@@ -41,6 +41,11 @@ func (api *API) buildHTTPRoutes() {
 		RegisterRoutesGateway(router, api.gateway, requiredPassword)
 	}
 
+	// Transaction pool API Calls
+	if api.tpool != nil {
+		RegisterRoutesTransactionPool(router, api.tpool)
+	}
+
 	// Apply UserAgent middleware and return the Router.
 	api.routerMu.Lock()
 	api.router = timeoutHandler(RequireUserAgent(router, requiredUserAgent), httpServerTimeout)

@@ -11,12 +11,14 @@ import (
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/modules/consensus"
 	"go.sia.tech/siad/modules/gateway"
+	"go.sia.tech/siad/modules/transactionpool"
 )
 
 // Node represents a satellite node containing all required modules.
 type Node struct {
-	ConsensusSet	modules.ConsensusSet
-	Gateway				modules.Gateway
+	ConsensusSet		modules.ConsensusSet
+	Gateway					modules.Gateway
+	TransactionPool	modules.TransactionPool
 
 	// The high level directory where all the persistence gets stored for the
 	// modules.
@@ -26,8 +28,12 @@ type Node struct {
 // Close will call close on every module within the node, combining and
 // returning the errors.
 func (n *Node) Close() (err error) {
+	if n.TransactionPool != nil {
+		fmt.Println("Closing transaction pool...")
+		err = errors.Compose(err, n.TransactionPool.Close())
+	}
 	if n.ConsensusSet != nil {
-		fmt.Println("Closing consensusset...")
+		fmt.Println("Closing consensus...")
 		err = errors.Compose(err, n.ConsensusSet.Close())
 	}
 	if n.Gateway != nil {
@@ -71,6 +77,18 @@ func New(gatewayAddr string, dir string, bootstrap bool, loadStartTime time.Time
 		return nil, errChan
 	}
 
+	// Load transaction pool.
+	fmt.Println("Loading transaction pool...")
+	tpoolDir := filepath.Join(d, "transactionpool")
+	if err := os.MkdirAll(tpoolDir, 0700); err != nil {
+		return nil, errChan
+	}
+	tp, err := transactionpool.New(cs, g, tpoolDir)
+	if err != nil {
+		errChan <- errors.Extend(err, errors.New("unable to create transaction pool"))
+		return nil, errChan
+	}
+
 	// Setup complete.
 	fmt.Printf("API is now available, synchronous startup completed in %.3f seconds\n", time.Since(loadStartTime).Seconds())
 	go func() {
@@ -78,8 +96,9 @@ func New(gatewayAddr string, dir string, bootstrap bool, loadStartTime time.Time
 	}()
 
 	return &Node{
-		Gateway:			g,
-		ConsensusSet:	cs,
-		Dir:					d,
+		ConsensusSet:			cs,
+		Gateway:					g,
+		TransactionPool:	tp,
+		Dir:							d,
 	}, errChan
 }
