@@ -18,7 +18,7 @@ func getAPIPassword() string {
 		pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Println()
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("Could not read API password: %v\n", err)
 		}
 		apiPassword = string(pw)
 	}
