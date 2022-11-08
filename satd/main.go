@@ -30,7 +30,7 @@ func main() {
 	log.SetFlags(0)
 	userAgent := flag.String("agent", "Sat-Agent", "custom agent used for API calls")
 	gatewayAddr := flag.String("addr", ":0", "address to listen on for peer connections")
-	apiAddr := flag.String("api-addr", "localhost:9980", "address to serve API on")
+	apiAddr := flag.String("api-addr", "localhost:10080", "address to serve API on")
 	//satelliteAddr := flag.String("sat-addr", ":9999", "address to listen on for renter requests")
 	dir := flag.String("dir", ".", "directory to store node state in")
 	bootstrap := flag.Bool("bootstrap", true, "bootstrap the gateway and consensus modules")
