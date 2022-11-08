@@ -11,6 +11,21 @@ import (
 	"github.com/mike76-dev/sia-satellite/node/api/server"
 )
 
+// tryAutoUnlock will try to automatically unlock the wallet if the
+// environment variable is set.
+func tryAutoUnlock(srv *server.Server) {
+	password := os.Getenv("SATD_WALLET_PASSWORD")
+	if password != "" {
+		fmt.Println("Wallet Password found, attempting to auto-unlock wallet...")
+		if err := srv.Unlock(password); err != nil {
+			fmt.Println("Auto-unlock failed:", err)
+		} else {
+			fmt.Println("Auto-unlock successful.")
+		}
+	}
+}
+
+// startDaemon starts the satd server.
 func startDaemon(userAgent, gatewayAddr, apiAddr, apiPassword, dir string, bootstrap bool) error {
 	loadStart := time.Now()
 
@@ -22,6 +37,9 @@ func startDaemon(userAgent, gatewayAddr, apiAddr, apiPassword, dir string, boots
 	if err != nil {
 		return err
 	}
+
+	// Attempt to auto-unlock the wallet using the SATD_WALLET_PASSWORD env variable.
+	tryAutoUnlock(srv)
 
 	// Listen for kill signals.
 	sigChan := make(chan os.Signal, 1)

@@ -12,6 +12,7 @@ import (
 	"go.sia.tech/siad/modules/consensus"
 	"go.sia.tech/siad/modules/gateway"
 	"go.sia.tech/siad/modules/transactionpool"
+	"go.sia.tech/siad/modules/wallet"
 )
 
 // Node represents a satellite node containing all required modules.
@@ -19,6 +20,7 @@ type Node struct {
 	ConsensusSet		modules.ConsensusSet
 	Gateway					modules.Gateway
 	TransactionPool	modules.TransactionPool
+	Wallet					modules.Wallet
 
 	// The high level directory where all the persistence gets stored for the
 	// modules.
@@ -28,6 +30,10 @@ type Node struct {
 // Close will call close on every module within the node, combining and
 // returning the errors.
 func (n *Node) Close() (err error) {
+	if n.Wallet != nil {
+		fmt.Println("Closing wallet...")
+		err = errors.Compose(err, n.Wallet.Close())
+	}
 	if n.TransactionPool != nil {
 		fmt.Println("Closing transaction pool...")
 		err = errors.Compose(err, n.TransactionPool.Close())
@@ -89,6 +95,19 @@ func New(gatewayAddr string, dir string, bootstrap bool, loadStartTime time.Time
 		return nil, errChan
 	}
 
+	// Load wallet.
+	fmt.Println("Loading wallet...")
+	walletDir := filepath.Join(d, "wallet")
+	if err := os.MkdirAll(walletDir, 0700); err != nil {
+		return nil, errChan
+	}
+	w, err := wallet.New(cs, tp, walletDir)
+	if err != nil {
+		errChan <- errors.Extend(err, errors.New("unable to create wallet"))
+		return nil, errChan
+	}
+
+
 	// Setup complete.
 	fmt.Printf("API is now available, synchronous startup completed in %.3f seconds\n", time.Since(loadStartTime).Seconds())
 	go func() {
@@ -99,6 +118,8 @@ func New(gatewayAddr string, dir string, bootstrap bool, loadStartTime time.Time
 		ConsensusSet:			cs,
 		Gateway:					g,
 		TransactionPool:	tp,
+		Wallet:						w,
+
 		Dir:							d,
 	}, errChan
 }

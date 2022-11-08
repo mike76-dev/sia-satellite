@@ -11,8 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	mnemonics "gitlab.com/NebulousLabs/entropy-mnemonics"
 	"gitlab.com/NebulousLabs/errors"
 
+	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/modules"
 
 	"github.com/mike76-dev/sia-satellite/node"
@@ -93,6 +95,29 @@ func (srv *Server) ServeErr() <-chan error {
 	return c
 }
 
+// Unlock unlocks the wallet using the provided password.
+func (srv *Server) Unlock(password string) error {
+	if srv.node.Wallet == nil {
+		return errors.New("server doesn't have a wallet")
+	}
+	var validKeys []crypto.CipherKey
+	dicts := []mnemonics.DictionaryID{"english", "german", "japanese"}
+	for _, dict := range dicts {
+		seed, err := modules.StringToSeed(password, dict)
+		if err != nil {
+			continue
+		}
+		validKeys = append(validKeys, crypto.NewWalletKey(crypto.HashObject(seed)))
+	}
+	validKeys = append(validKeys, crypto.NewWalletKey(crypto.HashObject(password)))
+	for _, key := range validKeys {
+		if err := srv.node.Wallet.Unlock(key); err == nil {
+			return nil
+		}
+	}
+	return modules.ErrBadEncryptionKey
+}
+
 // NewAsync creates a new API server. The API will require authentication using
 // HTTP basic auth if the supplied password is not the empty string. Usernames
 // are ignored for authentication. This type of authentication sends passwords
@@ -111,7 +136,7 @@ func NewAsync(requiredUserAgent string, gatewayAddr string, apiAddr string, requ
 		}
 
 		// Create the api for the server.
-		api := api.New(requiredUserAgent, requiredPassword, nil, nil, nil)
+		api := api.New(requiredUserAgent, requiredPassword, nil, nil, nil, nil)
 		srv := &Server{
 			api: api,
 			apiServer: &http.Server{
@@ -167,7 +192,7 @@ func NewAsync(requiredUserAgent string, gatewayAddr string, apiAddr string, requ
 
 		// Server wasn't shut down. Replace modules.
 		srv.node = n
-		api.SetModules(n.ConsensusSet, n.Gateway, n.TransactionPool)
+		api.SetModules(n.ConsensusSet, n.Gateway, n.TransactionPool, n.Wallet)
 		return srv, nil
 	}()
 	if err != nil {

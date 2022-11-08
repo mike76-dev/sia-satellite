@@ -89,6 +89,7 @@ type (
 		cs									modules.ConsensusSet
 		gateway							modules.Gateway
 		tpool								modules.TransactionPool
+		wallet							modules.Wallet
 
 		router							http.Handler
 		routerMu						sync.RWMutex
@@ -108,13 +109,14 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetModules allows for replacing the modules in the API at runtime.
-func (api *API) SetModules(cs modules.ConsensusSet, g modules.Gateway, tp modules.TransactionPool) {
+func (api *API) SetModules(cs modules.ConsensusSet, g modules.Gateway, tp modules.TransactionPool, w modules.Wallet) {
 	if api.modulesSet {
 		log.Fatal("can't call SetModules more than once")
 	}
 	api.cs = cs
 	api.gateway = g
 	api.tpool = tp
+	api.wallet = w
 	api.modulesSet = true
 	api.buildHTTPRoutes()
 }
@@ -122,11 +124,12 @@ func (api *API) SetModules(cs modules.ConsensusSet, g modules.Gateway, tp module
 // New creates a new API. The API will require authentication using HTTP basic
 // auth for certain endpoints of the supplied password is not the empty string.
 // Usernames are ignored for authentication.
-func New(requiredUserAgent string, requiredPassword string, cs modules.ConsensusSet, g modules.Gateway, tp modules.TransactionPool) *API {
+func New(requiredUserAgent string, requiredPassword string, cs modules.ConsensusSet, g modules.Gateway, tp modules.TransactionPool, w modules.Wallet) *API {
 	api := &API{
 		cs:									cs,
 		gateway:						g,
 		tpool:							tp,
+		wallet:							w,
 		requiredUserAgent:	requiredUserAgent,
 		requiredPassword:		requiredPassword,
 	}

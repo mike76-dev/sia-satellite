@@ -31,7 +31,7 @@ func (api *API) buildHTTPRoutes() {
 	router.GET("/daemon/stop", RequirePassword(api.daemonStopHandler, requiredPassword))
 	router.GET("/daemon/version", api.daemonVersionHandler)
 
-	// Consensus API Calls
+	// Consensus API Calls.
 	if api.cs != nil {
 		RegisterRoutesConsensus(router, api.cs)
 	}
@@ -41,9 +41,14 @@ func (api *API) buildHTTPRoutes() {
 		RegisterRoutesGateway(router, api.gateway, requiredPassword)
 	}
 
-	// Transaction pool API Calls
+	// Transaction pool API Calls.
 	if api.tpool != nil {
 		RegisterRoutesTransactionPool(router, api.tpool)
+	}
+
+	// Wallet API Calls.
+	if api.wallet != nil {
+		RegisterRoutesWallet(router, api.wallet, requiredPassword)
 	}
 
 	// Apply UserAgent middleware and return the Router.
