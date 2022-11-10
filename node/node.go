@@ -8,6 +8,8 @@ import (
 
 	"gitlab.com/NebulousLabs/errors"
 
+	"github.com/mike76-dev/sia-satellite/satellite"
+
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/modules/consensus"
 	"go.sia.tech/siad/modules/gateway"
@@ -19,6 +21,7 @@ import (
 type Node struct {
 	ConsensusSet		modules.ConsensusSet
 	Gateway					modules.Gateway
+	Satellite				satellite.Satellite
 	TransactionPool	modules.TransactionPool
 	Wallet					modules.Wallet
 
@@ -30,6 +33,10 @@ type Node struct {
 // Close will call close on every module within the node, combining and
 // returning the errors.
 func (n *Node) Close() (err error) {
+	if n.Satellite != nil {
+		fmt.Println("Closing satellite...")
+		err = errors.Compose(err, n.Satellite.Close())
+	}
 	if n.Wallet != nil {
 		fmt.Println("Closing wallet...")
 		err = errors.Compose(err, n.Wallet.Close())
@@ -50,7 +57,7 @@ func (n *Node) Close() (err error) {
 }
 
 // New will create a new node.
-func New(gatewayAddr string, dir string, bootstrap bool, loadStartTime time.Time) (*Node, <-chan error) {
+func New(gatewayAddr string, satelliteAddr string, dir string, bootstrap bool, loadStartTime time.Time) (*Node, <-chan error) {
 	// Make sure the path is an absolute one.
 	d, err := filepath.Abs(dir)
 	errChan := make(chan error, 1)
@@ -107,6 +114,17 @@ func New(gatewayAddr string, dir string, bootstrap bool, loadStartTime time.Time
 		return nil, errChan
 	}
 
+	// Load satellite.
+	fmt.Println("Loading satellite...")
+	satDir := filepath.Join(d, "satellite")
+	if err := os.MkdirAll(satDir, 0700); err != nil {
+		return nil, errChan
+	}
+	s, err := satellite.New(cs, g, tp, w, satelliteAddr, satDir)
+	if err != nil {
+		errChan <- errors.Extend(err, errors.New("unable to create satellite"))
+		return nil, errChan
+	}
 
 	// Setup complete.
 	fmt.Printf("API is now available, synchronous startup completed in %.3f seconds\n", time.Since(loadStartTime).Seconds())
@@ -117,6 +135,7 @@ func New(gatewayAddr string, dir string, bootstrap bool, loadStartTime time.Time
 	return &Node{
 		ConsensusSet:			cs,
 		Gateway:					g,
+		Satellite:				s,
 		TransactionPool:	tp,
 		Wallet:						w,
 

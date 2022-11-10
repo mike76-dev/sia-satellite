@@ -26,14 +26,14 @@ func tryAutoUnlock(srv *server.Server) {
 }
 
 // startDaemon starts the satd server.
-func startDaemon(userAgent, gatewayAddr, apiAddr, apiPassword, dir string, bootstrap bool) error {
+func startDaemon(userAgent, gatewayAddr, apiAddr, apiPassword, satelliteAddr string, dir string, bootstrap bool) error {
 	loadStart := time.Now()
 
 	fmt.Printf("satd v%v\n", api.DaemonVersion)
 	fmt.Println("Loading...")
 
 	// Start and run the server.
-	srv, err := server.New(apiAddr, userAgent, apiPassword, gatewayAddr, dir, bootstrap, loadStart)
+	srv, err := server.New(apiAddr, userAgent, apiPassword, gatewayAddr, satelliteAddr, dir, bootstrap, loadStart)
 	if err != nil {
 		return err
 	}
