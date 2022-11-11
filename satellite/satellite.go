@@ -3,11 +3,16 @@
 package satellite
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
+	"sync"
 
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/threadgroup"
 
 	"go.sia.tech/siad/modules"
+	"go.sia.tech/siad/persist"
 )
 
 var (
@@ -35,8 +40,12 @@ type SatelliteModule struct {
 	wallet				modules.Wallet
 
 	// Utilities.
-	persistDir    string
-	port          string
+	log						*persist.Logger
+	mu						sync.RWMutex
+	persist				persistence
+	persistDir		string
+	port					string
+	threads				threadgroup.ThreadGroup
 }
 
 // New returns an initialized Satellite.
@@ -72,10 +81,48 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 		return nil, err
 	}
 
+	// Create the logger.
+	s.log, err = persist.NewFileLogger(filepath.Join(s.persistDir, logFile))
+	if err != nil {
+		return nil, err
+	}
+	// Establish the closing of the logger.
+	s.threads.AfterStop(func() error {
+		if err := s.log.Close(); err != nil {
+			// The logger may or may not be working here, so use a Println
+			// instead.
+			fmt.Println("Failed to close the satellite logger:", err)
+			return err
+		}
+		return nil
+	})
+	s.log.Println("INFO: satellite created, started logging")
+
+	// Load the satellite persistence.
+	if loadErr := s.load(); loadErr != nil && !os.IsNotExist(loadErr) {
+		return nil, errors.AddContext(loadErr, "unable to load satellite")
+	}
+
+	// Make sure that the satellite saves on shutdown.
+	s.threads.AfterStop(func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if err := s.saveSync(); err != nil {
+			s.log.Println("ERROR: Unable to save satellite:", err)
+			return err
+		}
+		return nil
+	})
+
 	return s, nil
 }
 
 // Close shuts down the satellite.
 func (s *SatelliteModule) Close() error {
-	return nil
+	if err := s.threads.Stop(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveSync()
 }
