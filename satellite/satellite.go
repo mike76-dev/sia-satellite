@@ -34,18 +34,18 @@ type Satellite interface {
 // the renters and with the hosts.
 type SatelliteModule struct {
 	// Dependencies.
-	cs						modules.ConsensusSet
-	g							modules.Gateway
-	tpool					modules.TransactionPool
-	wallet				modules.Wallet
+	cs         modules.ConsensusSet
+	g          modules.Gateway
+	tpool      modules.TransactionPool
+	wallet     modules.Wallet
 
 	// Utilities.
-	log						*persist.Logger
-	mu						sync.RWMutex
-	persist				persistence
-	persistDir		string
-	port					string
-	threads				threadgroup.ThreadGroup
+	log        *persist.Logger
+	mu         sync.RWMutex
+	persist    persistence
+	persistDir string
+	port       string
+	threads    threadgroup.ThreadGroup
 }
 
 // New returns an initialized Satellite.
@@ -66,13 +66,13 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 
 	// Create the satellite object.
 	s := &SatelliteModule{
-		cs:						cs,
-		g:						g,
-		tpool:				tpool,
-		wallet:				wallet,
+		cs:         cs,
+		g:          g,
+		tpool:      tpool,
+		wallet:     wallet,
 
-		persistDir:		persistDir,
-		port:					satelliteAddr,
+		persistDir: persistDir,
+		port:       satelliteAddr,
 	}
 
 	// Create the perist directory if it does not yet exist.

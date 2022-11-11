@@ -23,19 +23,19 @@ import (
 
 // A Server is a collection of modules that can be communicated with over an http API.
 type Server struct {
-	api								*api.API
-	apiServer					*http.Server
-	listener					net.Listener
+	api               *api.API
+	apiServer         *http.Server
+	listener          net.Listener
 
-	node							*node.Node
-	requiredUserAgent	string
+	node              *node.Node
+	requiredUserAgent string
 
-	serveChan					chan struct{}
-	serveErr					error
+	serveChan         chan struct{}
+	serveErr          error
 
-	closeChan					chan struct{}
+	closeChan         chan struct{}
 
-	closeMu						sync.Mutex
+	closeMu           sync.Mutex
 }
 
 // serve listens for and handles API calls. It is a blocking function.

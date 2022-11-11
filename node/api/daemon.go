@@ -25,7 +25,7 @@ type (
 
 	// DaemonVersionGet contains information about the running daemon's version.
 	DaemonVersionGet struct {
-		Version     string
+		Version string
 	}
 )
 

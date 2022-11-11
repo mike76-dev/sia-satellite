@@ -19,11 +19,11 @@ import (
 
 // Node represents a satellite node containing all required modules.
 type Node struct {
-	ConsensusSet		modules.ConsensusSet
-	Gateway					modules.Gateway
-	Satellite				satellite.Satellite
-	TransactionPool	modules.TransactionPool
-	Wallet					modules.Wallet
+	ConsensusSet    modules.ConsensusSet
+	Gateway         modules.Gateway
+	Satellite       satellite.Satellite
+	TransactionPool modules.TransactionPool
+	Wallet          modules.Wallet
 
 	// The high level directory where all the persistence gets stored for the
 	// modules.
@@ -133,12 +133,12 @@ func New(gatewayAddr string, satelliteAddr string, dir string, bootstrap bool, l
 	}()
 
 	return &Node{
-		ConsensusSet:			cs,
-		Gateway:					g,
-		Satellite:				s,
-		TransactionPool:	tp,
-		Wallet:						w,
+		ConsensusSet:    cs,
+		Gateway:         g,
+		Satellite:       s,
+		TransactionPool: tp,
+		Wallet:          w,
 
-		Dir:							d,
+		Dir:             d,
 	}, errChan
 }

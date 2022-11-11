@@ -88,19 +88,19 @@ type (
 	// API encapsulates a collection of modules and implements a http.Handler
 	// to access their methods.
 	API struct {
-		cs									modules.ConsensusSet
-		gateway							modules.Gateway
-		satellite						satellite.Satellite
-		tpool								modules.TransactionPool
-		wallet							modules.Wallet
+		cs                modules.ConsensusSet
+		gateway           modules.Gateway
+		satellite         satellite.Satellite
+		tpool             modules.TransactionPool
+		wallet            modules.Wallet
 
-		router							http.Handler
-		routerMu						sync.RWMutex
+		router            http.Handler
+		routerMu          sync.RWMutex
 
-		requiredUserAgent		string
-		requiredPassword		string
-		modulesSet					bool
-		Shutdown						func() error
+		requiredUserAgent string
+		requiredPassword  string
+		modulesSet        bool
+		Shutdown          func() error
 	}
 )
 
@@ -130,13 +130,13 @@ func (api *API) SetModules(cs modules.ConsensusSet, g modules.Gateway, s satelli
 // Usernames are ignored for authentication.
 func New(requiredUserAgent string, requiredPassword string, cs modules.ConsensusSet, g modules.Gateway, s satellite.Satellite, tp modules.TransactionPool, w modules.Wallet) *API {
 	api := &API{
-		cs:									cs,
-		gateway:						g,
-		satellite:					s,
-		tpool:							tp,
-		wallet:							w,
-		requiredUserAgent:	requiredUserAgent,
-		requiredPassword:		requiredPassword,
+		cs:                cs,
+		gateway:           g,
+		satellite:         s,
+		tpool:             tp,
+		wallet:            w,
+		requiredUserAgent: requiredUserAgent,
+		requiredPassword:  requiredPassword,
 	}
 
 	// Register API handlers
