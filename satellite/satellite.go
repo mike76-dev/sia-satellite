@@ -4,15 +4,16 @@ package satellite
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/threadgroup"
 
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
+	siasync "go.sia.tech/siad/sync"
 )
 
 var (
@@ -35,23 +36,24 @@ type Satellite interface {
 // the renters and with the hosts.
 type SatelliteModule struct {
 	// Dependencies.
-	cs            modules.ConsensusSet
-	g             modules.Gateway
-	tpool         modules.TransactionPool
-	wallet        modules.Wallet
+	cs     modules.ConsensusSet
+	g      modules.Gateway
+	tpool  modules.TransactionPool
+	wallet modules.Wallet
 
 	// Utilities.
+	listener      net.Listener
 	log           *persist.Logger
 	mu            sync.RWMutex
 	persist       persistence
 	persistDir    string
 	port          string
-	threads       threadgroup.ThreadGroup
+	threads       siasync.ThreadGroup
 	staticAlerter *modules.GenericAlerter
 }
 
 // New returns an initialized Satellite.
-func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, satelliteAddr string, persistDir string) (*SatelliteModule, error) {
+func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, satelliteAddr string, persistDir string) (_ *SatelliteModule, err error) {
 	// Check that all the dependencies were provided.
 	if cs == nil {
 		return nil, errNilCS
@@ -74,12 +76,18 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 		wallet:        wallet,
 
 		persistDir:    persistDir,
-		port:          satelliteAddr,
 		staticAlerter: modules.NewAlerter("satellite"),
 	}
 
+	// Call stop in the event of a partial startup.
+	defer func() {
+		if err != nil {
+			err = errors.Compose(s.threads.Stop(), err)
+		}
+	}()
+
 	// Create the perist directory if it does not yet exist.
-	err := os.MkdirAll(s.persistDir, 0700)
+	err = os.MkdirAll(s.persistDir, 0700)
 	if err != nil {
 		return nil, err
 	}
@@ -90,14 +98,13 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 		return nil, err
 	}
 	// Establish the closing of the logger.
-	s.threads.AfterStop(func() error {
-		if err := s.log.Close(); err != nil {
+	s.threads.AfterStop(func() {
+		err := s.log.Close()
+		if err != nil {
 			// The logger may or may not be working here, so use a Println
 			// instead.
 			fmt.Println("Failed to close the satellite logger:", err)
-			return err
 		}
-		return nil
 	})
 	s.log.Println("INFO: satellite created, started logging")
 
@@ -107,15 +114,21 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 	}
 
 	// Make sure that the satellite saves on shutdown.
-	s.threads.AfterStop(func() error {
+	s.threads.AfterStop(func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if err := s.saveSync(); err != nil {
+		err := s.saveSync()
+		if err != nil {
 			s.log.Println("ERROR: Unable to save satellite:", err)
-			return err
 		}
-		return nil
 	})
+
+	// Initialize the networking.
+	err = s.initNetworking(satelliteAddr)
+	if err != nil {
+		s.log.Println("Could not initialize satellite networking:", err)
+		return nil, err
+	}
 
 	return s, nil
 }
