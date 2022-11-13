@@ -11,9 +11,11 @@ import (
 
 	"gitlab.com/NebulousLabs/errors"
 
+	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
+	"go.sia.tech/siad/types"
 )
 
 var (
@@ -40,6 +42,10 @@ type SatelliteModule struct {
 	g      modules.Gateway
 	tpool  modules.TransactionPool
 	wallet modules.Wallet
+
+	// ACID fields - these fields need to be updated in serial, ACID transactions.
+	publicKey types.SiaPublicKey
+	secretKey crypto.SecretKey
 
 	// Utilities.
 	listener      net.Listener
