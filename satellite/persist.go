@@ -76,7 +76,9 @@ func (s *SatelliteModule) load() error {
 // saveSync stores the Satellite's persistent data on disk, and then syncs to
 // disk to minimize the possibility of data loss.
 func (s *SatelliteModule) saveSync() error {
-	s.persist.PublicKey = s.publicKey
-	s.persist.SecretKey = s.secretKey
-	return persist.SaveJSON(persistMetadata, s.persist, filepath.Join(s.persistDir, persistFilename))
+	p := persistence{
+		PublicKey: s.publicKey,
+		SecretKey: s.secretKey,
+	}
+	return persist.SaveJSON(persistMetadata, p, filepath.Join(s.persistDir, persistFilename))
 }
