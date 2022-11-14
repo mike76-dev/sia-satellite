@@ -39,8 +39,15 @@ func main() {
 	// Fetch API password.
 	apiPassword := getAPIPassword()
 
+	// Create the state directory if it does not yet exist.
+	// This also checks if the provided directory parameter is valid.
+	err := os.MkdirAll(*dir, 0700)
+	if err != nil {
+		log.Fatalf("Provided parameter is invalid: %v\n", *dir)
+	}
+
 	// Start satd. startDaemon will only return when it is shutting down.
-	err := startDaemon(*userAgent, *gatewayAddr, *apiAddr, apiPassword, *satelliteAddr, *dir, *bootstrap)
+	err = startDaemon(*userAgent, *gatewayAddr, *apiAddr, apiPassword, *satelliteAddr, *dir, *bootstrap)
 	if err != nil {
 		log.Fatal(err)
 	}
