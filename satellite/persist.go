@@ -43,7 +43,7 @@ type (
 
 // establishDefaults configures the default settings for the satellite,
 // overwriting any existing settings.
-func (s *SatelliteModule) establishDefaults() {
+func (s *Satellite) establishDefaults() {
 	// Generate the satellite's key pair.
 	epk, esk, _ := ed25519.GenerateKey(fastrand.Reader)
 
@@ -57,7 +57,7 @@ func (s *SatelliteModule) establishDefaults() {
 }
 
 // load loads the Satellite's persistent data from disk.
-func (s *SatelliteModule) load() error {
+func (s *Satellite) load() error {
 	err := persist.LoadJSON(persistMetadata, &s.persist, filepath.Join(s.persistDir, persistFilename))
 	if os.IsNotExist(err) {
 		// There is no satellite.json, nothing to load.
@@ -78,7 +78,7 @@ func (s *SatelliteModule) load() error {
 
 // saveSync stores the Satellite's persistent data on disk, and then syncs to
 // disk to minimize the possibility of data loss.
-func (s *SatelliteModule) saveSync() error {
+func (s *Satellite) saveSync() error {
 	p := persistence{
 		PublicKey: s.publicKey,
 		SecretKey: s.secretKey,

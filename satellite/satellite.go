@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/mike76-dev/sia-satellite/interfaces"
+
 	"gitlab.com/NebulousLabs/errors"
 
 	"go.sia.tech/siad/crypto"
@@ -26,17 +28,9 @@ var (
 	errNilGateway = errors.New("satellite cannot use nil gateway")
 )
 
-// Satellite implements the methods necessary to communicate both with the
-// renters and the hosts.
-type Satellite interface {
-	modules.Alerter
-	// Close safely shuts down the satellite.
-	Close() error
-}
-
 // A Satellite contains the information necessary to communicate both with
 // the renters and with the hosts.
-type SatelliteModule struct {
+type Satellite struct {
 	// Dependencies.
 	cs     modules.ConsensusSet
 	g      modules.Gateway
@@ -62,7 +56,7 @@ type SatelliteModule struct {
 }
 
 // New returns an initialized Satellite.
-func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, satelliteAddr string, persistDir string) (_ *SatelliteModule, err error) {
+func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, satelliteAddr string, persistDir string) (_ *Satellite, err error) {
 	// Check that all the dependencies were provided.
 	if cs == nil {
 		return nil, errNilCS
@@ -78,7 +72,7 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 	}
 
 	// Create the satellite object.
-	s := &SatelliteModule{
+	s := &Satellite{
 		cs:            cs,
 		g:             g,
 		tpool:         tpool,
@@ -143,7 +137,7 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 }
 
 // Close shuts down the satellite.
-func (s *SatelliteModule) Close() error {
+func (s *Satellite) Close() error {
 	if err := s.threads.Stop(); err != nil {
 		return err
 	}
@@ -151,3 +145,6 @@ func (s *SatelliteModule) Close() error {
 	defer s.mu.Unlock()
 	return s.saveSync()
 }
+
+// enforce that Satellite satisfies the interfaces.Satellite interface
+var _ interfaces.Satellite = (*Satellite)(nil)

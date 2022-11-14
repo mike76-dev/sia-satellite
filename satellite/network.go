@@ -13,7 +13,7 @@ const defaultConnectionDeadline = 5 * time.Minute
 
 // threadedUpdateHostname periodically runs 'managedLearnHostname', which
 // checks if the satellite's hostname has changed.
-func (s *SatelliteModule) threadedUpdateHostname(closeChan chan struct{}) {
+func (s *Satellite) threadedUpdateHostname(closeChan chan struct{}) {
 	defer close(closeChan)
 	for {
 		s.managedLearnHostname()
@@ -29,7 +29,7 @@ func (s *SatelliteModule) threadedUpdateHostname(closeChan chan struct{}) {
 }
 
 // managedLearnHostname discovers the external IP of the Satellite.
-func (s *SatelliteModule) managedLearnHostname() {
+func (s *Satellite) managedLearnHostname() {
 	// Fetch the necessary variables.
 	s.mu.RLock()
 	satPort := s.port
@@ -66,7 +66,7 @@ func (s *SatelliteModule) managedLearnHostname() {
 
 // initNetworking performs actions like port forwarding, and gets the
 // satellite established on the network.
-func (s *SatelliteModule) initNetworking(address string) (err error) {
+func (s *Satellite) initNetworking(address string) (err error) {
 	// Create the listener and setup the close procedures.
 	s.listener, err = net.Listen("tcp", address)
 	if err != nil {
@@ -124,7 +124,7 @@ func (s *SatelliteModule) initNetworking(address string) (err error) {
 }
 
 // threadedListen listens for incoming RPCs and spawns an appropriate handler for each.
-func (s *SatelliteModule) threadedListen(closeChan chan struct{}) {
+func (s *Satellite) threadedListen(closeChan chan struct{}) {
 	defer close(closeChan)
 
 	// Receive connections until an error is returned by the listener. When an
@@ -148,7 +148,7 @@ func (s *SatelliteModule) threadedListen(closeChan chan struct{}) {
 
 // threadedHandleConn handles an incoming connection to the satellite,
 // typically an RPC.
-func (s *SatelliteModule) threadedHandleConn(conn net.Conn) {
+func (s *Satellite) threadedHandleConn(conn net.Conn) {
 	err := s.threads.Add()
 	if err != nil {
 		return

@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/NebulousLabs/errors"
 
+	"github.com/mike76-dev/sia-satellite/interfaces"
 	"github.com/mike76-dev/sia-satellite/satellite"
 
 	"go.sia.tech/siad/modules"
@@ -21,7 +22,7 @@ import (
 type Node struct {
 	ConsensusSet    modules.ConsensusSet
 	Gateway         modules.Gateway
-	Satellite       satellite.Satellite
+	Satellite       interfaces.Satellite
 	TransactionPool modules.TransactionPool
 	Wallet          modules.Wallet
 
