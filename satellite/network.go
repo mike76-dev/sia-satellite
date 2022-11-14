@@ -3,11 +3,66 @@ package satellite
 import (
 	"net"
 	"time"
+
+	"go.sia.tech/siad/modules"
 )
 
 // defaultConnectionDeadline is the default read and write deadline which is set
 // on a connection. This ensures it times out if I/O exceeds this deadline.
 const defaultConnectionDeadline = 5 * time.Minute
+
+// threadedUpdateHostname periodically runs 'managedLearnHostname', which
+// checks if the satellite's hostname has changed.
+func (s *SatelliteModule) threadedUpdateHostname(closeChan chan struct{}) {
+	defer close(closeChan)
+	for {
+		s.managedLearnHostname()
+		// Wait 30 minutes to check again. We want the satellite to be always
+		// accessible by the renters.
+		select {
+		case <-s.threads.StopChan():
+			return
+		case <-time.After(time.Minute * 30):
+			continue
+		}
+	}
+}
+
+// managedLearnHostname discovers the external IP of the Satellite.
+func (s *SatelliteModule) managedLearnHostname() {
+	// Fetch the necessary variables.
+	s.mu.RLock()
+	satPort := s.port
+	satAutoAddress := s.autoAddress
+	s.mu.RUnlock()
+
+	// Use the gateway to get the external ip.
+	hostname, err := s.g.DiscoverAddress(s.threads.StopChan())
+	if err != nil {
+		s.log.Println("WARN: failed to discover external IP")
+		return
+	}
+
+	autoAddress := modules.NetAddress(net.JoinHostPort(hostname.String(), satPort))
+	if err := autoAddress.IsValid(); err != nil {
+		s.log.Printf("WARN: discovered hostname %q is invalid: %v", autoAddress, err)
+		return
+	}
+	if autoAddress == satAutoAddress {
+		// Nothing to do - the auto address has not changed.
+		return
+	}
+
+	s.mu.Lock()
+	s.autoAddress = autoAddress
+	err = s.saveSync()
+	s.mu.Unlock()
+	if err != nil {
+		s.log.Println(err)
+	}
+
+	// TODO inform the renters that the Satellite address has changed.
+}
 
 // initNetworking performs actions like port forwarding, and gets the
 // satellite established on the network.
@@ -36,7 +91,8 @@ func (s *SatelliteModule) initNetworking(address string) (err error) {
 	}
 	s.port = port
 
-	// Non-blocking, perform port forwarding.
+	// Non-blocking, perform port forwarding and create the hostname discovery
+	// thread.
 	go func() {
 		// Add this function to the threadgroup, so that the logger will not
 		// disappear before port closing can be registered to the threadgroup
@@ -53,6 +109,12 @@ func (s *SatelliteModule) initNetworking(address string) (err error) {
 		if err != nil {
 			s.log.Println("ERROR: failed to forward port:", err)
 		}
+
+		threadedUpdateHostnameClosedChan := make(chan struct{})
+		go s.threadedUpdateHostname(threadedUpdateHostnameClosedChan)
+		s.threads.OnStop(func() {
+			<-threadedUpdateHostnameClosedChan
+		})
 	}()
 
 	// Launch the listener.

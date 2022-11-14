@@ -47,6 +47,9 @@ type SatelliteModule struct {
 	publicKey types.SiaPublicKey
 	secretKey crypto.SecretKey
 
+	// Transient fields.
+	autoAddress modules.NetAddress // Determined using automatic tooling in network.go
+
 	// Utilities.
 	listener      net.Listener
 	log           *persist.Logger
