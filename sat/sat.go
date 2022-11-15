@@ -1,5 +1,4 @@
-// interfaces Package defines various interfaces used by the Satellite.
-package interfaces
+package sat
 
 import (
 	"go.sia.tech/siad/modules"

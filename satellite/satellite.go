@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/mike76-dev/sia-satellite/interfaces"
+	"github.com/mike76-dev/sia-satellite/sat"
 
 	"gitlab.com/NebulousLabs/errors"
 
@@ -147,4 +147,4 @@ func (s *Satellite) Close() error {
 }
 
 // enforce that Satellite satisfies the interfaces.Satellite interface
-var _ interfaces.Satellite = (*Satellite)(nil)
+var _ sat.Satellite = (*Satellite)(nil)
