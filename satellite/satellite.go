@@ -4,11 +4,12 @@ package satellite
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"github.com/mike76-dev/sia-satellite/satellite/manager"
+	"github.com/mike76-dev/sia-satellite/satellite/provider"
 	"github.com/mike76-dev/sia-satellite/sat"
 
 	"gitlab.com/NebulousLabs/errors"
@@ -41,22 +42,21 @@ type Satellite struct {
 	publicKey types.SiaPublicKey
 	secretKey crypto.SecretKey
 
-	// Transient fields.
-	autoAddress modules.NetAddress // Determined using automatic tooling in network.go
+	// Submodules.
+	m Manager
+	p Provider
 
 	// Utilities.
-	listener      net.Listener
 	log           *persist.Logger
 	mu            sync.RWMutex
 	persist       persistence
 	persistDir    string
-	port          string
 	threads       siasync.ThreadGroup
 	staticAlerter *modules.GenericAlerter
 }
 
 // New returns an initialized Satellite.
-func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, satelliteAddr string, persistDir string) (_ *Satellite, err error) {
+func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, satelliteAddr string, persistDir string) (*Satellite, error) {
 	// Check that all the dependencies were provided.
 	if cs == nil {
 		return nil, errNilCS
@@ -71,12 +71,33 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 		return nil, errNilWallet
 	}
 
+	// Create the perist directory if it does not yet exist.
+	err := os.MkdirAll(persistDir, 0700)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the manager.
+	m, errChanM := manager.New(persistDir)
+	if err = modules.PeekErr(errChanM); err != nil {
+		return nil, errors.AddContext(err, "unable to create manager")
+	}
+
+	// Create the provider.
+	p, errChanP := provider.New(g, satelliteAddr, persistDir)
+	if err = modules.PeekErr(errChanP); err != nil {
+		return nil, errors.AddContext(err, "unable to create provider")
+	}
+
 	// Create the satellite object.
 	s := &Satellite{
 		cs:            cs,
 		g:             g,
 		tpool:         tpool,
 		wallet:        wallet,
+
+		m:             m,
+		p:             p,
 
 		persistDir:    persistDir,
 		staticAlerter: modules.NewAlerter("satellite"),
@@ -88,12 +109,6 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 			err = errors.Compose(s.threads.Stop(), err)
 		}
 	}()
-
-	// Create the perist directory if it does not yet exist.
-	err = os.MkdirAll(s.persistDir, 0700)
-	if err != nil {
-		return nil, err
-	}
 
 	// Create the logger.
 	s.log, err = persist.NewFileLogger(filepath.Join(s.persistDir, logFile))
@@ -111,10 +126,6 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 	})
 	s.log.Println("INFO: satellite created, started logging")
 
-	// Load the satellite persistence.
-	if loadErr := s.load(); loadErr != nil && !os.IsNotExist(loadErr) {
-		return nil, errors.AddContext(loadErr, "unable to load satellite")
-	}
 
 	// Make sure that the satellite saves on shutdown.
 	s.threads.AfterStop(func() {
@@ -126,20 +137,21 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 		}
 	})
 
-	// Initialize the networking.
-	err = s.initNetworking(satelliteAddr)
-	if err != nil {
-		s.log.Println("Could not initialize satellite networking:", err)
-		return nil, err
-	}
-
 	return s, nil
 }
 
 // Close shuts down the satellite.
 func (s *Satellite) Close() error {
-	if err := s.threads.Stop(); err != nil {
-		return err
+	var errP, errM, err error
+
+	// Close the provider.
+	errP = s.p.Close()
+
+	// Close the manager.
+	errM = s.m.Close()
+
+	if err = s.threads.Stop(); err != nil {
+		return errors.Compose(errP, errM, err)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

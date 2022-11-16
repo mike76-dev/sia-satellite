@@ -8,7 +8,6 @@ import (
 	"gitlab.com/NebulousLabs/fastrand"
 
 	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	"go.sia.tech/siad/types"
 
@@ -37,7 +36,6 @@ type (
 		// Satellite identity.
 		PublicKey   types.SiaPublicKey `json:"publickey"`
 		SecretKey   crypto.SecretKey   `json:"secretkey"`
-		AutoAddress modules.NetAddress `json:"autoaddress"`
 	}
 )
 
@@ -71,7 +69,6 @@ func (s *Satellite) load() error {
 	// Copy over the identity.
 	s.publicKey = s.persist.PublicKey
 	s.secretKey = s.persist.SecretKey
-	s.autoAddress = s.persist.AutoAddress
 
 	return nil
 }
@@ -82,7 +79,6 @@ func (s *Satellite) saveSync() error {
 	p := persistence{
 		PublicKey: s.publicKey,
 		SecretKey: s.secretKey,
-		AutoAddress: s.autoAddress,
 	}
 	return persist.SaveJSON(persistMetadata, p, filepath.Join(s.persistDir, persistFilename))
 }
