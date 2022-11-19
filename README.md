@@ -6,9 +6,8 @@ Unfortunately, you can currently only use the Sia storage platform if you have S
 **Sia Satellite** is a business model that can help overcome this barrier, at the cost of some centralization. A satellite is a network service that forms contracts with the hosts on behalf of the renter, manages these contracts, keeps track of the spendings, and pays the hosts with SC. The renter uploads their data directly to the hosts and downloads from them, thus reducing the load on the satellite. At the end of each period (usually one month), the renter pays for the service with their credit card. An upfront payment is also possible. An upfront-paying user can enjoy certain benefits, like setting price limits or selecting the hosts to store their data with.
 
 When using **Sia Satellite**, a renter does not need to own SC to use Sia storage, nor do they need to know about SC at all.
-**Sia Satellite** consists of the following three parts:
+**Sia Satellite** consists of the following two parts:
 - The satellite service, run on a remote server by a third party (the service provider)
-- The tweaked renter software, run locally by a user
 - The web portal, used to register user accounts, provide usage analytics, and pay for the service
 
 The service will intentionally be built without irrelevant modules, such as host, renter, or miner, in order to avoid possible conflicts of interests.
