@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1"/>
+	<link rel="icon" href="assets/satellite-icon.png">
+	<link rel="stylesheet" href="css/main.css">
+	<link rel="stylesheet" href="css/rent.css">
+	<script defer src="js/rent.js"></script>
+	<title>Sia Satellite - Rent Decentralized Storage</title>
+</head>
+<body>
+	<div class="container">
+		<div class="header">
+			<h1>Welcome to Sia Satellite</h1>
+			<p>Your gateway to decentralized cloud storage.</p>
+		</div>
+		<div id="login" class="frame">
+			<h2>Log into Your Account</h2>
+			<div class="contents">
+				<label for="login-email">Email Address</label>
+				<input id="login-email" type="email" class="input"
+					placeholder="user@domain.com">
+				<p id="login-email-error" class="error invisible">
+					Provided address is invalid
+				</p>
+				<label for="login-password">Password</label>
+				<input id="login-password" type="password" class="input">
+				<p id="login-password-error" class="error invisible">
+					Wrong combination of email and password
+				</p>
+			</div>
+			<button>Sign In</button>
+			<p>Forgot your password?
+				<span class="link" onclick="setStatus('reset')">Reset password</span>
+			</p>
+			<p>New to Sia Satellite?
+				<span class="link" onclick="setStatus('signup')">Create an account</span>
+			</p>
+		</div>
+		<div id="signup" class="frame disabled">
+			<h2>Create an Account</h2>
+			<div class="contents">
+				<label for="signup-email">Email Address</label>
+				<input id="signup-email" type="email" class="input"
+					placeholder="user@domain.com">
+				<p id="signup-email-error" class="error invisible">
+					Provided address is invalid
+				</p>
+				<label for="signup-password">Password</label>
+				<input id="signup-password" type="password" class="input">
+				<p id="signup-password-error" class="error invisible">
+					Password is not strong enough
+				</p>
+				<label for="signup-retype">Retype Password</label>
+				<input id="signup-retype" type="password" class="input">
+				<p id="signup-retype-error" class="error invisible">
+					The two passwords do not match
+				</p>
+				<div class="checkbox-container">
+					<input id="signup-agree" type="checkbox" class="checkbox">
+					<label for="signup-agree" class="checkbox-label">
+						I agree to the
+						<a class="link" href="tos.html" target="_blank">Terms of Service</a>
+						and
+						<a class="link" href="privacy.html" target="_blank">Privacy Policy</a>
+					</label>
+				</div>
+			</div>
+			<button>Sign Up</button>
+			<p>Already have an account?
+				<span class="link" onclick="setStatus('login')">Login</span>
+			</p>
+		</div>
+		<div id="reset" class="frame disabled">
+			<h2>Reset Your Password</h2>
+			<div class="contents">
+				<label for="reset-email">Email Address</label>
+				<input id="reset-email" type="email" class="input"
+					placeholder="user@domain.com">
+				<p id="reset-email-error" class="error invisible">
+					Provided address is invalid
+				</p>
+			</div>
+			<button>Reset Password</button>
+			<p>Back to
+				<span class="link" onclick="setStatus('login')">Login</span>
+			</p>
+		</div>
+		<div class="footer">
+			<a href="about.html" target="_blank">About</a>
+			<a href="privacy.html" target="_blank">Privacy</a>
+			<a href="tos.html" target="_blank">Terms of Service</a>
+			<a href="https://sia.tech" target="_blank">
+				<img src="assets/built-with-sia.ba604fcc.svg" alt="Sia">
+			</a>
+		</div>
+	</div>
+</body>
+</html>

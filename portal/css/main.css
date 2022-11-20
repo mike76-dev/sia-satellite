@@ -10,7 +10,7 @@ html {
 body {
 	margin: 0;
 	padding: 0;
-	width: 100vw;
+	width: 100%;
 	height: 100vh;
 	background-color: #0f2f9f;
 }
@@ -28,6 +28,7 @@ h2 {
 }
 
 p {
+	font-size: 1rem;
 	margin: 0.5rem 0;
 	color: #afafaf;
 }
@@ -43,40 +44,6 @@ p {
 	flex-direction: column;
 	align-items: left;
 	padding: 2rem;
-}
-
-.thumbnails {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	align-self: center;
-	padding: 1rem;
-}
-
-.thumbnails a {
-	text-decoration: none;
-}
-
-.thumbnail {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	margin: 1rem;
-	padding: 1rem;
-	width: 20rem;
-	height: 20rem;
-	border: 1px solid #cfcfcf;
-	border-radius: 1rem;
-	justify-content: center;
-	background-color: #001f8f;
-}
-
-.thumbnail h2 {
-	text-align: center;
-}
-
-.thumbnail p {
-	text-align: center;
 }
 
 .footer {
@@ -99,14 +66,22 @@ p {
 	height: 5rem;
 }
 
+.invisible {
+	visibility: hidden;
+}
+
+.disabled {
+	display: none!important;
+}
+
 @media screen and (max-width: 1000px) {
+
+	h1, h2 {
+		text-align: center;
+	}
 
 	.header {
 		align-items: center;
 		padding: 1rem;
-	}
-
-	.thumbnails {
-		flex-direction: column;
 	}
 }

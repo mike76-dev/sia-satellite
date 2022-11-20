@@ -1,0 +1,41 @@
+.thumbnails {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	align-self: center;
+	padding: 1rem;
+}
+
+.thumbnails a {
+	text-decoration: none;
+	margin-bottom: 2rem;
+}
+
+.thumbnail {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin: 1rem;
+	padding: 1rem;
+	width: 20rem;
+	height: 20rem;
+	border: 1px solid #cfcfcf;
+	border-radius: 1rem;
+	justify-content: center;
+	background-color: #001f8f;
+}
+
+.thumbnail h2 {
+	text-align: center;
+}
+
+.thumbnail p {
+	text-align: center;
+}
+
+@media screen and (max-width: 1000px) {
+
+	.thumbnails {
+		flex-direction: column;
+	}
+}
