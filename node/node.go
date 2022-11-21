@@ -8,10 +8,10 @@ import (
 
 	"gitlab.com/NebulousLabs/errors"
 
-	"github.com/mike76-dev/sia-satellite/sat"
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/satellite"
 
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/modules/consensus"
 	"go.sia.tech/siad/modules/gateway"
 	"go.sia.tech/siad/modules/transactionpool"
@@ -20,11 +20,11 @@ import (
 
 // Node represents a satellite node containing all required modules.
 type Node struct {
-	ConsensusSet    modules.ConsensusSet
-	Gateway         modules.Gateway
-	Satellite       sat.Satellite
-	TransactionPool modules.TransactionPool
-	Wallet          modules.Wallet
+	ConsensusSet    smodules.ConsensusSet
+	Gateway         smodules.Gateway
+	Satellite       modules.Satellite
+	TransactionPool smodules.TransactionPool
+	Wallet          smodules.Wallet
 
 	// The high level directory where all the persistence gets stored for the
 	// modules.
@@ -86,7 +86,7 @@ func New(gatewayAddr string, satelliteAddr string, dir string, bootstrap bool, l
 		return nil, errChan
 	}
 	cs, errChanCS := consensus.New(g, bootstrap, consensusDir)
-	if err := modules.PeekErr(errChanCS); err != nil {
+	if err := smodules.PeekErr(errChanCS); err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create consensus set"))
 		return nil, errChan
 	}

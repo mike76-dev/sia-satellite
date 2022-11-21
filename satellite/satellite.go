@@ -10,12 +10,12 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/satellite/manager"
 	"github.com/mike76-dev/sia-satellite/satellite/provider"
-	"github.com/mike76-dev/sia-satellite/sat"
+	"github.com/mike76-dev/sia-satellite/modules"
 
 	"gitlab.com/NebulousLabs/errors"
 
 	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
 	"go.sia.tech/siad/types"
@@ -33,10 +33,10 @@ var (
 // the renters and with the hosts.
 type Satellite struct {
 	// Dependencies.
-	cs     modules.ConsensusSet
-	g      modules.Gateway
-	tpool  modules.TransactionPool
-	wallet modules.Wallet
+	cs     smodules.ConsensusSet
+	g      smodules.Gateway
+	tpool  smodules.TransactionPool
+	wallet smodules.Wallet
 
 	// ACID fields - these fields need to be updated in serial, ACID transactions.
 	publicKey types.SiaPublicKey
@@ -52,11 +52,11 @@ type Satellite struct {
 	persist       persistence
 	persistDir    string
 	threads       siasync.ThreadGroup
-	staticAlerter *modules.GenericAlerter
+	staticAlerter *smodules.GenericAlerter
 }
 
 // New returns an initialized Satellite.
-func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, satelliteAddr string, persistDir string) (*Satellite, error) {
+func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, satelliteAddr string, persistDir string) (*Satellite, error) {
 	// Check that all the dependencies were provided.
 	if cs == nil {
 		return nil, errNilCS
@@ -79,13 +79,13 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 
 	// Create the manager.
 	m, errChanM := manager.New(persistDir)
-	if err = modules.PeekErr(errChanM); err != nil {
+	if err = smodules.PeekErr(errChanM); err != nil {
 		return nil, errors.AddContext(err, "unable to create manager")
 	}
 
 	// Create the provider.
 	p, errChanP := provider.New(g, satelliteAddr, persistDir)
-	if err = modules.PeekErr(errChanP); err != nil {
+	if err = smodules.PeekErr(errChanP); err != nil {
 		return nil, errors.AddContext(err, "unable to create provider")
 	}
 
@@ -100,7 +100,7 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 		p:             p,
 
 		persistDir:    persistDir,
-		staticAlerter: modules.NewAlerter("satellite"),
+		staticAlerter: smodules.NewAlerter("satellite"),
 	}
 
 	// Call stop in the event of a partial startup.
@@ -159,4 +159,4 @@ func (s *Satellite) Close() error {
 }
 
 // enforce that Satellite satisfies the interfaces.Satellite interface
-var _ sat.Satellite = (*Satellite)(nil)
+var _ modules.Satellite = (*Satellite)(nil)

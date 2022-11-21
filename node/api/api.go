@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mike76-dev/sia-satellite/sat"
+	"github.com/mike76-dev/sia-satellite/modules"
 
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 )
 
 const (
@@ -88,11 +88,11 @@ type (
 	// API encapsulates a collection of modules and implements a http.Handler
 	// to access their methods.
 	API struct {
-		cs                modules.ConsensusSet
-		gateway           modules.Gateway
-		satellite         sat.Satellite
-		tpool             modules.TransactionPool
-		wallet            modules.Wallet
+		cs                smodules.ConsensusSet
+		gateway           smodules.Gateway
+		satellite         modules.Satellite
+		tpool             smodules.TransactionPool
+		wallet            smodules.Wallet
 
 		router            http.Handler
 		routerMu          sync.RWMutex
@@ -112,7 +112,7 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetModules allows for replacing the modules in the API at runtime.
-func (api *API) SetModules(cs modules.ConsensusSet, g modules.Gateway, s sat.Satellite, tp modules.TransactionPool, w modules.Wallet) {
+func (api *API) SetModules(cs smodules.ConsensusSet, g smodules.Gateway, s modules.Satellite, tp smodules.TransactionPool, w smodules.Wallet) {
 	if api.modulesSet {
 		log.Fatal("can't call SetModules more than once")
 	}
@@ -128,7 +128,7 @@ func (api *API) SetModules(cs modules.ConsensusSet, g modules.Gateway, s sat.Sat
 // New creates a new API. The API will require authentication using HTTP basic
 // auth for certain endpoints of the supplied password is not the empty string.
 // Usernames are ignored for authentication.
-func New(requiredUserAgent string, requiredPassword string, cs modules.ConsensusSet, g modules.Gateway, s sat.Satellite, tp modules.TransactionPool, w modules.Wallet) *API {
+func New(requiredUserAgent string, requiredPassword string, cs smodules.ConsensusSet, g smodules.Gateway, s modules.Satellite, tp smodules.TransactionPool, w smodules.Wallet) *API {
 	api := &API{
 		cs:                cs,
 		gateway:           g,
