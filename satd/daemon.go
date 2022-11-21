@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/node"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/node/api/server"
 )
@@ -26,14 +27,14 @@ func tryAutoUnlock(srv *server.Server) {
 }
 
 // startDaemon starts the satd server.
-func startDaemon(userAgent, gatewayAddr, apiAddr, apiPassword, satelliteAddr string, dir string, bootstrap bool) error {
+func startDaemon(config *node.SatdConfig, apiPassword string) error {
 	loadStart := time.Now()
 
 	fmt.Printf("satd v%v\n", api.DaemonVersion)
 	fmt.Println("Loading...")
 
 	// Start and run the server.
-	srv, err := server.New(apiAddr, userAgent, apiPassword, gatewayAddr, satelliteAddr, dir, bootstrap, loadStart)
+	srv, err := server.New(config, apiPassword, loadStart)
 	if err != nil {
 		return err
 	}

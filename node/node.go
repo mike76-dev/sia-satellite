@@ -58,9 +58,9 @@ func (n *Node) Close() (err error) {
 }
 
 // New will create a new node.
-func New(gatewayAddr string, satelliteAddr string, dir string, bootstrap bool, loadStartTime time.Time) (*Node, <-chan error) {
+func New(config *SatdConfig, loadStartTime time.Time) (*Node, <-chan error) {
 	// Make sure the path is an absolute one.
-	d, err := filepath.Abs(dir)
+	d, err := filepath.Abs(config.Dir)
 	errChan := make(chan error, 1)
 	if err != nil {
 		errChan <- err
@@ -73,7 +73,7 @@ func New(gatewayAddr string, satelliteAddr string, dir string, bootstrap bool, l
 	if err := os.MkdirAll(gatewayDir, 0700); err != nil {
 		return nil, errChan
 	}
-	g, err := gateway.New(gatewayAddr, bootstrap, gatewayDir)
+	g, err := gateway.New(config.GatewayAddr, config.Bootstrap, gatewayDir)
 	if err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create gateway"))
 		return nil, errChan
@@ -85,7 +85,7 @@ func New(gatewayAddr string, satelliteAddr string, dir string, bootstrap bool, l
 	if err := os.MkdirAll(consensusDir, 0700); err != nil {
 		return nil, errChan
 	}
-	cs, errChanCS := consensus.New(g, bootstrap, consensusDir)
+	cs, errChanCS := consensus.New(g, config.Bootstrap, consensusDir)
 	if err := smodules.PeekErr(errChanCS); err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create consensus set"))
 		return nil, errChan
@@ -121,7 +121,7 @@ func New(gatewayAddr string, satelliteAddr string, dir string, bootstrap bool, l
 	if err := os.MkdirAll(satDir, 0700); err != nil {
 		return nil, errChan
 	}
-	s, err := satellite.New(cs, g, tp, w, satelliteAddr, satDir)
+	s, err := satellite.New(cs, g, tp, w, config.SatelliteAddr, satDir)
 	if err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create satellite"))
 		return nil, errChan
