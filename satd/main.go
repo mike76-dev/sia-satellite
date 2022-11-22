@@ -22,6 +22,7 @@ var defaultConfig = node.SatdConfig{
 }
 
 var config node.SatdConfig
+var configDir string
 
 func getAPIPassword() string {
 	apiPassword := os.Getenv("SATD_API_PASSWORD")
@@ -43,7 +44,11 @@ func main() {
 	log.SetFlags(0)
 
 	// Load config file if it exists. Otherwise load the defaults.
-	ok, err := config.Load()
+	configDir := os.Getenv("SATD_CONFIG_DIR")
+	if configDir != "" {
+		fmt.Println("Using SATD_CONFIG_DIR environment variable to load config.")
+	}
+	ok, err := config.Load(configDir)
 	if err != nil {
 		log.Fatalln("Could not load config file")
 	}
@@ -77,7 +82,7 @@ func main() {
 	config.Bootstrap = *bootstrap
 
 	// Save the configuration.
-	err = config.Save()
+	err = config.Save(configDir)
 	if err != nil {
 		log.Fatalln("Unable to save config file")
 	}
