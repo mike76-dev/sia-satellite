@@ -158,5 +158,5 @@ func (s *Satellite) Close() error {
 	return s.saveSync()
 }
 
-// enforce that Satellite satisfies the interfaces.Satellite interface
+// enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

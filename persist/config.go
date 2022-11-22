@@ -1,4 +1,4 @@
-package node
+package persist
 
 import (
 	"bytes"
@@ -21,6 +21,10 @@ type SatdConfig struct {
 	SatelliteAddr string `json: "satellite"`
 	Dir           string `json: "dir"`
 	Bootstrap     bool   `json: "bootstrap"`
+	DBUser        string `json: "dbuser"`
+	DBPassword    string `json: "dbpassword"`
+	DBName        string `json: "dbname"`
+	PortalPort    string `json: "portalport"`
 }
 
 // satdMetadata contains the header and version strings that identify the

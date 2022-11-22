@@ -6,22 +6,26 @@ import (
 	"log"
 	"os"
 
-	"github.com/mike76-dev/sia-satellite/node"
+	"github.com/mike76-dev/sia-satellite/persist"
 
 	"golang.org/x/term"
 )
 
 // Default config values.
-var defaultConfig = node.SatdConfig{
-	UserAgent: "Sat-Agent",
-	GatewayAddr: ":0",
-	APIAddr: "localhost:10080",
+var defaultConfig = persist.SatdConfig{
+	UserAgent:     "Sat-Agent",
+	GatewayAddr:   ":0",
+	APIAddr:       "localhost:10080",
 	SatelliteAddr: ":10082",
-	Dir: ".",
-	Bootstrap: true,
+	Dir:           ".",
+	Bootstrap:     true,
+	DBUser:        "",
+	DBPassword:    "",
+	DBName:        "satellite",
+	PortalPort:    ":8080",
 }
 
-var config node.SatdConfig
+var config persist.SatdConfig
 var configDir string
 
 func getAPIPassword() string {
@@ -63,6 +67,10 @@ func main() {
 	satelliteAddr := flag.String("sat-addr", "", "address to listen on for renter requests")
 	dir := flag.String("dir", "", "directory to store node state in")
 	bootstrap := flag.Bool("bootstrap", true, "bootstrap the gateway and consensus modules")
+	dbUser := flag.String("db-user", "", "username for accessing the database")
+	dbPassword := flag.String("db-pwd", "", "password for accessing the database")
+	dbName := flag.String("db-name", "", "name of MYSQL database")
+	portalPort := flag.String("portal", "", "port number the portal server listens at")
 	flag.Parse()
 	if *userAgent != "" {
 		config.UserAgent = *userAgent
@@ -80,6 +88,18 @@ func main() {
 		config.Dir = *dir
 	}
 	config.Bootstrap = *bootstrap
+	if *dbUser != "" {
+		config.DBUser = *dbUser
+	}
+	if *dbPassword != "" {
+		config.DBPassword = *dbPassword
+	}
+	if *dbName != "" {
+		config.DBName = *dbName
+	}
+	if *portalPort != "" {
+		config.PortalPort = *portalPort
+	}
 
 	// Save the configuration.
 	err = config.Save(configDir)

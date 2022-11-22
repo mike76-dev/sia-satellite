@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/mike76-dev/sia-satellite/node"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/node/api/server"
+	"github.com/mike76-dev/sia-satellite/persist"
 )
 
 // tryAutoUnlock will try to automatically unlock the wallet if the
@@ -27,7 +27,7 @@ func tryAutoUnlock(srv *server.Server) {
 }
 
 // startDaemon starts the satd server.
-func startDaemon(config *node.SatdConfig, apiPassword string) error {
+func startDaemon(config *persist.SatdConfig, apiPassword string) error {
 	loadStart := time.Now()
 
 	fmt.Printf("satd v%v\n", api.DaemonVersion)
@@ -60,7 +60,7 @@ func startDaemon(config *node.SatdConfig, apiPassword string) error {
 		}
 	}()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 
 	// Wait for server to complete shutdown.

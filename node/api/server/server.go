@@ -19,6 +19,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/node"
 	"github.com/mike76-dev/sia-satellite/node/api"
+	"github.com/mike76-dev/sia-satellite/persist"
 )
 
 // A Server is a collection of modules that can be communicated with over an http API.
@@ -122,7 +123,7 @@ func (srv *Server) Unlock(password string) error {
 // HTTP basic auth if the supplied password is not the empty string. Usernames
 // are ignored for authentication. This type of authentication sends passwords
 // in plaintext and should therefore only be used if the apiAddr is localhost.
-func NewAsync(config *node.SatdConfig, requiredPassword string, loadStartTime time.Time) (*Server, <-chan error) {
+func NewAsync(config *persist.SatdConfig, requiredPassword string, loadStartTime time.Time) (*Server, <-chan error) {
 	c := make(chan error, 1)
 	defer close(c)
 
@@ -210,7 +211,7 @@ func NewAsync(config *node.SatdConfig, requiredPassword string, loadStartTime ti
 // Usernames are ignored for authentication. This type of authentication
 // sends passwords in plaintext and should therefore only be used if the
 // apiAddr is localhost.
-func New(config *node.SatdConfig, requiredPassword string, loadStartTime time.Time) (*Server, error) {
+func New(config *persist.SatdConfig, requiredPassword string, loadStartTime time.Time) (*Server, error) {
 	// Wait for the node to be done loading.
 	srv, errChan := NewAsync(config, requiredPassword, loadStartTime)
 	if err := <-errChan; err != nil {

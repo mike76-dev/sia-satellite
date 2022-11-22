@@ -9,6 +9,8 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/persist"
+	"github.com/mike76-dev/sia-satellite/portal"
 	"github.com/mike76-dev/sia-satellite/satellite"
 
 	smodules "go.sia.tech/siad/modules"
@@ -22,6 +24,7 @@ import (
 type Node struct {
 	ConsensusSet    smodules.ConsensusSet
 	Gateway         smodules.Gateway
+	Portal          modules.Portal
 	Satellite       modules.Satellite
 	TransactionPool smodules.TransactionPool
 	Wallet          smodules.Wallet
@@ -34,6 +37,10 @@ type Node struct {
 // Close will call close on every module within the node, combining and
 // returning the errors.
 func (n *Node) Close() (err error) {
+	if n.Portal != nil {
+		fmt.Println("Closing portal...")
+		err = errors.Compose(err, n.Portal.Close())
+	}
 	if n.Satellite != nil {
 		fmt.Println("Closing satellite...")
 		err = errors.Compose(err, n.Satellite.Close())
@@ -58,7 +65,7 @@ func (n *Node) Close() (err error) {
 }
 
 // New will create a new node.
-func New(config *SatdConfig, loadStartTime time.Time) (*Node, <-chan error) {
+func New(config *persist.SatdConfig, loadStartTime time.Time) (*Node, <-chan error) {
 	// Make sure the path is an absolute one.
 	d, err := filepath.Abs(config.Dir)
 	errChan := make(chan error, 1)
@@ -127,6 +134,18 @@ func New(config *SatdConfig, loadStartTime time.Time) (*Node, <-chan error) {
 		return nil, errChan
 	}
 
+	// Load portal.
+	fmt.Println("Loading portal...")
+	portalDir := filepath.Join(d, "portal")
+	if err := os.MkdirAll(portalDir, 0700); err != nil {
+		return nil, errChan
+	}
+	p, err := portal.New(config, portalDir)
+	if err != nil {
+		errChan <- errors.Extend(err, errors.New("unable to create portal"))
+		return nil, errChan
+	}
+
 	// Setup complete.
 	fmt.Printf("API is now available, synchronous startup completed in %.3f seconds\n", time.Since(loadStartTime).Seconds())
 	go func() {
@@ -136,6 +155,7 @@ func New(config *SatdConfig, loadStartTime time.Time) (*Node, <-chan error) {
 	return &Node{
 		ConsensusSet:    cs,
 		Gateway:         g,
+		Portal:          p,
 		Satellite:       s,
 		TransactionPool: tp,
 		Wallet:          w,
