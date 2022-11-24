@@ -24,6 +24,22 @@ const (
 	httpMaxBodySize = 1048576 // 1MiB.
 )
 
+// Error codes provided in an HTTP response.
+const (
+	httpErrorNone = 0
+	httpErrorInternal = 1
+	httpErrorBadRequest = 2
+
+	httpErrorEmailInvalid = 10
+	httpErrorEmailUsed = 11
+
+	httpErrorPasswordTooShort = 20
+	httpErrorPasswordTooLong = 21
+	httpErrorPasswordNotCompliant = 22
+
+	httpErrorWrongCredentials = 30
+)
+
 // portalAPI implements the http.Handler interface.
 type portalAPI struct {
 	portal   *Portal
@@ -115,12 +131,13 @@ func writeSuccess(w http.ResponseWriter) {
 }
 
 // Error is a type that is encoded as JSON and returned in an API response in
-// the event of an error. Only the Message field is required. More fields may
-// be added to this struct in the future for better error reporting.
+// the event of an error.
 type Error struct {
+	// Code identifies the error and enables an easier client-side error handling.
+	Code    int    `json: "code"`
 	// Message describes the error in English. Typically it is set to
 	// `err.Error()`. This field is required.
-	Message string `json:"message"`
+	Message string `json: "message"`
 }
 
 // Error implements the error interface for the Error type. It returns only the
@@ -134,7 +151,10 @@ func checkHeader(w http.ResponseWriter, r *http.Request) Error {
 	if r.Header.Get("Content-Type") != "" {
 		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
 		if value != "application/json" {
-			return Error{httpContentTypeError}
+			return Error{
+				Code: httpErrorBadRequest,
+				Message: httpContentTypeError,
+			}
 		}
 	}
 	return Error{}
@@ -144,8 +164,8 @@ func checkHeader(w http.ResponseWriter, r *http.Request) Error {
 // json.Decoder.
 func prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, error) {
 	// Check the response header first.
-	if err := checkHeader(w, r); err.Message != "" {
-		writeError(w, Error{httpContentTypeError}, http.StatusUnsupportedMediaType)
+	if err := checkHeader(w, r); err.Code != httpErrorNone {
+		writeError(w, err, http.StatusUnsupportedMediaType)
 		return nil, errors.New(err.Message)
 	}
 
@@ -173,33 +193,54 @@ func (api *portalAPI) handleDecodeError(w http.ResponseWriter, err error) (Error
 	switch {
 		// Catch any syntax errors in the JSON.
 		case errors.As(err, &syntaxError):
-			return Error{"wrong request body format"}, http.StatusBadRequest
+			return Error{
+				Code: httpErrorBadRequest,
+				Message: "wrong request body format",
+			}, http.StatusBadRequest
 
 		// Catch a potential io.ErrUnexpectedEOF error in the JSON.
 		case errors.Is(err, io.ErrUnexpectedEOF):
-			return Error{"wrong request body format"}, http.StatusBadRequest
+			return Error{
+				Code: httpErrorBadRequest,
+				Message: "wrong request body format",
+			}, http.StatusBadRequest
 
 		// Catch any type errors.
 		case errors.As(err, &unmarshalTypeError):
-			return Error{"request body contains an invalid value"}, http.StatusBadRequest
+			return Error{
+				Code: httpErrorBadRequest,
+				Message: "request body contains an invalid value",
+			}, http.StatusBadRequest
 
 		// Catch the error caused by extra unexpected fields in the request
 		// body.
 		case strings.HasPrefix(err.Error(), "json: unknown field "):
-			return Error{"request body contains an unknown field"}, http.StatusBadRequest
+			return Error{
+				Code: httpErrorBadRequest,
+				Message: "request body contains an unknown field",
+			}, http.StatusBadRequest
 
 		// An io.EOF error is returned by Decode() if the request body is
 		// empty.
 		case errors.Is(err, io.EOF):
-			return Error{"request body is empty"}, http.StatusBadRequest
+			return Error{
+				Code: httpErrorBadRequest,
+				Message: "request body is empty",
+			}, http.StatusBadRequest
 
 		// Catch the error caused by the request body being too large.
 		case err.Error() == "http: request body too large":
-			return Error{"request body too large"}, http.StatusRequestEntityTooLarge
+			return Error{
+				Code: httpErrorBadRequest,
+				Message: "request body too large",
+			}, http.StatusRequestEntityTooLarge
 
 		// Otherwise send a 500 Internal Server Error response.
 		default:
 			api.portal.log.Printf("ERROR: failed to decode JSON: %v\n", err)
-			return Error{"internal error"}, http.StatusInternalServerError
+			return Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError
 	}
 }

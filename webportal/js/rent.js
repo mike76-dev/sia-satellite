@@ -173,20 +173,32 @@ function signupClick() {
 			} else return response.json();
 		})
 		.then(data => {
-			if (data.message && data.message.startsWith('invalid email address')) {
-				let err = document.getElementById('signup-email-error');
-				err.innerHTML = 'Provided email address is invalid';
-				err.classList.remove('invisible');
-				a.checked = false;
-				return;
+			let emailErr = document.getElementById('signup-email-error');
+			let passErr = document.getElementById('signup-password-error');
+			switch (data.Code) {
+				case 10:
+					emailErr.innerHTML = 'Provided email address is invalid';
+					emailErr.classList.remove('invisible');
+					break;
+				case 11:
+					emailErr.innerHTML = 'Email address is already used';
+					emailErr.classList.remove('invisible');
+					break;
+				case 20:
+					passErr.innerHTML = 'Password is too short';
+					passErr.classList.remove('invisible');
+					break;
+				case 21:
+					passErr.innerHTML = 'Password is too long';
+					passErr.classList.remove('invisible');
+				case 22:
+					passErr.innerHTML = 'Password is not secure enough';
+					passErr.classList.remove('invisible');
+				default:
+					// TODO
 			}
-			if (data.message && data.message.startsWith('invalid password')) {
-				let err = document.getElementById('signup-password-error');
-				err.innerHTML = 'Password is not secure enough';
-				err.classList.remove('invisible');
-				a.checked = false;
-				return;
-			}
+			a.checked = false;
+			return;
 		})
 		.catch(error => console.log(error));
 }

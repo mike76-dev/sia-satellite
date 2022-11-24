@@ -1,7 +1,6 @@
 package portal
 
 import (
-	"errors"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -30,12 +29,18 @@ func checkEmail(address string) (string, bool) {
 
 // checkPassword is a helper function that checks if the password
 // complies with the rules.
-func checkPassword(pwd string) error {
+func checkPassword(pwd string) Error {
 	if len(pwd) < 8 {
-		return errors.New("the password is too short")
+		return Error{
+			Code: httpErrorPasswordTooShort,
+			Message: "the password is too short",
+		}
 	}
 	if len(pwd) > 255 {
-		return errors.New("the password is too long")
+		return Error{
+			Code: httpErrorPasswordTooLong,
+			Message: "the password is too long",
+		}
 	}
 	var smalls, caps, digits, specials bool
 	for _, c := range pwd {
@@ -52,9 +57,12 @@ func checkPassword(pwd string) error {
 		}
 	}
 	if !smalls || !caps || !digits || !specials {
-		return errors.New("insecure password")
+		return Error{
+			Code: httpErrorPasswordNotCompliant,
+			Message: "insecure password",
+		}
 	}
-	return nil	
+	return Error{}	
 }
 
 // authHandlerPOST handles the POST /auth requests.
@@ -92,12 +100,15 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	
 	email := reg.Email
 	if _, ok := checkEmail(email); !ok {
-		writeError(w, Error{"invalid email address"}, http.StatusBadRequest)
+		writeError(w, Error{
+			Code: httpErrorEmailInvalid,
+			Message: "invalid email address",
+		}, http.StatusBadRequest)
 		return
 	}
 	password := reg.Password
-	if err := checkPassword(password); err != nil {
-		writeError(w, Error{"invalid password: " + err.Error()}, http.StatusBadRequest)
+	if err := checkPassword(password); err.Code != httpErrorNone {
+		writeError(w, err, http.StatusBadRequest)
 		return
 	}
 
