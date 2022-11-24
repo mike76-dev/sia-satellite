@@ -6,6 +6,7 @@
 	<link rel="icon" href="assets/satellite-icon.png">
 	<link rel="stylesheet" href="css/main.css">
 	<link rel="stylesheet" href="css/rent.css">
+	<script src="js/config.js"></script>
 	<script defer src="js/rent.js"></script>
 	<title>Sia Satellite - Rent Decentralized Storage</title>
 </head>
@@ -20,17 +21,19 @@
 			<div class="contents">
 				<label for="login-email">Email Address</label>
 				<input id="login-email" type="email" class="input"
-					placeholder="user@domain.com">
+					placeholder="user@domain.com" onkeypress="loginEmailChange()"
+					onchange="loginEmailChange()">
 				<p id="login-email-error" class="error invisible">
 					Provided address is invalid
 				</p>
 				<label for="login-password">Password</label>
-				<input id="login-password" type="password" class="input">
+				<input id="login-password" type="password" class="input"
+					onkeypress="loginPasswordChange()" onchange="loginPasswordChange()">
 				<p id="login-password-error" class="error invisible">
 					Wrong combination of email and password
 				</p>
 			</div>
-			<button>Sign In</button>
+			<button onclick="loginClick()">Sign In</button>
 			<p>Forgot your password?
 				<span class="link" onclick="setStatus('reset')">Reset password</span>
 			</p>
@@ -43,22 +46,26 @@
 			<div class="contents">
 				<label for="signup-email">Email Address</label>
 				<input id="signup-email" type="email" class="input"
-					placeholder="user@domain.com">
+					placeholder="user@domain.com" onkeypress="signupEmailChange()"
+					onchange="signupEmailChange()">
 				<p id="signup-email-error" class="error invisible">
 					Provided address is invalid
 				</p>
 				<label for="signup-password">Password</label>
-				<input id="signup-password" type="password" class="input">
+				<input id="signup-password" type="password" class="input"
+					onkeypress="signupPasswordChange()" onchange="signupPasswordChange()">
 				<p id="signup-password-error" class="error invisible">
 					Password is not strong enough
 				</p>
 				<label for="signup-retype">Retype Password</label>
-				<input id="signup-retype" type="password" class="input">
+				<input id="signup-retype" type="password" class="input"
+					onkeypress="signupRetypeChange()" onchange="signupRetypeChange()">
 				<p id="signup-retype-error" class="error invisible">
 					The two passwords do not match
 				</p>
 				<div class="checkbox-container">
-					<input id="signup-agree" type="checkbox" class="checkbox">
+					<input id="signup-agree" type="checkbox" class="checkbox"
+						onchange="signupAgreeChange()">
 					<label for="signup-agree" class="checkbox-label">
 						I agree to the
 						<a class="link" href="tos.html" target="_blank">Terms of Service</a>
@@ -66,8 +73,11 @@
 						<a class="link" href="privacy.html" target="_blank">Privacy Policy</a>
 					</label>
 				</div>
+				<p id="signup-agree-error" class="error invisible">
+					Please agree to the Terms and the Policy
+				</p>
 			</div>
-			<button>Sign Up</button>
+			<button onclick="signupClick()">Sign Up</button>
 			<p>Already have an account?
 				<span class="link" onclick="setStatus('login')">Login</span>
 			</p>
@@ -77,12 +87,13 @@
 			<div class="contents">
 				<label for="reset-email">Email Address</label>
 				<input id="reset-email" type="email" class="input"
-					placeholder="user@domain.com">
+					placeholder="user@domain.com" onkeypress="resetEmailChange()"
+					onchange="resetEmailChange()">
 				<p id="reset-email-error" class="error invisible">
 					Provided address is invalid
 				</p>
 			</div>
-			<button>Reset Password</button>
+			<button onclick="resetClick()">Reset Password</button>
 			<p>Back to
 				<span class="link" onclick="setStatus('login')">Login</span>
 			</p>
