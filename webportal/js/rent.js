@@ -15,24 +15,54 @@ function setStatus(s) {
 	let signup = document.getElementById('signup');
 	let reset = document.getElementById('reset');
 	status = s;
+	clearErrors();
 	switch (s) {
 		case 'login':
+			clearLoginTab();
 			login.classList.remove('disabled');
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
 			break;
 		case 'signup':
+			clearSignupTab();
 			login.classList.add('disabled');
 			signup.classList.remove('disabled');
 			reset.classList.add('disabled');
 			break;
 		case 'reset':
+			clearResetTab();
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
 			reset.classList.remove('disabled');
 			break;
 		default:
 	}
+}
+
+function clearErrors() {
+	document.getElementById('login-email-error').classList.add('invisible');
+	document.getElementById('login-password-error').classList.add('invisible');
+	document.getElementById('signup-email-error').classList.add('invisible');
+	document.getElementById('signup-password-error').classList.add('invisible');
+	document.getElementById('signup-retype-error').classList.add('invisible');
+	document.getElementById('signup-agree-error').classList.add('invisible');
+	document.getElementById('reset-email-error').classList.add('invisible');
+}
+
+function clearLoginTab() {
+	document.getElementById('login-email').value = '';
+	document.getElementById('login-password').value = '';
+}
+
+function clearSignupTab() {
+	document.getElementById('signup-email').value = '';
+	document.getElementById('signup-password').value = '';
+	document.getElementById('signup-retype').value = '';
+	document.getElementById('signup-agree').checked = false;
+}
+
+function clearResetTab() {
+	document.getElementById('reset-email').value = '';
 }
 
 function validateEmail(addr) {
