@@ -1,7 +1,6 @@
 package portal
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/mail"
@@ -60,15 +59,10 @@ func checkPassword(pwd string) error {
 
 // authMeHandlerPOST handles the POST /authme requests.
 func authMeHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	if hErr := checkHeader(w, req); hErr.Message != "" {
-		writeError(w, Error{httpContentTypeError}, http.StatusUnsupportedMediaType)
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
 		return
 	}
-
-	req.Body = http.MaxBytesReader(w, req.Body, httpMaxBodySize)
-
-	dec := json.NewDecoder(req.Body)
-	dec.DisallowUnknownFields()
 
 	var auth authMeRequest
 	err, code := handleDecodeError(w, dec.Decode(&auth))

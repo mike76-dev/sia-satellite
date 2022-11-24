@@ -134,6 +134,29 @@ func checkHeader(w http.ResponseWriter, r *http.Request) Error {
 	return Error{}
 }
 
+// prepareDecoder is a helper function that returns an initialized
+// json.Decoder.
+func prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, error) {
+	// Check the response header first.
+	if err := checkHeader(w, r); err.Message != "" {
+		writeError(w, Error{httpContentTypeError}, http.StatusUnsupportedMediaType)
+		return nil, errors.New(err.Message)
+	}
+
+	// Limit the request body size.
+	r.Body = http.MaxBytesReader(w, r.Body, httpMaxBodySize)
+
+	// Initialize the decoder and instruct it to not accept any undeclared
+	// fields in the body JSON.
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+
+	// Return the decoder.
+	return dec, nil
+}
+
+// handleDecodeError is a helper function that parses the json.Decoder
+// errors and returns an error message and a response code.
 func handleDecodeError(w http.ResponseWriter, err error) (Error, int) {
 	if err == nil {
 		return Error{}, http.StatusOK
