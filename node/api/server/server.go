@@ -123,7 +123,7 @@ func (srv *Server) Unlock(password string) error {
 // HTTP basic auth if the supplied password is not the empty string. Usernames
 // are ignored for authentication. This type of authentication sends passwords
 // in plaintext and should therefore only be used if the apiAddr is localhost.
-func NewAsync(config *persist.SatdConfig, requiredPassword string, loadStartTime time.Time) (*Server, <-chan error) {
+func NewAsync(config *persist.SatdConfig, apiPassword string, dbPassword string, loadStartTime time.Time) (*Server, <-chan error) {
 	c := make(chan error, 1)
 	defer close(c)
 
@@ -137,7 +137,7 @@ func NewAsync(config *persist.SatdConfig, requiredPassword string, loadStartTime
 		}
 
 		// Create the api for the server.
-		api := api.New(config.UserAgent, requiredPassword, nil, nil, nil, nil, nil)
+		api := api.New(config.UserAgent, apiPassword, nil, nil, nil, nil, nil)
 		srv := &Server{
 			api: api,
 			apiServer: &http.Server{
@@ -173,7 +173,7 @@ func NewAsync(config *persist.SatdConfig, requiredPassword string, loadStartTime
 		}()
 
 		// Create the node for the server after the server was started.
-		n, errChan = node.New(config, loadStartTime)
+		n, errChan = node.New(config, dbPassword, loadStartTime)
 		if err := modules.PeekErr(errChan); err != nil {
 			if isAddrInUseErr(err) {
 				return nil, fmt.Errorf("%v; are you running another instance of siad?", err.Error())
@@ -211,9 +211,9 @@ func NewAsync(config *persist.SatdConfig, requiredPassword string, loadStartTime
 // Usernames are ignored for authentication. This type of authentication
 // sends passwords in plaintext and should therefore only be used if the
 // apiAddr is localhost.
-func New(config *persist.SatdConfig, requiredPassword string, loadStartTime time.Time) (*Server, error) {
+func New(config *persist.SatdConfig, apiPassword string, dbPassword string, loadStartTime time.Time) (*Server, error) {
 	// Wait for the node to be done loading.
-	srv, errChan := NewAsync(config, requiredPassword, loadStartTime)
+	srv, errChan := NewAsync(config, apiPassword, dbPassword, loadStartTime)
 	if err := <-errChan; err != nil {
 		// Error occurred during async load. Close all modules.
 		fmt.Println("ERROR:", err)

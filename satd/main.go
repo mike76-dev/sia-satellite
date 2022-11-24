@@ -20,7 +20,6 @@ var defaultConfig = persist.SatdConfig{
 	Dir:           ".",
 	Bootstrap:     true,
 	DBUser:        "",
-	DBPassword:    "",
 	DBName:        "satellite",
 	PortalPort:    ":8080",
 }
@@ -42,6 +41,22 @@ func getAPIPassword() string {
 		apiPassword = string(pw)
 	}
 	return apiPassword
+}
+
+func getDBPassword() string {
+	dbPassword := os.Getenv("SATD_DB_PASSWORD")
+	if dbPassword != "" {
+		fmt.Println("Using SATD_DB_PASSWORD environment variable.")
+	} else {
+		fmt.Print("Enter database password: ")
+		pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if err != nil {
+			log.Fatalf("Could not read database password: %v\n", err)
+		}
+		dbPassword = string(pw)
+	}
+	return dbPassword
 }
 
 func main() {
@@ -68,7 +83,6 @@ func main() {
 	dir := flag.String("dir", "", "directory to store node state in")
 	bootstrap := flag.Bool("bootstrap", true, "bootstrap the gateway and consensus modules")
 	dbUser := flag.String("db-user", "", "username for accessing the database")
-	dbPassword := flag.String("db-pwd", "", "password for accessing the database")
 	dbName := flag.String("db-name", "", "name of MYSQL database")
 	portalPort := flag.String("portal", "", "port number the portal server listens at")
 	flag.Parse()
@@ -91,9 +105,6 @@ func main() {
 	if *dbUser != "" {
 		config.DBUser = *dbUser
 	}
-	if *dbPassword != "" {
-		config.DBPassword = *dbPassword
-	}
 	if *dbName != "" {
 		config.DBName = *dbName
 	}
@@ -110,6 +121,9 @@ func main() {
 	// Fetch API password.
 	apiPassword := getAPIPassword()
 
+	// Fetch DB password.
+	dbPassword := getDBPassword()
+
 	// Create the state directory if it does not yet exist.
 	// This also checks if the provided directory parameter is valid.
 	err = os.MkdirAll(config.Dir, 0700)
@@ -118,7 +132,7 @@ func main() {
 	}
 
 	// Start satd. startDaemon will only return when it is shutting down.
-	err = startDaemon(&config, apiPassword)
+	err = startDaemon(&config, apiPassword, dbPassword)
 	if err != nil {
 		log.Fatalln(err)
 	}

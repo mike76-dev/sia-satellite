@@ -44,7 +44,7 @@ type Portal struct {
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, persistDir string) (*Portal, error) {
+func New(config *persist.SatdConfig, dbPassword string, persistDir string) (*Portal, error) {
 	// Create the perist directory if it does not yet exist.
 	err := os.MkdirAll(persistDir, 0700)
 	if err != nil {
@@ -54,7 +54,7 @@ func New(config *persist.SatdConfig, persistDir string) (*Portal, error) {
 	// Create the portal object.
 	p := &Portal{
 		dbUser:        config.DBUser,
-		dbPassword:    config.DBPassword,
+		dbPassword:    dbPassword,
 		dbName:        config.DBName,
 
 		apiPort:       config.PortalPort,

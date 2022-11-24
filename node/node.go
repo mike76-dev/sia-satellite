@@ -65,7 +65,7 @@ func (n *Node) Close() (err error) {
 }
 
 // New will create a new node.
-func New(config *persist.SatdConfig, loadStartTime time.Time) (*Node, <-chan error) {
+func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time) (*Node, <-chan error) {
 	// Make sure the path is an absolute one.
 	d, err := filepath.Abs(config.Dir)
 	errChan := make(chan error, 1)
@@ -140,7 +140,7 @@ func New(config *persist.SatdConfig, loadStartTime time.Time) (*Node, <-chan err
 	if err := os.MkdirAll(portalDir, 0700); err != nil {
 		return nil, errChan
 	}
-	p, err := portal.New(config, portalDir)
+	p, err := portal.New(config, dbPassword, portalDir)
 	if err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create portal"))
 		return nil, errChan

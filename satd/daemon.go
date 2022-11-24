@@ -27,14 +27,14 @@ func tryAutoUnlock(srv *server.Server) {
 }
 
 // startDaemon starts the satd server.
-func startDaemon(config *persist.SatdConfig, apiPassword string) error {
+func startDaemon(config *persist.SatdConfig, apiPassword string, dbPassword string) error {
 	loadStart := time.Now()
 
 	fmt.Printf("satd v%v\n", api.DaemonVersion)
 	fmt.Println("Loading...")
 
 	// Start and run the server.
-	srv, err := server.New(config, apiPassword, loadStart)
+	srv, err := server.New(config, apiPassword, dbPassword, loadStart)
 	if err != nil {
 		return err
 	}

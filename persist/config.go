@@ -22,7 +22,6 @@ type SatdConfig struct {
 	Dir           string `json: "dir"`
 	Bootstrap     bool   `json: "bootstrap"`
 	DBUser        string `json: "dbuser"`
-	DBPassword    string `json: "dbpassword"`
 	DBName        string `json: "dbname"`
 	PortalPort    string `json: "portalport"`
 }
