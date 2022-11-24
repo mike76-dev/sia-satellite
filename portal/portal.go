@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -20,23 +21,24 @@ import (
 	siasync "go.sia.tech/siad/sync"
 )
 
-// logFile contains the name of the portal log file.
-const logFile = "portal.log"
-
 // Portal contains the information related to the server.
 type Portal struct {
-	// Database.
+	// Database-related fields.
 	db         *sql.DB
 	dbUser     string
 	dbPassword string
 	dbName     string
 
-	// Server.
+	// Server-related fields.
 	apiPort    string
+
+	// Atomic stats.
+	authStats  map[string]authenticationStats
 
 	// Utilities.
 	listener      net.Listener
 	log           *spersist.Logger
+	mu            sync.Mutex
 	persistDir    string
 	threads       siasync.ThreadGroup
 	staticAlerter *smodules.GenericAlerter
@@ -58,6 +60,8 @@ func New(config *persist.SatdConfig, dbPassword string, persistDir string) (*Por
 		dbName:        config.DBName,
 
 		apiPort:       config.PortalPort,
+
+		authStats:     make(map[string]authenticationStats),
 
 		persistDir:    persistDir,
 		staticAlerter: smodules.NewAlerter("portal"),
@@ -110,7 +114,27 @@ func New(config *persist.SatdConfig, dbPassword string, persistDir string) (*Por
 	p.threads.AfterStop(func() {
 		err := p.db.Close()
 		if err != nil {
-			p.log.Println("Unable to close the database:", err)
+			p.log.Println("ERROR: unable to close the database:", err)
+		}
+	})
+
+	// Load the portal persistence.
+	if err = p.load(); err != nil {
+		return nil, errors.AddContext(err, "unable to load portal")
+	}
+
+	// Spawn the thread to periodically save the portal.
+	go p.threadedSaveLoop()
+
+	// Spawn the thread to periodically prune the authentication stats.
+	go p.threadedPruneAuthStats()
+
+	// Make sure that the portal saves after shutdown.
+	p.threads.AfterStop(func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if err := p.saveSync(); err != nil {
+			p.log.Println("ERROR: unable to save portal:", err)
 		}
 	})
 
@@ -134,7 +158,10 @@ func (p *Portal) Close() error {
 	if err := p.threads.Stop(); err != nil {
 		return errors.Compose(errDB, err)
 	}
-	return nil
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.saveSync()
 }
 
 // enforce that Portal satisfies the modules.Portal interface
