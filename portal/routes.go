@@ -11,8 +11,8 @@ import (
 )
 
 type (
-	// authMeRequest holds the body of an /authme POST request.
-	authMeRequest struct {
+	// authRequest holds the body of an /authme POST request.
+	authRequest struct {
 		Email    string `json: "email"`
 		Password string `json: "password"`
 	}
@@ -57,32 +57,51 @@ func checkPassword(pwd string) error {
 	return nil	
 }
 
-// authMeHandlerPOST handles the POST /authme requests.
-func authMeHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// authHandlerPOST handles the POST /auth requests.
+func authHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	dec, decErr := prepareDecoder(w, req)
 	if decErr != nil {
 		return
 	}
 
-	var auth authMeRequest
+	var auth authRequest
 	err, code := handleDecodeError(w, dec.Decode(&auth))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
 	}
+
+	// TODO implement auth code.
+
+	writeSuccess(w)
+}
+
+// registerHandlerPOST handles the POST /register requests.
+func registerHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
+		return
+	}
+
+	var reg authRequest
+	err, code := handleDecodeError(w, dec.Decode(&reg))
+	if code != http.StatusOK {
+		writeError(w, err, code)
+		return
+	}
 	
-	/*email := auth.Email
+	email := reg.Email
 	if _, ok := checkEmail(email); !ok {
 		writeError(w, Error{"invalid email address"}, http.StatusBadRequest)
 		return
 	}
-	password := auth.Password
+	password := reg.Password
 	if err := checkPassword(password); err != nil {
 		writeError(w, Error{"invalid password: " + err.Error()}, http.StatusBadRequest)
 		return
-	}*/
+	}
 
-	// TODO implement auth code.
+	// TODO implement registration code.
 
 	writeSuccess(w)
 }

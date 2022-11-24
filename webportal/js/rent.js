@@ -95,7 +95,7 @@ function loginClick() {
 		},
 		body: JSON.stringify(data)
 	}
-	fetch(apiBaseURL + '/authme', options)
+	fetch(apiBaseURL + '/auth', options)
 		.then(response => {
 			if (response.status == 204) {
 				return "request successful";
@@ -154,6 +154,41 @@ function signupClick() {
 		err.classList.remove('invisible');
 		return;
 	}
+	let data = {
+		email:    e.value,
+		password: p.value
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	fetch(apiBaseURL + '/register', options)
+		.then(response => {
+			if (response.status == 204) {
+				// TODO
+				return "request successful";
+			} else return response.json();
+		})
+		.then(data => {
+			if (data.message && data.message.startsWith('invalid email address')) {
+				let err = document.getElementById('signup-email-error');
+				err.innerHTML = 'Provided email address is invalid';
+				err.classList.remove('invisible');
+				a.checked = false;
+				return;
+			}
+			if (data.message && data.message.startsWith('invalid password')) {
+				let err = document.getElementById('signup-password-error');
+				err.innerHTML = 'Password is not secure enough';
+				err.classList.remove('invisible');
+				a.checked = false;
+				return;
+			}
+		})
+		.catch(error => console.log(error));
 }
 
 function resetEmailChange() {
