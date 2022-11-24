@@ -58,14 +58,14 @@ func checkPassword(pwd string) error {
 }
 
 // authHandlerPOST handles the POST /auth requests.
-func authHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	dec, decErr := prepareDecoder(w, req)
 	if decErr != nil {
 		return
 	}
 
 	var auth authRequest
-	err, code := handleDecodeError(w, dec.Decode(&auth))
+	err, code := api.handleDecodeError(w, dec.Decode(&auth))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
@@ -77,14 +77,14 @@ func authHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Para
 }
 
 // registerHandlerPOST handles the POST /register requests.
-func registerHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	dec, decErr := prepareDecoder(w, req)
 	if decErr != nil {
 		return
 	}
 
 	var reg authRequest
-	err, code := handleDecodeError(w, dec.Decode(&reg))
+	err, code := api.handleDecodeError(w, dec.Decode(&reg))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return

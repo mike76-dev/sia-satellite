@@ -26,6 +26,7 @@ const (
 
 // portalAPI implements the http.Handler interface.
 type portalAPI struct {
+	portal   *Portal
 	router   http.Handler
 	routerMu sync.RWMutex
 }
@@ -43,10 +44,10 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router := httprouter.New()
 
 	router.POST("/auth", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		authHandlerPOST(w, req, ps)
+		api.authHandlerPOST(w, req, ps)
 	})
 	router.POST("/register", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		registerHandlerPOST(w, req, ps)
+		api.registerHandlerPOST(w, req, ps)
 	})
 
 	api.routerMu.Lock()
@@ -66,7 +67,9 @@ func (p *Portal) initNetworking(address string) error {
 	p.listener = l
 
 	// Initialize the portal API.
-	api := &portalAPI{}
+	api := &portalAPI{
+		portal: p,
+	}
 	api.buildHTTPRoutes()
 
 	// Start the portal API server.
@@ -158,9 +161,9 @@ func prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, erro
 	return dec, nil
 }
 
-// handleDecodeError is a helper function that parses the json.Decoder
-// errors and returns an error message and a response code.
-func handleDecodeError(w http.ResponseWriter, err error) (Error, int) {
+// handleDecodeError parses the json.Decoder errors and returns an
+// error message and a response code.
+func (api *portalAPI) handleDecodeError(w http.ResponseWriter, err error) (Error, int) {
 	if err == nil {
 		return Error{}, http.StatusOK
 	}
@@ -196,6 +199,7 @@ func handleDecodeError(w http.ResponseWriter, err error) (Error, int) {
 
 		// Otherwise send a 500 Internal Server Error response.
 		default:
+			api.portal.log.Printf("ERROR: failed to decode JSON: %v\n", err)
 			return Error{"internal error"}, http.StatusInternalServerError
 	}
 }
