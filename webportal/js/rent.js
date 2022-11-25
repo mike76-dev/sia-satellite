@@ -198,6 +198,7 @@ function signupClick() {
 	fetch(apiBaseURL + '/register', options)
 		.then(response => {
 			if (response.status == 204) {
+				clearSignupTab();
 				// TODO
 				return "request successful";
 			} else return response.json();
@@ -221,9 +222,16 @@ function signupClick() {
 				case 21:
 					passErr.innerHTML = 'Password is too long';
 					passErr.classList.remove('invisible');
+					break;
 				case 22:
 					passErr.innerHTML = 'Password is not secure enough';
 					passErr.classList.remove('invisible');
+					break;
+				case 31:
+					emailErr.innerHTML = 'Too many attempts, try again later';
+					emailErr.classList.remove('invisible');
+					window.setTimeout(function() {emailErr.classList.add('invisible')}, 5000);
+					break;
 				default:
 					// TODO
 			}

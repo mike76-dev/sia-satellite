@@ -86,6 +86,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 // registerHandlerPOST handles the POST /register requests.
 func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode request body.
 	dec, decErr := prepareDecoder(w, req)
 	if decErr != nil {
 		return
@@ -97,7 +98,8 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		writeError(w, err, code)
 		return
 	}
-	
+
+	// Check request fields for validity.	
 	email := reg.Email
 	if _, ok := checkEmail(email); !ok {
 		writeError(w, Error{
@@ -112,7 +114,47 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	// TODO implement registration code.
+	// Check if the email address is already registered.
+	count, cErr := api.portal.countEmails(email)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+	if count > 0 {
+		writeError(w,
+			Error{
+				Code: httpErrorEmailUsed,
+				Message: "email already registered",
+			}, http.StatusNotAcceptable)
+		return
+	}
+
+	// Check and update stats. This is done after the email check but
+	// we may decide to do it at an earlier step in the future.
+	if cErr := api.portal.checkAndUpdateSignupRequests(req.RemoteAddr); cErr != nil {
+		writeError(w,
+			Error{
+				Code: httpErrorTooManyRequests,
+				Message: "too many signup requests",
+			}, http.StatusTooManyRequests)
+		return
+	}
+
+	// Create a new account.
+	if cErr := api.portal.createAccount(email, password); cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
 
 	writeSuccess(w)
 }

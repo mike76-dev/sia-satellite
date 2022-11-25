@@ -26,18 +26,19 @@ const (
 
 // Error codes provided in an HTTP response.
 const (
-	httpErrorNone = 0
-	httpErrorInternal = 1
-	httpErrorBadRequest = 2
+	httpErrorNone                 = 0
+	httpErrorInternal             = 1
+	httpErrorBadRequest           = 2
 
-	httpErrorEmailInvalid = 10
-	httpErrorEmailUsed = 11
+	httpErrorEmailInvalid         = 10
+	httpErrorEmailUsed            = 11
 
-	httpErrorPasswordTooShort = 20
-	httpErrorPasswordTooLong = 21
+	httpErrorPasswordTooShort     = 20
+	httpErrorPasswordTooLong      = 21
 	httpErrorPasswordNotCompliant = 22
 
-	httpErrorWrongCredentials = 30
+	httpErrorWrongCredentials     = 30
+	httpErrorTooManyRequests      = 31
 )
 
 // portalAPI implements the http.Handler interface.
