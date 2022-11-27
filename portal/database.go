@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"runtime"
 
+	"gitlab.com/NebulousLabs/fastrand"
+
 	"golang.org/x/crypto/argon2"
 )
 
@@ -30,5 +32,6 @@ func (p *Portal) createAccount(email, password string) error {
 func passwordHash(password string) string {
 	t := uint8(runtime.NumCPU())
 	hash := argon2.IDKey([]byte(password), []byte(argon2Salt), 1, 64 * 1024, t, 32)
+	defer fastrand.Read(hash[:])
 	return hex.EncodeToString(hash)
 }
