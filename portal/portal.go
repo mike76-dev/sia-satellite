@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
 
@@ -43,6 +44,7 @@ type Portal struct {
 	threads       siasync.ThreadGroup
 	staticAlerter *smodules.GenericAlerter
 	closeChan     chan int
+	ms            mail.MailSender
 }
 
 // New returns an initialized portal server.
@@ -91,6 +93,13 @@ func New(config *persist.SatdConfig, dbPassword string, persistDir string) (*Por
 		}
 	})
 	p.log.Println("INFO: portal created, started logging")
+
+	// Create the mail client.
+	ms, err := mail.New(persistDir)
+	if err != nil {
+		p.log.Println("ERROR: could not create mail client", err)
+	}
+	p.ms = ms
 
 	// Connect to the database.
 	cfg := mysql.Config {
