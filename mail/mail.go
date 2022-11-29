@@ -19,7 +19,7 @@ const configFilename = "mail.json"
 
 // MailSender is an abstraction of a mail client.
 type MailSender interface {
-	SendHTML(to, subject string, body *bytes.Buffer) error
+	SendMail(from, to, subject string, body *bytes.Buffer) error
 }
 
 type (
@@ -41,22 +41,20 @@ type (
 )
 
 // SendMail sends the message contained in body using HTML format.
-func (mc *mailClient) SendHTML(to, subject string, body *bytes.Buffer) error {
+func (mc *mailClient) SendMail(from, to, subject string, body *bytes.Buffer) error {
 	// Authenticate.
 	auth := smtp.PlainAuth("", mc.from, mc.password, mc.smtpHost)
 
 	// Prepare the message.
 	rec := []string{to}
 	var b bytes.Buffer
-	mimeHeaders := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
-	_, err := b.Write([]byte(fmt.Sprintf("%s\n%s\n\n", subject, mimeHeaders)))
-	if err != nil {
-		return errors.AddContext(err, "unable to write the message header")
-	}
-	_, err = b.Write(body.Bytes())
-	if err != nil {
-		return errors.AddContext(err, "unable to write the message body")
-	}
+	mimeHeaders := "MIME-version: 1.0;\r\nContent-Type: text/html; charset=\"UTF-8\";\r\n\r\n"
+	b.Write([]byte(fmt.Sprintf("From: %s\r\n", from)))
+	b.Write([]byte(fmt.Sprintf("To: %s\r\n", to)))
+	b.Write([]byte(fmt.Sprintf("Subject: %s\r\n", subject)))
+	b.Write([]byte(mimeHeaders))
+	b.Write(body.Bytes())
+	b.Write([]byte("\r\n"))
 
 	// Send the email.
   return smtp.SendMail(mc.smtpHost+":"+mc.smtpPort, auth, mc.from, rec, b.Bytes())

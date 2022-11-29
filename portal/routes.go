@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"bytes"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -142,6 +143,20 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 				Code: httpErrorTooManyRequests,
 				Message: "too many signup requests",
 			}, http.StatusTooManyRequests)
+		return
+	}
+
+	// Send verification link by email.
+	var b bytes.Buffer
+	b.Write([]byte("<h1>This is a test</h1>")) // TODO generate a verification link
+	sErr := api.portal.ms.SendMail("Sia Satellite", email, "Verify Your Account", &b)
+	if sErr != nil {
+		api.portal.log.Printf("ERROR: unable to send verification link: %v\n", sErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "unable to send verification link",
+			}, http.StatusInternalServerError)
 		return
 	}
 
