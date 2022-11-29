@@ -20,7 +20,7 @@ const (
 		<!DOCTYPE html>
 		<html>
 		<body>
-    	<h2>Please Verify Your Email</h2>
+    	<h2>Please Verify Your Email Address</h2>
 	    <p>Click on the following link to complete your account registration. This link is valid within the next 24 hours.</p>
 	    <p><a href="{{.Path}}?token={{.Token}}">{{.Path}}?token={{.Token}}</a></p>
 		</body>
@@ -161,14 +161,14 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 
 	// Check and update stats. This is done after the email check but
 	// we may decide to do it at an earlier step in the future.
-	if cErr := api.portal.checkAndUpdateVerifications(req.RemoteAddr); cErr != nil {
+	/*if cErr := api.portal.checkAndUpdateVerifications(req.RemoteAddr); cErr != nil {
 		writeError(w,
 			Error{
 				Code: httpErrorTooManyRequests,
 				Message: "too many verification requests",
 			}, http.StatusTooManyRequests)
 		return
-	}
+	}*/
 
 	// Generate a verification link.
 	token := api.portal.generateToken(verifyPrefix, email, time.Now().Add(24 * time.Hour))
@@ -215,7 +215,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	// Create a new account.
-	if cErr := api.portal.createAccount(email, password); cErr != nil {
+	/*if cErr := api.portal.createAccount(email, password); cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
@@ -223,7 +223,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
-	}
+	}*/
 
 	writeSuccess(w)
 }
