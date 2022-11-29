@@ -137,11 +137,11 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 
 	// Check and update stats. This is done after the email check but
 	// we may decide to do it at an earlier step in the future.
-	if cErr := api.portal.checkAndUpdateSignupRequests(req.RemoteAddr); cErr != nil {
+	if cErr := api.portal.checkAndUpdateVerifications(req.RemoteAddr); cErr != nil {
 		writeError(w,
 			Error{
 				Code: httpErrorTooManyRequests,
-				Message: "too many signup requests",
+				Message: "too many verification requests",
 			}, http.StatusTooManyRequests)
 		return
 	}

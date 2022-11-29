@@ -9,24 +9,24 @@ import (
 const (
 	// authStatsCheckFrequency defines how often the authentication
 	// stats are pruned.
-	authStatsCheckFrequency = time.Minute * 30
+	authStatsCheckFrequency = time.Minute * 10
 
 	// authStatsPruneThreshold defines how old the authentication
 	// stats may become before they are pruned.
 	authStatsPruneThreshold = time.Hour * 24
-)
 
-var (
-	// maxSignupRequests is how many new accounts may be created in a
-	// given time from the same IP. It is unlikely that a user would
-	// need to register more than one account.
-	maxSignupRequests = 3 / time.Hour.Seconds()
+	// authStatsCountResetThreshold defines when the counter needs
+	// to be reset to zero after the last activity.
+	authStatsCountResetThreshold = time.Hour
+
+	// maxVerifications is how many times a verification link may be
+	// requested per hour from the same IP.
+	maxVerifications = 3
 )
 
 type (
 	// authAttempts keeps track of specific authentication activities.
 	authAttempts struct {
-		FirstAttempt int64 `json: "first"`
 		LastAttempt  int64 `json: "last"`
 		Count        int64 `json: "count"`
 	}
@@ -34,10 +34,9 @@ type (
 	// authenticationStats is the summary of authentication attempts
 	// from a single IP address.
 	authenticationStats struct {
-		RemoteHost       string       `json: "host"`
-		SuccessfulLogins *authAttempts `json: "loginsuccess"`
+		RemoteHost       string        `json: "host"`
 		FailedLogins     *authAttempts `json: "loginfail"`
-		SignupRequests   *authAttempts `json: "signup"`
+		Verifications    *authAttempts `json: "verification"`
 		PasswordResets   *authAttempts `json: "reset"`
 	}
 )
@@ -64,31 +63,40 @@ func (p *Portal) threadedPruneAuthStats() {
 
 			now := time.Now().Unix()
 			for ip, entry := range p.authStats {
-				sl := now - entry.SuccessfulLogins.LastAttempt
-				fl := now - entry.FailedLogins.LastAttempt
-				sr := now - entry.SignupRequests.LastAttempt
-				pr := now - entry.PasswordResets.LastAttempt
-				min := sl
-				if fl < min {
-					min = fl
-				}
-				if sr < min {
-					min = sr
+				// Check if the entry needs to be pruned.
+				fl := float64(now - entry.FailedLogins.LastAttempt)
+				vr := float64(now - entry.Verifications.LastAttempt)
+				pr := float64(now - entry.PasswordResets.LastAttempt)
+				min := fl
+				if vr < min {
+					min = vr
 				}
 				if pr < min {
 					min = pr
 				}
-				if float64(min) > authStatsPruneThreshold.Seconds() {
+				if min > authStatsPruneThreshold.Seconds() {
 					delete(p.authStats, ip)
+					continue
+				}
+
+				// Check if the counters need to be reset.
+				if fl > authStatsCountResetThreshold.Seconds() {
+					p.authStats[entry.RemoteHost].FailedLogins.Count = 0
+				}
+				if vr > authStatsCountResetThreshold.Seconds() {
+					p.authStats[entry.RemoteHost].Verifications.Count = 0
+				}
+				if pr > authStatsCountResetThreshold.Seconds() {
+					p.authStats[entry.RemoteHost].PasswordResets.Count = 0
 				}
 			}
 		}()
 	}
 }
 
-// checkAndUpdateSignupRequests checks if there are too many signup
-// requests coming from the same IP and updates the stats.
-func (p *Portal) checkAndUpdateSignupRequests(addr string) error {
+// checkAndUpdateVerifications checks if there are too many verification
+// links are requested from the same IP and updates the stats.
+func (p *Portal) checkAndUpdateVerifications(addr string) error {
 	host, _, _ := net.SplitHostPort(addr)
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -99,8 +107,7 @@ func (p *Portal) checkAndUpdateSignupRequests(addr string) error {
 	if !ok {
 		p.authStats[host] = authenticationStats{
 			RemoteHost: host,
-			SignupRequests: &authAttempts{
-				FirstAttempt: time.Now().Unix(),
+			Verifications: &authAttempts{
 				LastAttempt: time.Now().Unix(),
 				Count: 1,
 			},
@@ -109,23 +116,22 @@ func (p *Portal) checkAndUpdateSignupRequests(addr string) error {
 	}
 
 	// IP exists but no signup attempts yet.
-	if (as.SignupRequests.Count == 0) {
-		p.authStats[host].SignupRequests.FirstAttempt = time.Now().Unix()
-		p.authStats[host].SignupRequests.LastAttempt = time.Now().Unix()
-		p.authStats[host].SignupRequests.Count = 1
+	if (as.Verifications.Count == 0) {
+		p.authStats[host].Verifications.LastAttempt = time.Now().Unix()
+		p.authStats[host].Verifications.Count = 1
 		return nil
 	}
 
 	// Check for abuse.
-	p.authStats[host].SignupRequests.LastAttempt = time.Now().Unix()
-	p.authStats[host].SignupRequests.Count++
-	span := time.Now().Unix() - as.SignupRequests.FirstAttempt
+	p.authStats[host].Verifications.LastAttempt = time.Now().Unix()
+	p.authStats[host].Verifications.Count++
+	span := time.Now().Unix() - as.Verifications.LastAttempt
 	if span == 0 {
 		span = 1 // To avoid division by zero.
 	}
 
-	if float64(as.SignupRequests.Count) / float64(span) > maxSignupRequests {
-		return errors.New("too many signup requests from " + host)
+	if float64(as.Verifications.Count) / float64(span) > maxVerifications {
+		return errors.New("too many verification requests from " + host)
 	}
 
 	return nil
