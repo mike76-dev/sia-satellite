@@ -44,12 +44,21 @@ type (
 
 // checkEmail is a helper function that validates an email address.
 // If the email address is valid, it is returned in lowercase.
-func checkEmail(address string) (string, bool) {
+func checkEmail(address string) (string, Error) {
 	_, err := mail.ParseAddress(address)
 	if err != nil {
-		return "", false
+		return "", Error{
+			Code: httpErrorEmailInvalid,
+			Message: "the email address is invalid",
+		}
 	}
-	return strings.ToLower(address), true
+	if len(address) > 48 {
+		return "", Error{
+			Code: httpErrorEmailTooLong,
+			Message: "the email address is too long",
+		}
+	}
+	return strings.ToLower(address), Error{}
 }
 
 // checkPassword is a helper function that checks if the password
@@ -87,7 +96,7 @@ func checkPassword(pwd string) Error {
 			Message: "insecure password",
 		}
 	}
-	return Error{}	
+	return Error{}
 }
 
 // authHandlerPOST handles the POST /auth requests.
@@ -125,12 +134,9 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	// Check request fields for validity.	
-	email := reg.Email
-	if _, ok := checkEmail(email); !ok {
-		writeError(w, Error{
-			Code: httpErrorEmailInvalid,
-			Message: "invalid email address",
-		}, http.StatusBadRequest)
+	email, err := checkEmail(reg.Email)
+	if err.Code != httpErrorNone {
+		writeError(w, err, http.StatusBadRequest)
 		return
 	}
 	password := reg.Password
@@ -159,58 +165,8 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	// Check and update stats. This is done after the email check but
-	// we may decide to do it at an earlier step in the future.
-	/*if cErr := api.portal.checkAndUpdateVerifications(req.RemoteAddr); cErr != nil {
-		writeError(w,
-			Error{
-				Code: httpErrorTooManyRequests,
-				Message: "too many verification requests",
-			}, http.StatusTooManyRequests)
-		return
-	}*/
-
-	// Generate a verification link.
-	token := api.portal.generateToken(verifyPrefix, email, time.Now().Add(24 * time.Hour))
-	path := req.Header["Referer"]
-	if len(path) == 0 {
-		api.portal.log.Printf("ERROR: unable to fetch referer URL")
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "unable to fetch referer URL",
-			}, http.StatusInternalServerError)
-		return
-	}
-	link := authLink{
-		Path:  path[0],
-		Token: token,
-	}
-
-	// Generate email body.
-	t := template.New("verify")
-	t, pErr := t.Parse(verifyTemplate)
-	if pErr != nil {
-		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", pErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "unable to send verification link",
-			}, http.StatusInternalServerError)
-		return
-	}
-	var b bytes.Buffer
-  t.Execute(&b, link)
-
 	// Send verification link by email.
-	sErr := api.portal.ms.SendMail("Sia Satellite", email, "Action Required", &b)
-	if sErr != nil {
-		api.portal.log.Printf("ERROR: unable to send verification link: %v\n", sErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "unable to send verification link",
-			}, http.StatusInternalServerError)
+	if !api.sendVerificationLinkByMail(w, req, email) {
 		return
 	}
 
@@ -224,6 +180,92 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 			}, http.StatusInternalServerError)
 		return
 	}*/
+
+	writeSuccess(w)
+}
+
+// sendVerificationLinkByMail is a wrapper function for sending a
+// verification link by email.
+func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *http.Request, email string) bool {
+	// Check and update stats. This is done after the email check but
+	// we may decide to do it at an earlier step in the future.
+	if err := api.portal.checkAndUpdateVerifications(req.RemoteAddr); err != nil {
+		writeError(w,
+			Error{
+				Code: httpErrorTooManyRequests,
+				Message: "too many verification requests",
+			}, http.StatusTooManyRequests)
+		return false
+	}
+
+	// Generate a verification link.
+	token := api.portal.generateToken(verifyPrefix, email, time.Now().Add(24 * time.Hour))
+	path := req.Header["Referer"]
+	if len(path) == 0 {
+		api.portal.log.Printf("ERROR: unable to fetch referer URL")
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "unable to fetch referer URL",
+			}, http.StatusInternalServerError)
+		return false
+	}
+	link := authLink{
+		Path:  path[0],
+		Token: token,
+	}
+
+	// Generate email body.
+	t := template.New("verify")
+	t, err := t.Parse(verifyTemplate)
+	if err != nil {
+		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "unable to send verification link",
+			}, http.StatusInternalServerError)
+		return false
+	}
+	var b bytes.Buffer
+	t.Execute(&b, link)
+
+	// Send verification link by email.
+	err = api.portal.ms.SendMail("Sia Satellite", email, "Action Required", &b)
+	if err != nil {
+		api.portal.log.Printf("ERROR: unable to send verification link: %v\n", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "unable to send verification link",
+			}, http.StatusInternalServerError)
+		return false
+	}
+
+	return true
+}
+
+// registerResendHandlerPOST handles the POST /register/resend requests.
+func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode request body.
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
+		return
+	}
+
+	var data struct {
+		Email string `json: "email"`
+	}
+	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	if code != http.StatusOK {
+		writeError(w, err, code)
+		return
+	}
+
+	// Send verification link by email.
+	if !api.sendVerificationLinkByMail(w, req, data.Email) {
+		return
+	}
 
 	writeSuccess(w)
 }

@@ -32,6 +32,7 @@ const (
 
 	httpErrorEmailInvalid         = 10
 	httpErrorEmailUsed            = 11
+	httpErrorEmailTooLong         = 12
 
 	httpErrorPasswordTooShort     = 20
 	httpErrorPasswordTooLong      = 21
@@ -65,6 +66,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	})
 	router.POST("/register", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.registerHandlerPOST(w, req, ps)
+	})
+	router.POST("/register/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.registerResendHandlerPOST(w, req, ps)
 	})
 
 	api.routerMu.Lock()

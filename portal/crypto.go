@@ -29,8 +29,7 @@ type (
 	}
 )
 
-// generateToken generates an authorization token. Only the first
-// 48 bytes of the email address are used.
+// generateToken generates an authorization token.
 func (p *Portal) generateToken(prefix authPrefix, email string, expires time.Time) string {
 	// Generate a new Threefish cipher.
 	key := p.satellite.SecretKey()
