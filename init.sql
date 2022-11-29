@@ -5,7 +5,5 @@ CREATE TABLE accounts (
 	email          VARCHAR(255) NOT NULL UNIQUE,
 	password_hash  VARCHAR(64) NOT NULL,
 	verified       BOOL NOT NULL,
-	token          VARCHAR(64),
-	token_expiry   DATE,
 	PRIMARY KEY (id)
 );
