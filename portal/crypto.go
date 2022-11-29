@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"log"
 	"time"
@@ -39,12 +40,11 @@ func (p *Portal) generateToken(prefix authPrefix, email string, expires time.Tim
 	}
 
 	// Encrypt the data.
-	t, _ := expires.MarshalBinary()
 	src := make([]byte, 64)
 	dst := make([]byte, 64)
 	copy(src[:8], prefix[:])
 	copy(src[8:56], email[:])
-	copy(src[56:], t[:])
+	binary.BigEndian.PutUint64(src[56:], uint64(expires.Unix()))
 	cipher.Encrypt(dst, src)
 
 	return hex.EncodeToString(dst)
