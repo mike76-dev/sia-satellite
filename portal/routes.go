@@ -149,7 +149,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	// Send verification link by email.
 	var b bytes.Buffer
 	b.Write([]byte("<h1>This is a test</h1>")) // TODO generate a verification link
-	sErr := api.portal.ms.SendMail("Sia Satellite", email, "Verify Your Account", &b)
+	sErr := api.portal.ms.SendMail("Sia Satellite", email, "Action Required", &b)
 	if sErr != nil {
 		api.portal.log.Printf("ERROR: unable to send verification link: %v\n", sErr)
 		writeError(w,
