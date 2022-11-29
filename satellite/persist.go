@@ -52,6 +52,12 @@ func (s *Satellite) establishDefaults() {
 
 	s.publicKey = types.Ed25519PublicKey(pk)
 	s.secretKey = sk
+
+	// The generated keys are important, save them.
+	err := s.saveSync()
+	if err != nil {
+		s.log.Println("failed to save satellite persistence:", err)
+	}
 }
 
 // load loads the Satellite's persistent data from disk.

@@ -55,6 +55,20 @@ type Satellite struct {
 	staticAlerter *smodules.GenericAlerter
 }
 
+// PublicKey returns the satellite's public key
+func (s *Satellite) PublicKey() types.SiaPublicKey {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.publicKey
+}
+
+// SecretKey returns the satellite's secret key
+func (s *Satellite) SecretKey() crypto.SecretKey {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.secretKey
+}
+
 // New returns an initialized Satellite.
 func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, satelliteAddr string, persistDir string) (*Satellite, error) {
 	// Check that all the dependencies were provided.
@@ -126,6 +140,11 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 	})
 	s.log.Println("INFO: satellite created, started logging")
 
+	// Load the satellite persistence.
+	if loadErr := s.load(); loadErr != nil && !os.IsNotExist(loadErr) {
+		err = errors.AddContext(loadErr, "unable to load satellite")
+		return nil, err
+	}
 
 	// Make sure that the satellite saves on shutdown.
 	s.threads.AfterStop(func() {
