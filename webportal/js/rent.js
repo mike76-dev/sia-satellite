@@ -14,6 +14,7 @@ function setStatus(s) {
 	let login = document.getElementById('login');
 	let signup = document.getElementById('signup');
 	let reset = document.getElementById('reset');
+	let resendVerify = document.getElementById('resend-verify');
 	status = s;
 	clearErrors();
 	switch (s) {
@@ -22,18 +23,27 @@ function setStatus(s) {
 			login.classList.remove('disabled');
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
+			resendVerify.classList.add('disabled');
 			break;
 		case 'signup':
 			clearSignupTab();
 			login.classList.add('disabled');
 			signup.classList.remove('disabled');
 			reset.classList.add('disabled');
+			resendVerify.classList.add('disabled');
 			break;
 		case 'reset':
 			clearResetTab();
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
 			reset.classList.remove('disabled');
+			resendVerify.classList.add('disabled');
+			break;
+		case 'resend-verify':
+			login.classList.add('disabled');
+			signup.classList.add('disabled');
+			reset.classList.add('disabled');
+			resendVerify.classList.remove('disabled');
 			break;
 		default:
 	}
@@ -47,6 +57,7 @@ function clearErrors() {
 	document.getElementById('signup-retype-error').classList.add('invisible');
 	document.getElementById('signup-agree-error').classList.add('invisible');
 	document.getElementById('reset-email-error').classList.add('invisible');
+	document.getElementById('resend-verify-error').classList.add('invisible');
 }
 
 function clearLoginTab() {
@@ -128,7 +139,7 @@ function loginClick() {
 	fetch(apiBaseURL + '/auth', options)
 		.then(response => {
 			if (response.status == 204) {
-				return "request successful";
+				return 'request successful';
 			} else return response.json();
 		})
 		.then(data => console.log(data)) //TODO
@@ -198,9 +209,11 @@ function signupClick() {
 	fetch(apiBaseURL + '/register', options)
 		.then(response => {
 			if (response.status == 204) {
+				let rv = document.getElementById('resend-verify-email');
+				rv.value = e.value;
+				setStatus('resend-verify');
 				clearSignupTab();
-				// TODO
-				return "request successful";
+				return 'request successful';
 			} else return response.json();
 		})
 		.then(data => {
@@ -213,6 +226,10 @@ function signupClick() {
 					break;
 				case 11:
 					emailErr.innerHTML = 'Email address is already used';
+					emailErr.classList.remove('invisible');
+					break;
+				case 12:
+					emailErr.innerHTML = 'Email address is too long';
 					emailErr.classList.remove('invisible');
 					break;
 				case 20:
@@ -233,7 +250,6 @@ function signupClick() {
 					window.setTimeout(function() {emailErr.classList.add('invisible')}, 5000);
 					break;
 				default:
-					// TODO
 			}
 			a.checked = false;
 			return;
@@ -254,4 +270,37 @@ function resetClick() {
 		err.classList.remove('invisible');
 		return;
 	}
+}
+
+function resendVerifyClick() {
+	let e = document.getElementById('resend-verify-email');
+	let data = {
+		email:    e.value
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	fetch(apiBaseURL + '/register/resend', options)
+		.then(response => {
+			if (response.status == 204) {
+				return 'request successful';
+			} else return response.json();
+		})
+		.then(data => {
+			let resendErr = document.getElementById('resend-verify-error');
+			switch (data.Code) {
+				case 31:
+					resendErr.innerHTML = 'Too many attempts, try again later';
+					resendErr.classList.remove('invisible');
+					window.setTimeout(function() {resendErr.classList.add('invisible')}, 5000);
+					break;
+				default:
+			}
+			return;
+		})
+		.catch(error => console.log(error));
 }

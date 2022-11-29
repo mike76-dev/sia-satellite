@@ -171,7 +171,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	// Create a new account.
-	/*if cErr := api.portal.createAccount(email, password); cErr != nil {
+	if cErr := api.portal.createAccount(email, password); cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
@@ -179,7 +179,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
-	}*/
+	}
 
 	writeSuccess(w)
 }

@@ -98,6 +98,21 @@
 				<span class="link" onclick="setStatus('login')">Login</span>
 			</p>
 		</div>
+		<div id="resend-verify" class="frame disabled">
+			<h2>Check Your Email</h2>
+			<div class="contents">
+				<p>An email has been sent to:</p>
+				<input id="resend-verify-email" class="input" disabled>
+				<p id="resend-verify-error" class="error invisible">
+					Too many attempts, try again later
+				</p>
+				<p>If there is no email, check your spam folder.</p>
+			</div>
+			<button onclick="resendVerifyClick()">Resend Link</button>
+			<p>Back to
+				<span class="link" onclick="setStatus('signup')">Account Creation</span>
+			</p>
+		</div>
 		<div class="footer">
 			<a href="about.html" target="_blank">About</a>
 			<a href="privacy.html" target="_blank">Privacy</a>
