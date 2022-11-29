@@ -14,6 +14,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
+	"github.com/mike76-dev/sia-satellite/satellite"
 
 	"gitlab.com/NebulousLabs/errors"
 
@@ -24,6 +25,9 @@ import (
 
 // Portal contains the information related to the server.
 type Portal struct {
+	// Satellite reference.
+	satellite  *satellite.Satellite
+
 	// Database-related fields.
 	db         *sql.DB
 	dbUser     string
@@ -48,7 +52,7 @@ type Portal struct {
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, dbPassword string, persistDir string) (*Portal, error) {
+func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, persistDir string) (*Portal, error) {
 	// Create the perist directory if it does not yet exist.
 	err := os.MkdirAll(persistDir, 0700)
 	if err != nil {
@@ -57,6 +61,8 @@ func New(config *persist.SatdConfig, dbPassword string, persistDir string) (*Por
 
 	// Create the portal object.
 	p := &Portal{
+		satellite:     s,
+
 		dbUser:        config.DBUser,
 		dbPassword:    dbPassword,
 		dbName:        config.DBName,

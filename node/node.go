@@ -140,7 +140,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	if err := os.MkdirAll(portalDir, 0700); err != nil {
 		return nil, errChan
 	}
-	p, err := portal.New(config, dbPassword, portalDir)
+	p, err := portal.New(config, s, dbPassword, portalDir)
 	if err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create portal"))
 		return nil, errChan
