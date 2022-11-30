@@ -78,6 +78,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.POST("/token", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.tokenHandlerPOST(w, req, ps)
 	})
+	router.POST("/reset", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.resetHandlerPOST(w, req, ps)
+	})
 
 	api.routerMu.Lock()
 	api.router = router

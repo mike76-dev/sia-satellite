@@ -26,6 +26,10 @@ const (
 	// maxFailedLogins is how many failed login attempts per hour
 	// may be accepted from the same IP.
 	maxFailedLogins = 3
+
+	// maxPasswordResets is how many times a password reset link may
+	// be requested per hour from the same IP.
+	maxPasswordResets = 3
 )
 
 type (
@@ -183,6 +187,51 @@ func (p *Portal) checkAndUpdateFailedLogins(addr string) error {
 
 	if float64(as.FailedLogins.Count) / float64(span) > maxFailedLogins {
 		return errors.New("too many failed logins from " + host)
+	}
+
+	return nil
+}
+
+// checkAndUpdatePasswordResets checks if there are too many password
+// reset requests from the same IP and updates the stats.
+func (p *Portal) checkAndUpdatePasswordResets(addr string) error {
+	host, _, _ := net.SplitHostPort(addr)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	as, ok := p.authStats[host]
+
+	// No such IP in the map yet.
+	if !ok {
+		p.authStats[host] = authenticationStats{
+			RemoteHost: host,
+			FailedLogins: &authAttempts{},
+			Verifications: &authAttempts{},
+			PasswordResets: &authAttempts{
+				LastAttempt: time.Now().Unix(),
+				Count: 1,
+			},
+		}
+		return nil
+	}
+
+	// IP exists but no password resets yet.
+	if (as.PasswordResets.Count == 0) {
+		p.authStats[host].PasswordResets.LastAttempt = time.Now().Unix()
+		p.authStats[host].PasswordResets.Count = 1
+		return nil
+	}
+
+	// Check for abuse.
+	p.authStats[host].PasswordResets.LastAttempt = time.Now().Unix()
+	p.authStats[host].PasswordResets.Count++
+	span := time.Now().Unix() - as.PasswordResets.LastAttempt
+	if span == 0 {
+		span = 1 // To avoid division by zero.
+	}
+
+	if float64(as.PasswordResets.Count) / float64(span) > maxPasswordResets {
+		return errors.New("too many password reset requests from " + host)
 	}
 
 	return nil

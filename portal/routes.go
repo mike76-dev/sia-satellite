@@ -26,6 +26,20 @@ const (
 		</body>
 		</html>
 	`
+
+	// resetTemplate contains the text send by email when a
+	// user wants to reset their password.
+	resetTemplate = `
+		<!-- template.html -->
+		<!DOCTYPE html>
+		<html>
+		<body>
+    	<h2>Reset Your Password</h2>
+	    <p>Click on the following link to enter a new password. This link is valid within the next 24 hours.</p>
+	    <p><a href="{{.Path}}?token={{.Token}}">{{.Path}}?token={{.Token}}</a></p>
+		</body>
+		</html>
+	`
 )
 
 // authLink holds the parts of an authentication link.
@@ -233,8 +247,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 // sendVerificationLinkByMail is a wrapper function for sending a
 // verification link by email.
 func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *http.Request, email string) bool {
-	// Check and update stats. This is done after the email check but
-	// we may decide to do it at an earlier step in the future.
+	// Check and update stats.
 	if err := api.portal.checkAndUpdateVerifications(req.RemoteAddr); err != nil {
 		writeError(w,
 			Error{
@@ -284,6 +297,56 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 			Error{
 				Code: httpErrorInternal,
 				Message: "unable to send verification link",
+			}, http.StatusInternalServerError)
+		return false
+	}
+
+	return true
+}
+
+// sendPasswordResetLinkByMail is a wrapper function for sending a
+// password reset link by email.
+func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *http.Request, email string) bool {
+	// Generate a password reset link.
+	token := api.portal.generateToken(resetPrefix, email, time.Now().Add(24 * time.Hour))
+	path := req.Header["Referer"]
+	if len(path) == 0 {
+		api.portal.log.Printf("ERROR: unable to fetch referer URL")
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "unable to fetch referer URL",
+			}, http.StatusInternalServerError)
+		return false
+	}
+	link := authLink{
+		Path:  path[0],
+		Token: token,
+	}
+
+	// Generate email body.
+	t := template.New("reset")
+	t, err := t.Parse(resetTemplate)
+	if err != nil {
+		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "unable to send password reset link",
+			}, http.StatusInternalServerError)
+		return false
+	}
+	var b bytes.Buffer
+	t.Execute(&b, link)
+
+	// Send password reset link by email.
+	err = api.portal.ms.SendMail("Sia Satellite", email, "Reset Your Password", &b)
+	if err != nil {
+		api.portal.log.Printf("ERROR: unable to send password reset link: %v\n", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "unable to send password reset link",
 			}, http.StatusInternalServerError)
 		return false
 	}
@@ -373,6 +436,60 @@ func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request,
 				Code: httpErrorTokenInvalid,
 				Message: "prefix not supported",
 			}, http.StatusBadRequest)
+		return
+	}
+
+	writeSuccess(w)
+}
+
+// resetHandlerPOST handles the POST /reset requests.
+func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check and update password reset stats.
+	if cErr := api.portal.checkAndUpdatePasswordResets(req.RemoteAddr); cErr != nil {
+		writeError(w,
+			Error{
+				Code: httpErrorTooManyRequests,
+				Message: "too many password reset requests",
+			}, http.StatusTooManyRequests)
+		return
+	}
+
+	// Decode request body.
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
+		return
+	}
+
+	var data struct {
+		Email string `json: "email"`
+	}
+	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	if code != http.StatusOK {
+		writeError(w, err, code)
+		return
+	}
+
+	// Check if such account exists.
+	count, cErr := api.portal.countEmails(data.Email)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	if count == 0 {
+		// Do not return an error. Otherwise we would give a potential
+		// attacker a hint.
+		writeSuccess(w)
+		return
+	}
+
+	// Send password reset link by email.
+	if !api.sendPasswordResetLinkByMail(w, req, data.Email) {
 		return
 	}
 
