@@ -146,6 +146,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	// Check if the email address is already registered.
+	registeredAndVerified := false
 	count, cErr := api.portal.countEmails(email)
 	if cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
@@ -157,12 +158,48 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 	if count > 0 {
-		writeError(w,
-			Error{
-				Code: httpErrorEmailUsed,
-				Message: "email already registered",
-			}, http.StatusNotAcceptable)
-		return
+		// Check if the account is verified already.
+		var passwordOK bool
+		registeredAndVerified, passwordOK, cErr = api.portal.isVerified(email, password)
+		if cErr != nil {
+			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+			writeError(w,
+				Error{
+					Code: httpErrorInternal,
+					Message: "internal error",
+				}, http.StatusInternalServerError)
+			return
+		}
+
+		// Wrong password.
+		if !passwordOK {
+			// Check and update login stats.
+			if cErr := api.portal.checkAndUpdateFailedLogins(req.RemoteAddr); cErr != nil {
+				writeError(w,
+					Error{
+						Code: httpErrorTooManyRequests,
+						Message: "too many failed login attempts",
+					}, http.StatusTooManyRequests)
+				return
+			}
+
+			writeError(w,
+				Error{
+					Code: httpErrorWrongCredentials,
+					Message: "invalid combination of email and password",
+				}, http.StatusBadRequest)
+			return
+		}
+
+		// This account is completely registered.
+		if registeredAndVerified {
+			writeError(w,
+				Error{
+					Code: httpErrorEmailUsed,
+					Message: "email already registered",
+				}, http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Send verification link by email.
@@ -170,18 +207,27 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	// Create a new account.
-	if cErr := api.portal.createAccount(email, password); cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
+	if !registeredAndVerified {
+		// Create a new account.
+		if cErr := api.portal.updateAccount(email, password, false); cErr != nil {
+			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+			writeError(w,
+				Error{
+					Code: httpErrorInternal,
+					Message: "internal error",
+				}, http.StatusInternalServerError)
+			return
+		}
+
+		writeSuccess(w)
+	} else {
+		// Report that the account is unverified.
+		writeError(w, Error{
+			Code: httpErrorNone,
+			Message: "account not verified yet",
+		}, http.StatusOK)
 		return
 	}
-
-	writeSuccess(w)
 }
 
 // sendVerificationLinkByMail is a wrapper function for sending a
@@ -264,6 +310,69 @@ func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http
 
 	// Send verification link by email.
 	if !api.sendVerificationLinkByMail(w, req, data.Email) {
+		return
+	}
+
+	writeSuccess(w)
+}
+
+// tokenHandlerPOST handles the POST /token requests.
+func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode request body.
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
+		return
+	}
+
+	var data struct {
+		Token string `json: "token"`
+	}
+	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	if code != http.StatusOK {
+		writeError(w, err, code)
+		return
+	}
+
+	// Decode the token.
+	prefix, email, expires, tErr := api.portal.decodeToken(data.Token)
+	if tErr != nil {
+		writeError(w,
+			Error{
+				Code: httpErrorTokenInvalid,
+				Message: "unable to decode token",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	switch prefix {
+	case verifyPrefix:
+		if expires.Before(time.Now()) {
+			writeError(w,
+			Error{
+				Code: httpErrorTokenExpired,
+				Message: "link already expired",
+			}, http.StatusBadRequest)
+			return
+		}
+		err := api.portal.updateAccount(email, "", true)
+		if err != nil {
+			writeError(w,
+				Error{
+					Code: httpErrorInternal,
+					Message: "unable to verify account",
+				}, http.StatusInternalServerError)
+			return
+		}
+
+	case resetPrefix:
+		// TODO
+
+	default:
+		writeError(w,
+			Error{
+				Code: httpErrorTokenInvalid,
+				Message: "prefix not supported",
+			}, http.StatusBadRequest)
 		return
 	}
 

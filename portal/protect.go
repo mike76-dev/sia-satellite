@@ -22,6 +22,10 @@ const (
 	// maxVerifications is how many times a verification link may be
 	// requested per hour from the same IP.
 	maxVerifications = 3
+
+	// maxFailedLogins is how many failed login attempts per hour
+	// may be accepted from the same IP.
+	maxFailedLogins = 3
 )
 
 type (
@@ -95,7 +99,7 @@ func (p *Portal) threadedPruneAuthStats() {
 }
 
 // checkAndUpdateVerifications checks if there are too many verification
-// links are requested from the same IP and updates the stats.
+// links requested from the same IP and updates the stats.
 func (p *Portal) checkAndUpdateVerifications(addr string) error {
 	host, _, _ := net.SplitHostPort(addr)
 	p.mu.Lock()
@@ -107,15 +111,17 @@ func (p *Portal) checkAndUpdateVerifications(addr string) error {
 	if !ok {
 		p.authStats[host] = authenticationStats{
 			RemoteHost: host,
+			FailedLogins: &authAttempts{},
 			Verifications: &authAttempts{
 				LastAttempt: time.Now().Unix(),
 				Count: 1,
 			},
+			PasswordResets: &authAttempts{},
 		}
 		return nil
 	}
 
-	// IP exists but no signup attempts yet.
+	// IP exists but no verification requests yet.
 	if (as.Verifications.Count == 0) {
 		p.authStats[host].Verifications.LastAttempt = time.Now().Unix()
 		p.authStats[host].Verifications.Count = 1
@@ -132,6 +138,51 @@ func (p *Portal) checkAndUpdateVerifications(addr string) error {
 
 	if float64(as.Verifications.Count) / float64(span) > maxVerifications {
 		return errors.New("too many verification requests from " + host)
+	}
+
+	return nil
+}
+
+// checkAndUpdateFailedLogins checks if there are too many failed
+// login attempts from the same IP and updates the stats.
+func (p *Portal) checkAndUpdateFailedLogins(addr string) error {
+	host, _, _ := net.SplitHostPort(addr)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	as, ok := p.authStats[host]
+
+	// No such IP in the map yet.
+	if !ok {
+		p.authStats[host] = authenticationStats{
+			RemoteHost: host,
+			FailedLogins: &authAttempts{
+				LastAttempt: time.Now().Unix(),
+				Count: 1,
+			},
+			Verifications: &authAttempts{},
+			PasswordResets: &authAttempts{},
+		}
+		return nil
+	}
+
+	// IP exists but no failed logins yet.
+	if (as.FailedLogins.Count == 0) {
+		p.authStats[host].FailedLogins.LastAttempt = time.Now().Unix()
+		p.authStats[host].FailedLogins.Count = 1
+		return nil
+	}
+
+	// Check for abuse.
+	p.authStats[host].FailedLogins.LastAttempt = time.Now().Unix()
+	p.authStats[host].FailedLogins.Count++
+	span := time.Now().Unix() - as.FailedLogins.LastAttempt
+	if span == 0 {
+		span = 1 // To avoid division by zero.
+	}
+
+	if float64(as.FailedLogins.Count) / float64(span) > maxFailedLogins {
+		return errors.New("too many failed logins from " + host)
 	}
 
 	return nil

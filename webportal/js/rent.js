@@ -8,7 +8,57 @@ const specialChars = [
 	'\\', '|', ',', '.', '<', '>', '/', '?'
 ];
 
-var status = 'login';
+var status;
+
+var query = window.location.search;
+if (query.startsWith('?token=')) {
+	let token = query.slice(7);
+	if (token.length == 128) {
+		let data = {
+			token: token
+		}
+		let options = {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json;charset=utf-8'
+			},
+			body: JSON.stringify(data)
+		}
+		let m = document.getElementById('message');
+		fetch(apiBaseURL + '/token', options)
+			.then(response => {
+				if (response.status == 204) {
+					m.innerHTML = 'Email verification successful, you will be redirected now...';
+					m.classList.remove('disabled');
+					window.setTimeout(function() {
+						m.classList.add('disabled');
+						m.innerHTML = '';
+						setStatus('login');
+					}, 3000);
+					return 'request successful';
+				} else return response.json();
+			})
+			.then(data => {
+				switch (data.Code) {
+					case 40:
+						m.innerHTML = 'Provided link is invalid';
+						m.classList.remove('disabled');
+						break;
+					case 41:
+						m.innerHTML = 'Provided link already expired. Please request a new one.';
+						m.classList.remove('disabled');
+						window.setTimeout(function() {
+							m.classList.add('disabled');
+							m.innerHTML = '';
+							setStatus('signup');
+						}, 3000);
+						break;
+					default:
+				}
+			})
+			.catch(error => console.log(error));
+	}
+} else setStatus('login');
 
 function setStatus(s) {
 	let login = document.getElementById('login');
@@ -46,6 +96,10 @@ function setStatus(s) {
 			resendVerify.classList.remove('disabled');
 			break;
 		default:
+			login.classList.add('disabled');
+			signup.classList.add('disabled');
+			reset.classList.add('disabled');
+			resendVerify.classList.add('disabled');
 	}
 }
 
@@ -208,7 +262,7 @@ function signupClick() {
 	}
 	fetch(apiBaseURL + '/register', options)
 		.then(response => {
-			if (response.status == 204) {
+			if (response.status == 200 || response.status == 204) {
 				let rv = document.getElementById('resend-verify-email');
 				rv.value = e.value;
 				setStatus('resend-verify');
@@ -244,15 +298,18 @@ function signupClick() {
 					passErr.innerHTML = 'Password is not secure enough';
 					passErr.classList.remove('invisible');
 					break;
+				case 30:
+					passErr.innerHTML = 'Wrong combination of email and password';
+					passErr.classList.remove('invisible');
+					break;
 				case 31:
 					emailErr.innerHTML = 'Too many attempts, try again later';
 					emailErr.classList.remove('invisible');
-					window.setTimeout(function() {emailErr.classList.add('invisible')}, 5000);
+					window.setTimeout(function() {emailErr.classList.add('invisible')}, 3000);
 					break;
 				default:
 			}
 			a.checked = false;
-			return;
 		})
 		.catch(error => console.log(error));
 }
@@ -296,7 +353,7 @@ function resendVerifyClick() {
 				case 31:
 					resendErr.innerHTML = 'Too many attempts, try again later';
 					resendErr.classList.remove('invisible');
-					window.setTimeout(function() {resendErr.classList.add('invisible')}, 5000);
+					window.setTimeout(function() {resendErr.classList.add('invisible')}, 3000);
 					break;
 				default:
 			}

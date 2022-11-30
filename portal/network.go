@@ -40,6 +40,11 @@ const (
 
 	httpErrorWrongCredentials     = 30
 	httpErrorTooManyRequests      = 31
+
+	httpErrorTokenInvalid         = 40
+	httpErrorTokenExpired         = 41
+
+	httpErrorNotFound             = 50
 )
 
 // portalAPI implements the http.Handler interface.
@@ -69,6 +74,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	})
 	router.POST("/register/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.registerResendHandlerPOST(w, req, ps)
+	})
+	router.POST("/token", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.tokenHandlerPOST(w, req, ps)
 	})
 
 	api.routerMu.Lock()

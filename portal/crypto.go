@@ -3,6 +3,7 @@ package portal
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"log"
 	"time"
 
@@ -47,4 +48,36 @@ func (p *Portal) generateToken(prefix authPrefix, email string, expires time.Tim
 	cipher.Encrypt(dst, src)
 
 	return hex.EncodeToString(dst)
+}
+
+func (p *Portal) decodeToken(token string) (prefix authPrefix, email string, expires time.Time, err error) {
+	// Convert hex to bytes.
+	b, err := hex.DecodeString(token)
+	if err != nil {
+		return authPrefix{}, "", time.Unix(0, 0), err
+	}
+	if len(b) != 64 {
+		return authPrefix{}, "", time.Unix(0, 0), errors.New("Wrong token length")
+	}
+
+	// Generate a new Threefish cipher.
+	key := p.satellite.SecretKey()
+	cipher, err := threefish.NewCipher(key[:], make([]byte, threefish.TweakSize))
+	if err != nil {
+		log.Fatalln("Wrong key length for a Threefish cipher")
+	}
+
+	// Decrypt the data.
+	src := make([]byte, 64)
+	dst := make([]byte, 64)
+	copy(src[:], b[:])
+	cipher.Decrypt(dst, src)
+	at := authToken{
+		Email: make([]byte, 48),
+	}
+	copy(at.Prefix[:], dst[:8])
+	copy(at.Email[:], dst[8:56])
+	at.Expires = int64(binary.BigEndian.Uint64(dst[56:]))
+
+	return at.Prefix, string(at.Email), time.Unix(at.Expires, 0), nil
 }

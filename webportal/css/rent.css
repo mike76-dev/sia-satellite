@@ -76,3 +76,11 @@ button:hover {
 .checkbox-label {
 	margin: 0;
 }
+
+.message {
+	width: 100%;
+	font-size: 1.5rem;
+	color: #cfcfcf;
+	text-align: center;
+	margin: auto;
+}
