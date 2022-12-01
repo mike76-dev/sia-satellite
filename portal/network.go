@@ -63,7 +63,6 @@ type (
 
 	// authRequestWithToken holds the body of an /change POST request.
 	authRequestWithToken struct {
-		Email    string `json: "email"`
 		Password string `json: "password"`
 		Token    string `json: "token"`
 	}

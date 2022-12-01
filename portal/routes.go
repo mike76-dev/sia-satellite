@@ -216,7 +216,6 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	// Check if the email address is already registered.
-	registeredAndVerified := false
 	count, cErr := api.portal.countEmails(email)
 	if cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
@@ -229,8 +228,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 	if count > 0 {
 		// Check if the account is verified already.
-		var passwordOK bool
-		registeredAndVerified, passwordOK, cErr = api.portal.isVerified(email, password)
+		verified, passwordOK, cErr := api.portal.isVerified(email, password)
 		if cErr != nil {
 			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 			writeError(w,
@@ -238,6 +236,16 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 					Code: httpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
+			return
+		}
+
+		// Account fully registered.
+		if verified {
+			writeError(w,
+				Error{
+					Code: httpErrorEmailUsed,
+					Message: "email address already used",
+				}, http.StatusBadRequest)
 			return
 		}
 
@@ -260,16 +268,6 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 				}, http.StatusBadRequest)
 			return
 		}
-
-		// This account is completely registered.
-		if registeredAndVerified {
-			writeError(w,
-				Error{
-					Code: httpErrorEmailUsed,
-					Message: "email already registered",
-				}, http.StatusBadRequest)
-			return
-		}
 	}
 
 	// Send verification link by email.
@@ -277,27 +275,18 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	if !registeredAndVerified {
-		// Create a new account.
-		if cErr := api.portal.updateAccount(email, password, false); cErr != nil {
-			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
-			writeError(w,
-				Error{
-					Code: httpErrorInternal,
-					Message: "internal error",
-				}, http.StatusInternalServerError)
-			return
-		}
-
-		writeSuccess(w)
-	} else {
-		// Report that the account is unverified.
-		writeError(w, Error{
-			Code: httpErrorNone,
-			Message: "account not verified yet",
-		}, http.StatusOK)
+	// Create a new account.
+	if cErr := api.portal.updateAccount(email, password, false); cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
 		return
 	}
+
+	writeSuccess(w)
 }
 
 // sendVerificationLinkByMail is a wrapper function for sending a
@@ -646,12 +635,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	// Check request fields for validity.	
-	email, err := checkEmail(chr.Email)
-	if err.Code != httpErrorNone {
-		writeError(w, err, http.StatusBadRequest)
-		return
-	}
+	// Check password for validity.	
 	password := chr.Password
 	if err := checkPassword(password); err.Code != httpErrorNone {
 		writeError(w, err, http.StatusBadRequest)
@@ -659,22 +643,13 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	}
 
 	// Decode and verify the token.
-	prefix, em, expires, tErr := api.portal.decodeToken(chr.Token)
+	prefix, email, expires, tErr := api.portal.decodeToken(chr.Token)
 	if tErr != nil || prefix != cookiePrefix {
 		writeError(w,
 			Error{
 				Code: httpErrorTokenInvalid,
 				Message: "invalid token",
 			}, http.StatusBadRequest)
-		return
-	}
-
-	if em != email {
-		writeError(w,
-		Error{
-			Code: httpErrorEmailInvalid,
-			Message: "invalid email address",
-		}, http.StatusBadRequest)
 		return
 	}
 
