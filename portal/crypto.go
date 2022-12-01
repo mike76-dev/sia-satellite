@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -16,6 +17,9 @@ var (
 
 	// resetPrefix is used for generating a password reset token.
 	resetPrefix = authPrefix{'P', 'W', 'R', 'e', 's', 'e', 't', 0}
+
+	// cookiePrefix is used for generating client-side cookies.
+	cookiePrefix = authPrefix{'C', 'o', 'o', 'k', 'i', 'e', 0, 0}
 )
 
 type (
@@ -79,5 +83,8 @@ func (p *Portal) decodeToken(token string) (prefix authPrefix, email string, exp
 	copy(at.Email[:], dst[8:56])
 	at.Expires = int64(binary.BigEndian.Uint64(dst[56:]))
 
-	return at.Prefix, string(at.Email), time.Unix(at.Expires, 0), nil
+	// Find the length of email.
+	l := bytes.IndexByte(at.Email[:], 0)
+
+	return at.Prefix, string(at.Email[:l]), time.Unix(at.Expires, 0), nil
 }
