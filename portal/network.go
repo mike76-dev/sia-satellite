@@ -54,6 +54,21 @@ type portalAPI struct {
 	routerMu sync.RWMutex
 }
 
+type (
+	// authRequest holds the body of an /auth POST request.
+	authRequest struct {
+		Email    string `json: "email"`
+		Password string `json: "password"`
+	}
+
+	// authRequestWithToken holds the body of an /change POST request.
+	authRequestWithToken struct {
+		Email    string `json: "email"`
+		Password string `json: "password"`
+		Token    string `json: "token"`
+	}
+)
+
 // ServeHTTP implements the http.Handler interface.
 func (api *portalAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.routerMu.RLock()
@@ -80,6 +95,12 @@ func (api *portalAPI) buildHTTPRoutes() {
 	})
 	router.POST("/reset", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.resetHandlerPOST(w, req, ps)
+	})
+	router.POST("/reset/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.resetResendHandlerPOST(w, req, ps)
+	})
+	router.POST("/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.changeHandlerPOST(w, req, ps)
 	})
 
 	api.routerMu.Lock()

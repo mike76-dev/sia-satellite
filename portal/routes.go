@@ -48,14 +48,6 @@ type authLink struct {
 	Token string
 }
 
-type (
-	// authRequest holds the body of an /authme POST request.
-	authRequest struct {
-		Email    string `json: "email"`
-		Password string `json: "password"`
-	}
-)
-
 // checkEmail is a helper function that validates an email address.
 // If the email address is valid, it is returned in lowercase.
 func checkEmail(address string) (string, Error) {
@@ -409,6 +401,7 @@ func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	switch prefix {
 	case verifyPrefix:
+		// A verify token received. Check the validity.
 		if expires.Before(time.Now()) {
 			writeError(w,
 			Error{
@@ -417,6 +410,8 @@ func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request,
 			}, http.StatusBadRequest)
 			return
 		}
+
+		// Update the user account.
 		err := api.portal.updateAccount(email, "", true)
 		if err != nil {
 			writeError(w,
@@ -428,7 +423,48 @@ func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request,
 		}
 
 	case resetPrefix:
-		// TODO
+		// A password reset token received. Check the validity.
+		if expires.Before(time.Now()) {
+			writeError(w,
+			Error{
+				Code: httpErrorTokenExpired,
+				Message: "link already expired",
+			}, http.StatusBadRequest)
+			return
+		}
+
+		// Check if the email address is already registered.
+		count, cErr := api.portal.countEmails(email)
+		if cErr != nil {
+			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+			writeError(w,
+				Error{
+					Code: httpErrorInternal,
+					Message: "internal error",
+				}, http.StatusInternalServerError)
+			return
+		}
+
+		if count == 0 {
+			// No such email address found. This can only happen if
+			// the account was deleted.
+			writeError(w,
+				Error{
+					Code: httpErrorNotFound,
+					Message: "email address not found",
+				}, http.StatusBadRequest)
+			return
+		}
+
+		// Generate a cookie token and send it. Set the expiration
+		// the same as of the password reset token.
+		ct := api.portal.generateToken(cookiePrefix, email, expires)
+		var data struct {
+			Token string `json: "token"`
+		}
+		data.Token = ct
+		writeJSON(w, data)
+		return
 
 	default:
 		writeError(w,
@@ -490,6 +526,135 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Send password reset link by email.
 	if !api.sendPasswordResetLinkByMail(w, req, data.Email) {
+		return
+	}
+
+	writeSuccess(w)
+}
+
+// resetResendHandlerPOST handles the POST /reset/resend requests.
+func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check and update stats.
+	if err := api.portal.checkAndUpdatePasswordResets(req.RemoteAddr); err != nil {
+		writeError(w,
+			Error{
+				Code: httpErrorTooManyRequests,
+				Message: "too many password reset requests",
+			}, http.StatusTooManyRequests)
+		return
+	}
+
+	// Decode request body.
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
+		return
+	}
+
+	var data struct {
+		Email string `json: "email"`
+	}
+	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	if code != http.StatusOK {
+		writeError(w, err, code)
+		return
+	}
+
+	// Send password reset link by email.
+	if !api.sendPasswordResetLinkByMail(w, req, data.Email) {
+		return
+	}
+
+	writeSuccess(w)
+}
+
+// changeHandlerPOST handles the POST /change requests.
+func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode request body.
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
+		return
+	}
+
+	var chr authRequestWithToken
+	err, code := api.handleDecodeError(w, dec.Decode(&chr))
+	if code != http.StatusOK {
+		writeError(w, err, code)
+		return
+	}
+
+	// Check request fields for validity.	
+	email, err := checkEmail(chr.Email)
+	if err.Code != httpErrorNone {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+	password := chr.Password
+	if err := checkPassword(password); err.Code != httpErrorNone {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	// Decode and verify the token.
+	prefix, em, expires, tErr := api.portal.decodeToken(chr.Token)
+	if tErr != nil || prefix != cookiePrefix {
+		writeError(w,
+			Error{
+				Code: httpErrorTokenInvalid,
+				Message: "invalid token",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	if em != email {
+		writeError(w,
+		Error{
+			Code: httpErrorEmailInvalid,
+			Message: "invalid email address",
+		}, http.StatusBadRequest)
+		return
+	}
+
+	if expires.Before(time.Now()) {
+		writeError(w,
+		Error{
+			Code: httpErrorTokenExpired,
+			Message: "token already expired",
+		}, http.StatusBadRequest)
+		return
+	}
+
+	// Check if the user account exists.
+	count, cErr := api.portal.countEmails(email)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// No such account. Can only happen if it was deleted.
+	if count == 0 {
+		writeError(w,
+			Error{
+				Code: httpErrorNotFound,
+				Message: "no such account",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// Update the account with the new password. Set it to
+	// verified in any case, because the email address has
+	// been verified.
+	if cErr := api.portal.updateAccount(email, password, true); cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
 		return
 	}
 

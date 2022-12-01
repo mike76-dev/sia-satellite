@@ -114,6 +114,49 @@
 				<span class="link" onclick="setStatus('signup')">Account Creation</span>
 			</p>
 		</div>
+		<div id="resend-reset" class="frame disabled">
+			<h2>Check Your Email</h2>
+			<div class="contents">
+				<p>An email has been sent to:</p>
+				<input id="resend-reset-email" class="input" disabled>
+				<p id="resend-reset-error" class="error invisible">
+					Too many attempts, try again later
+				</p>
+				<p>If there is no email, check your spam folder.</p>
+			</div>
+			<button onclick="resendResetClick()">Resend Link</button>
+			<p>Back to
+				<span class="link" onclick="setStatus('login')">Login</span>
+			</p>
+		</div>
+		<div id="change" class="frame disabled">
+			<h2>Enter New Password</h2>
+			<div class="contents">
+				<label for="change-email">Email Address</label>
+				<input id="change-email" type="email" class="input"
+					placeholder="user@domain.com" onkeypress="changeEmailChange()"
+					onchange="changeEmailChange()">
+				<p id="change-email-error" class="error invisible">
+					Provided address is invalid
+				</p>
+				<label for="change-password">Password</label>
+				<input id="change-password" type="password" class="input"
+					onkeypress="changePasswordChange()" onchange="changePasswordChange()">
+				<p id="change-password-error" class="error invisible">
+					Password is not strong enough
+				</p>
+				<label for="change-retype">Retype Password</label>
+				<input id="change-retype" type="password" class="input"
+					onkeypress="changeRetypeChange()" onchange="changeRetypeChange()">
+				<p id="change-retype-error" class="error invisible">
+					The two passwords do not match
+				</p>
+			</div>
+			<button onclick="changeClick()">Submit</button>
+			<p>Back to
+				<span class="link" onclick="setStatus('login')">Login</span>
+			</p>
+		</div>
 		<div class="footer">
 			<a href="about.html" target="_blank">About</a>
 			<a href="privacy.html" target="_blank">Privacy</a>

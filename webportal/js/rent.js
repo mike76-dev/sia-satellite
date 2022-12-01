@@ -9,6 +9,7 @@ const specialChars = [
 ];
 
 var status;
+var authToken = '';
 
 var query = window.location.search;
 if (query.startsWith('?token=')) {
@@ -36,9 +37,22 @@ if (query.startsWith('?token=')) {
 						setStatus('login');
 					}, 3000);
 					return 'request successful';
+				} else if (response.status == 200) {
+					m.innerHTML = 'You will now be redirected to enter a new password...';
+					m.classList.remove('disabled');
+					window.setTimeout(function() {
+						m.classList.add('disabled');
+						m.innerHTML = '';
+						setStatus('change');
+					}, 3000);
+					return response.json();
 				} else return response.json();
 			})
 			.then(data => {
+				if (data.Token) {
+					authToken = data.Token;
+					return;
+				}
 				switch (data.Code) {
 					case 40:
 						m.innerHTML = 'Provided link is invalid';
@@ -60,11 +74,19 @@ if (query.startsWith('?token=')) {
 	}
 } else setStatus('login');
 
+function setCookie(name, value, days) {
+	let date = new Date();
+	date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+	document.cookie = name + '=' + value + '; expires=' + date.toUTCString() + '; path=/';
+}
+	
 function setStatus(s) {
 	let login = document.getElementById('login');
 	let signup = document.getElementById('signup');
 	let reset = document.getElementById('reset');
 	let resendVerify = document.getElementById('resend-verify');
+	let resendReset = document.getElementById('resend-reset');
+	let change = document.getElementById('change');
 	status = s;
 	clearErrors();
 	switch (s) {
@@ -74,6 +96,8 @@ function setStatus(s) {
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
 			resendVerify.classList.add('disabled');
+			resendReset.classList.add('disabled');
+			change.classList.add('disabled');
 			break;
 		case 'signup':
 			clearSignupTab();
@@ -81,6 +105,8 @@ function setStatus(s) {
 			signup.classList.remove('disabled');
 			reset.classList.add('disabled');
 			resendVerify.classList.add('disabled');
+			resendReset.classList.add('disabled');
+			change.classList.add('disabled');
 			break;
 		case 'reset':
 			clearResetTab();
@@ -88,18 +114,41 @@ function setStatus(s) {
 			signup.classList.add('disabled');
 			reset.classList.remove('disabled');
 			resendVerify.classList.add('disabled');
+			resendReset.classList.add('disabled');
+			change.classList.add('disabled');
 			break;
 		case 'resend-verify':
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
 			resendVerify.classList.remove('disabled');
+			resendReset.classList.add('disabled');
+			change.classList.add('disabled');
+			break;
+		case 'resend-reset':
+			login.classList.add('disabled');
+			signup.classList.add('disabled');
+			reset.classList.add('disabled');
+			resendVerify.classList.add('disabled');
+			resendReset.classList.remove('disabled');
+			change.classList.add('disabled');
+			break;
+		case 'change':
+			clearChangeTab();
+			login.classList.add('disabled');
+			signup.classList.add('disabled');
+			reset.classList.add('disabled');
+			resendVerify.classList.add('disabled');
+			resendReset.classList.add('disabled');
+			change.classList.remove('disabled');
 			break;
 		default:
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
 			resendVerify.classList.add('disabled');
+			resendReset.classList.add('disabled');
+			change.classList.add('disabled');
 	}
 }
 
@@ -112,6 +161,10 @@ function clearErrors() {
 	document.getElementById('signup-agree-error').classList.add('invisible');
 	document.getElementById('reset-email-error').classList.add('invisible');
 	document.getElementById('resend-verify-error').classList.add('invisible');
+	document.getElementById('resend-reset-error').classList.add('invisible');
+	document.getElementById('change-email-error').classList.add('invisible');
+	document.getElementById('change-password-error').classList.add('invisible');
+	document.getElementById('change-retype-error').classList.add('invisible');
 }
 
 function clearLoginTab() {
@@ -128,6 +181,12 @@ function clearSignupTab() {
 
 function clearResetTab() {
 	document.getElementById('reset-email').value = '';
+}
+
+function clearChangeTab() {
+	document.getElementById('change-email').value = '';
+	document.getElementById('change-password').value = '';
+	document.getElementById('change-retype').value = '';
 }
 
 function validateEmail(addr) {
@@ -327,12 +386,44 @@ function resetClick() {
 		err.classList.remove('invisible');
 		return;
 	}
+	let data = {
+		email: e.value
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	fetch(apiBaseURL + '/reset', options)
+		.then(response => {
+			if (response.status == 204) {
+				let rv = document.getElementById('resend-reset-email');
+				rv.value = e.value;
+				setStatus('resend-reset');
+				clearResetTab();
+				return 'request successful';
+			} else return response.json();
+		})
+		.then(data => {
+			let emailErr = document.getElementById('reset-email-error');
+			switch (data.Code) {
+				case 31:
+					emailErr.innerHTML = 'Too many attempts, try again later';
+					emailErr.classList.remove('invisible');
+					window.setTimeout(function() {emailErr.classList.add('invisible')}, 3000);
+					break;
+				default:
+			}
+		})
+		.catch(error => console.log(error));
 }
 
 function resendVerifyClick() {
 	let e = document.getElementById('resend-verify-email');
 	let data = {
-		email:    e.value
+		email: e.value
 	}
 	let options = {
 		method: 'POST',
@@ -358,6 +449,160 @@ function resendVerifyClick() {
 				default:
 			}
 			return;
+		})
+		.catch(error => console.log(error));
+}
+
+function resendResetClick() {
+	let e = document.getElementById('resend-reset-email');
+	let data = {
+		email: e.value
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	fetch(apiBaseURL + '/reset/resend', options)
+		.then(response => {
+			if (response.status == 204) {
+				return 'request successful';
+			} else return response.json();
+		})
+		.then(data => {
+			let resendErr = document.getElementById('resend-reset-error');
+			switch (data.Code) {
+				case 31:
+					resendErr.innerHTML = 'Too many attempts, try again later';
+					resendErr.classList.remove('invisible');
+					window.setTimeout(function() {resendErr.classList.add('invisible')}, 3000);
+					break;
+				default:
+			}
+			return;
+		})
+		.catch(error => console.log(error));
+}
+
+function changeEmailChange() {
+	let err = document.getElementById('change-email-error');
+	err.classList.add('invisible');
+}
+
+function changePasswordChange() {
+	let err = document.getElementById('change-password-error');
+	err.classList.add('invisible');
+}
+
+function changeRetypeChange() {
+	let err = document.getElementById('change-retype-error');
+	err.classList.add('invisible');
+}
+
+function changeClick() {
+	let e = document.getElementById('change-email');
+	if (!validateEmail(e.value)) {
+		let err = document.getElementById('change-email-error');
+		err.innerHTML = 'Provided email address is invalid';
+		err.classList.remove('invisible');
+		return;
+	}
+	let p = document.getElementById('change-password');
+	if (!validatePassword(p.value)) {
+		let err = document.getElementById('change-password-error');
+		err.innerHTML = 'Provided password is invalid';
+		err.classList.remove('invisible');
+		return;
+	}
+	let r = document.getElementById('change-retype');
+	if (r.value != p.value) {
+		let err = document.getElementById('change-retype-error');
+		err.innerHTML = 'The two passwords do not match';
+		err.classList.remove('invisible');
+		return;
+	}
+	let data = {
+		email:    e.value,
+		password: p.value,
+		token:    authToken
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	let m = document.getElementById('message');
+	fetch(apiBaseURL + '/change', options)
+		.then(response => {
+			if (response.status == 204) {
+				setStatus('');
+				m.innerHTML = 'Password changed successfully, please log in using your new password...';
+				m.classList.remove('disabled');
+				window.setTimeout(function() {
+					m.classList.add('disabled');
+					m.innerHTML = '';
+					clearLoginTab();
+					setStatus('login');
+				}, 3000);
+				return 'request successful';
+			} else return response.json();
+		})
+		.then(data => {
+			let emailErr = document.getElementById('change-email-error');
+			let passErr = document.getElementById('change-password-error');
+			switch (data.Code) {
+				case 10:
+					emailErr.innerHTML = 'Provided email address is invalid';
+					emailErr.classList.remove('invisible');
+					break;
+				case 20:
+					passErr.innerHTML = 'Password is too short';
+					passErr.classList.remove('invisible');
+					break;
+				case 21:
+					passErr.innerHTML = 'Password is too long';
+					passErr.classList.remove('invisible');
+					break;
+				case 22:
+					passErr.innerHTML = 'Password is not secure enough';
+					passErr.classList.remove('invisible');
+					break;
+				case 31:
+					emailErr.innerHTML = 'Too many attempts, try again later';
+					emailErr.classList.remove('invisible');
+					window.setTimeout(function() {emailErr.classList.add('invisible')}, 3000);
+					break;
+				case 40:
+					setStatus('');
+					m.innerHTML = 'Unknown error. Please request a new link.';
+					m.classList.remove('disabled');
+					clearResetTab();
+					window.setTimeout(function() {
+						m.classList.add('disabled');
+						m.innerHTML = '';
+						setStatus('reset');
+					}, 3000);
+					break;
+				case 41:
+					m.innerHTML = 'Provided link already expired. Please request a new one.';
+					m.classList.remove('disabled');
+					clearResetTab();
+					window.setTimeout(function() {
+						m.classList.add('disabled');
+						m.innerHTML = '';
+						setStatus('reset');
+					}, 3000);
+					break;
+				case 50:
+					emailErr.innerHTML = 'Unknown error';
+					emailErr.classList.remove('invisible');
+					break;
+				default:
+			}
 		})
 		.catch(error => console.log(error));
 }
