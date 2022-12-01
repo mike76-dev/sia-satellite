@@ -105,21 +105,85 @@ func checkPassword(pwd string) Error {
 	return Error{}
 }
 
-// authHandlerPOST handles the POST /auth requests.
-func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// loginHandlerPOST handles the POST /login requests.
+func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	dec, decErr := prepareDecoder(w, req)
 	if decErr != nil {
 		return
 	}
 
-	var auth authRequest
-	err, code := api.handleDecodeError(w, dec.Decode(&auth))
+	var ar authRequest
+	err, code := api.handleDecodeError(w, dec.Decode(&ar))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
 	}
+	email := strings.ToLower(ar.Email)
+	password := ar.Password
 
-	// TODO implement auth code.
+	// Check if the user account exists.
+	count, cErr := api.portal.countEmails(email)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	if count == 0 {
+		// Wrong email address. Check and update stats.
+		if err := api.portal.checkAndUpdateFailedLogins(req.RemoteAddr); err != nil {
+			writeError(w,
+				Error{
+					Code: httpErrorTooManyRequests,
+					Message: "too many failed login attempts",
+				}, http.StatusTooManyRequests)
+			return
+		}
+		writeError(w,
+			Error{
+				Code: httpErrorWrongCredentials,
+				Message: "invalid combination of email and password",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// Check if the account is verified and the password is correct.
+	verified, passwordOK, cErr := api.portal.isVerified(email, password)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// Wrong password or the email is not verified.
+	if !passwordOK || !verified {
+		// Check and update login stats.
+		if err := api.portal.checkAndUpdateFailedLogins(req.RemoteAddr); err != nil {
+			writeError(w,
+				Error{
+					Code: httpErrorTooManyRequests,
+					Message: "too many failed login attempts",
+				}, http.StatusTooManyRequests)
+			return
+		}
+
+		writeError(w,
+			Error{
+				Code: httpErrorWrongCredentials,
+				Message: "invalid combination of email and password",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// TODO implement the logic in case of a success.
 
 	writeSuccess(w)
 }
@@ -132,20 +196,20 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	var reg authRequest
-	err, code := api.handleDecodeError(w, dec.Decode(&reg))
+	var ar authRequest
+	err, code := api.handleDecodeError(w, dec.Decode(&ar))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
 	}
 
 	// Check request fields for validity.	
-	email, err := checkEmail(reg.Email)
+	email, err := checkEmail(ar.Email)
 	if err.Code != httpErrorNone {
 		writeError(w, err, http.StatusBadRequest)
 		return
 	}
-	password := reg.Password
+	password := ar.Password
 	if err := checkPassword(password); err.Code != httpErrorNone {
 		writeError(w, err, http.StatusBadRequest)
 		return

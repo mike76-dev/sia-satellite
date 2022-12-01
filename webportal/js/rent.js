@@ -249,13 +249,36 @@ function loginClick() {
 		},
 		body: JSON.stringify(data)
 	}
-	fetch(apiBaseURL + '/auth', options)
+	fetch(apiBaseURL + '/login', options)
 		.then(response => {
 			if (response.status == 204) {
+				setStatus('');
+				let m = document.getElementById('message');
+				m.innerHTML = 'Congratulations, you are logged in!';
+				m.classList.remove('disabled');
+				window.setTimeout(function() {
+					let i = window.location.href.lastIndexOf('/');
+					window.location.replace(window.location.href.slice(0, i));
+				}, 3000); //TODO
 				return 'request successful';
 			} else return response.json();
 		})
-		.then(data => console.log(data)) //TODO
+		.then(data => {
+			let emailErr = document.getElementById('login-email-error');
+			let passErr = document.getElementById('login-password-error');
+			switch (data.Code) {
+				case 30:
+					passErr.innerHTML = 'Wrong combination of email and password';
+					passErr.classList.remove('invisible');
+					break;
+				case 31:
+					emailErr.innerHTML = 'Too many attempts, try again later';
+					emailErr.classList.remove('invisible');
+					window.setTimeout(function() {emailErr.classList.add('invisible')}, 3000);
+					break;
+				default:
+			}
+		})
 		.catch(error => console.log(error));
 }
 

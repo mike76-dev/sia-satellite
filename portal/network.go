@@ -81,8 +81,8 @@ func (api *portalAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (api *portalAPI) buildHTTPRoutes() {
 	router := httprouter.New()
 
-	router.POST("/auth", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		api.authHandlerPOST(w, req, ps)
+	router.POST("/login", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.loginHandlerPOST(w, req, ps)
 	})
 	router.POST("/register", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.registerHandlerPOST(w, req, ps)
