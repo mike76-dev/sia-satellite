@@ -51,14 +51,29 @@
 		<div id="signup" class="frame disabled">
 			<h2>Create an Account</h2>
 			<div class="contents">
-				<label for="signup-email">Email Address</label>
+				<label for="signup-email">Email Address
+					<span class="hint-button">?
+						<div class="hint">
+							Email address can be maximum 48 characters long.
+						</div>
+					</span>
+				</label>
 				<input id="signup-email" type="email" class="input"
 					placeholder="user@domain.com" onkeypress="signupEmailChange()"
 					onchange="signupEmailChange()">
 				<p id="signup-email-error" class="error invisible">
 					Provided address is invalid
 				</p>
-				<label for="signup-password">Password</label>
+				<label for="signup-password">
+					Password
+					<span class="hint-button">?
+						<div class="hint">
+							Password must be minimum 8 characters long and contain
+							at least one small letter, one capital letter, one digit,
+							and one special character.
+						</div>
+					</span>
+				</label>
 				<div class="password">
 					<input id="signup-password" type="password" class="input"
 						onkeypress="signupPasswordChange()" onchange="signupPasswordChange()">
@@ -150,7 +165,16 @@
 		<div id="change" class="frame disabled">
 			<h2>Enter New Password</h2>
 			<div class="contents">
-				<label for="change-password">Password</label>
+				<label for="change-password">
+					Password
+					<span class="hint-button">?
+						<div class="hint">
+							Password must be minimum 8 characters long and contain
+							at least one small letter, one capital letter, one digit,
+							and one special character.
+						</div>
+					</span>
+				</label>
 				<div class="password">
 					<input id="change-password" type="password" class="input"
 						onkeypress="changePasswordChange()" onchange="changePasswordChange()">
