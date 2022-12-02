@@ -31,6 +31,7 @@ label {
 	font-size: 1rem;
 	padding: 0.5rem;
 	outline: none;
+	width: 100%;
 }
 
 .error {
@@ -83,4 +84,29 @@ button:hover {
 	color: #cfcfcf;
 	text-align: center;
 	margin: auto;
+}
+
+.password {
+	position: relative;
+	width: 100%;
+}
+
+.toggle-checkbox {
+	position: absolute;
+	width: 1.5rem;
+	height: 1.5rem;
+	right: 0.25rem;
+	top: 0.25rem;
+	z-index: 1;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.toggle-icon {
+	position: absolute;
+	width: 1.5rem;
+	height: 1.5rem;
+	right: 0.5rem;
+	top: 0.5rem;
+	z-index: 1;
 }

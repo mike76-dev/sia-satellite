@@ -162,7 +162,6 @@ function clearErrors() {
 	document.getElementById('reset-email-error').classList.add('invisible');
 	document.getElementById('resend-verify-error').classList.add('invisible');
 	document.getElementById('resend-reset-error').classList.add('invisible');
-	document.getElementById('change-email-error').classList.add('invisible');
 	document.getElementById('change-password-error').classList.add('invisible');
 	document.getElementById('change-retype-error').classList.add('invisible');
 }
@@ -184,7 +183,6 @@ function clearResetTab() {
 }
 
 function clearChangeTab() {
-	document.getElementById('change-email').value = '';
 	document.getElementById('change-password').value = '';
 	document.getElementById('change-retype').value = '';
 }
@@ -525,13 +523,6 @@ function changeRetypeChange() {
 }
 
 function changeClick() {
-	let e = document.getElementById('change-email');
-	if (!validateEmail(e.value)) {
-		let err = document.getElementById('change-email-error');
-		err.innerHTML = 'Provided email address is invalid';
-		err.classList.remove('invisible');
-		return;
-	}
 	let p = document.getElementById('change-password');
 	if (!validatePassword(p.value)) {
 		let err = document.getElementById('change-password-error');
@@ -547,7 +538,6 @@ function changeClick() {
 		return;
 	}
 	let data = {
-		email:    e.value,
 		password: p.value,
 		token:    authToken
 	}
@@ -575,13 +565,8 @@ function changeClick() {
 			} else return response.json();
 		})
 		.then(data => {
-			let emailErr = document.getElementById('change-email-error');
 			let passErr = document.getElementById('change-password-error');
 			switch (data.Code) {
-				case 10:
-					emailErr.innerHTML = 'Provided email address is invalid';
-					emailErr.classList.remove('invisible');
-					break;
 				case 20:
 					passErr.innerHTML = 'Password is too short';
 					passErr.classList.remove('invisible');
@@ -593,11 +578,6 @@ function changeClick() {
 				case 22:
 					passErr.innerHTML = 'Password is not secure enough';
 					passErr.classList.remove('invisible');
-					break;
-				case 31:
-					emailErr.innerHTML = 'Too many attempts, try again later';
-					emailErr.classList.remove('invisible');
-					window.setTimeout(function() {emailErr.classList.add('invisible')}, 3000);
 					break;
 				case 40:
 					setStatus('');
@@ -628,4 +608,69 @@ function changeClick() {
 			}
 		})
 		.catch(error => console.log(error));
+}
+
+function toggleLoginPassword() {
+	let c = document.getElementById('login-password-toggle');
+	let i = document.getElementById('login-password-icon');
+	let p = document.getElementById('login-password');
+	if (c.checked) {
+		p.type = 'text';
+		i.src = 'assets/hide-password.png';
+	} else {
+		p.type = 'password';
+		i.src = 'assets/show-password.png';
+	}
+}
+
+function toggleSignupPassword() {
+	let c = document.getElementById('signup-password-toggle');
+	let i = document.getElementById('signup-password-icon');
+	let p = document.getElementById('signup-password');
+	if (c.checked) {
+		p.type = 'text';
+		i.src = 'assets/hide-password.png';
+	} else {
+		p.type = 'password';
+		i.src = 'assets/show-password.png';
+	}
+}
+
+function toggleSignupRetype() {
+	let c = document.getElementById('signup-retype-toggle');
+	let i = document.getElementById('signup-retype-icon');
+	let p = document.getElementById('signup-retype');
+	if (c.checked) {
+		p.type = 'text';
+		i.src = 'assets/hide-password.png';
+	} else {
+		p.type = 'password';
+		i.src = 'assets/show-password.png';
+	}
+}
+
+function toggleChangePassword() {
+	let c = document.getElementById('change-password-toggle');
+	let i = document.getElementById('change-password-icon');
+	let p = document.getElementById('change-password');
+	if (c.checked) {
+		p.type = 'text';
+		i.src = 'assets/hide-password.png';
+	} else {
+		p.type = 'password';
+		i.src = 'assets/show-password.png';
+	}
+}
+
+function toggleChangeRetype() {
+	let c = document.getElementById('change-retype-toggle');
+	let i = document.getElementById('change-retype-icon');
+	let p = document.getElementById('change-retype');
+	if (c.checked) {
+		p.type = 'text';
+		i.src = 'assets/hide-password.png';
+	} else {
+		p.type = 'password';
+		i.src = 'assets/show-password.png';
+	}
 }

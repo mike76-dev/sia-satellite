@@ -28,8 +28,14 @@
 					Provided address is invalid
 				</p>
 				<label for="login-password">Password</label>
-				<input id="login-password" type="password" class="input"
-					onkeypress="loginPasswordChange()" onchange="loginPasswordChange()">
+				<div class="password">
+					<input id="login-password" type="password" class="input"
+						onkeypress="loginPasswordChange()" onchange="loginPasswordChange()">
+					<img id="login-password-icon" src="assets/show-password.png"
+						class="toggle-icon">
+					<input id="login-password-toggle" type="checkbox"
+						class="toggle-checkbox" onChange="toggleLoginPassword()">
+				</div>
 				<p id="login-password-error" class="error invisible">
 					Wrong combination of email and password
 				</p>
@@ -53,14 +59,26 @@
 					Provided address is invalid
 				</p>
 				<label for="signup-password">Password</label>
-				<input id="signup-password" type="password" class="input"
-					onkeypress="signupPasswordChange()" onchange="signupPasswordChange()">
+				<div class="password">
+					<input id="signup-password" type="password" class="input"
+						onkeypress="signupPasswordChange()" onchange="signupPasswordChange()">
+					<img id="signup-password-icon" src="assets/show-password.png"
+						class="toggle-icon">
+					<input id="signup-password-toggle" type="checkbox"
+						class="toggle-checkbox" onChange="toggleSignupPassword()">
+				</div>
 				<p id="signup-password-error" class="error invisible">
 					Password is not strong enough
 				</p>
 				<label for="signup-retype">Retype Password</label>
-				<input id="signup-retype" type="password" class="input"
-					onkeypress="signupRetypeChange()" onchange="signupRetypeChange()">
+				<div class="password">
+					<input id="signup-retype" type="password" class="input"
+						onkeypress="signupRetypeChange()" onchange="signupRetypeChange()">
+					<img id="signup-retype-icon" src="assets/show-password.png"
+						class="toggle-icon">
+					<input id="signup-retype-toggle" type="checkbox"
+						class="toggle-checkbox" onChange="toggleSignupRetype()">
+				</div>
 				<p id="signup-retype-error" class="error invisible">
 					The two passwords do not match
 				</p>
@@ -132,22 +150,27 @@
 		<div id="change" class="frame disabled">
 			<h2>Enter New Password</h2>
 			<div class="contents">
-				<label for="change-email">Email Address</label>
-				<input id="change-email" type="email" class="input"
-					placeholder="user@domain.com" onkeypress="changeEmailChange()"
-					onchange="changeEmailChange()">
-				<p id="change-email-error" class="error invisible">
-					Provided address is invalid
-				</p>
 				<label for="change-password">Password</label>
-				<input id="change-password" type="password" class="input"
-					onkeypress="changePasswordChange()" onchange="changePasswordChange()">
+				<div class="password">
+					<input id="change-password" type="password" class="input"
+						onkeypress="changePasswordChange()" onchange="changePasswordChange()">
+					<img id="change-password-icon" src="assets/show-password.png"
+						class="toggle-icon">
+					<input id="change-password-toggle" type="checkbox"
+						class="toggle-checkbox" onChange="toggleChangePassword()">
+				</div>
 				<p id="change-password-error" class="error invisible">
 					Password is not strong enough
 				</p>
 				<label for="change-retype">Retype Password</label>
-				<input id="change-retype" type="password" class="input"
-					onkeypress="changeRetypeChange()" onchange="changeRetypeChange()">
+				<div class="password">
+					<input id="change-retype" type="password" class="input"
+						onkeypress="changeRetypeChange()" onchange="changeRetypeChange()">
+					<img id="change-retype-icon" src="assets/show-password.png"
+						class="toggle-icon">
+					<input id="change-retype-toggle" type="checkbox"
+						class="toggle-checkbox" onChange="toggleChangeRetype()">
+				</div>
 				<p id="change-retype-error" class="error invisible">
 					The two passwords do not match
 				</p>
