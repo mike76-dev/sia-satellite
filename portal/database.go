@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"runtime"
+	"time"
 
 	"gitlab.com/NebulousLabs/fastrand"
 
@@ -13,6 +14,14 @@ import (
 const (
 	// argon2Salt is the salt for the password hashing algorithm.
 	argon2Salt = "SiaSatellitePasswordHashingSalt."
+
+	// pruneUnverifiedAccountsFrequency is how often unverified
+	// accounts are pruned from the database.
+	pruneUnverifiedAccountsFrequency = 2 * time.Hour
+
+	// pruneUnverifiedAccountsThreshold is how old an unverified
+	// account needs to be to get pruned.
+	pruneUnverifiedAccountsThreshold = 7 * 24 * time.Hour
 )
 
 // countEmails counts all accounts with the given email
@@ -50,7 +59,7 @@ func (p *Portal) updateAccount(email, password string, verified bool) error {
 			return errors.New("password may not be empty")
 		}
 		pwHash := passwordHash(password)
-		_, err := p.db.Exec("INSERT INTO accounts (email, password_hash, verified) VALUES (?, ?, ?)", email, pwHash, false)
+		_, err := p.db.Exec("INSERT INTO accounts (email, password_hash, verified, created) VALUES (?, ?, ?, ?)", email, pwHash, false, time.Now().Unix())
 		return err
 	}
 
@@ -70,4 +79,33 @@ func passwordHash(password string) string {
 	hash := argon2.IDKey([]byte(password), []byte(argon2Salt), 1, 64 * 1024, t, 32)
 	defer fastrand.Read(hash[:])
 	return hex.EncodeToString(hash)
+}
+
+// threadedPruneUnverifiedAccounts deletes unverified user accounts
+// from the database.
+func (p *Portal) threadedPruneUnverifiedAccounts() {
+	for {
+		select {
+		case <-p.threads.StopChan():
+			return
+		case <-time.After(pruneUnverifiedAccountsFrequency):
+		}
+
+		func() {
+			err := p.threads.Add()
+			if err != nil {
+				return
+			}
+			defer p.threads.Done()
+
+			p.mu.Lock()
+			defer p.mu.Unlock()
+
+			now := time.Now().Unix()
+			_, err = p.db.Exec("DELETE FROM accounts WHERE verified = FALSE AND created < ?", now - pruneUnverifiedAccountsThreshold.Milliseconds() / 1000)
+			if err != nil {
+				p.log.Printf("ERROR: error querying database: %v\n", err)
+			}
+		}()
+	}
 }

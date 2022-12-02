@@ -144,6 +144,9 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, 
 	// Spawn the thread to periodically prune the authentication stats.
 	go p.threadedPruneAuthStats()
 
+	// Spawn the thread to periodically prune the unverified accounts.
+	go p.threadedPruneUnverifiedAccounts()
+
 	// Make sure that the portal saves after shutdown.
 	p.threads.AfterStop(func() {
 		p.mu.Lock()

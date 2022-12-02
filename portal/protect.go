@@ -8,11 +8,11 @@ import (
 const (
 	// authStatsCheckFrequency defines how often the authentication
 	// stats are pruned.
-	authStatsCheckFrequency = time.Minute * 10
+	authStatsCheckFrequency = 10 * time.Minute
 
 	// authStatsPruneThreshold defines how old the authentication
 	// stats may become before they are pruned.
-	authStatsPruneThreshold = time.Hour * 24
+	authStatsPruneThreshold = 24 * time.Hour
 
 	// authStatsCountResetThreshold defines when the counter needs
 	// to be reset to zero after the last activity.

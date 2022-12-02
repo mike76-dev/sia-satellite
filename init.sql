@@ -5,5 +5,6 @@ CREATE TABLE accounts (
 	email          VARCHAR(48) NOT NULL UNIQUE,
 	password_hash  VARCHAR(64) NOT NULL,
 	verified       BOOL NOT NULL,
+	created        INT NOT NULL,
 	PRIMARY KEY (id)
 );
