@@ -135,7 +135,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	if count == 0 {
 		// Wrong email address. Check and update stats.
-		if err := api.portal.checkAndUpdateFailedLogins(req.RemoteAddr); err != nil {
+		if err := api.portal.checkAndUpdateFailedLogins(getRemoteHost(req)); err != nil {
 			writeError(w,
 				Error{
 					Code: httpErrorTooManyRequests,
@@ -166,7 +166,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 	// Wrong password or the email is not verified.
 	if !passwordOK || !verified {
 		// Check and update login stats.
-		if err := api.portal.checkAndUpdateFailedLogins(req.RemoteAddr); err != nil {
+		if err := api.portal.checkAndUpdateFailedLogins(getRemoteHost(req)); err != nil {
 			writeError(w,
 				Error{
 					Code: httpErrorTooManyRequests,
@@ -252,7 +252,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		// Wrong password.
 		if !passwordOK {
 			// Check and update login stats.
-			if cErr := api.portal.checkAndUpdateFailedLogins(req.RemoteAddr); cErr != nil {
+			if cErr := api.portal.checkAndUpdateFailedLogins(getRemoteHost(req)); cErr != nil {
 				writeError(w,
 					Error{
 						Code: httpErrorTooManyRequests,
@@ -293,7 +293,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 // verification link by email.
 func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *http.Request, email string) bool {
 	// Check and update stats.
-	if err := api.portal.checkAndUpdateVerifications(req.RemoteAddr); err != nil {
+	if err := api.portal.checkAndUpdateVerifications(getRemoteHost(req)); err != nil {
 		writeError(w,
 			Error{
 				Code: httpErrorTooManyRequests,
@@ -534,7 +534,7 @@ func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request,
 // resetHandlerPOST handles the POST /reset requests.
 func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Check and update password reset stats.
-	if cErr := api.portal.checkAndUpdatePasswordResets(req.RemoteAddr); cErr != nil {
+	if cErr := api.portal.checkAndUpdatePasswordResets(getRemoteHost(req)); cErr != nil {
 		writeError(w,
 			Error{
 				Code: httpErrorTooManyRequests,
@@ -588,7 +588,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 // resetResendHandlerPOST handles the POST /reset/resend requests.
 func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Check and update stats.
-	if err := api.portal.checkAndUpdatePasswordResets(req.RemoteAddr); err != nil {
+	if err := api.portal.checkAndUpdatePasswordResets(getRemoteHost(req)); err != nil {
 		writeError(w,
 			Error{
 				Code: httpErrorTooManyRequests,

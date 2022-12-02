@@ -280,3 +280,15 @@ func (api *portalAPI) handleDecodeError(w http.ResponseWriter, err error) (Error
 			}, http.StatusInternalServerError
 	}
 }
+
+// getRemoteHost returns the address of the remote host.
+func getRemoteHost(r *http.Request) (host string) {
+	host, _, _ = net.SplitHostPort(r.RemoteAddr)
+	if host == "127.0.0.1" || host == "localhost" {
+		xff := r.Header.Values("X-Forwarded-For")
+		if len(xff) > 0 {
+			host = xff[0]
+		}
+	}
+	return
+}

@@ -2,7 +2,6 @@ package portal
 
 import (
 	"errors"
-	"net"
 	"time"
 )
 
@@ -104,8 +103,7 @@ func (p *Portal) threadedPruneAuthStats() {
 
 // checkAndUpdateVerifications checks if there are too many verification
 // links requested from the same IP and updates the stats.
-func (p *Portal) checkAndUpdateVerifications(addr string) error {
-	host, _, _ := net.SplitHostPort(addr)
+func (p *Portal) checkAndUpdateVerifications(host string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -149,8 +147,7 @@ func (p *Portal) checkAndUpdateVerifications(addr string) error {
 
 // checkAndUpdateFailedLogins checks if there are too many failed
 // login attempts from the same IP and updates the stats.
-func (p *Portal) checkAndUpdateFailedLogins(addr string) error {
-	host, _, _ := net.SplitHostPort(addr)
+func (p *Portal) checkAndUpdateFailedLogins(host string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -194,8 +191,7 @@ func (p *Portal) checkAndUpdateFailedLogins(addr string) error {
 
 // checkAndUpdatePasswordResets checks if there are too many password
 // reset requests from the same IP and updates the stats.
-func (p *Portal) checkAndUpdatePasswordResets(addr string) error {
-	host, _, _ := net.SplitHostPort(addr)
+func (p *Portal) checkAndUpdatePasswordResets(host string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
