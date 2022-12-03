@@ -8,9 +8,8 @@ const specialChars = [
 	'\\', '|', ',', '.', '<', '>', '/', '?'
 ];
 
-var status;
+var status = '';
 var authToken = '';
-var cookiesAllowed = false;
 
 var query = window.location.search;
 if (query.startsWith('?token=')) {
@@ -73,14 +72,29 @@ if (query.startsWith('?token=')) {
 			})
 			.catch(error => console.log(error));
 	}
-} else setStatus('login');
-
-if (navigator.cookieEnabled && getCookie('satellite') == '') {
-	document.getElementById('cookie').classList.remove('disabled');
+} else if (navigator.cookieEnabled) {
+	if (getCookie('satellite') == '') {
+		document.getElementById('cookie').classList.remove('disabled');
+		setStatus('login');
+	} else {
+		setStatus('');
+		let m = document.getElementById('message');
+		m.innerHTML = 'You are logged in, proceeding...';
+		m.classList.remove('disabled');
+		window.setTimeout(function() {
+			m.classList.add('disabled');
+			m.innerHTML = '';
+			let i = window.location.href.lastIndexOf('/');
+			window.location.replace(window.location.href.slice(0, i) + '/dummy.html');
+		}, 3000);
+	}
+} else {
+	let m = document.getElementById('message');
+	m.innerHTML = 'Please allow cookies in your browser and reload the page. <a href="privacy.html" target="_blank">Read more</a>';
+	m.classList.remove('disabled');
 }
 
-function allowCookies(allow) {
-	cookiesAllowed = allow;
+function allowCookies() {
 	document.getElementById('cookie').classList.add('disabled');
 }
 
@@ -272,20 +286,21 @@ function loginClick() {
 		body: JSON.stringify(data)
 	}
 	fetch(apiBaseURL + '/login', options)
-		.then(response => {
-			if (response.status == 204) {
+		.then(response => response.json())
+		.then(data => {
+			if (data.Token) {
 				setStatus('');
 				let m = document.getElementById('message');
 				m.innerHTML = 'Congratulations, you are logged in!';
 				m.classList.remove('disabled');
+				authToken = data.Token;
+				setCookie('satellite', data.Token, 7)
 				window.setTimeout(function() {
 					let i = window.location.href.lastIndexOf('/');
-					window.location.replace(window.location.href.slice(0, i));
-				}, 3000); //TODO
-				return 'request successful';
-			} else return response.json();
-		})
-		.then(data => {
+					window.location.replace(window.location.href.slice(0, i) + '/dummy.html');
+				}, 3000);
+				return
+			}
 			let emailErr = document.getElementById('login-email-error');
 			let passErr = document.getElementById('login-password-error');
 			switch (data.Code) {

@@ -183,9 +183,15 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	// TODO implement the logic in case of a success.
+	// Login successful, generate a cookie.
+	ct := api.portal.generateToken(cookiePrefix, email, time.Now().Add(7 * 24 * time.Hour))
+	var data struct {
+		Token string `json: "token"`
+	}
+	data.Token = ct
 
-	writeSuccess(w)
+	// Send the cookie.
+	writeJSON(w, data)
 }
 
 // registerHandlerPOST handles the POST /register requests.
