@@ -10,6 +10,7 @@ const specialChars = [
 
 var status;
 var authToken = '';
+var cookiesAllowed = false;
 
 var query = window.location.search;
 if (query.startsWith('?token=')) {
@@ -74,12 +75,35 @@ if (query.startsWith('?token=')) {
 	}
 } else setStatus('login');
 
+if (navigator.cookieEnabled && getCookie('satellite') == '') {
+	document.getElementById('cookie').classList.remove('disabled');
+}
+
+function allowCookies(allow) {
+	cookiesAllowed = allow;
+	document.getElementById('cookie').classList.add('disabled');
+}
+
 function setCookie(name, value, days) {
 	let date = new Date();
 	date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
 	document.cookie = name + '=' + value + '; expires=' + date.toUTCString() + '; path=/';
 }
-	
+
+function getCookie(name) {
+	let n = name + '=';
+	let ca = document.cookie.split(';');
+	let c;
+	for (let i = 0; i < ca.length; i++) {
+		c = ca[i];
+		while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+		if (c.indexOf(n) === 0) {
+			return c.substring(n.length, c.length);
+		}
+	}
+	return '';
+}
+
 function setStatus(s) {
 	let login = document.getElementById('login');
 	let signup = document.getElementById('signup');

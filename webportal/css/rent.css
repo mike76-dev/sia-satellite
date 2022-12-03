@@ -145,3 +145,72 @@ button:hover {
 .hint-button:hover .hint {
 	display: initial;
 }
+
+.cookie-container {
+	width: 100%;
+	position: fixed;
+	bottom: -100%;
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	background-color: rgba(207, 207, 207, 0.8);
+	padding: 1rem;
+	animation-name: cookie;
+	animation-duration: 1s;
+	animation-delay: 4s;
+	animation-fill-mode: forwards;
+}
+
+@keyframes cookie {
+	from {bottom: -100%;}
+	to {bottom: 0;}
+}
+
+.cookie-text {
+	font-size: 0.8rem;
+	color: #af3f00;
+	text-align: center;
+	margin: 0;
+}
+
+.cookie-text a {
+	color: #af3f00;
+}
+
+.cookie-button-container {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-around;
+	width: 50%;
+	margin-top: 0.5rem;
+}
+
+.cookie-button {
+	width: 5rem;
+	height: 2rem;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	border-radius: 0.5rem;
+	cursor: pointer;
+	font-size: 0.8rem;
+	font-weight: bold;
+	color: #cfcfcf;
+}
+
+.cookie-allow {
+	background-color: rgba(0, 127, 0, 0.7);
+}
+
+.cookie-allow:hover {
+	background-color: rgba(0, 127, 0, 1);
+}
+
+.cookie-deny {
+	background-color: rgba(127, 0, 0, 0.7);
+}
+
+.cookie-deny:hover {
+	background-color: rgba(127, 0, 0, 1);
+}
