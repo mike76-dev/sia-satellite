@@ -12,3 +12,6 @@ When using **Sia Satellite**, a renter does not need to own SC to use Sia storag
 
 The service will intentionally be built without irrelevant modules, such as host, renter, or miner, in order to avoid possible conflicts of interests.
 When the service is fully developed, anyone will be able to run their own satellite. This way, the centralization piece can be mitigated.
+
+
+This work is supported by a [Sia Foundation](https://sia.tech) grant.
