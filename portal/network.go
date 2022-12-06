@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/golang/gddo/httputil/header"
 	"github.com/julienschmidt/httprouter"
@@ -26,6 +27,10 @@ const (
 
 	// currencyAPI is the network address of the currency exchange rate API.
 	currencyAPI = "https://api.freecurrencyapi.com/v1/latest?apikey="
+
+	// exchangeRateFetchInterval is how often currency exchange rates are
+	// retrieved.
+	exchangeRateFetchInterval = 24 * time.Hour
 )
 
 // Error codes provided in an HTTP response.
@@ -297,24 +302,46 @@ type exchangeRates struct {
 	Data map[string]float64 `json: "data"`
 }
 
-// fetchExchangeRates retrieves the fiat currency exchange rates.
-func (p *Portal) fetchExchangeRates() error {
+// threadedFetchExchangeRates retrieves the fiat currency
+// exchange rates.
+func (p *Portal) threadedFetchExchangeRates() {
 	key := os.Getenv("SATD_FREECURRENCY_API_KEY")
 	if key == "" {
-		return errors.New("could not find API key")
+		p.log.Println("ERROR: unable to find API key")
+		return
 	}
-	resp, err := http.Get(currencyAPI + key)
-	if err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return errors.New("server responded with an error")
+
+	for {
+		select {
+		case <-p.threads.StopChan():
+			return
+		case <-time.After(exchangeRateFetchInterval):
 		}
-		var data exchangeRates
-		dec := json.NewDecoder(resp.Body)
-		dec.Decode(&data)
-		for k, v := range data.Data {
-			p.exchRates[k] = v
-		}
+
+		func() {
+			err := p.threads.Add()
+			if err != nil {
+				return
+			}
+			defer p.threads.Done()
+
+			p.mu.Lock()
+			defer p.mu.Unlock()
+
+			resp, err := http.Get(currencyAPI + key)
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					p.log.Println("ERROR: falied to fetch exchange rates")
+					return
+				}
+				var data exchangeRates
+				dec := json.NewDecoder(resp.Body)
+				dec.Decode(&data)
+				for k, v := range data.Data {
+					p.exchRates[k] = v
+				}
+			}
+		}()
 	}
-	return err
 }

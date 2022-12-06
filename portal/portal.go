@@ -158,10 +158,8 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, 
 		}
 	})
 
-	// Fetch the exchange rates.
-	if err = p.fetchExchangeRates(); err != nil {
-		p.log.Println("Failed to fetch exchange rates:", err)
-	}
+	// Spawn the thread to fetch the exchange rates.
+	go p.threadedFetchExchangeRates()
 
 	// Start listening to API requests.
 	if err = p.initNetworking("127.0.0.1" + p.apiPort); err != nil {
