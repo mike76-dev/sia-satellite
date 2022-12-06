@@ -62,9 +62,18 @@ function setActiveMenuIndex(ind) {
 	clearErrors();
 }
 
-function showMenu() {
+function showMenu(e) {
+	e.preventDefault();
+	e.stopPropagation();
 	document.getElementById('menu-button').classList.add('mobile-hidden');
 	document.getElementById('menu-container').classList.remove('mobile-hidden');
+	document.addEventListener('click', documentClickHandler);
+}
+
+function documentClickHandler() {
+	document.removeEventListener('click', documentClickHandler);
+	document.getElementById('menu-button').classList.remove('mobile-hidden');
+	document.getElementById('menu-container').classList.add('mobile-hidden');
 }
 
 function validatePassword(pass) {
