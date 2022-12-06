@@ -39,6 +39,7 @@ type Portal struct {
 
 	// Atomic stats.
 	authStats  map[string]authenticationStats
+	exchRates  map[string]float64
 
 	// Utilities.
 	listener      net.Listener
@@ -70,6 +71,7 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, 
 		apiPort:       config.PortalPort,
 
 		authStats:     make(map[string]authenticationStats),
+		exchRates:     make(map[string]float64),
 
 		persistDir:    persistDir,
 		staticAlerter: smodules.NewAlerter("portal"),
@@ -155,6 +157,11 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, 
 			p.log.Println("ERROR: unable to save portal:", err)
 		}
 	})
+
+	// Fetch the exchange rates.
+	if err = p.fetchExchangeRates(); err != nil {
+		p.log.Println("Failed to fetch exchange rates:", err)
+	}
 
 	// Start listening to API requests.
 	if err = p.initNetworking("127.0.0.1" + p.apiPort); err != nil {

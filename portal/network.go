@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -22,6 +23,9 @@ const (
 
 	// httpMaxBodySize enforces a maximum read of 1MiB from the request body.
 	httpMaxBodySize = 1048576 // 1MiB.
+
+	// currencyAPI is the network address of the currency exchange rate API.
+	currencyAPI = "https://api.freecurrencyapi.com/v1/latest?apikey="
 )
 
 // Error codes provided in an HTTP response.
@@ -286,4 +290,31 @@ func getRemoteHost(r *http.Request) (host string) {
 		}
 	}
 	return
+}
+
+// exchangeRates holds the firat currency exchange rates.
+type exchangeRates struct {
+	Data map[string]float64 `json: "data"`
+}
+
+// fetchExchangeRates retrieves the fiat currency exchange rates.
+func (p *Portal) fetchExchangeRates() error {
+	key := os.Getenv("SATD_FREECURRENCY_API_KEY")
+	if key == "" {
+		return errors.New("could not find API key")
+	}
+	resp, err := http.Get(currencyAPI + key)
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return errors.New("server responded with an error")
+		}
+		var data exchangeRates
+		dec := json.NewDecoder(resp.Body)
+		dec.Decode(&data)
+		for k, v := range data.Data {
+			p.exchRates[k] = v
+		}
+	}
+	return err
 }
