@@ -705,3 +705,76 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 
 	writeSuccess(w)
 }
+
+// deleteHandlerPOST handles the POST /delete requests.
+func (api *portalAPI) deleteHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode request body.
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
+		return
+	}
+
+	var dr struct {Token string `json: "token"`}
+	err, code := api.handleDecodeError(w, dec.Decode(&dr))
+	if code != http.StatusOK {
+		writeError(w, err, code)
+		return
+	}
+
+	// Decode and verify the token.
+	prefix, email, expires, tErr := api.portal.decodeToken(dr.Token)
+	if tErr != nil || prefix != cookiePrefix {
+		writeError(w,
+			Error{
+				Code: httpErrorTokenInvalid,
+				Message: "invalid token",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	if expires.Before(time.Now()) {
+		writeError(w,
+		Error{
+			Code: httpErrorTokenExpired,
+			Message: "token already expired",
+		}, http.StatusBadRequest)
+		return
+	}
+
+	// Check if the user account exists.
+	count, cErr := api.portal.countEmails(email)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// No such account. Can only happen if it was deleted.
+	if count == 0 {
+		writeError(w,
+			Error{
+				Code: httpErrorNotFound,
+				Message: "no such account",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// TODO Check if the account is allowed to be deleted.
+
+	// Remove the account from the database.
+	if cErr := api.portal.deleteAccount(email); cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeSuccess(w)
+}

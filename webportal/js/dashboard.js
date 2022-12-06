@@ -29,6 +29,10 @@ function getCookie(name) {
 	return '';
 }
 
+function deleteCookie(name) {
+	document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/';
+}
+
 var menu = document.getElementById('menu');
 var pages = document.getElementById('pages');
 for (let i = 0; i < menu.childElementCount; i++) {
@@ -199,6 +203,59 @@ function changeClick() {
 					emailErr.innerHTML = 'Unknown error';
 					emailErr.classList.remove('invisible');
 					break;
+				default:
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function deleteClick() {
+	if (!confirm('Are you sure you want to delete your account?')) return;
+	let data = {
+		token:    authToken
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	let m = document.getElementById('message');
+	fetch(apiBaseURL + '/delete', options)
+		.then(response => {
+			if (response.status == 204) {
+				deleteCookie('satellite');
+				let i = window.location.href.lastIndexOf('/');
+				window.location.replace(window.location.href.slice(0, i) + '/rent.html');
+				return 'request successful';
+			} else return response.json();
+		})
+		.then(data => {
+			switch (data.Code) {
+				case 40:
+					m.innerHTML = 'Unknown error. Recommended to clear the cookies and reload the page.';
+					m.classList.remove('disabled');
+					window.setTimeout(function() {
+						m.classList.add('disabled');
+						m.innerHTML = '';
+					}, 3000);
+					break;
+				case 41:
+					m.innerHTML = 'Unknown error. Recommended to clear the cookies and reload the page.';
+					m.classList.remove('disabled');
+					window.setTimeout(function() {
+						m.classList.add('disabled');
+						m.innerHTML = '';
+					}, 3000);
+					break;
+				case 50:
+					m.innerHTML = 'Unknown error';
+					m.classList.remove('disabled');
+					window.setTimeout(function() {
+						m.classList.add('disabled');
+						m.innerHTML = '';
+					}, 3000);
 				default:
 			}
 		})

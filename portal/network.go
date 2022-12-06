@@ -101,6 +101,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.POST("/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.changeHandlerPOST(w, req, ps)
 	})
+	router.POST("/delete", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.deleteHandlerPOST(w, req, ps)
+	})
 
 	api.routerMu.Lock()
 	api.router = router

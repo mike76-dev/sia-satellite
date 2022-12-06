@@ -45,7 +45,7 @@ func (p *Portal) isVerified(email, password string) (verified bool, ok bool, err
 	return v, (ph == pwHash), err
 }
 
-// createAccount updates the user account in the database.
+// updateAccount updates the user account in the database.
 // If the account does not exist yet, it is created.
 func (p *Portal) updateAccount(email, password string, verified bool) error {
 	c, err := p.countEmails(email)
@@ -108,4 +108,10 @@ func (p *Portal) threadedPruneUnverifiedAccounts() {
 			}
 		}()
 	}
+}
+
+// deleteAccount deletes the user account from the database.
+func (p *Portal) deleteAccount(email string) error {
+	_, err := p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
+	return err
 }

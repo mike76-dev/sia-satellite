@@ -85,7 +85,7 @@ if (query.startsWith('?token=')) {
 			m.classList.add('disabled');
 			m.innerHTML = '';
 			let i = window.location.href.lastIndexOf('/');
-			window.location.replace(window.location.href.slice(0, i) + '/dummy.html');
+			window.location.replace(window.location.href.slice(0, i) + '/dashboard.html');
 		}, 3000);
 	}
 } else {
@@ -297,7 +297,7 @@ function loginClick() {
 				setCookie('satellite', data.Token, 7)
 				window.setTimeout(function() {
 					let i = window.location.href.lastIndexOf('/');
-					window.location.replace(window.location.href.slice(0, i) + '/dummy.html');
+					window.location.replace(window.location.href.slice(0, i) + '/dashboard.html');
 				}, 3000);
 				return
 			}
