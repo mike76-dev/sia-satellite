@@ -26,7 +26,7 @@ if (query.startsWith('?token=')) {
 			body: JSON.stringify(data)
 		}
 		let m = document.getElementById('message');
-		fetch(apiBaseURL + '/token', options)
+		fetch(apiBaseURL + '/auth/token', options)
 			.then(response => {
 				if (response.status == 204) {
 					m.innerHTML = 'Email verification successful, you will be redirected now...';
@@ -285,7 +285,7 @@ function loginClick() {
 		},
 		body: JSON.stringify(data)
 	}
-	fetch(apiBaseURL + '/login', options)
+	fetch(apiBaseURL + '/auth/login', options)
 		.then(response => response.json())
 		.then(data => {
 			if (data.Token) {
@@ -379,7 +379,7 @@ function signupClick() {
 		},
 		body: JSON.stringify(data)
 	}
-	fetch(apiBaseURL + '/register', options)
+	fetch(apiBaseURL + '/auth/register', options)
 		.then(response => {
 			if (response.status == 200 || response.status == 204) {
 				let rv = document.getElementById('resend-verify-email');
@@ -456,7 +456,7 @@ function resetClick() {
 		},
 		body: JSON.stringify(data)
 	}
-	fetch(apiBaseURL + '/reset', options)
+	fetch(apiBaseURL + '/auth/reset', options)
 		.then(response => {
 			if (response.status == 204) {
 				let rv = document.getElementById('resend-reset-email');
@@ -492,7 +492,7 @@ function resendVerifyClick() {
 		},
 		body: JSON.stringify(data)
 	}
-	fetch(apiBaseURL + '/register/resend', options)
+	fetch(apiBaseURL + '/auth/register/resend', options)
 		.then(response => {
 			if (response.status == 204) {
 				return 'request successful';
@@ -525,7 +525,7 @@ function resendResetClick() {
 		},
 		body: JSON.stringify(data)
 	}
-	fetch(apiBaseURL + '/reset/resend', options)
+	fetch(apiBaseURL + '/auth/reset/resend', options)
 		.then(response => {
 			if (response.status == 204) {
 				return 'request successful';
@@ -583,7 +583,7 @@ function changeClick() {
 		body: JSON.stringify(data)
 	}
 	let m = document.getElementById('message');
-	fetch(apiBaseURL + '/change', options)
+	fetch(apiBaseURL + '/auth/change', options)
 		.then(response => {
 			if (response.status == 204) {
 				setStatus('');

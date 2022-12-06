@@ -42,11 +42,25 @@ const (
 	`
 )
 
-// authLink holds the parts of an authentication link.
-type authLink struct {
-	Path  string
-	Token string
-}
+type (
+	// authRequest holds the body of an /auth/login POST request.
+	authRequest struct {
+		Email    string `json: "email"`
+		Password string `json: "password"`
+	}
+
+	// authRequestWithToken holds the body of an /auth/change POST request.
+	authRequestWithToken struct {
+		Password string `json: "password"`
+		Token    string `json: "token"`
+	}
+
+	// authLink holds the parts of an authentication link.
+	authLink struct {
+		Path  string
+		Token string
+	}
+)
 
 // checkEmail is a helper function that validates an email address.
 // If the email address is valid, it is returned in lowercase.
@@ -105,7 +119,7 @@ func checkPassword(pwd string) Error {
 	return Error{}
 }
 
-// loginHandlerPOST handles the POST /login requests.
+// loginHandlerPOST handles the POST /auth/login requests.
 func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	dec, decErr := prepareDecoder(w, req)
 	if decErr != nil {
@@ -194,7 +208,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 	writeJSON(w, data)
 }
 
-// registerHandlerPOST handles the POST /register requests.
+// registerHandlerPOST handles the POST /auth/register requests.
 func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode request body.
 	dec, decErr := prepareDecoder(w, req)
@@ -405,7 +419,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 	return true
 }
 
-// registerResendHandlerPOST handles the POST /register/resend requests.
+// registerResendHandlerPOST handles the POST /auth/register/resend requests.
 func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode request body.
 	dec, decErr := prepareDecoder(w, req)
@@ -430,7 +444,7 @@ func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http
 	writeSuccess(w)
 }
 
-// tokenHandlerPOST handles the POST /token requests.
+// tokenHandlerPOST handles the POST /auth/token requests.
 func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode request body.
 	dec, decErr := prepareDecoder(w, req)
@@ -537,7 +551,7 @@ func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request,
 	writeSuccess(w)
 }
 
-// resetHandlerPOST handles the POST /reset requests.
+// resetHandlerPOST handles the POST /auth/reset requests.
 func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Check and update password reset stats.
 	if cErr := api.portal.checkAndUpdatePasswordResets(getRemoteHost(req)); cErr != nil {
@@ -591,7 +605,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 	writeSuccess(w)
 }
 
-// resetResendHandlerPOST handles the POST /reset/resend requests.
+// resetResendHandlerPOST handles the POST /auth/reset/resend requests.
 func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Check and update stats.
 	if err := api.portal.checkAndUpdatePasswordResets(getRemoteHost(req)); err != nil {
@@ -626,7 +640,7 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 	writeSuccess(w)
 }
 
-// changeHandlerPOST handles the POST /change requests.
+// changeHandlerPOST handles the POST /auth/change requests.
 func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode request body.
 	dec, decErr := prepareDecoder(w, req)
@@ -706,7 +720,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	writeSuccess(w)
 }
 
-// deleteHandlerPOST handles the POST /delete requests.
+// deleteHandlerPOST handles the POST /auth/delete requests.
 func (api *portalAPI) deleteHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode request body.
 	dec, decErr := prepareDecoder(w, req)

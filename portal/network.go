@@ -54,20 +54,6 @@ type portalAPI struct {
 	routerMu sync.RWMutex
 }
 
-type (
-	// authRequest holds the body of an /auth POST request.
-	authRequest struct {
-		Email    string `json: "email"`
-		Password string `json: "password"`
-	}
-
-	// authRequestWithToken holds the body of an /change POST request.
-	authRequestWithToken struct {
-		Password string `json: "password"`
-		Token    string `json: "token"`
-	}
-)
-
 // ServeHTTP implements the http.Handler interface.
 func (api *portalAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.routerMu.RLock()
@@ -80,28 +66,28 @@ func (api *portalAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (api *portalAPI) buildHTTPRoutes() {
 	router := httprouter.New()
 
-	router.POST("/login", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	router.POST("/auth/login", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.loginHandlerPOST(w, req, ps)
 	})
-	router.POST("/register", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	router.POST("/auth/register", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.registerHandlerPOST(w, req, ps)
 	})
-	router.POST("/register/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	router.POST("/auth/register/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.registerResendHandlerPOST(w, req, ps)
 	})
-	router.POST("/token", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	router.POST("/auth/token", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.tokenHandlerPOST(w, req, ps)
 	})
-	router.POST("/reset", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	router.POST("/auth/reset", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.resetHandlerPOST(w, req, ps)
 	})
-	router.POST("/reset/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	router.POST("/auth/reset/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.resetResendHandlerPOST(w, req, ps)
 	})
-	router.POST("/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	router.POST("/auth/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.changeHandlerPOST(w, req, ps)
 	})
-	router.POST("/delete", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	router.POST("/auth/delete", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.deleteHandlerPOST(w, req, ps)
 	})
 

@@ -153,7 +153,7 @@ function changeClick() {
 		body: JSON.stringify(data)
 	}
 	let m = document.getElementById('message');
-	fetch(apiBaseURL + '/change', options)
+	fetch(apiBaseURL + '/auth/change', options)
 		.then(response => {
 			if (response.status == 204) {
 				clearPassword();
@@ -222,7 +222,7 @@ function deleteClick() {
 		body: JSON.stringify(data)
 	}
 	let m = document.getElementById('message');
-	fetch(apiBaseURL + '/delete', options)
+	fetch(apiBaseURL + '/auth/delete', options)
 		.then(response => {
 			if (response.status == 204) {
 				deleteCookie('satellite');
