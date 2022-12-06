@@ -43,6 +43,15 @@ for (let i = 0; i < menu.childElementCount; i++) {
 
 setActiveMenuIndex(0);
 
+var account = {
+	email:      '',
+	subscribed: false,
+	balance:    0.0,
+	currency:   ''
+}
+
+retrieveBalance();
+
 function setActiveMenuIndex(ind) {
 	let li, p;
 	if (ind > menu.childElementCount) return;
@@ -221,7 +230,7 @@ function changeClick() {
 function deleteClick() {
 	if (!confirm('Are you sure you want to delete your account?')) return;
 	let data = {
-		token:    authToken
+		token: authToken
 	}
 	let options = {
 		method: 'POST',
@@ -267,6 +276,29 @@ function deleteClick() {
 					}, 3000);
 				default:
 			}
+		})
+		.catch(error => console.log(error));
+}
+
+function retrieveBalance() {
+	let data = {
+		token: authToken
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	fetch(apiBaseURL + '/dashboard/balance', options)
+		.then(response => response.json())
+		.then(data => {
+			if (data.Email) {
+				console.log(data); //TODO
+				return;
+			}
+			if (data.Code) console.log(data.Code, data.Message); //TODO
 		})
 		.catch(error => console.log(error));
 }

@@ -66,6 +66,7 @@ func (api *portalAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (api *portalAPI) buildHTTPRoutes() {
 	router := httprouter.New()
 
+	// /auth requests.
 	router.POST("/auth/login", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.loginHandlerPOST(w, req, ps)
 	})
@@ -89,6 +90,11 @@ func (api *portalAPI) buildHTTPRoutes() {
 	})
 	router.POST("/auth/delete", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.deleteHandlerPOST(w, req, ps)
+	})
+
+	// /dashboard requests.
+	router.POST("/dashboard/balance", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.balanceHandlerPOST(w, req, ps)
 	})
 
 	api.routerMu.Lock()

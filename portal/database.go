@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"runtime"
@@ -114,4 +115,26 @@ func (p *Portal) threadedPruneUnverifiedAccounts() {
 func (p *Portal) deleteAccount(email string) error {
 	_, err := p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
 	return err
+}
+
+// getBalance retrieves the balance information on the account.
+// An empty struct is returned when there is no data.
+func (p *Portal) getBalance(email string) (*userBalance, error) {
+	var s bool
+	var b float64
+	var c string
+	err := p.db.QueryRow("SELECT subscribed, balance, currency FROM balances WHERE email = ?", email).Scan(&s, &b, &c)
+
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	ub := &userBalance{
+		Email:      email,
+		Subscribed: s,
+		Balance:    b,
+		Currency:   c,
+	}
+
+	return ub, nil
 }
