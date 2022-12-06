@@ -546,11 +546,6 @@ function resendResetClick() {
 		.catch(error => console.log(error));
 }
 
-function changeEmailChange() {
-	let err = document.getElementById('change-email-error');
-	err.classList.add('invisible');
-}
-
 function changePasswordChange() {
 	let err = document.getElementById('change-password-error');
 	err.classList.add('invisible');

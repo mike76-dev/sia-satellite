@@ -13,6 +13,7 @@
 <body>
 	<div class="container">
 		<div class="main">
+			<div id="message" class="message disabled"></div>
 			<div id="menu-button" class="menu-button" onclick="showMenu()">&equiv;</div>
 			<div id="menu-container" class="menu mobile-hidden">
 				<ul id="menu" class="menu-list">
@@ -38,6 +39,42 @@
 				</div>
 				<div class="page disabled">
 					<h1>Account Settings</h1>
+					<section>
+						<h2>Change Password</h2>
+						<label for="change-password">New Password
+							<span class="hint-button">?
+								<div class="hint">
+									Password must be minimum 8 characters long and contain
+									at least one small letter, one capital letter, one digit,
+									and one special character.
+								</div>
+							</span>
+						</label>
+						<div class="password">
+							<input id="change-password" type="password" class="input"
+								onkeypress="changePasswordChange()" onchange="changePasswordChange()">
+							<img id="change-password-icon" src="assets/show-password.png"
+								class="toggle-icon">
+							<input id="change-password-toggle" type="checkbox"
+								class="toggle-checkbox" onChange="toggleChangePassword()">
+						</div>
+						<p id="change-password-error" class="error invisible">
+							Password is not strong enough
+						</p>
+						<label for="change-retype">Retype Password</label>
+						<div class="password">
+							<input id="change-retype" type="password" class="input"
+								onkeypress="changeRetypeChange()" onchange="changeRetypeChange()">
+							<img id="change-retype-icon" src="assets/show-password.png"
+								class="toggle-icon">
+							<input id="change-retype-toggle" type="checkbox"
+								class="toggle-checkbox" onChange="toggleChangeRetype()">
+						</div>
+						<p id="change-retype-error" class="error invisible">
+							The two passwords do not match
+						</p>
+						<button onclick="changeClick()">Submit</button>
+					</section>
 				</div>
 			</div>
 		</div>
