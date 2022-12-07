@@ -96,12 +96,6 @@ function allowCookies() {
 	document.getElementById('cookie').classList.add('disabled');
 }
 
-function setCookie(name, value, days) {
-	let date = new Date();
-	date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
-	document.cookie = name + '=' + value + '; expires=' + date.toUTCString() + '; path=/';
-}
-
 function getCookie(name) {
 	let n = name + '=';
 	let ca = document.cookie.split(';');
