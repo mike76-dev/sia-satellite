@@ -1,19 +1,19 @@
 package portal
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"context"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/mike76-dev/sia-satellite/external"
 )
 
 const (
@@ -23,9 +23,6 @@ const (
 
 	// httpMaxBodySize enforces a maximum read of 1MiB from the request body.
 	httpMaxBodySize = 1048576 // 1MiB.
-
-	// currencyAPI is the network address of the currency exchange rate API.
-	currencyAPI = "https://api.freecurrencyapi.com/v1/latest?apikey="
 
 	// exchangeRateFetchInterval is how often currency exchange rates are
 	// retrieved.
@@ -304,19 +301,31 @@ func getCookie(r *http.Request, name string) string {
 	return ""
 }
 
-// exchangeRates holds the firat currency exchange rates.
-type exchangeRates struct {
-	Data map[string]float64 `json: "data"`
-}
-
-// threadedFetchExchangeRates retrieves the fiat currency
-// exchange rates.
-func (p *Portal) threadedFetchExchangeRates() {
-	key := os.Getenv("SATD_FREECURRENCY_API_KEY")
-	if key == "" {
-		p.log.Println("ERROR: unable to find API key")
+// fetchExchangeRates retrieves the fiat currency exchange rates.
+func (p *Portal) fetchExchangeRates() {
+	err := p.threads.Add()
+	if err != nil {
 		return
 	}
+	defer p.threads.Done()
+
+	data, err := external.FetchExchangeRates()
+	if err != nil {
+		p.log.Println("ERROR:", err)
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for k, v := range data.Data {
+		p.exchRates[k] = v
+	}
+}
+
+// threadedFetchExchangeRates performs the fetch with set intervals.
+func (p *Portal) threadedFetchExchangeRates() {
+	p.fetchExchangeRates()
 
 	for {
 		select {
@@ -325,30 +334,6 @@ func (p *Portal) threadedFetchExchangeRates() {
 		case <-time.After(exchangeRateFetchInterval):
 		}
 
-		func() {
-			err := p.threads.Add()
-			if err != nil {
-				return
-			}
-			defer p.threads.Done()
-
-			p.mu.Lock()
-			defer p.mu.Unlock()
-
-			resp, err := http.Get(currencyAPI + key)
-			if err == nil {
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					p.log.Println("ERROR: falied to fetch exchange rates")
-					return
-				}
-				var data exchangeRates
-				dec := json.NewDecoder(resp.Body)
-				dec.Decode(&data)
-				for k, v := range data.Data {
-					p.exchRates[k] = v
-				}
-			}
-		}()
+		p.fetchExchangeRates()
 	}
 }
