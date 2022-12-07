@@ -270,6 +270,12 @@ function deleteClick() {
 		.catch(error => console.log(error));
 }
 
+function logout() {
+	deleteCookie('satellite');
+	let i = window.location.href.lastIndexOf('/');
+	window.location.replace(window.location.href.slice(0, i) + '/rent.html');
+}
+
 function retrieveBalance() {
 	let options = {
 		method: 'GET',
