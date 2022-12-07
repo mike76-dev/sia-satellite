@@ -18,23 +18,11 @@ type (
 	}
 )
 
-// balanceHandlerPOST handles the POST /dashboard/balance requests.
-func (api *portalAPI) balanceHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// Decode request body.
-	dec, decErr := prepareDecoder(w, req)
-	if decErr != nil {
-		return
-	}
-
-	var dr struct {Token string `json: "token"`}
-	err, code := api.handleDecodeError(w, dec.Decode(&dr))
-	if code != http.StatusOK {
-		writeError(w, err, code)
-		return
-	}
-
+// balanceHandlerGET handles the GET /dashboard/balance requests.
+func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
-	prefix, email, expires, tErr := api.portal.decodeToken(dr.Token)
+	token := getCookie(req, "satellite")
+	prefix, email, expires, tErr := api.portal.decodeToken(token)
 	if tErr != nil || prefix != cookiePrefix {
 		writeError(w,
 			Error{

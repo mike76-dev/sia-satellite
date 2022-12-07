@@ -35,7 +35,7 @@ const (
 		<html>
 		<body>
     	<h2>Reset Your Password</h2>
-	    <p>Click on the following link to enter a new password. This link is valid within the next 24 hours.</p>
+	    <p>Click on the following link to enter a new password. This link is valid within the next 60 minutes.</p>
 	    <p><a href="{{.Path}}?token={{.Token}}">{{.Path}}?token={{.Token}}</a></p>
 		</body>
 		</html>
@@ -126,14 +126,14 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	var ar authRequest
-	err, code := api.handleDecodeError(w, dec.Decode(&ar))
+	var data struct{Email string `json: "email"`}
+	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
 	}
-	email := strings.ToLower(ar.Email)
-	password := ar.Password
+	email := strings.ToLower(data.Email)
+	password := req.Header.Get("Satellite-Password")
 
 	// Check if the user account exists.
 	count, cErr := api.portal.countEmails(email)
@@ -198,14 +198,18 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	// Login successful, generate a cookie.
-	ct := api.portal.generateToken(cookiePrefix, email, time.Now().Add(7 * 24 * time.Hour))
-	var data struct {
-		Token string `json: "token"`
+	t := time.Now().Add(7 * 24 * time.Hour)
+	token := api.portal.generateToken(cookiePrefix, email, t)
+	cookie := http.Cookie{
+		Name:    "satellite",
+		Value:   token,
+		Expires: t,
+		Path:    "/",
 	}
-	data.Token = ct
 
 	// Send the cookie.
-	writeJSON(w, data)
+	http.SetCookie(w, &cookie)
+	writeSuccess(w)
 }
 
 // registerHandlerPOST handles the POST /auth/register requests.
@@ -216,20 +220,20 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	var ar authRequest
-	err, code := api.handleDecodeError(w, dec.Decode(&ar))
+	var data struct{Email string `json: "email"`}
+	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
 	}
 
 	// Check request fields for validity.	
-	email, err := checkEmail(ar.Email)
+	email, err := checkEmail(data.Email)
 	if err.Code != httpErrorNone {
 		writeError(w, err, http.StatusBadRequest)
 		return
 	}
-	password := ar.Password
+	password := req.Header.Get("Satellite-Password")
 	if err := checkPassword(password); err.Code != httpErrorNone {
 		writeError(w, err, http.StatusBadRequest)
 		return
@@ -373,7 +377,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 // password reset link by email.
 func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *http.Request, email string) bool {
 	// Generate a password reset link.
-	token := api.portal.generateToken(resetPrefix, email, time.Now().Add(24 * time.Hour))
+	token := api.portal.generateToken(resetPrefix, email, time.Now().Add(time.Hour))
 	path := req.Header["Referer"]
 	if len(path) == 0 {
 		api.portal.log.Printf("ERROR: unable to fetch referer URL")
@@ -427,9 +431,7 @@ func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http
 		return
 	}
 
-	var data struct {
-		Email string `json: "email"`
-	}
+	var data struct {Email string `json: "email"`}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -444,25 +446,12 @@ func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http
 	writeSuccess(w)
 }
 
-// tokenHandlerPOST handles the POST /auth/token requests.
-func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// Decode request body.
-	dec, decErr := prepareDecoder(w, req)
-	if decErr != nil {
-		return
-	}
-
-	var data struct {
-		Token string `json: "token"`
-	}
-	err, code := api.handleDecodeError(w, dec.Decode(&data))
-	if code != http.StatusOK {
-		writeError(w, err, code)
-		return
-	}
+// authHandlerGET handles the GET /auth requests.
+func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	token := req.Header.Get("Satellite-Token")
 
 	// Decode the token.
-	prefix, email, expires, tErr := api.portal.decodeToken(data.Token)
+	prefix, email, expires, tErr := api.portal.decodeToken(token)
 	if tErr != nil {
 		writeError(w,
 			Error{
@@ -529,15 +518,17 @@ func (api *portalAPI) tokenHandlerPOST(w http.ResponseWriter, req *http.Request,
 			return
 		}
 
-		// Generate a cookie token and send it. Set the expiration
-		// the same as of the password reset token.
-		ct := api.portal.generateToken(cookiePrefix, email, expires)
-		var data struct {
-			Token string `json: "token"`
+		// Generate a change cookie. This one has a different name, so
+		// that a password reset is not confused for a password change.
+		// Set the expiration the same as of the password reset token.
+		ct := api.portal.generateToken(changePrefix, email, expires)
+		cookie := http.Cookie{
+			Name:    "satellite-change",
+			Value:   ct,
+			Expires: expires,
+			Path:    "/",
 		}
-		data.Token = ct
-		writeJSON(w, data)
-		return
+		http.SetCookie(w, &cookie)
 
 	default:
 		writeError(w,
@@ -569,9 +560,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	var data struct {
-		Email string `json: "email"`
-	}
+	var data struct {Email string `json: "email"`}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -623,9 +612,7 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	var data struct {
-		Email string `json: "email"`
-	}
+	var data struct {Email string `json: "email"`}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -640,31 +627,25 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 	writeSuccess(w)
 }
 
-// changeHandlerPOST handles the POST /auth/change requests.
-func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// Decode request body.
-	dec, decErr := prepareDecoder(w, req)
-	if decErr != nil {
-		return
-	}
-
-	var chr authRequestWithToken
-	err, code := api.handleDecodeError(w, dec.Decode(&chr))
-	if code != http.StatusOK {
-		writeError(w, err, code)
-		return
-	}
-
+// changeHandlerGET handles the GET /auth/change requests.
+func (api *portalAPI) changeHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Check password for validity.	
-	password := chr.Password
+	password := req.Header.Get("Satellite-Password")
 	if err := checkPassword(password); err.Code != httpErrorNone {
 		writeError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	// Decode and verify the token.
-	prefix, email, expires, tErr := api.portal.decodeToken(chr.Token)
-	if tErr != nil || prefix != cookiePrefix {
+	reset := false
+	token := getCookie(req, "satellite")
+	if token == "" {
+		// Password reset was requested.
+		token = getCookie(req, "satellite-change")
+		reset = true
+	}
+	prefix, email, expires, tErr := api.portal.decodeToken(token)
+	if tErr != nil || (reset && prefix != changePrefix) || (!reset && prefix != cookiePrefix) {
 		writeError(w,
 			Error{
 				Code: httpErrorTokenInvalid,
@@ -720,23 +701,11 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	writeSuccess(w)
 }
 
-// deleteHandlerPOST handles the POST /auth/delete requests.
-func (api *portalAPI) deleteHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// Decode request body.
-	dec, decErr := prepareDecoder(w, req)
-	if decErr != nil {
-		return
-	}
-
-	var dr struct {Token string `json: "token"`}
-	err, code := api.handleDecodeError(w, dec.Decode(&dr))
-	if code != http.StatusOK {
-		writeError(w, err, code)
-		return
-	}
-
+// deleteHandlerGET handles the GET /auth/delete requests.
+func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
-	prefix, email, expires, tErr := api.portal.decodeToken(dr.Token)
+	token := getCookie(req, "satellite")
+	prefix, email, expires, tErr := api.portal.decodeToken(token)
 	if tErr != nil || prefix != cookiePrefix {
 		writeError(w,
 			Error{

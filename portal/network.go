@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/gddo/httputil/header"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -76,6 +75,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router := httprouter.New()
 
 	// /auth requests.
+	router.GET("/auth", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.authHandlerGET(w, req, ps)
+	})
 	router.POST("/auth/login", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.loginHandlerPOST(w, req, ps)
 	})
@@ -85,25 +87,22 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.POST("/auth/register/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.registerResendHandlerPOST(w, req, ps)
 	})
-	router.POST("/auth/token", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		api.tokenHandlerPOST(w, req, ps)
-	})
 	router.POST("/auth/reset", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.resetHandlerPOST(w, req, ps)
 	})
 	router.POST("/auth/reset/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.resetResendHandlerPOST(w, req, ps)
 	})
-	router.POST("/auth/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		api.changeHandlerPOST(w, req, ps)
+	router.GET("/auth/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.changeHandlerGET(w, req, ps)
 	})
-	router.POST("/auth/delete", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		api.deleteHandlerPOST(w, req, ps)
+	router.GET("/auth/delete", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.deleteHandlerGET(w, req, ps)
 	})
 
 	// /dashboard requests.
-	router.POST("/dashboard/balance", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		api.balanceHandlerPOST(w, req, ps)
+	router.GET("/dashboard/balance", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.balanceHandlerGET(w, req, ps)
 	})
 
 	api.routerMu.Lock()
@@ -188,13 +187,11 @@ func (err Error) Error() string {
 
 // checkHeader checks the HTTP request header for the right content type.
 func checkHeader(w http.ResponseWriter, r *http.Request) Error {
-	if r.Header.Get("Content-Type") != "" {
-		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
-		if value != "application/json" {
-			return Error{
-				Code: httpErrorBadRequest,
-				Message: httpContentTypeError,
-			}
+	value := r.Header.Get("Content-Type")
+	if value != "" && !strings.Contains(value, "application/json") {
+		return Error{
+			Code: httpErrorBadRequest,
+			Message: httpContentTypeError,
 		}
 	}
 	return Error{}
@@ -295,6 +292,16 @@ func getRemoteHost(r *http.Request) (host string) {
 		}
 	}
 	return
+}
+
+// getCookie is a helper function that retrieves the cookie value.
+func getCookie(r *http.Request, name string) string {
+	cookie, err := r.Cookie(name)
+	if err == nil {
+		v := cookie.Value
+		return strings.TrimPrefix(v, name + "=")
+	}
+	return ""
 }
 
 // exchangeRates holds the firat currency exchange rates.
