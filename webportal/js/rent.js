@@ -2,6 +2,13 @@ if (apiBaseURL == '') {
 	throw new Error('API base URL not specified');
 }
 
+if (!navigator.cookieEnabled) {
+	let m = document.getElementById('message');
+	m.innerHTML = 'Please allow cookies in your browser and reload the page. <a href="privacy.html" target="_blank">Read more</a>';
+	m.classList.remove('disabled');
+	throw new Error('Cookies disabled');
+}
+
 const specialChars = [
 	'`', '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
 	'-', '_', '=', '+', '[', ']', '{', '}', ';', ':', "'", '"',
@@ -9,50 +16,45 @@ const specialChars = [
 ];
 
 var status = '';
-var authToken = '';
 
 var query = window.location.search;
 if (query.startsWith('?token=')) {
 	let token = query.slice(7);
 	if (token.length == 128) {
-		let data = {
-			token: token
-		}
 		let options = {
-			method: 'POST',
+			method: 'GET',
 			headers: {
-				'Content-Type': 'application/json;charset=utf-8'
-			},
-			body: JSON.stringify(data)
+				'Content-Type':   'application/json;charset=utf-8',
+				'Satellite-Token': token
+			}
 		}
 		let m = document.getElementById('message');
-		fetch(apiBaseURL + '/auth/token', options)
+		fetch(apiBaseURL + '/auth', options)
 			.then(response => {
 				if (response.status == 204) {
-					m.innerHTML = 'Email verification successful, you will be redirected now...';
-					m.classList.remove('disabled');
-					window.setTimeout(function() {
-						m.classList.add('disabled');
-						m.innerHTML = '';
-						setStatus('login');
-					}, 3000);
-					return 'request successful';
-				} else if (response.status == 200) {
-					m.innerHTML = 'You will now be redirected to enter a new password...';
-					m.classList.remove('disabled');
-					window.setTimeout(function() {
-						m.classList.add('disabled');
-						m.innerHTML = '';
-						setStatus('change');
-					}, 3000);
-					return response.json();
+					cookie = getCookie('satellite-change');
+					if (cookie == '') {
+						m.innerHTML = 'Email verification successful, you will be redirected now...';
+						m.classList.remove('disabled');
+						window.setTimeout(function() {
+							m.classList.add('disabled');
+							m.innerHTML = '';
+							setStatus('login');
+						}, 3000);
+						return 'request successful';
+					} else {
+						m.innerHTML = 'You will now be redirected to enter a new password...';
+						m.classList.remove('disabled');
+						window.setTimeout(function() {
+							m.classList.add('disabled');
+							m.innerHTML = '';
+							setStatus('change');
+						}, 3000);
+						return response.json();
+					}
 				} else return response.json();
 			})
 			.then(data => {
-				if (data.Token) {
-					authToken = data.Token;
-					return;
-				}
 				switch (data.Code) {
 					case 40:
 						m.innerHTML = 'Provided link is invalid';
@@ -72,7 +74,7 @@ if (query.startsWith('?token=')) {
 			})
 			.catch(error => console.log(error));
 	}
-} else if (navigator.cookieEnabled) {
+} else {
 	if (getCookie('satellite') == '') {
 		document.getElementById('cookie').classList.remove('disabled');
 		setStatus('login');
@@ -88,10 +90,6 @@ if (query.startsWith('?token=')) {
 			window.location.replace(window.location.href.slice(0, i) + '/dashboard.html');
 		}, 3000);
 	}
-} else {
-	let m = document.getElementById('message');
-	m.innerHTML = 'Please allow cookies in your browser and reload the page. <a href="privacy.html" target="_blank">Read more</a>';
-	m.classList.remove('disabled');
 }
 
 function allowCookies() {
@@ -116,6 +114,10 @@ function getCookie(name) {
 		}
 	}
 	return '';
+}
+
+function deleteCookie(name) {
+	document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/';
 }
 
 function setStatus(s) {
@@ -275,32 +277,31 @@ function loginClick() {
 		return;
 	}
 	let data = {
-		email:    e.value,
-		password: p.value
+		email: e.value
 	}
 	let options = {
 		method: 'POST',
 		headers: {
-			'Content-Type': 'application/json;charset=utf-8'
+			'Content-Type':       'application/json;charset=utf-8',
+			'Satellite-Password': p.value
 		},
 		body: JSON.stringify(data)
 	}
 	fetch(apiBaseURL + '/auth/login', options)
-		.then(response => response.json())
+		.then(response => {
+				if (response.status == 204) {
+					setStatus('');
+					let m = document.getElementById('message');
+					m.innerHTML = 'Congratulations, you are logged in!';
+					m.classList.remove('disabled');
+					window.setTimeout(function() {
+						let i = window.location.href.lastIndexOf('/');
+						window.location.replace(window.location.href.slice(0, i) + '/dashboard.html');
+					}, 3000);
+					return 'request successful';
+				} else return response.json();
+		})
 		.then(data => {
-			if (data.Token) {
-				setStatus('');
-				let m = document.getElementById('message');
-				m.innerHTML = 'Congratulations, you are logged in!';
-				m.classList.remove('disabled');
-				authToken = data.Token;
-				setCookie('satellite', data.Token, 7)
-				window.setTimeout(function() {
-					let i = window.location.href.lastIndexOf('/');
-					window.location.replace(window.location.href.slice(0, i) + '/dashboard.html');
-				}, 3000);
-				return
-			}
 			let emailErr = document.getElementById('login-email-error');
 			let passErr = document.getElementById('login-password-error');
 			switch (data.Code) {
@@ -369,19 +370,19 @@ function signupClick() {
 		return;
 	}
 	let data = {
-		email:    e.value,
-		password: p.value
+		email: e.value
 	}
 	let options = {
 		method: 'POST',
 		headers: {
-			'Content-Type': 'application/json;charset=utf-8'
+			'Content-Type':       'application/json;charset=utf-8',
+			'Satellite-Password': p.value
 		},
 		body: JSON.stringify(data)
 	}
 	fetch(apiBaseURL + '/auth/register', options)
 		.then(response => {
-			if (response.status == 200 || response.status == 204) {
+			if (response.status == 204) {
 				let rv = document.getElementById('resend-verify-email');
 				rv.value = e.value;
 				setStatus('resend-verify');
@@ -571,16 +572,12 @@ function changeClick() {
 		err.classList.remove('invisible');
 		return;
 	}
-	let data = {
-		password: p.value,
-		token:    authToken
-	}
 	let options = {
-		method: 'POST',
+		method: 'GET',
 		headers: {
-			'Content-Type': 'application/json;charset=utf-8'
-		},
-		body: JSON.stringify(data)
+			'Content-Type':       'application/json;charset=utf-8',
+			'Satellite-Password': p.value
+		}
 	}
 	let m = document.getElementById('message');
 	fetch(apiBaseURL + '/auth/change', options)
@@ -589,6 +586,7 @@ function changeClick() {
 				setStatus('');
 				m.innerHTML = 'Password changed successfully, please log in using your new password...';
 				m.classList.remove('disabled');
+				deleteCookie('satellite-change');
 				window.setTimeout(function() {
 					m.classList.add('disabled');
 					m.innerHTML = '';

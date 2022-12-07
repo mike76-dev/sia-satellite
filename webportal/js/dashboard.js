@@ -13,8 +13,6 @@ if (!navigator.cookieEnabled || getCookie('satellite') == '') {
 	window.location.replace(window.location.href.slice(0, i) + '/rent.html');
 }
 
-var authToken = getCookie('satellite');
-
 function getCookie(name) {
 	let n = name + '=';
 	let ca = document.cookie.split(';');
@@ -159,16 +157,12 @@ function changeClick() {
 		err.classList.remove('invisible');
 		return;
 	}
-	let data = {
-		password: p.value,
-		token:    authToken
-	}
 	let options = {
-		method: 'POST',
+		method: 'GET',
 		headers: {
-			'Content-Type': 'application/json;charset=utf-8'
-		},
-		body: JSON.stringify(data)
+			'Content-Type':       'application/json;charset=utf-8',
+			'Satellite-Password': p.value
+		}
 	}
 	let m = document.getElementById('message');
 	fetch(apiBaseURL + '/auth/change', options)
@@ -229,15 +223,11 @@ function changeClick() {
 
 function deleteClick() {
 	if (!confirm('Are you sure you want to delete your account?')) return;
-	let data = {
-		token: authToken
-	}
 	let options = {
-		method: 'POST',
+		method: 'GET',
 		headers: {
 			'Content-Type': 'application/json;charset=utf-8'
-		},
-		body: JSON.stringify(data)
+		}
 	}
 	let m = document.getElementById('message');
 	fetch(apiBaseURL + '/auth/delete', options)
@@ -281,15 +271,11 @@ function deleteClick() {
 }
 
 function retrieveBalance() {
-	let data = {
-		token: authToken
-	}
 	let options = {
-		method: 'POST',
+		method: 'GET',
 		headers: {
 			'Content-Type': 'application/json;charset=utf-8'
-		},
-		body: JSON.stringify(data)
+		}
 	}
 	fetch(apiBaseURL + '/dashboard/balance', options)
 		.then(response => response.json())
