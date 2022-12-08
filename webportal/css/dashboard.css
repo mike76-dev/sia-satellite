@@ -208,6 +208,10 @@ button:hover {
 	display: initial;
 }
 
+.balance {
+	text-align: left;
+}
+
 @media screen and (max-width: 800px) {
 
 	.menu-button {

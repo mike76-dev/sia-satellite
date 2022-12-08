@@ -48,7 +48,7 @@ var account = {
 	currency:   ''
 }
 
-retrieveBalance();
+retrieveBalance(); // TODO set intervals.
 
 function setActiveMenuIndex(ind) {
 	let li, p;
@@ -285,6 +285,14 @@ function retrieveBalance() {
 	}
 	fetch(apiBaseURL + '/dashboard/balance', options)
 		.then(response => response.json())
-		.then(data => console.log(data)) //TODO
+		.then(data => {
+			if (data.Code) console.log(data)
+			else {
+				let b = document.getElementById('balance');
+				let c = data.Currency == '' ? 'USD' : data.Currency;
+				b.innerHTML = data.Balance.toFixed(2) + ' ' + c +
+					' (' + data.SCBalance.toFixed(2) + ' SC)';
+			}
+		})
 		.catch(error => console.log(error));
 }
