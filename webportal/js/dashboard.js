@@ -285,12 +285,6 @@ function retrieveBalance() {
 	}
 	fetch(apiBaseURL + '/dashboard/balance', options)
 		.then(response => response.json())
-		.then(data => {
-			if (data.Email) {
-				console.log(data); //TODO
-				return;
-			}
-			if (data.Code) console.log(data.Code, data.Message); //TODO
-		})
+		.then(data => console.log(data)) //TODO
 		.catch(error => console.log(error));
 }

@@ -131,7 +131,7 @@ func (p *Portal) getBalance(email string) (*userBalance, error) {
 	}
 
 	ub := &userBalance{
-		Email:      email,
+		IsUser:     !errors.Is(err, sql.ErrNoRows),
 		Subscribed: s,
 		Balance:    b,
 		Currency:   c,
