@@ -13,17 +13,17 @@ import (
 // exchange rate API.
 const currencyAPI = "https://api.freecurrencyapi.com/v1/latest"
 
-// ExchangeRates holds the firat currency exchange rates.
-type ExchangeRates struct {
+// exchangeRates holds the firat currency exchange rates.
+type exchangeRates struct {
 	Data map[string]float64 `json: "data"`
 }
 
 // FetchExchangeRates retrieves the fiat currency exchange
 // rates using an external API request.
-func FetchExchangeRates() (*ExchangeRates, error) {
+func FetchExchangeRates() (map[string]float64, error) {
 	key := os.Getenv("SATD_FREECURRENCY_API_KEY")
 	if key == "" {
-		return &ExchangeRates{}, errors.New("unable to find API key")
+		return nil, errors.New("unable to find API key")
 	}
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", currencyAPI, nil)
@@ -32,12 +32,15 @@ func FetchExchangeRates() (*ExchangeRates, error) {
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return &ExchangeRates{}, errors.New("falied to fetch exchange rates")
+			return nil, errors.New("falied to fetch exchange rates")
 		}
-		var data ExchangeRates
+		var data exchangeRates
 		dec := json.NewDecoder(resp.Body)
-		dec.Decode(&data)
-		return &data, nil
+		err = dec.Decode(&data)
+		if err != nil {
+			return nil, errors.New("wrong format of the exchange rates")
+		}
+		return data.Data, nil
 	}
-	return &ExchangeRates{}, errors.New("falied to fetch exchange rates")
+	return nil, errors.New("falied to fetch exchange rates")
 }

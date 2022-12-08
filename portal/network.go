@@ -318,7 +318,7 @@ func (p *Portal) fetchExchangeRates() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for k, v := range data.Data {
+	for k, v := range data {
 		p.exchRates[k] = v
 	}
 }
