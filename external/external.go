@@ -7,16 +7,31 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strconv"
 )
 
-// currencyAPI is the network address of the currency
-// exchange rate API.
-const currencyAPI = "https://api.freecurrencyapi.com/v1/latest"
+const (
+	// currencyAPI is the endpoint of the currency exchange rate API.
+	currencyAPI = "https://api.freecurrencyapi.com/v1/latest"
 
-// exchangeRates holds the firat currency exchange rates.
-type exchangeRates struct {
-	Data map[string]float64 `json: "data"`
-}
+	// scusdRateAPI is the endpoint of the SC-USD rate API.
+	scusdRateAPI = "https://api.bittrex.com/v3/markets/SC-USD/ticker"
+)
+
+type (
+	// exchangeRates holds the fiat currency exchange rates.
+	exchangeRates struct {
+		Data map[string]float64 `json: "data"`
+	}
+
+	// scusdRate holds the SC-USD market data.
+	scusdRate struct {
+		Symbol        string `json: "symbol"`
+		LastTradeRate string `json: "lastTradeRate"`
+		BidRate       string `json: "bidRate"`
+		AskRate       string `json: "askRate"`
+	}
+)
 
 // FetchExchangeRates retrieves the fiat currency exchange
 // rates using an external API request.
@@ -43,4 +58,23 @@ func FetchExchangeRates() (map[string]float64, error) {
 		return data.Data, nil
 	}
 	return nil, errors.New("falied to fetch exchange rates")
+}
+
+// FetchSCUSDRate retrieves the SC-USD trade rate.
+func FetchSCUSDRate() (float64, error) {
+	resp, err := http.Get(scusdRateAPI)
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return 0, errors.New("falied to fetch SC-USD rate")
+		}
+		var data scusdRate
+		dec := json.NewDecoder(resp.Body)
+		err = dec.Decode(&data)
+		if err != nil {
+			return 0, errors.New("wrong format of SC-USD market data")
+		}
+		return strconv.ParseFloat(data.LastTradeRate, 64)
+	}
+	return 0, errors.New("falied to fetch SC-USD rate")
 }

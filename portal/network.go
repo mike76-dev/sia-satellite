@@ -27,6 +27,9 @@ const (
 	// exchangeRateFetchInterval is how often currency exchange rates are
 	// retrieved.
 	exchangeRateFetchInterval = 24 * time.Hour
+
+	// scusdRateFetchInterval is how often SC-USD rate is retrieved.
+	scusdRateFetchInterval = 10 * time.Minute
 )
 
 // Error codes provided in an HTTP response.
@@ -303,12 +306,6 @@ func getCookie(r *http.Request, name string) string {
 
 // fetchExchangeRates retrieves the fiat currency exchange rates.
 func (p *Portal) fetchExchangeRates() {
-	err := p.threads.Add()
-	if err != nil {
-		return
-	}
-	defer p.threads.Done()
-
 	data, err := external.FetchExchangeRates()
 	if err != nil {
 		p.log.Println("ERROR:", err)
@@ -325,6 +322,12 @@ func (p *Portal) fetchExchangeRates() {
 
 // threadedFetchExchangeRates performs the fetch with set intervals.
 func (p *Portal) threadedFetchExchangeRates() {
+	err := p.threads.Add()
+	if err != nil {
+		return
+	}
+	defer p.threads.Done()
+
 	p.fetchExchangeRates()
 
 	for {
@@ -335,5 +338,40 @@ func (p *Portal) threadedFetchExchangeRates() {
 		}
 
 		p.fetchExchangeRates()
+	}
+}
+
+// fetchSCUSDRate retrieves the SC-USD rate.
+func (p *Portal) fetchSCUSDRate() {
+	data, err := external.FetchSCUSDRate()
+	if err != nil {
+		p.log.Println("ERROR:", err)
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.scusdRate = data
+}
+
+// threadedFetchSCUSDRate performs the fetch with set intervals.
+func (p *Portal) threadedFetchSCUSDRate() {
+	err := p.threads.Add()
+	if err != nil {
+		return
+	}
+	defer p.threads.Done()
+
+	p.fetchSCUSDRate()
+
+	for {
+		select {
+		case <-p.threads.StopChan():
+			return
+		case <-time.After(scusdRateFetchInterval):
+		}
+
+		p.fetchSCUSDRate()
 	}
 }

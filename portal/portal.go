@@ -40,6 +40,7 @@ type Portal struct {
 	// Atomic stats.
 	authStats  map[string]authenticationStats
 	exchRates  map[string]float64
+	scusdRate  float64
 
 	// Utilities.
 	listener      net.Listener
@@ -158,8 +159,9 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, 
 		}
 	})
 
-	// Spawn the thread to fetch the exchange rates.
+	// Spawn the threads to fetch the exchange rates.
 	go p.threadedFetchExchangeRates()
+	go p.threadedFetchSCUSDRate()
 
 	// Start listening to API requests.
 	if err = p.initNetworking("127.0.0.1" + p.apiPort); err != nil {
