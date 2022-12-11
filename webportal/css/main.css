@@ -4,7 +4,7 @@
 
 html {
 	font-family: 'Montserrat', sans-serif;
-	font-size: 16px;
+	font-size: 32px;
 }
 
 body {
@@ -74,7 +74,28 @@ p {
 	display: none!important;
 }
 
-@media screen and (max-width: 1000px) {
+@media screen and (max-width: 3440px) {
+
+	html {
+		font-size: 28px;
+	}
+}
+
+@media screen and (max-width: 2560px) {
+
+	html {
+		font-size: 20px;
+	}
+}
+
+@media screen and (max-width: 1920px) {
+
+	html {
+		font-size: 16px;
+	}
+}
+
+@media screen and (max-width: 1024px) {
 
 	h1, h2 {
 		text-align: center;
