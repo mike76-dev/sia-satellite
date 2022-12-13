@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/siamux"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
@@ -22,6 +23,11 @@ import (
 
 // Node represents a satellite node containing all required modules.
 type Node struct {
+	// The mux of the node.
+	Mux    *siamux.SiaMux
+	muxLog *os.File
+
+	// The modules of the node.
 	ConsensusSet    smodules.ConsensusSet
 	Gateway         smodules.Gateway
 	Portal          modules.Portal
@@ -61,6 +67,10 @@ func (n *Node) Close() (err error) {
 		fmt.Println("Closing gateway...")
 		err = errors.Compose(err, n.Gateway.Close())
 	}
+	if n.Mux != nil {
+		fmt.Println("Closing siamux...")
+		err = errors.Compose(err, n.Mux.Close(), n.muxLog.Close())
+	}
 	return nil
 }
 
@@ -71,6 +81,13 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	errChan := make(chan error, 1)
 	if err != nil {
 		errChan <- err
+		return nil, errChan
+	}
+
+	// Create the siamux.
+	mux, muxLog, err := smodules.NewSiaMux(filepath.Join(d, "siamux"), d, config.SiamuxAddr, config.SiamuxWSAddr)
+	if err != nil {
+		errChan <- errors.Extend(err, errors.New("unable to create siamux"))
 		return nil, errChan
 	}
 
@@ -153,6 +170,9 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	}()
 
 	return &Node{
+		Mux:    mux,
+		muxLog: muxLog,
+
 		ConsensusSet:    cs,
 		Gateway:         g,
 		Portal:          p,
@@ -160,6 +180,6 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 		TransactionPool: tp,
 		Wallet:          w,
 
-		Dir:             d,
+		Dir: d,
 	}, errChan
 }

@@ -17,6 +17,8 @@ var defaultConfig = persist.SatdConfig{
 	GatewayAddr:   ":0",
 	APIAddr:       "localhost:10080",
 	SatelliteAddr: ":10082",
+	SiamuxAddr:    ":0",
+	SiamuxWSAddr:  ":0",
 	Dir:           ".",
 	Bootstrap:     true,
 	DBUser:        "",
@@ -80,6 +82,8 @@ func main() {
 	gatewayAddr := flag.String("addr", "", "address to listen on for peer connections")
 	apiAddr := flag.String("api-addr", "", "address to serve API on")
 	satelliteAddr := flag.String("sat-addr", "", "address to listen on for renter requests")
+	siamuxAddr := flag.String("siamux-addr", "", "address that Siamux listens on")
+	siamuxWSAddr := flag.String("siamux-ws-addr", "", "websockets address for Siamux")
 	dir := flag.String("dir", "", "directory to store node state in")
 	bootstrap := flag.Bool("bootstrap", true, "bootstrap the gateway and consensus modules")
 	dbUser := flag.String("db-user", "", "username for accessing the database")
@@ -97,6 +101,12 @@ func main() {
 	}
 	if *satelliteAddr != "" {
 		config.SatelliteAddr = *satelliteAddr
+	}
+	if *siamuxAddr != "" {
+		config.SiamuxAddr = *siamuxAddr
+	}
+	if *siamuxWSAddr != "" {
+		config.SiamuxWSAddr = *siamuxWSAddr
 	}
 	if *dir != "" {
 		config.Dir = *dir

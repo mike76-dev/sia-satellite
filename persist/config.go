@@ -19,6 +19,8 @@ type SatdConfig struct {
 	GatewayAddr   string `json: "gateway"`
 	APIAddr       string `json: "api"`
 	SatelliteAddr string `json: "satellite"`
+	SiamuxAddr    string `json: "siamux"`
+	SiamuxWSAddr  string `json: "siamuxws"`
 	Dir           string `json: "dir"`
 	Bootstrap     bool   `json: "bootstrap"`
 	DBUser        string `json: "dbuser"`
