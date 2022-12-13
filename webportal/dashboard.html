@@ -8,6 +8,8 @@
 	<link rel="stylesheet" href="css/dashboard.css">
 	<script src="js/config.js"></script>
 	<script defer src="js/dashboard.js"></script>
+	<script src="https://js.stripe.com/v3/"></script>
+	<script defer src="js/payment.js"></script>
 	<title>Sia Satellite - Dashboard</title>
 </head>
 <body>
@@ -38,7 +40,19 @@
 					<h1>Current Spendings</h1>
 				</div>
 				<div class="page disabled">
-					<h1>Payment Plan</h1>
+					<h1>Payment</h1>
+					<section>
+						<p>You are going to make a test payment of 5.00 USD.
+							Don't worry, your card will not be charged.</p>
+			      <div id="payment-element">
+      			  <!--Stripe.js injects the Payment Element-->
+      			</div>
+      			<button id="payment-submit" onclick="handleSubmit(event)">
+      			  <div class="spinner disabled" id="spinner"></div>
+      			  <span id="payment-text">Pay now</span>
+      			</button>
+      			<div id="payment-message" class="disabled"></div>
+			    </section>
 				</div>
 				<div class="page disabled">
 					<h1>Payment History</h1>

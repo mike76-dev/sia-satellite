@@ -3,9 +3,10 @@ module github.com/mike76-dev/sia-satellite
 go 1.18
 
 require (
+	github.com/dchest/threefish v0.0.0-20120919164726-3ecf4c494abf
 	github.com/go-sql-driver/mysql v1.6.0
-	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f
 	github.com/julienschmidt/httprouter v1.3.0
+	github.com/stripe/stripe-go/v74 v74.2.0
 	gitlab.com/NebulousLabs/encoding v0.0.0-20200604091946-456c3dc907fe
 	gitlab.com/NebulousLabs/entropy-mnemonics v0.0.0-20181018051301-7532f67e3500
 	gitlab.com/NebulousLabs/errors v0.0.0-20200929122200-06c536cf6975
@@ -17,7 +18,6 @@ require (
 
 require (
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect
-	github.com/dchest/threefish v0.0.0-20120919164726-3ecf4c494abf // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/klauspost/cpuid v1.2.2 // indirect
 	github.com/klauspost/reedsolomon v1.9.3 // indirect

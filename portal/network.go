@@ -105,6 +105,11 @@ func (api *portalAPI) buildHTTPRoutes() {
 		api.balanceHandlerGET(w, req, ps)
 	})
 
+	// /stripe requests.
+	router.POST("/stripe/create-payment-intent", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.paymentHandlerPOST(w, req, ps)
+	})
+
 	api.routerMu.Lock()
 	api.router = router
 	api.routerMu.Unlock()
