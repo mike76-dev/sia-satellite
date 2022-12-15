@@ -13,6 +13,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/siamux"
 
 	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
@@ -23,6 +24,7 @@ import (
 
 var (
 	// Nil dependency errors.
+	errNilSMux    = errors.New("satellite cannot use a nil siamux")
 	errNilCS      = errors.New("satellite cannot use a nil state")
 	errNilTpool   = errors.New("satellite cannot use a nil transaction pool")
 	errNilWallet  = errors.New("satellite cannot use a nil wallet")
@@ -33,6 +35,7 @@ var (
 // the renters and with the hosts.
 type Satellite struct {
 	// Dependencies.
+	mux    *siamux.SiaMux
 	cs     smodules.ConsensusSet
 	g      smodules.Gateway
 	tpool  smodules.TransactionPool
@@ -70,8 +73,11 @@ func (s *Satellite) SecretKey() crypto.SecretKey {
 }
 
 // New returns an initialized Satellite.
-func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, satelliteAddr string, persistDir string) (*Satellite, error) {
+func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, mux *siamux.SiaMux, satelliteAddr string, persistDir string) (*Satellite, error) {
 	// Check that all the dependencies were provided.
+	if mux == nil {
+		return nil, errNilSMux
+	}
 	if cs == nil {
 		return nil, errNilCS
 	}
@@ -92,7 +98,7 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 	}
 
 	// Create the manager.
-	m, errChanM := manager.New(persistDir)
+	m, errChanM := manager.New(cs, g, tpool, wallet, mux, persistDir)
 	if err = smodules.PeekErr(errChanM); err != nil {
 		return nil, errors.AddContext(err, "unable to create manager")
 	}

@@ -8,8 +8,10 @@ import (
 	"sync"
 
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/siamux"
 
 	"go.sia.tech/siad/modules"
+	"go.sia.tech/siad/modules/renter/hostdb"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
 )
@@ -18,6 +20,7 @@ import (
 // hosts.
 type Manager struct {
 	// Utilities
+	hostDB        modules.HostDB
 	log           *persist.Logger
 	mu            sync.RWMutex
 	persist       persistence
@@ -27,12 +30,20 @@ type Manager struct {
 }
 
 // New returns an initialized Manager.
-func New(persistDir string) (*Manager, <-chan error) {
+func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, mux *siamux.SiaMux, persistDir string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
 	var err error
 
+	// Create the HostDB object.
+	hdb, errChanHDB := hostdb.New(g, cs, tpool, mux, persistDir)
+	if err := modules.PeekErr(errChanHDB); err != nil {
+		errChan <- err
+		return nil, errChan
+	}
+
 	// Create the Manager object.
 	m := &Manager{
+		hostDB:        hdb,
 		persistDir:    persistDir,
 		staticAlerter: modules.NewAlerter("manager"),
 	}
@@ -82,10 +93,7 @@ func New(persistDir string) (*Manager, <-chan error) {
 
 // Close shuts down the manager.
 func (m *Manager) Close() error {
-	if err := m.threads.Stop(); err != nil {
-		return err
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.saveSync()
+	return errors.Compose(m.threads.Stop(), m.hostDB.Close(), m.saveSync())
 }
