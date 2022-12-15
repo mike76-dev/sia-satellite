@@ -46,8 +46,8 @@ type Satellite struct {
 	secretKey crypto.SecretKey
 
 	// Submodules.
-	m Manager
-	p Provider
+	m *manager.Manager
+	p *provider.Provider
 
 	// Utilities.
 	log           *persist.Logger
@@ -165,6 +165,12 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 	return s, nil
 }
 
+// ActiveHosts calls Manager.ActiveHosts.
+func (s *Satellite) ActiveHosts() ([]smodules.HostDBEntry, error) { return s.m.ActiveHosts() }
+
+// AllHosts calls Manager.AllHosts.
+func (s *Satellite) AllHosts() ([]smodules.HostDBEntry, error) { return s.m.AllHosts() }
+
 // Close shuts down the satellite.
 func (s *Satellite) Close() error {
 	var errP, errM, err error
@@ -182,6 +188,24 @@ func (s *Satellite) Close() error {
 	defer s.mu.Unlock()
 	return s.saveSync()
 }
+
+// Filter calls Manager.Filter.
+func (s *Satellite) Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error) { return s.m.Filter() }
+
+// SetFilterMode calls Manager.SetFilterMode.
+func (s *Satellite) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPublicKey, netAddresses []string) error { return s.m.SetFilterMode(lm, hosts, netAddresses) }
+
+// Host calls Manager.Host.
+func (s *Satellite) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, error) { return s.m.Host(spk) }
+
+// InitialScanComplete calls Manager.InitialScanComplete.
+func (s *Satellite) InitialScanComplete() (bool, error) { return s.m.InitialScanComplete() }
+
+// ScoreBreakdown calls Manager.ScoreBreakdown.
+func (s *Satellite) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) { return s.m.ScoreBreakdown(e) }
+
+// EstimateHostScore calls Manager.EstimateHostScore.
+func (s *Satellite) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance) (smodules.HostScoreBreakdown, error) { return s.m.EstimateHostScore(e, a) }
 
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

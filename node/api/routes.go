@@ -51,6 +51,14 @@ func (api *API) buildHTTPRoutes() {
 		RegisterRoutesWallet(router, api.wallet, requiredPassword)
 	}
 
+	// HostDB API Calls.
+	router.GET("/hostdb", api.hostdbHandler)
+	router.GET("/hostdb/active", api.hostdbActiveHandler)
+	router.GET("/hostdb/all", api.hostdbAllHandler)
+	router.GET("/hostdb/hosts/:pubkey", api.hostdbHostsHandler)
+	router.GET("/hostdb/filtermode", api.hostdbFilterModeHandlerGET)
+	router.POST("/hostdb/filtermode", RequirePassword(api.hostdbFilterModeHandlerPOST, requiredPassword))
+
 	// Apply UserAgent middleware and return the Router.
 	api.routerMu.Lock()
 	api.router = timeoutHandler(RequireUserAgent(router, requiredUserAgent), httpServerTimeout)

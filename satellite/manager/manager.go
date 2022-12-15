@@ -14,13 +14,16 @@ import (
 	"go.sia.tech/siad/modules/renter/hostdb"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
+	"go.sia.tech/siad/types"
 )
 
 // A Manager contains the information necessary to communicate with the
 // hosts.
 type Manager struct {
-	// Utilities
-	hostDB        modules.HostDB
+	// Dependencies.
+	hostDB modules.HostDB
+
+	// Utilities.
 	log           *persist.Logger
 	mu            sync.RWMutex
 	persist       persistence
@@ -91,9 +94,83 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 	return m, errChan
 }
 
+// ActiveHosts returns an array of hostDB's active hosts.
+func (m *Manager) ActiveHosts() ([]modules.HostDBEntry, error) { return m.hostDB.ActiveHosts() }
+
+// AllHosts returns an array of all hosts.
+func (m *Manager) AllHosts() ([]modules.HostDBEntry, error) { return m.hostDB.AllHosts() }
+
 // Close shuts down the manager.
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return errors.Compose(m.threads.Stop(), m.hostDB.Close(), m.saveSync())
+}
+
+// Filter returns the hostdb's filterMode and filteredHosts.
+func (m *Manager) Filter() (modules.FilterMode, map[string]types.SiaPublicKey, []string, error) {
+	var fm modules.FilterMode
+	hosts := make(map[string]types.SiaPublicKey)
+	if err := m.threads.Add(); err != nil {
+		return fm, hosts, nil, err
+	}
+	defer m.threads.Done()
+	fm, hosts, netAddresses, err := m.hostDB.Filter()
+	if err != nil {
+		return fm, hosts, netAddresses, errors.AddContext(err, "error getting hostdb filter:")
+	}
+	return fm, hosts, netAddresses, nil
+}
+
+// SetFilterMode sets the hostdb filter mode.
+func (m *Manager) SetFilterMode(lm modules.FilterMode, hosts []types.SiaPublicKey, netAddresses []string) error {
+	if err := m.threads.Add(); err != nil {
+		return err
+	}
+	defer m.threads.Done()
+	// Check to see how many hosts are needed for the allowance.
+	/*settings, err := s.m.Settings()
+	if err != nil {
+		return errors.AddContext(err, "error getting manager settings:")
+	}
+	minHosts := settings.Allowance.Hosts
+	if len(hosts) < int(minHosts) && lm == smodules.HostDBActiveWhitelist {
+		s.m.log.Printf("WARN: There are fewer whitelisted hosts than the allowance requires.  Have %v whitelisted hosts, need %v to support allowance\n", len(hosts), minHosts)
+	}*/ //TODO
+
+	// Set list mode filter for the hostdb.
+	if err := m.hostDB.SetFilterMode(lm, hosts, netAddresses); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Host returns the host associated with the given public key.
+func (m *Manager) Host(spk types.SiaPublicKey) (modules.HostDBEntry, bool, error) {
+	return m.hostDB.Host(spk)
+}
+
+// InitialScanComplete returns a boolean indicating if the initial scan of the
+// hostdb is completed.
+func (m *Manager) InitialScanComplete() (bool, error) { return m.hostDB.InitialScanComplete() }
+
+// ScoreBreakdown returns the score breakdown of the specific host.
+func (m *Manager) ScoreBreakdown(e modules.HostDBEntry) (modules.HostScoreBreakdown, error) {
+	return m.hostDB.ScoreBreakdown(e)
+}
+
+// EstimateHostScore returns the estimated host score.
+func (m *Manager) EstimateHostScore(e modules.HostDBEntry, a modules.Allowance) (modules.HostScoreBreakdown, error) {
+	/*if reflect.DeepEqual(a, smodules.Allowance{}) {
+		settings, err := s.m.Settings()
+		if err != nil {
+			return smodules.HostScoreBreakdown{}, errors.AddContext(err, "error getting renter settings:")
+		}
+		a = settings.Allowance
+	}
+	if reflect.DeepEqual(a, smodules.Allowance{}) {
+		a = smodules.DefaultAllowance
+	}*/ //TODO
+	return m.hostDB.EstimateHostScore(e, a)
 }
