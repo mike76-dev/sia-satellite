@@ -7,12 +7,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/mike76-dev/sia-satellite/satellite/manager/contractor"
-
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/siamux"
 
-	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/modules/renter/hostdb"
 	"go.sia.tech/siad/persist"
@@ -20,43 +17,11 @@ import (
 	"go.sia.tech/siad/types"
 )
 
-// A hostContractor negotiates, revises, renews, and provides access to file
-// contracts.
-type hostContractor interface {
-	modules.Alerter
-
-	// Allowance returns the current allowance.
-	Allowance() modules.Allowance
-
-	// Close closes the hostContractor.
-	Close() error
-
-	// ContractPublicKey returns the public key capable of verifying the renter's
-	// signature on a contract.
-	ContractPublicKey(pk types.SiaPublicKey) (crypto.PublicKey, bool)
-
-	// CurrentPeriod returns the height at which the current allowance period
-	// began.
-	CurrentPeriod() types.BlockHeight
-
-	// PeriodSpending returns the amount spent on contracts during the current
-	// billing period.
-	PeriodSpending() (modules.ContractorSpending, error)
-
-	// RefreshedContract checks if the contract was previously refreshed.
-	RefreshedContract(fcid types.FileContractID) bool
-
-	// Synced returns a channel that is closed when the contractor is fully
-	// synced with the peer-to-peer network.
-	Synced() <-chan struct{}
-}
-
 // A Manager contains the information necessary to communicate with the
 // hosts.
 type Manager struct {
 	// Dependencies.
-	hostContractor hostContractor
-	hostDB         modules.HostDB
+	hostDB modules.HostDB
 
 	// Utilities.
 	log           *persist.Logger
@@ -65,7 +30,6 @@ type Manager struct {
 	persistDir    string
 	threads       siasync.ThreadGroup
 	staticAlerter *modules.GenericAlerter
-	staticMux     *siamux.SiaMux
 }
 
 // New returns an initialized Manager.
@@ -80,20 +44,11 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 		return nil, errChan
 	}
 
-	// Create the hostContractor object.
-	hc, errChanContractor := contractor.New(cs, wallet, tpool, hdb, persistDir)
-	if err := modules.PeekErr(errChanContractor); err != nil {
-		errChan <- err
-		return nil, errChan
-	}
-
 	// Create the Manager object.
 	m := &Manager{
-		hostContractor: hc,
-		hostDB:         hdb,
-		persistDir:     persistDir,
-		staticAlerter:  modules.NewAlerter("manager"),
-		staticMux:      mux,
+		hostDB:        hdb,
+		persistDir:    persistDir,
+		staticAlerter: modules.NewAlerter("manager"),
 	}
 
 	// Call stop in the event of a partial startup.
@@ -149,7 +104,7 @@ func (m *Manager) AllHosts() ([]modules.HostDBEntry, error) { return m.hostDB.Al
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return errors.Compose(m.threads.Stop(), m.hostContractor.Close(), m.hostDB.Close(), m.saveSync())
+	return errors.Compose(m.threads.Stop(), m.hostDB.Close(), m.saveSync())
 }
 
 // Filter returns the hostdb's filterMode and filteredHosts.
