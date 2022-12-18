@@ -11,11 +11,11 @@ type (
 	// userBalance holds the current balance as well as
 	// the data on the chosen payment scheme.
 	userBalance struct {
-		IsUser     bool    `json: "isuser"`
-		Subscribed bool    `json: "subscribed"`
-		Balance    float64 `json: "balance"`
-		Currency   string  `json: "currency"`
-		SCBalance  float64 `json: "scbalance"`
+		IsUser     bool    `json:"isuser"`
+		Subscribed bool    `json:"subscribed"`
+		Balance    float64 `json:"balance"`
+		Currency   string  `json:"currency"`
+		SCBalance  float64 `json:"scbalance"`
 	}
 )
 

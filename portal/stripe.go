@@ -10,7 +10,7 @@ import (
 )
 
 type item struct {
-	ID string `json: "id"`
+	ID string `json:"id"`
 }
 
 func calculateOrderAmount(items []item) int64 {

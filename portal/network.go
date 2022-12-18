@@ -178,10 +178,10 @@ func writeSuccess(w http.ResponseWriter) {
 // the event of an error.
 type Error struct {
 	// Code identifies the error and enables an easier client-side error handling.
-	Code    int    `json: "code"`
+	Code    int    `json:"code"`
 	// Message describes the error in English. Typically it is set to
 	// `err.Error()`. This field is required.
-	Message string `json: "message"`
+	Message string `json:"message"`
 }
 
 // Error implements the error interface for the Error type. It returns only the

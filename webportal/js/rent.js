@@ -55,7 +55,7 @@ if (query.startsWith('?token=')) {
 				} else return response.json();
 			})
 			.then(data => {
-				switch (data.Code) {
+				switch (data.code) {
 					case 40:
 						m.innerHTML = 'Provided link is invalid';
 						m.classList.remove('disabled');
@@ -298,7 +298,7 @@ function loginClick() {
 		.then(data => {
 			let emailErr = document.getElementById('login-email-error');
 			let passErr = document.getElementById('login-password-error');
-			switch (data.Code) {
+			switch (data.code) {
 				case 30:
 					passErr.innerHTML = 'Wrong combination of email and password';
 					passErr.classList.remove('invisible');
@@ -387,7 +387,7 @@ function signupClick() {
 		.then(data => {
 			let emailErr = document.getElementById('signup-email-error');
 			let passErr = document.getElementById('signup-password-error');
-			switch (data.Code) {
+			switch (data.code) {
 				case 10:
 					emailErr.innerHTML = 'Provided email address is invalid';
 					emailErr.classList.remove('invisible');
@@ -463,7 +463,7 @@ function resetClick() {
 		})
 		.then(data => {
 			let emailErr = document.getElementById('reset-email-error');
-			switch (data.Code) {
+			switch (data.code) {
 				case 31:
 					emailErr.innerHTML = 'Too many attempts, try again later';
 					emailErr.classList.remove('invisible');
@@ -495,7 +495,7 @@ function resendVerifyClick() {
 		})
 		.then(data => {
 			let resendErr = document.getElementById('resend-verify-error');
-			switch (data.Code) {
+			switch (data.code) {
 				case 31:
 					resendErr.innerHTML = 'Too many attempts, try again later';
 					resendErr.classList.remove('invisible');
@@ -528,7 +528,7 @@ function resendResetClick() {
 		})
 		.then(data => {
 			let resendErr = document.getElementById('resend-reset-error');
-			switch (data.Code) {
+			switch (data.code) {
 				case 31:
 					resendErr.innerHTML = 'Too many attempts, try again later';
 					resendErr.classList.remove('invisible');
@@ -592,7 +592,7 @@ function changeClick() {
 		})
 		.then(data => {
 			let passErr = document.getElementById('change-password-error');
-			switch (data.Code) {
+			switch (data.code) {
 				case 20:
 					passErr.innerHTML = 'Password is too short';
 					passErr.classList.remove('invisible');

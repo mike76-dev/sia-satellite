@@ -43,18 +43,6 @@ const (
 )
 
 type (
-	// authRequest holds the body of an /auth/login POST request.
-	authRequest struct {
-		Email    string `json: "email"`
-		Password string `json: "password"`
-	}
-
-	// authRequestWithToken holds the body of an /auth/change POST request.
-	authRequestWithToken struct {
-		Password string `json: "password"`
-		Token    string `json: "token"`
-	}
-
 	// authLink holds the parts of an authentication link.
 	authLink struct {
 		Path  string
@@ -126,7 +114,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	var data struct{Email string `json: "email"`}
+	var data struct{Email string `json:"email"`}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -220,7 +208,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	var data struct{Email string `json: "email"`}
+	var data struct{Email string `json:"email"`}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -431,7 +419,7 @@ func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http
 		return
 	}
 
-	var data struct {Email string `json: "email"`}
+	var data struct {Email string `json:"email"`}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -560,7 +548,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	var data struct {Email string `json: "email"`}
+	var data struct {Email string `json:"email"`}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -612,7 +600,7 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	var data struct {Email string `json: "email"`}
+	var data struct {Email string `json:"email"`}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)

@@ -34,17 +34,17 @@ const (
 type (
 	// authAttempts keeps track of specific authentication activities.
 	authAttempts struct {
-		LastAttempt  int64 `json: "last"`
-		Count        int64 `json: "count"`
+		LastAttempt  int64 `json:"last"`
+		Count        int64 `json:"count"`
 	}
 
 	// authenticationStats is the summary of authentication attempts
 	// from a single IP address.
 	authenticationStats struct {
-		RemoteHost       string        `json: "host"`
-		FailedLogins     *authAttempts `json: "loginfail"`
-		Verifications    *authAttempts `json: "verification"`
-		PasswordResets   *authAttempts `json: "reset"`
+		RemoteHost       string        `json:"host"`
+		FailedLogins     *authAttempts `json:"loginfail"`
+		Verifications    *authAttempts `json:"verification"`
+		PasswordResets   *authAttempts `json:"reset"`
 	}
 )
 

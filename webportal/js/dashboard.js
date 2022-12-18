@@ -180,7 +180,7 @@ function changeClick() {
 		})
 		.then(data => {
 			let passErr = document.getElementById('change-password-error');
-			switch (data.Code) {
+			switch (data.code) {
 				case 20:
 					passErr.innerHTML = 'Password is too short';
 					passErr.classList.remove('invisible');
@@ -240,7 +240,7 @@ function deleteClick() {
 			} else return response.json();
 		})
 		.then(data => {
-			switch (data.Code) {
+			switch (data.code) {
 				case 40:
 					m.innerHTML = 'Unknown error. Recommended to clear the cookies and reload the page.';
 					m.classList.remove('disabled');
@@ -286,12 +286,12 @@ function retrieveBalance() {
 	fetch(apiBaseURL + '/dashboard/balance', options)
 		.then(response => response.json())
 		.then(data => {
-			if (data.Code) console.log(data)
+			if (data.code) console.log(data)
 			else {
-				let b = document.getElementById('balance');
-				let c = data.Currency == '' ? 'USD' : data.Currency;
-				b.innerHTML = data.Balance.toFixed(2) + ' ' + c +
-					' (' + data.SCBalance.toFixed(2) + ' SC)';
+				let b = document.getElementById('balance');console.log(data);
+				let c = data.currency == '' ? 'USD' : data.currency;
+				b.innerHTML = data.balance.toFixed(2) + ' ' + c +
+					' (' + data.scbalance.toFixed(2) + ' SC)';
 			}
 		})
 		.catch(error => console.log(error));
