@@ -21,15 +21,15 @@ const (
 type (
 	// exchangeRates holds the fiat currency exchange rates.
 	exchangeRates struct {
-		Data map[string]float64 `json: "data"`
+		Data map[string]float64 `json:"data"`
 	}
 
 	// scusdRate holds the SC-USD market data.
 	scusdRate struct {
-		Symbol        string `json: "symbol"`
-		LastTradeRate string `json: "lastTradeRate"`
-		BidRate       string `json: "bidRate"`
-		AskRate       string `json: "askRate"`
+		Symbol        string `json:"symbol"`
+		LastTradeRate string `json:"lastTradeRate"`
+		BidRate       string `json:"bidRate"`
+		AskRate       string `json:"askRate"`
 	}
 )
 
