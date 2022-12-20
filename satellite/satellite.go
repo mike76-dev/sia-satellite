@@ -207,5 +207,8 @@ func (s *Satellite) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBr
 // EstimateHostScore calls Manager.EstimateHostScore.
 func (s *Satellite) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance) (smodules.HostScoreBreakdown, error) { return s.m.EstimateHostScore(e, a) }
 
+// GetAverages calls Manager.GetAverages.
+func (s *Satellite) GetAverages() modules.HostAverages { return s.m.GetAverages() }
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

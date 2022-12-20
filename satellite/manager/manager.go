@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/mike76-dev/sia-satellite/modules"
+
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/siamux"
 
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/modules/renter/hostdb"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
@@ -21,7 +23,10 @@ import (
 // hosts.
 type Manager struct {
 	// Dependencies.
-	hostDB modules.HostDB
+	hostDB smodules.HostDB
+
+	// Atomic properties.
+	hostAverages modules.HostAverages
 
 	// Utilities.
 	log           *persist.Logger
@@ -29,17 +34,17 @@ type Manager struct {
 	persist       persistence
 	persistDir    string
 	threads       siasync.ThreadGroup
-	staticAlerter *modules.GenericAlerter
+	staticAlerter *smodules.GenericAlerter
 }
 
 // New returns an initialized Manager.
-func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, mux *siamux.SiaMux, persistDir string) (*Manager, <-chan error) {
+func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, mux *siamux.SiaMux, persistDir string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
 	var err error
 
 	// Create the HostDB object.
 	hdb, errChanHDB := hostdb.New(g, cs, tpool, mux, persistDir)
-	if err := modules.PeekErr(errChanHDB); err != nil {
+	if err := smodules.PeekErr(errChanHDB); err != nil {
 		errChan <- err
 		return nil, errChan
 	}
@@ -48,12 +53,12 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 	m := &Manager{
 		hostDB:        hdb,
 		persistDir:    persistDir,
-		staticAlerter: modules.NewAlerter("manager"),
+		staticAlerter: smodules.NewAlerter("manager"),
 	}
 
 	// Call stop in the event of a partial startup.
 	defer func() {
-		if err = modules.PeekErr(errChan); err != nil {
+		if err = smodules.PeekErr(errChan); err != nil {
 			errChan <- errors.Compose(m.threads.Stop(), err)
 		}
 	}()
@@ -91,14 +96,17 @@ func New(cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPo
 		}
 	})
 
+	// Spawn a thread to calculate the host network averages.
+	go m.threadedCalculateAverages()
+
 	return m, errChan
 }
 
 // ActiveHosts returns an array of hostDB's active hosts.
-func (m *Manager) ActiveHosts() ([]modules.HostDBEntry, error) { return m.hostDB.ActiveHosts() }
+func (m *Manager) ActiveHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.ActiveHosts() }
 
 // AllHosts returns an array of all hosts.
-func (m *Manager) AllHosts() ([]modules.HostDBEntry, error) { return m.hostDB.AllHosts() }
+func (m *Manager) AllHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.AllHosts() }
 
 // Close shuts down the manager.
 func (m *Manager) Close() error {
@@ -108,8 +116,8 @@ func (m *Manager) Close() error {
 }
 
 // Filter returns the hostdb's filterMode and filteredHosts.
-func (m *Manager) Filter() (modules.FilterMode, map[string]types.SiaPublicKey, []string, error) {
-	var fm modules.FilterMode
+func (m *Manager) Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error) {
+	var fm smodules.FilterMode
 	hosts := make(map[string]types.SiaPublicKey)
 	if err := m.threads.Add(); err != nil {
 		return fm, hosts, nil, err
@@ -123,7 +131,7 @@ func (m *Manager) Filter() (modules.FilterMode, map[string]types.SiaPublicKey, [
 }
 
 // SetFilterMode sets the hostdb filter mode.
-func (m *Manager) SetFilterMode(lm modules.FilterMode, hosts []types.SiaPublicKey, netAddresses []string) error {
+func (m *Manager) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPublicKey, netAddresses []string) error {
 	if err := m.threads.Add(); err != nil {
 		return err
 	}
@@ -147,7 +155,7 @@ func (m *Manager) SetFilterMode(lm modules.FilterMode, hosts []types.SiaPublicKe
 }
 
 // Host returns the host associated with the given public key.
-func (m *Manager) Host(spk types.SiaPublicKey) (modules.HostDBEntry, bool, error) {
+func (m *Manager) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, error) {
 	return m.hostDB.Host(spk)
 }
 
@@ -156,12 +164,12 @@ func (m *Manager) Host(spk types.SiaPublicKey) (modules.HostDBEntry, bool, error
 func (m *Manager) InitialScanComplete() (bool, error) { return m.hostDB.InitialScanComplete() }
 
 // ScoreBreakdown returns the score breakdown of the specific host.
-func (m *Manager) ScoreBreakdown(e modules.HostDBEntry) (modules.HostScoreBreakdown, error) {
+func (m *Manager) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) {
 	return m.hostDB.ScoreBreakdown(e)
 }
 
 // EstimateHostScore returns the estimated host score.
-func (m *Manager) EstimateHostScore(e modules.HostDBEntry, a modules.Allowance) (modules.HostScoreBreakdown, error) {
+func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance) (smodules.HostScoreBreakdown, error) {
 	/*if reflect.DeepEqual(a, smodules.Allowance{}) {
 		settings, err := s.m.Settings()
 		if err != nil {
@@ -173,4 +181,11 @@ func (m *Manager) EstimateHostScore(e modules.HostDBEntry, a modules.Allowance) 
 		a = smodules.DefaultAllowance
 	}*/ //TODO
 	return m.hostDB.EstimateHostScore(e, a)
+}
+
+// GetAverages retrieves the host network averages from HostDB.
+func (m *Manager) GetAverages() modules.HostAverages {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.hostAverages
 }

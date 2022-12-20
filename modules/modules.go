@@ -6,6 +6,19 @@ import (
 	"go.sia.tech/siad/types"
 )
 
+// HostAverages contains the host network averages from HostDB.
+type HostAverages struct {
+	NumHosts               uint64
+	Duration               types.BlockHeight
+	StoragePrice           types.Currency
+	Collateral             types.Currency
+	DownloadBandwidthPrice types.Currency
+	UploadBandwidthPrice   types.Currency
+	ContractPrice          types.Currency
+	BaseRPCPrice           types.Currency
+	SectorAccessPrice      types.Currency
+}
+
 // Satellite implements the methods necessary to communicate both with the
 // renters and the hosts.
 type Satellite interface {
@@ -47,6 +60,9 @@ type Satellite interface {
 
 	// SecretKey returns the satellite's secret key.
 	SecretKey() crypto.SecretKey
+
+	// GetAverages retrieves the host network averages.
+	GetAverages() HostAverages
 }
 
 // Manager implements the methods necessary to communicate with the
@@ -84,6 +100,9 @@ type Manager interface {
 	// ScoreBreakdown will return the score for a host db entry using the
 	// hostdb's weighting algorithm.
 	ScoreBreakdown(entry smodules.HostDBEntry) (smodules.HostScoreBreakdown, error)
+
+	// GetAverages retrieves the host network averages.
+	GetAverages() HostAverages
 }
 
 // Provider implements the methods necessary to communicate with the

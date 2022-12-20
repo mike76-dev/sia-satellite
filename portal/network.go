@@ -104,6 +104,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.GET("/dashboard/balance", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.balanceHandlerGET(w, req, ps)
 	})
+	router.GET("/dashboard/averages", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.averagesHandlerGET(w, req, ps)
+	})
 
 	// /stripe requests.
 	router.POST("/stripe/create-payment-intent", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
