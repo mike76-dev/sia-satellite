@@ -217,6 +217,42 @@ button:disabled {
 	text-align: left;
 }
 
+.content {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-bottom: -0.5rem;
+}
+
+.content-item {
+	display: flex;
+	flex-direction: column;
+	margin-right: 0.5rem;
+	margin-bottom: 0.5rem;
+	padding: 0.5rem;
+	border: 1px solid #afafaf;
+	border-radius: 0.5rem;
+	min-width: 12rem;
+}
+
+.content-item:last-child {
+	margin-right: 0;
+}
+
+.content-error {
+	border-color: #af0000;
+}
+
+#select-payment {
+	margin-top: 0.5rem;
+}
+
+select {
+	width: 100%;
+	padding: 0.5rem;
+	font-size: 1rem;
+}
+
 #payment-message {
 	color: rgb(105, 115, 134);
 	font-size: 1rem;

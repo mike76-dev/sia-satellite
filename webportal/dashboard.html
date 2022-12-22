@@ -30,8 +30,40 @@
 			<div id="pages" class="pages">
 				<div class="page disabled">
 					<h1>Overview</h1>
-					<p>Your balance:</p>
-					<h2 id="balance" class="balance"></h2>
+					<section>
+						<p>Your balance:</p>
+						<h2 id="balance" class="balance"></h2>
+					</section>
+					<section>
+						<p>Network statistics:</p>
+						<div class="content">
+							<div class="content-item">
+								<p>Number of hosts:<br>
+									<strong id="numhosts"></strong>
+								</p>
+							</div>
+							<div class="content-item">
+								<p>Average storage price:<br>
+									<strong id="storage"></strong>
+								</p>
+							</div>
+							<div class="content-item">
+								<p>Average upload price:<br>
+									<strong id="upload"></strong>
+								</p>
+							</div>
+							<div class="content-item">
+								<p>Average download price:<br>
+									<strong id="download"></strong>
+								</p>
+							</div>
+							<div class="content-item">
+								<p>Average contract duration:<br>
+									<strong id="duration"></strong>
+								</p>
+							</div>
+						</div>
+					</section>
 				</div>
 				<div class="page disabled">
 					<h1>Contract Information</h1>
@@ -40,8 +72,93 @@
 					<h1>Current Spendings</h1>
 				</div>
 				<div class="page disabled">
-					<h1>Payment</h1>
-					<section>
+					<h1>Payment Plan</h1>
+					<section id="select">
+						<p>You haven't created a payment plan yet.</p>
+						<div class="content">
+							<div class="content-item">
+								<label for="select-currency">Your Currency</label>
+								<select id="select-currency" onchange="changeCurrency(this)">
+									<option value="USD">USD</option>
+									<option value="EUR">EUR</option>
+									<option value="GBP">GBP</option>
+								</select>
+							</div>
+							<div class="content-item">
+								<label for="select-duration">Storage Duration
+									<span class="hint-button">?
+										<div class="hint">
+											How long you want to store your files in weeks.
+											You can renew the contracts before the end of this period.
+										</div>
+									</span>
+								</label>
+								<input id="select-duration" class="input" type="number" min="0"
+									onchange="changeInput(this)">
+							</div>
+							<div class="content-item">
+								<label for="select-storage">Storage Volume
+									<span class="hint-button">?
+										<div class="hint">
+											How much data you want to store over the selected period in gigabytes.
+										</div>
+									</span>
+								</label>
+								<input id="select-storage" class="input" type="number" min="0"
+									onchange="changeInput(this)">
+							</div>
+							<div class="content-item">
+								<label for="select-upload">Upload Volume
+									<span class="hint-button">?
+										<div class="hint">
+											How much data you want to upload over the selected period in gigabytes.
+										</div>
+									</span>
+								</label>
+								<input id="select-upload" class="input" type="number" min="0"
+									onchange="changeInput(this)">
+							</div>
+							<div class="content-item">
+								<label for="select-download">Download Volume
+									<span class="hint-button">?
+										<div class="hint">
+											How much data you want to download over the selected period in gigabytes.
+										</div>
+									</span>
+								</label>
+								<input id="select-download" class="input" type="number" min="0"
+									onchange="changeInput(this)">
+							</div>
+							<div class="content-item">
+								<label for="select-hosts">Number of Hosts
+									<span class="hint-button">?
+										<div class="hint">
+											How many hosts you want to form contracts with.
+											The more hosts, the more reliable, but involves more overhead costs.
+										</div>
+									</span>
+								</label>
+								<input id="select-hosts" class="input" type="number" min="0" value="50"
+									onchange="changeInput(this)">
+							</div>
+							<div class="content-item">
+								<label for="select-redundancy">Redundancy Target
+									<span class="hint-button">?
+										<div class="hint">
+											What redundancy should the stored data have. The greater, the more reliable,
+											but the more you pay for the storage and the uploads.
+										</div>
+									</span>
+								</label>
+								<input id="select-redundancy" class="input" type="number" min="0" value="3.0"
+									onchange="changeInput(this)">
+							</div>
+						</div>
+						<h2 id="select-payment" class="balance"></h2>
+						<div id="select-limits" class="content disabled">
+						</div>
+					</section>
+					<section id="payment" class="disabled">
 						<p>You are going to make a test payment of 5.00 USD.
 							Don't worry, your card will not be charged.</p>
 			      <div id="payment-element">
