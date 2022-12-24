@@ -154,21 +154,84 @@
 									onchange="changeInput(this)">
 							</div>
 						</div>
-						<h2 id="select-payment" class="balance"></h2>
-						<div id="select-limits" class="content disabled">
+						<br>
+						<p>You can set price limits if you like.</p>
+						<div class="content">
+							<div class="content-item">
+								<label for="limits-contract">Max. Contract Price
+									<span class="hint-button">?
+										<div class="hint">
+											How much you want to pay for forming a contract with a single host.
+										</div>
+									</span>
+								</label>
+								<input id="limits-contract" class="input" type="number" min="0"
+									onchange="changeInput(this, false)">
+								<p id="limits-contract-average" class="average"></p>
+							</div>
+							<div class="content-item">
+								<label for="limits-storage">Max. Storage Price
+									<span class="hint-button">?
+										<div class="hint">
+											How much you want to pay for storing a whole TB of data
+											for one month not counting for redundancy.
+										</div>
+									</span>
+								</label>
+								<input id="limits-storage" class="input" type="number" min="0"
+									onchange="changeInput(this, false)">
+								<p id="limits-storage-average" class="average"></p>
+							</div>
+							<div class="content-item">
+								<label for="limits-upload">Max. Upload Price
+									<span class="hint-button">?
+										<div class="hint">
+											How much you want to pay for uploading a whole TB of data
+											not counting for redundancy.
+										</div>
+									</span>
+								</label>
+								<input id="limits-upload" class="input" type="number" min="0"
+									onchange="changeInput(this, false)">
+								<p id="limits-upload-average" class="average"></p>
+							</div>
+							<div class="content-item">
+								<label for="limits-download">Max. Download Price
+									<span class="hint-button">?
+										<div class="hint">
+											How much you want to pay for downloading a whole TB of data.
+										</div>
+									</span>
+								</label>
+								<input id="limits-download" class="input" type="number" min="0"
+									onchange="changeInput(this, false)">
+								<p id="limits-download-average" class="average"></p>
+							</div>
+						</div>
+						<button id="payment-calculate" disabled onclick="calculatePayment()">
+							<div class="spinner disabled" id="calculate-spinner"></div>
+							<span id="calculate-text">Calculate</span>
+						</button>
+						<div id="payment-amount" class="disabled">
+							<br>
+							<p id="amount-text"></p>
+							<button id="amount-proceed" onclick="toPayment()"></button>
 						</div>
 					</section>
 					<section id="payment" class="disabled">
-						<p>You are going to make a test payment of 5.00 USD.
-							Don't worry, your card will not be charged.</p>
+						<p>You are going to make a test payment of
+							<span id="to-pay"></span>.
+							Don't worry, your card will not be charged.
+						</p>
 			      <div id="payment-element">
       			  <!--Stripe.js injects the Payment Element-->
       			</div>
       			<button id="payment-submit" onclick="handleSubmit(event)">
-      			  <div class="spinner disabled" id="spinner"></div>
-      			  <span id="payment-text">Pay now</span>
-      			</button>
-      			<div id="payment-message" class="disabled"></div>
+ 	    			  <div class="spinner disabled" id="spinner"></div>
+ 	    			  <span id="payment-text">Pay Now</span>
+ 	    			</button>
+ 	    			<button id="payment-back" onclick="backToSelect()">Back</button>
+  	   			<div id="payment-message" class="disabled"></div>
 			    </section>
 				</div>
 				<div class="page disabled">

@@ -13,11 +13,16 @@ type item struct {
 	ID string `json:"id"`
 }
 
-func calculateOrderAmount(items []item) int64 {
-	// Replace this constant with a calculation of the order's amount
-	// Calculate the order total on the server to prevent
-	// people from directly manipulating the amount on the client
-	return 500
+func (p *Portal) calculateOrderAmount(items []item) int64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// If paymentAmount is zero, return a non-zero amount.
+	if p.paymentAmount == 0 {
+		return 1
+	}
+
+	return int64(p.paymentAmount * 100)
 }
 
 // paymentHandlerPOST handles the POST /stripe/create-payment-intent requests.
@@ -39,7 +44,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 
 	// Create a PaymentIntent with amount and currency
 	params := &stripe.PaymentIntentParams{
-		Amount:   stripe.Int64(calculateOrderAmount(data.Items)),
+		Amount:   stripe.Int64(api.portal.calculateOrderAmount(data.Items)),
 		Currency: stripe.String(string(stripe.CurrencyUSD)),
 		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
 			Enabled: stripe.Bool(true),

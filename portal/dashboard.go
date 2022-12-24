@@ -2,6 +2,7 @@ package portal
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
 
@@ -35,6 +37,29 @@ type (
 		ContractPrice          float64 `json:"contractprice"`
 		BaseRPCPrice           float64 `json:"baserpcprice"`
 		SectorAccessPrice      float64 `json:"sectoraccessprice"`
+	}
+
+	// hostsRequest contains the body of a /dashboard/hosts request.
+	hostsRequest struct {
+		Hosts            uint64  `json:"numhosts"`
+		Duration         float64 `json:"duration"`
+		Storage          float64 `json:"storage"`
+		Upload           float64 `json:"upload"`
+		Download         float64 `json:"download"`
+		Redundancy       float64 `json:"redundancy"`
+		MaxContractPrice float64 `json:"maxcontractprice"`
+		MaxStoragePrice  float64 `json:"maxstorageprice"`
+		MaxUploadPrice   float64 `json:"maxuploadprice"`
+		MaxDownloadPrice float64 `json:"maxdownloadprice"`
+		Estimation       float64 `json:"estimation"`
+		Currency         string  `json:"currency"`
+	}
+
+	// hostsResponse contains the response to a /dashboard/hosts request.
+	hostsResponse struct {
+		Hosts      uint64  `json:"numhosts"`
+		Estimation float64 `json:"estimation"`
+		Currency   string  `json:"currency"`
 	}
 )
 
@@ -150,10 +175,10 @@ func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAver
 		break
 	}
 
-	sp, _  := ha.StoragePrice.Mul64(uint64(types.BlocksPerMonth)).Mul64(1 << 40).Float64()
-	c, _   := ha.Collateral.Mul64(uint64(types.BlocksPerMonth)).Mul64(1 << 40).Float64()
-	dbp, _ := ha.DownloadBandwidthPrice.Mul64(1 << 40).Float64()
-	ubp, _ := ha.UploadBandwidthPrice.Mul64(1 << 40).Float64()
+	sp, _  := ha.StoragePrice.Mul(smodules.BlockBytesPerMonthTerabyte).Float64()
+	c, _   := ha.Collateral.Mul(smodules.BlockBytesPerMonthTerabyte).Float64()
+	dbp, _ := ha.DownloadBandwidthPrice.Mul(smodules.BytesPerTerabyte).Float64()
+	ubp, _ := ha.UploadBandwidthPrice.Mul(smodules.BytesPerTerabyte).Float64()
 	cp, _  := ha.ContractPrice.Float64()
 	brp, _ := ha.BaseRPCPrice.Float64()
 	sap, _ := ha.SectorAccessPrice.Float64()
@@ -173,4 +198,179 @@ func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAver
 	}
 
 	return sha
+}
+
+// hostsHandlerPOST handles the POST /dashboard/hosts requests.
+func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	prefix, _, expires, tErr := api.portal.decodeToken(token)
+	if tErr != nil || prefix != cookiePrefix {
+		writeError(w,
+			Error{
+				Code: httpErrorTokenInvalid,
+				Message: "invalid token",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	if expires.Before(time.Now()) {
+		writeError(w,
+		Error{
+			Code: httpErrorTokenExpired,
+			Message: "token already expired",
+		}, http.StatusBadRequest)
+		return
+	}
+
+	// Decode the request body.
+	dec, decErr := prepareDecoder(w, req)
+	if decErr != nil {
+		return
+	}
+
+	var data hostsRequest
+	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	if code != http.StatusOK {
+		writeError(w, err, code)
+		return
+	}
+
+	// Calculate the exchange rate.
+	api.portal.mu.Lock()
+	defer api.portal.mu.Unlock()
+
+	fiatRate, ok := api.portal.exchRates[data.Currency]
+	if !ok {
+		writeError(w,
+			Error{
+				Code: httpErrorNotFound,
+				Message: "unsupported currency",
+			}, http.StatusBadRequest)
+		return
+	}
+	rate := fiatRate * api.portal.scusdRate
+
+	// Sanity check.
+	if rate == 0 {
+		api.portal.log.Println("ERROR: zero exchange rate")
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "zero exchange rate",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// Create an allowance.
+	a := smodules.DefaultAllowance
+	a.Funds = types.SiacoinPrecision.MulFloat(data.Estimation / rate)
+	a.Hosts = data.Hosts
+	a.Period = types.BlockHeight(data.Duration * float64(types.BlocksPerWeek))
+	a.ExpectedStorage = uint64(data.Storage * (1 << 30))
+	a.ExpectedUpload = uint64(data.Upload * (1 << 30))
+	a.ExpectedDownload = uint64(data.Download * (1 << 30))
+	a.ExpectedRedundancy = data.Redundancy
+	a.MaxRPCPrice = modules.MaxRPCPrice
+	a.MaxSectorAccessPrice = modules.MaxSectorAccessPrice
+	a.MaxContractPrice = types.SiacoinPrecision.MulFloat(data.MaxContractPrice / rate)
+	a.MaxStoragePrice = types.SiacoinPrecision.MulFloat(data.MaxStoragePrice / rate)
+	a.MaxUploadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxUploadPrice / rate)
+	a.MaxDownloadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxDownloadPrice / rate)
+
+	// Pick random hosts.
+	hosts, hErr := api.portal.satellite.RandomHosts(a.Hosts, a)
+	if hErr != nil {
+		api.portal.log.Println("ERROR: could not get random hosts", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "could not get hosts",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// Check if there are zero hosts, which means no estimation can be made.
+	if len(hosts) == 0 {
+		writeJSON(w, hostsResponse{ Currency: data.Currency, })
+		return
+	}
+
+	// Calculate the price estimation.
+	// Add up the costs for each host.
+	var totalContractCost types.Currency
+	var totalDownloadCost types.Currency
+	var totalStorageCost types.Currency
+	var totalUploadCost types.Currency
+	var totalCollateral types.Currency
+	for _, host := range hosts {
+		totalContractCost = totalContractCost.Add(host.ContractPrice)
+		totalDownloadCost = totalDownloadCost.Add(host.DownloadBandwidthPrice)
+		totalStorageCost = totalStorageCost.Add(host.StoragePrice)
+		totalUploadCost = totalUploadCost.Add(host.UploadBandwidthPrice)
+		totalCollateral = totalCollateral.Add(host.Collateral)
+	}
+
+	// Account for the expected data size and duration.
+	totalDownloadCost = totalDownloadCost.Mul64(a.ExpectedDownload)
+	totalStorageCost = totalStorageCost.Mul64(a.ExpectedStorage * uint64(a.Period))
+	totalUploadCost = totalUploadCost.Mul64(a.ExpectedUpload)
+	totalCollateral = totalCollateral.Mul64(a.ExpectedStorage * uint64(a.Period))
+
+	// Factor in redundancy.
+	totalStorageCost = totalStorageCost.MulFloat(a.ExpectedRedundancy)
+	totalUploadCost = totalUploadCost.MulFloat(a.ExpectedRedundancy)
+	totalCollateral = totalCollateral.MulFloat(a.ExpectedRedundancy)
+
+	// Perform averages.
+	totalContractCost = totalContractCost.Div64(uint64(len(hosts)))
+	totalDownloadCost = totalDownloadCost.Div64(uint64(len(hosts)))
+	totalStorageCost = totalStorageCost.Div64(uint64(len(hosts)))
+	totalUploadCost = totalUploadCost.Div64(uint64(len(hosts)))
+	totalCollateral = totalCollateral.Div64(uint64(len(hosts)))
+
+	// Take the average of the host set to estimate the overall cost of the
+	// contract forming. This is to protect against the case where less hosts
+	// were gathered for the estimate that the allowance requires.
+	totalContractCost = totalContractCost.Mul64(a.Hosts)
+
+	// Add the cost of paying the transaction fees and then double the contract
+	// costs to account for renewing a full set of contracts.
+	_, feePerByte := api.portal.satellite.FeeEstimation()
+	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(uint64(a.Hosts))
+	totalContractCost = totalContractCost.Add(txnsFees)
+	totalContractCost = totalContractCost.Mul64(2)
+
+	// Add in siafund fee. which should be around 10%. The 10% siafund fee
+	// accounts for paying 3.9% siafund on transactions and host collateral. We
+	// estimate the renter to spend all of it's allowance so the siafund fee
+	// will be calculated on the sum of the allowance and the hosts collateral.
+	taxableAmount := totalContractCost
+	taxableAmount = taxableAmount.Add(totalDownloadCost)
+	taxableAmount = taxableAmount.Add(totalStorageCost)
+	taxableAmount = taxableAmount.Add(totalUploadCost)
+	taxableAmount = taxableAmount.Add(totalCollateral)
+	siafundFee := taxableAmount.MulTax().RoundDown(types.SiafundCount)
+	totalPayout := taxableAmount.Add(siafundFee)
+
+	// Increase estimates by a factor of safety to account for host churn and
+	// any potential missed additions
+	totalPayout = totalPayout.MulFloat(1.2)
+
+	// Apply exchange rate and round up to the whole number.
+	precision, _ := types.SiacoinPrecision.Float64()
+	estimation, _ := totalPayout.MulFloat(rate).Float64()
+	payment := math.Ceil(estimation / precision)
+
+	// Update the payment amount.
+	api.portal.paymentAmount = payment
+
+	// Send the response.
+	resp := hostsResponse{
+		Hosts:      uint64(len(hosts)),
+		Estimation: payment,
+		Currency:   data.Currency,
+	}
+
+	writeJSON(w, resp)
 }

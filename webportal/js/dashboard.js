@@ -61,11 +61,14 @@ var averages = {
 	sectorAccessPrice: 0.0
 }
 
+var paymentEstimation;
+var paymentAmount;
+var paymentCurrency;
+
 retrieveBalance();
 //window.setInterval(retrieveBalance, 30000); TODO
 retrieveAverages();
 window.setInterval(retrieveAverages, 600000);
-window.setInterval(updatePayment, 10000);
 
 function setActiveMenuIndex(ind) {
 	let li, p;
@@ -344,7 +347,14 @@ function retrieveAverages() {
 				document.getElementById('download').innerHTML = data.downloadbandwidthprice.toPrecision(2) +
 					' ' + averages.currency + '/TiB';
 				document.getElementById('duration').innerHTML = data.duration;
-				updatePayment();
+				document.getElementById('limits-contract-average').innerHTML =
+					'Average: ' + data.contractprice.toPrecision(2) + ' ' + averages.currency;
+				document.getElementById('limits-storage-average').innerHTML =
+					'Average: ' + data.storageprice.toPrecision(2) + ' ' + averages.currency;
+				document.getElementById('limits-upload-average').innerHTML =
+					'Average: ' + data.uploadbandwidthprice.toPrecision(2) + ' ' + averages.currency;
+				document.getElementById('limits-download-average').innerHTML =
+					'Average: ' + data.downloadbandwidthprice.toPrecision(2) + ' ' + averages.currency;
 			}
 		})
 		.catch(error => console.log(error));
@@ -355,19 +365,21 @@ function changeCurrency(s) {
 	retrieveAverages();
 }
 
-function changeInput(obj) {
-	let v = parseFloat(obj.value)
-	if (isNaN(v) || v <= 0) {
-		obj.classList.add('content-error');
-	} else {
-		obj.classList.remove('content-error');
+function changeInput(obj, check = true) {
+	if (check) {
+		let v = parseFloat(obj.value)
+		if (isNaN(v) || v <= 0) {
+			obj.classList.add('content-error');
+		} else {
+			obj.classList.remove('content-error');
+		}
+		updateEstimation();
 	}
-	updatePayment();
+	document.getElementById('payment-amount').classList.add('disabled');
 }
 
-function updatePayment() {
+function updateEstimation() {
 	let payment = document.getElementById('select-payment');
-	let limits = document.getElementById('select-limits');
 	let currency = document.getElementById('select-currency').value;
 	let duration = parseFloat(document.getElementById('select-duration').value);
 	let storage = parseFloat(document.getElementById('select-storage').value);
@@ -381,10 +393,10 @@ function updatePayment() {
 		isNaN(download) || download <= 0 ||
 		isNaN(hosts) || hosts <= 0 ||
 		isNaN(redundancy) || redundancy <= 0) {
-		payment.innerHTML = '';
-		limits.classList.add('disabled');
+		document.getElementById('payment-calculate').disabled = true;
 		return;
 	}
+	document.getElementById('payment-calculate').disabled = false;
 	let p = averages.contractPrice * hosts;
 	p += averages.storagePrice * storage * redundancy * duration * 30 / 7 / 1024;
 	p += averages.uploadBandwidthPrice * upload * redundancy / 1024;
@@ -393,7 +405,89 @@ function updatePayment() {
 	p += averages.baseRPCPrice * (hosts + redundancy * 10 + download / upload); // rather a guess
 	// Siafund fee including the host's collateral
 	p += 0.039 * (p + averages.collateral * redundancy * duration * 30 / 7 / 1024);
-	p *= 1.5; // overhead
-	payment.innerHTML = 'Estimated payment: ' + p.toFixed(2) + ' ' + currency;
-	limits.classList.remove('disabled');
+	p *= 2; // for renewing
+	p *= 1.2; // any extra costs
+	paymentEstimation = p;
+}
+
+function calculatePayment() {
+	updateEstimation();
+	let currency = document.getElementById('select-currency').value;
+	let duration = parseFloat(document.getElementById('select-duration').value);
+	let storage = parseFloat(document.getElementById('select-storage').value);
+	let upload = parseFloat(document.getElementById('select-upload').value);
+	let download = parseFloat(document.getElementById('select-download').value);
+	let hosts = parseInt(document.getElementById('select-hosts').value);
+	let redundancy = parseFloat(document.getElementById('select-redundancy').value);
+	let maxContractPrice = parseFloat(document.getElementById('limits-contract').value);
+	let maxStoragePrice = parseFloat(document.getElementById('limits-storage').value);
+	let maxUploadPrice = parseFloat(document.getElementById('limits-upload').value);
+	let maxDownloadPrice = parseFloat(document.getElementById('limits-download').value);
+	let data = {
+		numhosts: hosts,
+		duration: duration,
+		storage: storage,
+		upload: upload,
+		download: download,
+		redundancy: redundancy,
+		maxcontractprice: isNaN(maxContractPrice) || maxContractPrice < 0 ? 0 : maxContractPrice,
+		maxstorageprice: isNaN(maxStoragePrice) || maxStoragePrice < 0 ? 0 : maxStoragePrice,
+		maxuploadprice: isNaN(maxUploadPrice) || maxUploadPrice < 0 ? 0 : maxUploadPrice,
+		maxdownloadprice: isNaN(maxDownloadPrice) || maxDownloadPrice < 0 ? 0 : maxDownloadPrice,
+		estimation: paymentEstimation,
+		currency: currency
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	document.getElementById('payment-calculate').disabled = true;
+	document.getElementById('calculate-text').classList.add('disabled');
+	document.getElementById('calculate-spinner').classList.remove('disabled');
+	document.getElementById('payment-amount').classList.add('disabled');
+	fetch(apiBaseURL + '/dashboard/hosts', options)
+		.then(response => {
+			document.getElementById('payment-calculate').disabled = false;
+			document.getElementById('calculate-text').classList.remove('disabled');
+			document.getElementById('calculate-spinner').classList.add('disabled');
+			return response.json();
+		})
+		.then(data => {
+			if (data.code) {
+				console.log(data);
+			} else {
+				let text = document.getElementById('amount-text');
+				let button = document.getElementById('amount-proceed');
+				paymentAmount = data.estimation;
+				paymentCurrency = data.currency;
+				if (data.numhosts == hosts) {
+					text.innerHTML = 'Amount to pay: ' + paymentAmount.toFixed(2) + ' ' + paymentCurrency;
+					button.innerHTML = 'Proceed to Payment';
+				} else {
+					text.innerHTML = 'Warning: only ' + data.numhosts +
+						' hosts found that match these conditions. Amount to pay: ' +
+						paymentAmount.toFixed(2) + ' ' + paymentCurrency;
+					button.innerHTML = 'Proceed Anyway';
+				}
+				document.getElementById('payment-amount').classList.remove('disabled');
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function toPayment() {
+	initialize();
+	checkStatus();
+	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
+		paymentCurrency;
+	document.getElementById('select').classList.add('disabled');
+	document.getElementById('payment').classList.remove('disabled');
+}
+
+function backToSelect() {
+	document.getElementById('payment').classList.add('disabled');
+	document.getElementById('select').classList.remove('disabled');
 }

@@ -6,11 +6,10 @@ const items = [{ id: 'storage' }];
 
 let elements;
 
-initialize();
-checkStatus();
-
 // Fetches a payment intent and captures the client secret
 async function initialize() {
+	document.getElementById('payment-submit').classList.add('disabled');
+	document.getElementById('payment-back').classList.add('disabled');
 	const response = await fetch(apiBaseURL + '/stripe/create-payment-intent', {
 		method:  'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -44,12 +43,18 @@ async function initialize() {
 	};
 
 	const paymentElement = elements.create('payment', paymentElementOptions);
+	paymentElement.on('ready', function() {
+		document.getElementById('payment-submit').classList.remove('disabled');
+		document.getElementById('payment-back').classList.remove('disabled');
+	});
+	
 	paymentElement.mount('#payment-element');
 }
 
 async function handleSubmit(e) {
 	e.preventDefault();
 	setLoading(true);
+	document.getElementById('payment-back').classList.add('disabled');
 
 	const { error } = await stripe.confirmPayment({
 		elements,
@@ -70,6 +75,7 @@ async function handleSubmit(e) {
 	}
 
 	setLoading(false);
+	document.getElementById('payment-back').classList.remove('disabled');
 }
 
 // Fetches the payment intent status after payment submission

@@ -116,7 +116,7 @@ label {
 
 button {
 	width: 50%;
-	max-width: 10rem;
+	max-width: 12rem;
 	height: 2.5rem;
 	margin-top: 0.5rem;
 	font-size: 1rem;
@@ -243,6 +243,10 @@ button:disabled {
 	border-color: #af0000;
 }
 
+.average {
+	font-size: 0.8rem;
+}
+
 #select-payment {
 	margin-top: 0.5rem;
 }
@@ -251,6 +255,10 @@ select {
 	width: 100%;
 	padding: 0.5rem;
 	font-size: 1rem;
+}
+
+#payment-amount {
+	width: 100%;
 }
 
 #payment-message {

@@ -183,6 +183,12 @@ func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance
 	return m.hostDB.EstimateHostScore(e, a)
 }
 
+// RandomHosts picks up to the specified number of random hosts from the
+// hostdb sorted by weight.
+func (m *Manager) RandomHosts(n uint64, a smodules.Allowance) ([]smodules.HostDBEntry, error) {
+	return m.hostDB.RandomHostsWithAllowance(int(n), nil, nil, a)
+}
+
 // GetAverages retrieves the host network averages from HostDB.
 func (m *Manager) GetAverages() modules.HostAverages {
 	m.mu.Lock()

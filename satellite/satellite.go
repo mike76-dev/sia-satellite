@@ -207,8 +207,15 @@ func (s *Satellite) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBr
 // EstimateHostScore calls Manager.EstimateHostScore.
 func (s *Satellite) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance) (smodules.HostScoreBreakdown, error) { return s.m.EstimateHostScore(e, a) }
 
+// RandomHosts calls Manager.RandomHosts.
+func (s *Satellite) RandomHosts(n uint64, a smodules.Allowance) ([]smodules.HostDBEntry, error) { return s.m.RandomHosts(n, a) }
+
 // GetAverages calls Manager.GetAverages.
 func (s *Satellite) GetAverages() modules.HostAverages { return s.m.GetAverages() }
+
+// FeeEstimation returns the minimum and the maximum estimated fees for
+// a transaction.
+func (s *Satellite) FeeEstimation() (min, max types.Currency) { return s.tpool.FeeEstimation() }
 
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)
