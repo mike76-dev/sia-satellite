@@ -269,7 +269,6 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Calculate the exchange rate.
 	api.portal.mu.Lock()
-	defer api.portal.mu.Unlock()
 
 	fiatRate, ok := api.portal.exchRates[data.Currency]
 	if !ok {
@@ -281,6 +280,8 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 	rate := fiatRate * api.portal.scusdRate
+
+	api.portal.mu.Unlock()
 
 	// Sanity check.
 	if rate == 0 {
