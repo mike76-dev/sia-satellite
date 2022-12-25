@@ -41,7 +41,6 @@ type Portal struct {
 	authStats     map[string]authenticationStats
 	exchRates     map[string]float64
 	scusdRate     float64
-	paymentAmount float64
 
 	// Utilities.
 	listener      net.Listener

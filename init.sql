@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS balances;
 DROP TABLE IF EXISTS accounts;
 
@@ -16,6 +17,18 @@ CREATE TABLE balances (
 	subscribed BOOL NOT NULL,
 	balance    FLOAT NOT NULL,
 	currency   VARCHAR(8) NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (email) REFERENCES accounts(email)
+);
+
+CREATE TABLE payments (
+	id         INT NOT NULL AUTO_INCREMENT,
+	email      VARCHAR(48) NOT NULL,
+	amount     FLOAT NOT NULL,
+	currency   VARCHAR(8) NOT NULL,
+	amount_usd FLOAT NOT NULL,
+	made       INT NOT NULL,
+	pending    BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );

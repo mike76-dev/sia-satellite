@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"time"
 
+	nerrors "gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 
 	"golang.org/x/crypto/argon2"
@@ -60,7 +61,9 @@ func (p *Portal) updateAccount(email, password string, verified bool) error {
 			return errors.New("password may not be empty")
 		}
 		pwHash := passwordHash(password)
-		_, err := p.db.Exec("INSERT INTO accounts (email, password_hash, verified, created) VALUES (?, ?, ?, ?)", email, pwHash, false, time.Now().Unix())
+		_, err := p.db.Exec(`
+			INSERT INTO accounts (email, password_hash, verified, created)
+			VALUES (?, ?, ?, ?)`, email, pwHash, false, time.Now().Unix())
 		return err
 	}
 
@@ -113,9 +116,10 @@ func (p *Portal) threadedPruneUnverifiedAccounts() {
 
 // deleteAccount deletes the user account from the database.
 func (p *Portal) deleteAccount(email string) error {
-	_, err := p.db.Exec("DELETE FROM balances WHERE email = ?", email)
-	_, err = p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
-	return err
+	_, err1 := p.db.Exec("DELETE FROM payments WHERE email = ?", email)
+	_, err2 := p.db.Exec("DELETE FROM balances WHERE email = ?", email)
+	_, err3 := p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
+	return nerrors.Compose(err1, err2, err3)
 }
 
 // getBalance retrieves the balance information on the account.
@@ -138,4 +142,64 @@ func (p *Portal) getBalance(email string) (*userBalance, error) {
 	}
 
 	return ub, nil
+}
+
+// flushPendingPayments removes any pending payments for the given
+// user account.
+func (p *Portal) flushPendingPayments(email string) error {
+	_, err := p.db.Exec("DELETE FROM payments WHERE email = ? AND pending = ?", email, true)
+	return err
+}
+
+// putPendingPayment inserts a pending payment into the database.
+func (p *Portal) putPendingPayment(email string, amount float64, currency string) error {
+	// Convert the amount to USD.
+	p.mu.Lock()
+	rate, exists := p.exchRates[currency]
+	p.mu.Unlock()
+	if !exists {
+		return errors.New("unsupported currency")
+	}
+	if rate == 0 {
+		return errors.New("unable to get exchange rate")
+	}
+
+	// Flush any existing pending payments first.
+	if err := p.flushPendingPayments(email); err != nil {
+		return err
+	}
+
+	// Insert a pending payment.
+	amountUSD := amount / rate
+	timestamp := time.Now().Unix()
+	_, err := p.db.Exec(`
+		INSERT INTO payments (email, amount, currency, amount_usd, made, pending)
+		VALUES (?, ?, ?, ?, ?, ?)`, email, amount, currency, amountUSD, timestamp, true)
+
+	return err
+}
+
+// getPendingPayment retrieves a pending payment from the database.
+func (p *Portal) getPendingPayment(email string) (*userPayment, error) {
+	var amount, amountUSD float64
+	var currency string
+	var timestamp uint64
+
+	err := p.db.QueryRow(`
+		SELECT amount, currency, amount_usd, made FROM payments
+		WHERE email = ? AND pending = ?`, email, true).Scan(&amount, &currency, &amountUSD, &timestamp)
+
+	// If there are no rows, return an error anyway.
+	if err != nil {
+		return nil, err
+	}
+
+	up := &userPayment{
+		Amount: amount,
+		Currency: currency,
+		AmountUSD: amountUSD,
+		Timestamp: timestamp,
+	}
+
+	return up, nil
 }

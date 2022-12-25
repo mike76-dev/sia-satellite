@@ -61,6 +61,15 @@ type (
 		Estimation float64 `json:"estimation"`
 		Currency   string  `json:"currency"`
 	}
+
+	// userPayment contains the details of a payment made by the user
+	// account.
+	userPayment struct {
+		Amount    float64 `json:"amount"`
+		Currency  string  `json:"currency"`
+		AmountUSD float64 `json:"amountusd"`
+		Timestamp uint64  `json:"timestamp:`
+	}
 )
 
 // balanceHandlerGET handles the GET /dashboard/balance requests.
@@ -204,7 +213,7 @@ func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAver
 func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
-	prefix, _, expires, tErr := api.portal.decodeToken(token)
+	prefix, email, expires, tErr := api.portal.decodeToken(token)
 	if tErr != nil || prefix != cookiePrefix {
 		writeError(w,
 			Error{
@@ -220,6 +229,28 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 			Code: httpErrorTokenExpired,
 			Message: "token already expired",
 		}, http.StatusBadRequest)
+		return
+	}
+
+	// Check if the user account exists.
+	count, cErr := api.portal.countEmails(email)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// No such account. Can only happen if it was deleted.
+	if count == 0 {
+		writeError(w,
+			Error{
+				Code: httpErrorNotFound,
+				Message: "no such account",
+			}, http.StatusBadRequest)
 		return
 	}
 
@@ -363,7 +394,16 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	payment := math.Ceil(estimation / precision)
 
 	// Update the payment amount.
-	api.portal.paymentAmount = payment
+	pErr := api.portal.putPendingPayment(email, payment, data.Currency)
+	if pErr != nil {
+		api.portal.log.Printf("ERROR: error recording the payment: %v\n", pErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
 
 	// Send the response.
 	resp := hostsResponse{
