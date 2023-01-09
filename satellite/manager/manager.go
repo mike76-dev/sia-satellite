@@ -2,6 +2,7 @@
 package manager
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 // hosts.
 type Manager struct {
 	// Dependencies.
+	db     *sql.DB
 	hostDB smodules.HostDB
 
 	// Atomic properties.
@@ -38,7 +40,7 @@ type Manager struct {
 }
 
 // New returns an initialized Manager.
-func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, mux *siamux.SiaMux, persistDir string) (*Manager, <-chan error) {
+func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, db *sql.DB, mux *siamux.SiaMux, persistDir string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
 	var err error
 
@@ -51,6 +53,7 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 
 	// Create the Manager object.
 	m := &Manager{
+		db:            db,
 		hostDB:        hdb,
 		persistDir:    persistDir,
 		staticAlerter: smodules.NewAlerter("manager"),

@@ -1,7 +1,9 @@
 package node
 
 import (
+	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -9,6 +11,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/siamux"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
 	"github.com/mike76-dev/sia-satellite/portal"
@@ -23,6 +26,9 @@ import (
 
 // Node represents a satellite node containing all required modules.
 type Node struct {
+	// MySQL database.
+	DB         *sql.DB
+
 	// The mux of the node.
 	Mux    *siamux.SiaMux
 	muxLog *os.File
@@ -71,7 +77,11 @@ func (n *Node) Close() (err error) {
 		fmt.Println("Closing siamux...")
 		err = errors.Compose(err, n.Mux.Close(), n.muxLog.Close())
 	}
-	return nil
+	if n.DB != nil {
+		fmt.Println("Closing database...")
+		err = errors.Compose(err, n.DB.Close())
+	}
+	return err
 }
 
 // New will create a new node.
@@ -82,6 +92,24 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
+	}
+
+	// Connect to the database.
+	fmt.Println("Connecting to the SQL database...")
+	cfg := mysql.Config {
+		User:		config.DBUser,
+		Passwd:	dbPassword,
+		Net:		"tcp",
+		Addr:		"127.0.0.1:3306",
+		DBName: config.DBName,
+	}
+	db, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		log.Fatalf("Could not connect to the database: %v\n", err)
+	}
+	err = db.Ping()
+	if err != nil {
+		log.Fatalf("MySQL database not responding: %v\n", err)
 	}
 
 	// Create the siamux.
@@ -145,7 +173,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	if err := os.MkdirAll(satDir, 0700); err != nil {
 		return nil, errChan
 	}
-	s, err := satellite.New(cs, g, tp, w, mux, config.SatelliteAddr, satDir)
+	s, err := satellite.New(cs, g, tp, w, db, mux, config.SatelliteAddr, satDir)
 	if err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create satellite"))
 		return nil, errChan
@@ -157,7 +185,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	if err := os.MkdirAll(portalDir, 0700); err != nil {
 		return nil, errChan
 	}
-	p, err := portal.New(config, s, dbPassword, portalDir)
+	p, err := portal.New(config, s, db, portalDir)
 	if err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create portal"))
 		return nil, errChan
@@ -170,6 +198,8 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	}()
 
 	return &Node{
+		DB: db,
+
 		Mux:    mux,
 		muxLog: muxLog,
 
