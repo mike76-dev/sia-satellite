@@ -39,7 +39,8 @@ type (
 
 	// HostdbGet holds information about the hostdb.
 	HostdbGet struct {
-		InitialScanComplete bool `json:"initialscancomplete"`
+		BlockHeight         types.BlockHeight `json:"blockheight"`
+		InitialScanComplete bool              `json:"initialscancomplete"`
 	}
 
 	// HostdbFilterModeGET contains the information about the HostDB's
@@ -62,12 +63,13 @@ type (
 // hostdbHandler handles the API call asking for the list of active
 // hosts.
 func (api *API) hostdbHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	isc, err := api.satellite.InitialScanComplete()
+	isc, bh, err := api.satellite.InitialScanComplete()
 	if err != nil {
 		WriteError(w, Error{"Failed to get initial scan status: " + err.Error()}, http.StatusInternalServerError)
 		return
 	}
 	WriteJSON(w, HostdbGet{
+		BlockHeight:         bh,
 		InitialScanComplete: isc,
 	})
 }

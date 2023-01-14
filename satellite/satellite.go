@@ -205,7 +205,7 @@ func (s *Satellite) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPubli
 func (s *Satellite) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, error) { return s.m.Host(spk) }
 
 // InitialScanComplete calls Manager.InitialScanComplete.
-func (s *Satellite) InitialScanComplete() (bool, error) { return s.m.InitialScanComplete() }
+func (s *Satellite) InitialScanComplete() (bool, types.BlockHeight, error) { return s.m.InitialScanComplete() }
 
 // ScoreBreakdown calls Manager.ScoreBreakdown.
 func (s *Satellite) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) { return s.m.ScoreBreakdown(e) }

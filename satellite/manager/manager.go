@@ -9,12 +9,12 @@ import (
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/satellite/manager/hostdb"
 
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/siamux"
 
 	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/modules/renter/hostdb"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
 	"go.sia.tech/siad/types"
@@ -25,7 +25,7 @@ import (
 type Manager struct {
 	// Dependencies.
 	db     *sql.DB
-	hostDB smodules.HostDB
+	hostDB modules.HostDB
 
 	// Atomic properties.
 	hostAverages modules.HostAverages
@@ -45,7 +45,7 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 	var err error
 
 	// Create the HostDB object.
-	hdb, errChanHDB := hostdb.New(g, cs, tpool, mux, persistDir)
+	hdb, errChanHDB := hostdb.New(g, cs, tpool, db, mux, persistDir)
 	if err := smodules.PeekErr(errChanHDB); err != nil {
 		errChan <- err
 		return nil, errChan
@@ -164,7 +164,7 @@ func (m *Manager) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, erro
 
 // InitialScanComplete returns a boolean indicating if the initial scan of the
 // hostdb is completed.
-func (m *Manager) InitialScanComplete() (bool, error) { return m.hostDB.InitialScanComplete() }
+func (m *Manager) InitialScanComplete() (bool, types.BlockHeight, error) { return m.hostDB.InitialScanComplete() }
 
 // ScoreBreakdown returns the score breakdown of the specific host.
 func (m *Manager) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) {
