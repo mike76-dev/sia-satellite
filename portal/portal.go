@@ -4,13 +4,11 @@ package portal
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
@@ -25,14 +23,9 @@ import (
 
 // Portal contains the information related to the server.
 type Portal struct {
-	// Satellite reference.
-	satellite  *satellite.Satellite
-
-	// Database-related fields.
+	// Dependencies.
 	db         *sql.DB
-	dbUser     string
-	dbPassword string
-	dbName     string
+	satellite  *satellite.Satellite
 
 	// Server-related fields.
 	apiPort    string
@@ -54,7 +47,7 @@ type Portal struct {
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, persistDir string) (*Portal, error) {
+func New(config *persist.SatdConfig, s *satellite.Satellite, db *sql.DB, persistDir string) (*Portal, error) {
 	// Create the perist directory if it does not yet exist.
 	err := os.MkdirAll(persistDir, 0700)
 	if err != nil {
@@ -63,11 +56,8 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, 
 
 	// Create the portal object.
 	p := &Portal{
+		db:            db,
 		satellite:     s,
-
-		dbUser:        config.DBUser,
-		dbPassword:    dbPassword,
-		dbName:        config.DBName,
 
 		apiPort:       config.PortalPort,
 
@@ -110,32 +100,6 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, dbPassword string, 
 	}
 	p.ms = ms
 
-	// Connect to the database.
-	cfg := mysql.Config {
-		User:		p.dbUser,
-		Passwd:	p.dbPassword,
-		Net:		"tcp",
-		Addr:		"127.0.0.1:3306",
-		DBName: p.dbName,
-	}
-	db, err := sql.Open("mysql", cfg.FormatDSN())
-	if err != nil {
-		log.Fatalf("Could not connect to the database: %v\n", err)
-	}
-	err = db.Ping()
-	if err != nil {
-		log.Fatalf("MySQL database not responding: %v\n", err)
-	}
-	p.db = db
-	p.log.Println("INFO: successfully connected to MySQL database")
-	// Make sure that the database is closed on shutdown.
-	p.threads.AfterStop(func() {
-		err := p.db.Close()
-		if err != nil {
-			p.log.Println("ERROR: unable to close the database:", err)
-		}
-	})
-
 	// Load the portal persistence.
 	if err = p.load(); err != nil {
 		return nil, errors.AddContext(err, "unable to load portal")
@@ -177,11 +141,8 @@ func (p *Portal) Close() error {
 	// Shut down the listener.
 	p.closeChan <- 1
 	
-	// Close the database.
-	errDB := p.db.Close()
-
 	if err := p.threads.Stop(); err != nil {
-		return errors.Compose(errDB, err)
+		return err
 	}
 
 	p.mu.Lock()

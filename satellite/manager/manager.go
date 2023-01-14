@@ -2,18 +2,19 @@
 package manager
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/satellite/manager/hostdb"
 
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/siamux"
 
 	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/modules/renter/hostdb"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
 	"go.sia.tech/siad/types"
@@ -23,7 +24,8 @@ import (
 // hosts.
 type Manager struct {
 	// Dependencies.
-	hostDB smodules.HostDB
+	db     *sql.DB
+	hostDB modules.HostDB
 
 	// Atomic properties.
 	hostAverages modules.HostAverages
@@ -38,12 +40,12 @@ type Manager struct {
 }
 
 // New returns an initialized Manager.
-func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, mux *siamux.SiaMux, persistDir string) (*Manager, <-chan error) {
+func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, db *sql.DB, mux *siamux.SiaMux, persistDir string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
 	var err error
 
 	// Create the HostDB object.
-	hdb, errChanHDB := hostdb.New(g, cs, tpool, mux, persistDir)
+	hdb, errChanHDB := hostdb.New(g, cs, tpool, db, mux, persistDir)
 	if err := smodules.PeekErr(errChanHDB); err != nil {
 		errChan <- err
 		return nil, errChan
@@ -51,6 +53,7 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 
 	// Create the Manager object.
 	m := &Manager{
+		db:            db,
 		hostDB:        hdb,
 		persistDir:    persistDir,
 		staticAlerter: smodules.NewAlerter("manager"),
@@ -161,7 +164,7 @@ func (m *Manager) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, erro
 
 // InitialScanComplete returns a boolean indicating if the initial scan of the
 // hostdb is completed.
-func (m *Manager) InitialScanComplete() (bool, error) { return m.hostDB.InitialScanComplete() }
+func (m *Manager) InitialScanComplete() (bool, types.BlockHeight, error) { return m.hostDB.InitialScanComplete() }
 
 // ScoreBreakdown returns the score breakdown of the specific host.
 func (m *Manager) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) {

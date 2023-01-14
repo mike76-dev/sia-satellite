@@ -3,6 +3,7 @@
 package satellite
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 
 var (
 	// Nil dependency errors.
+	errNilDB      = errors.New("satellite cannot use a nil database")
 	errNilSMux    = errors.New("satellite cannot use a nil siamux")
 	errNilCS      = errors.New("satellite cannot use a nil state")
 	errNilTpool   = errors.New("satellite cannot use a nil transaction pool")
@@ -36,6 +38,7 @@ var (
 type Satellite struct {
 	// Dependencies.
 	mux    *siamux.SiaMux
+	db     *sql.DB
 	cs     smodules.ConsensusSet
 	g      smodules.Gateway
 	tpool  smodules.TransactionPool
@@ -73,8 +76,11 @@ func (s *Satellite) SecretKey() crypto.SecretKey {
 }
 
 // New returns an initialized Satellite.
-func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, mux *siamux.SiaMux, satelliteAddr string, persistDir string) (*Satellite, error) {
+func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, db *sql.DB, mux *siamux.SiaMux, satelliteAddr string, persistDir string) (*Satellite, error) {
 	// Check that all the dependencies were provided.
+	if db == nil {
+		return nil, errNilDB
+	}
 	if mux == nil {
 		return nil, errNilSMux
 	}
@@ -98,7 +104,7 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 	}
 
 	// Create the manager.
-	m, errChanM := manager.New(cs, g, tpool, wallet, mux, persistDir)
+	m, errChanM := manager.New(cs, g, tpool, wallet, db, mux, persistDir)
 	if err = smodules.PeekErr(errChanM); err != nil {
 		return nil, errors.AddContext(err, "unable to create manager")
 	}
@@ -199,7 +205,7 @@ func (s *Satellite) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPubli
 func (s *Satellite) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, error) { return s.m.Host(spk) }
 
 // InitialScanComplete calls Manager.InitialScanComplete.
-func (s *Satellite) InitialScanComplete() (bool, error) { return s.m.InitialScanComplete() }
+func (s *Satellite) InitialScanComplete() (bool, types.BlockHeight, error) { return s.m.InitialScanComplete() }
 
 // ScoreBreakdown calls Manager.ScoreBreakdown.
 func (s *Satellite) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) { return s.m.ScoreBreakdown(e) }
