@@ -440,7 +440,7 @@ func New(g smodules.Gateway, cs smodules.ConsensusSet, tpool smodules.Transactio
 
 // ActiveHosts returns a list of hosts that are currently online, sorted by
 // weight. If hostdb is in black or white list mode, then only active hosts from
-// the filteredTree will be returned
+// the filteredTree will be returned.
 func (hdb *HostDB) ActiveHosts() (activeHosts []smodules.HostDBEntry, err error) {
 	if err = hdb.tg.Add(); err != nil {
 		return activeHosts, err
@@ -454,7 +454,7 @@ func (hdb *HostDB) ActiveHosts() (activeHosts []smodules.HostDBEntry, err error)
 		if len(entry.ScanHistory) == 0 {
 			continue
 		}
-		if !entry.ScanHistory[len(entry.ScanHistory)-1].Success {
+		if !entry.ScanHistory[len(entry.ScanHistory) - 1].Success {
 			continue
 		}
 		if !entry.AcceptingContracts {
