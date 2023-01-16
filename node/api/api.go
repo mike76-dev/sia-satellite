@@ -156,7 +156,7 @@ func New(requiredUserAgent string, requiredPassword string, cs smodules.Consensu
 // UnrecognizedCallHandler handles calls to not-loaded modules.
 func (api *API) UnrecognizedCallHandler(w http.ResponseWriter, _ *http.Request) {
 	var errStr string
-	errStr = fmt.Sprintf("%d Module not loaded - Refer to API.md", StatusModuleNotLoaded)
+	errStr = fmt.Sprintf("%d Module not loaded", StatusModuleNotLoaded)
 	WriteError(w, Error{errStr}, StatusModuleNotLoaded)
 }
 
