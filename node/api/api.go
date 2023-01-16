@@ -133,7 +133,7 @@ func (api *API) SetModules(cs smodules.ConsensusSet, g smodules.Gateway, p modul
 }
 
 // New creates a new API. The API will require authentication using HTTP basic
-// auth for certain endpoints of the supplied password is not the empty string.
+// auth for certain endpoints if the supplied password is not the empty string.
 // Usernames are ignored for authentication.
 func New(requiredUserAgent string, requiredPassword string, cs smodules.ConsensusSet, g smodules.Gateway, p modules.Portal, s modules.Satellite, tp smodules.TransactionPool, w smodules.Wallet) *API {
 	api := &API{

@@ -60,8 +60,7 @@ type (
 	}
 )
 
-// hostdbHandler handles the API call asking for the list of active
-// hosts.
+// hostdbHandler handles the API call asking for the status of HostDB.
 func (api *API) hostdbHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	isc, bh, err := api.satellite.InitialScanComplete()
 	if err != nil {
