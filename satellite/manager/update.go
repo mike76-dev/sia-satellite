@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	calculateAveragesFrequency = time.Hour
+	calculateAveragesFrequency = 10 * time.Minute
 )
 
 // calculateAverages calculates the host network averages from HostDB.
