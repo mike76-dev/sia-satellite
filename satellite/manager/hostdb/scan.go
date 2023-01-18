@@ -155,7 +155,7 @@ func (hdb *HostDB) queueScan(entry modules.HostDBEntry) {
 			entry := hdb.scanList[0]
 			hdb.scanList = hdb.scanList[1:]
 			delete(hdb.scanMap, entry.PublicKey.String())
-			scansRemaining := len(hdb.scanList)
+			//scansRemaining := len(hdb.scanList)
 
 			// Grab the most recent entry for this host.
 			recentEntry, exists := hdb.staticHostTree.Select(entry.PublicKey)
@@ -166,7 +166,7 @@ func (hdb *HostDB) queueScan(entry modules.HostDBEntry) {
 			// Try to send this entry to an existing idle worker (non-blocking).
 			select {
 			case scanPool <- entry:
-				hdb.staticLog.Debugf("Sending host %v for scan, %v hosts remain\n", entry.PublicKey.String(), scansRemaining)
+				//hdb.staticLog.Debugf("Sending host %v for scan, %v hosts remain\n", entry.PublicKey.String(), scansRemaining)
 				hdb.mu.Unlock()
 				continue
 			default:
@@ -191,7 +191,7 @@ func (hdb *HostDB) queueScan(entry modules.HostDBEntry) {
 			hdb.mu.Unlock()
 
 			// Block while waiting for an opening in the scan pool.
-			hdb.staticLog.Debugf("Sending host %v for scan, %v hosts remain\n", entry.PublicKey.String(), scansRemaining)
+			//hdb.staticLog.Debugf("Sending host %v for scan, %v hosts remain\n", entry.PublicKey.String(), scansRemaining)
 			select {
 			case scanPool <- entry:
 				continue
@@ -309,9 +309,9 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 		// Insert into Hosttrees
 		err := hdb.insert(newEntry)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: unable to insert entry which is was thought to be new:", err)
+			hdb.staticLog.Println("ERROR: unable to insert entry which is thought to be new:", err)
 		} else {
-			hdb.staticLog.Printf("Adding host %v to the hostdb. Net error: %v\n", newEntry.PublicKey.String(), netErr)
+			//hdb.staticLog.Printf("Adding host %v to the hostdb. Net error: %v\n", newEntry.PublicKey.String(), netErr)
 		}
 	} else {
 		// Modify hosttrees
@@ -319,7 +319,7 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 		if err != nil {
 			hdb.staticLog.Println("ERROR: unable to modify entry which is thought to exist:", err)
 		} else {
-			hdb.staticLog.Printf("Adding host %v to the hostdb. Net error: %v\n", newEntry.PublicKey.String(), netErr)
+			//hdb.staticLog.Printf("Adding host %v to the hostdb. Net error: %v\n", newEntry.PublicKey.String(), netErr)
 		}
 	}
 	if err := hdb.updateHost(newEntry); err != nil {
@@ -367,12 +367,12 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 	// Request settings from the queued host entry.
 	netAddr := entry.NetAddress
 	pubKey := entry.PublicKey
-	hdb.staticLog.Printf("Scanning host %v at %v\n", pubKey, netAddr)
+	//hdb.staticLog.Printf("Scanning host %v at %v\n", pubKey, netAddr)
 
 	// Resolve the host's used subnets and update the timestamp if they
 	// changed. We only update the timestamp if resolving the ipNets was
 	// successful.
-	ipNets, err := hdb.staticLookupIPNets(entry.NetAddress)
+	ipNets, err := hdb.staticLookupIPNets(netAddr)
 	if err == nil && !equalIPNets(ipNets, entry.IPNets) {
 		entry.IPNets = ipNets
 		entry.LastIPNetChange = time.Now()

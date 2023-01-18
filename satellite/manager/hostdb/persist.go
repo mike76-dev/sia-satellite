@@ -113,7 +113,7 @@ func (hdb *HostDB) load() error {
 	hdb.filteredDomains = newFilteredDomains(data.FilteredDomains)
 
 	if len(hdb.filteredHosts) > 0 {
-		hdb.filteredTree = hosttree.New(hdb.weightFunc, modules.ProdDependencies.Resolver())
+		hdb.filteredTree = hosttree.New(hdb.weightFunc, hdb.resolver)
 	}
 
 	// Load the hosts into the host trees.
@@ -311,10 +311,8 @@ func (hdb *HostDB) updateHost(host modules.HostDBEntry) error {
 	}
 
 	for _, subnet := range hostIPNets {
-		if _, exists := ipNets[subnet]; exists {
-			// No need to save, just remove from the map.
-			delete(ipNets, subnet)
-		} else {
+		_, exists := ipNets[subnet]
+		if !exists {
 			// Insert into the database.
 			_, err = hdb.db.Exec(`
 				INSERT INTO ipnets (public_key, ip_net)
@@ -323,6 +321,7 @@ func (hdb *HostDB) updateHost(host modules.HostDBEntry) error {
 				return err
 			}
 		}
+		delete(ipNets, subnet)
 	}
 
 	// Delete the rest.
@@ -369,19 +368,17 @@ func (hdb *HostDB) updateScanHistory(host modules.HostDBEntry) error {
 	for _, scan := range history {
 		b, _ = scan.Timestamp.MarshalText()
 		t = string(b)
-		s, exists := scans[t]
-		if exists {
-			// No need to save, just remove from the map.
-			delete(scans, t)
-		} else {
+		_, exists := scans[t]
+		if !exists {
 			// Insert into the database.
 			_, err = hdb.db.Exec(`
 				INSERT INTO scanhistory (public_key, time, success)
-				VALUES (?, ?, ?)`, pk, t, s)
+				VALUES (?, ?, ?)`, pk, t, scan.Success)
 			if err != nil {
 				return err
 			}
 		}
+		delete(scans, t)
 	}
 
 	// Delete the rest.
