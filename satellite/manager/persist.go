@@ -3,6 +3,9 @@ package manager
 import (
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/mike76-dev/sia-satellite/modules"
 
 	"gitlab.com/NebulousLabs/errors"
 
@@ -16,6 +19,9 @@ const (
 	// persistFilename is the filename to be used when persisting manager
 	// information to a JSON file.
 	persistFilename = "manager.json"
+
+	// saveFrequency defines how often the manager should be saved to disk.
+	saveFrequency = time.Minute * 2
 )
 
 // persistMetadata contains the header and version strings that identify the
@@ -28,6 +34,7 @@ var persistMetadata = persist.Metadata{
 type (
 	// persist contains all of the persistent manager data.
 	persistence struct {
+		HostAverages modules.HostAverages `json:"averages"`
 	}
 )
 
@@ -42,16 +49,44 @@ func (m *Manager) load() error {
 		return errors.AddContext(err, "failed to load manager persistence")
 	}
 
-	// TODO Copy data fields.
+	m.mu.Lock()
+	m.hostAverages = m.persist.HostAverages
+	m.mu.Unlock()
 
 	return nil
 }
 
-// saveSync stores the Provider's persistent data on disk, and then syncs to
+// saveSync stores the Manager's persistent data on disk, and then syncs to
 // disk to minimize the possibility of data loss.
 func (m *Manager) saveSync() error {
-	p := persistence{
-		// TODO Copy data fields.
+	m.persist = persistence{
+		HostAverages: m.hostAverages,
 	}
-	return persist.SaveJSON(persistMetadata, p, filepath.Join(m.persistDir, persistFilename))
+	return persist.SaveJSON(persistMetadata, m.persist, filepath.Join(m.persistDir, persistFilename))
+}
+
+// threadedSaveLoop periodically saves the Portal's persistent data.
+func (m *Manager) threadedSaveLoop() {
+	for {
+		select {
+		case <-m.threads.StopChan():
+			return
+		case <-time.After(saveFrequency):
+		}
+
+		func() {
+			err := m.threads.Add()
+			if err != nil {
+				return
+			}
+			defer m.threads.Done()
+
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			err = m.saveSync()
+			if err != nil {
+				m.log.Println("ERROR: Unable to save manager persistence:", err)
+			}
+		}()
+	}
 }

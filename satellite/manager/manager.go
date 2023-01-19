@@ -89,6 +89,9 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 		return nil, errChan
 	}
 
+	// Spawn the thread to periodically save the manager.
+	go m.threadedSaveLoop()
+
 	// Make sure that the manager saves on shutdown.
 	m.threads.AfterStop(func() {
 		m.mu.Lock()

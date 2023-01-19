@@ -8,15 +8,15 @@ import (
 
 // HostAverages contains the host network averages from HostDB.
 type HostAverages struct {
-	NumHosts               uint64
-	Duration               types.BlockHeight
-	StoragePrice           types.Currency
-	Collateral             types.Currency
-	DownloadBandwidthPrice types.Currency
-	UploadBandwidthPrice   types.Currency
-	ContractPrice          types.Currency
-	BaseRPCPrice           types.Currency
-	SectorAccessPrice      types.Currency
+	NumHosts               uint64            `json:"numhosts"`
+	Duration               types.BlockHeight `json:"height"`
+	StoragePrice           types.Currency    `json:"storageprice"`
+	Collateral             types.Currency    `json:"collateral"`
+	DownloadBandwidthPrice types.Currency    `json:"downloadprice"`
+	UploadBandwidthPrice   types.Currency    `json:"uploadprice"`
+	ContractPrice          types.Currency    `json:"contractprice"`
+	BaseRPCPrice           types.Currency    `json:"baserpcprice"`
+	SectorAccessPrice      types.Currency    `json:"sectoraccessprice"`
 }
 
 // Satellite implements the methods necessary to communicate both with the
