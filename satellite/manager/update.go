@@ -14,6 +14,11 @@ const (
 
 // calculateAverages calculates the host network averages from HostDB.
 func (m *Manager) calculateAverages() {
+	// Skip calculating if HostDB is not done loading the hosts.
+	if !m.hostDB.LoadingComplete() {
+		return
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.hostAverages = modules.HostAverages{}

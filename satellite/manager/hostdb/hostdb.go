@@ -169,7 +169,7 @@ type HostDB struct {
 	// weight. The tree is necessary for selecting weighted hosts at random.
 	staticHostTree *hosttree.HostTree
 
-	// the scanPool is a set of hosts that need to be scanned. There are a
+	// The scan pool is a set of hosts that need to be scanned. There are a
 	// handful of goroutines constantly waiting on the channel for hosts to
 	// scan. The scan map is used to prevent duplicates from entering the scan
 	// pool.
@@ -181,6 +181,7 @@ type HostDB struct {
 	scanWait                bool
 	scanningThreads         int
 	synced                  bool
+	loadingComplete         bool
 
 	// staticFilteredTree is a hosttree that only contains the hosts that align
 	// with the filterMode. The filteredHosts are the hosts that are submitted
@@ -727,4 +728,10 @@ func (hdb *HostDB) SetIPViolationCheck(enabled bool) error {
 	defer hdb.mu.Unlock()
 	hdb.disableIPViolationCheck = !enabled
 	return nil
+}
+
+// LoadingComplete indicates if the HostDB has finished loading the hosts
+// from the database.
+func (hdb *HostDB) LoadingComplete() bool {
+	return hdb.loadingComplete
 }

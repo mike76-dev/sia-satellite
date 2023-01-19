@@ -205,4 +205,8 @@ type HostDB interface {
 	// SetIPViolationCheck enables/disables the IP violation check within the
 	// hostdb.
 	SetIPViolationCheck(enabled bool) error
+
+	// LoadingComplete indicates if the HostDB has finished loading the hosts
+	// from the database.
+	LoadingComplete() bool
 }

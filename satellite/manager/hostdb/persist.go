@@ -116,88 +116,98 @@ func (hdb *HostDB) load() error {
 		hdb.filteredTree = hosttree.New(hdb.weightFunc, hdb.resolver)
 	}
 
-	// Load the hosts into the host trees.
-	rows, err := hdb.db.Query(`
-		SELECT accepting_contracts, max_download_batch_size, max_duration,
-			max_revise_batch_size, net_address, remaining_storage, sector_size,
-			total_storage, unlock_hash, window_size, collateral, max_collateral,
-			base_rpc_price, contract_price, download_bandwidth_price,
-			sector_access_price, storage_price, upload_bandwidth_price,
-			ephemeral_account_expiry, max_ephemeral_account_balance, revision_number,
-			version, sia_mux_port, first_seen, historic_downtime, historic_uptime,
-			historic_failed_interactions, historic_successful_interactions,
-			recent_failed_interactions, recent_successful_interactions,
-			last_historic_update, last_ip_net_change, public_key, filtered
-		FROM hosts`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+	// "Lazily" load the hosts into the host trees.
+	go func() {
+		rows, err := hdb.db.Query(`
+			SELECT accepting_contracts, max_download_batch_size, max_duration,
+				max_revise_batch_size, net_address, remaining_storage, sector_size,
+				total_storage, unlock_hash, window_size, collateral, max_collateral,
+				base_rpc_price, contract_price, download_bandwidth_price,
+				sector_access_price, storage_price, upload_bandwidth_price,
+				ephemeral_account_expiry, max_ephemeral_account_balance, revision_number,
+				version, sia_mux_port, first_seen, historic_downtime, historic_uptime,
+				historic_failed_interactions, historic_successful_interactions,
+				recent_failed_interactions, recent_successful_interactions,
+				last_historic_update, last_ip_net_change, public_key, filtered
+			FROM hosts`)
+		if err != nil {
+			hdb.staticLog.Println("ERROR: could not load the hosts:", err)
+			return
+		}
+		defer rows.Close()
 
-	var entry hostEntry
-	var scanRows, ipRows *sql.Rows
-	var txt string
-	var t time.Time
-	var s bool
-	var ip string
+		var entry hostEntry
+		var scanRows, ipRows *sql.Rows
+		var txt string
+		var t time.Time
+		var s bool
+		var ip string
 	
-	for rows.Next() {
-		if err := rows.Scan(&entry.AcceptingContracts, &entry.MaxDownloadBatchSize, &entry.MaxDuration, &entry.MaxReviseBatchSize, &entry.NetAddress, &entry.RemainingStorage, &entry.SectorSize, &entry.TotalStorage, &entry.UnlockHash, &entry.WindowSize, &entry.Collateral, &entry.MaxCollateral, &entry.BaseRPCPrice, &entry.ContractPrice, &entry.DownloadBandwidthPrice, &entry.SectorAccessPrice, &entry.StoragePrice, &entry.UploadBandwidthPrice, &entry.EphemeralAccountExpiry, &entry.MaxEphemeralAccountBalance, &entry.RevisionNumber, &entry.Version, &entry.SiaMuxPort, &entry.FirstSeen, &entry.HistoricDowntime, &entry.HistoricUptime, &entry.HistoricFailedInteractions, &entry.HistoricSuccessfulInteractions, &entry.RecentFailedInteractions, &entry.RecentSuccessfulInteractions, &entry.LastHistoricUpdate, &entry.LastIPNetChange, &entry.PublicKey, &entry.Filtered); err != nil {
-			return err
-		}
+		for rows.Next() {
+			if err := rows.Scan(&entry.AcceptingContracts, &entry.MaxDownloadBatchSize, &entry.MaxDuration, &entry.MaxReviseBatchSize, &entry.NetAddress, &entry.RemainingStorage, &entry.SectorSize, &entry.TotalStorage, &entry.UnlockHash, &entry.WindowSize, &entry.Collateral, &entry.MaxCollateral, &entry.BaseRPCPrice, &entry.ContractPrice, &entry.DownloadBandwidthPrice, &entry.SectorAccessPrice, &entry.StoragePrice, &entry.UploadBandwidthPrice, &entry.EphemeralAccountExpiry, &entry.MaxEphemeralAccountBalance, &entry.RevisionNumber, &entry.Version, &entry.SiaMuxPort, &entry.FirstSeen, &entry.HistoricDowntime, &entry.HistoricUptime, &entry.HistoricFailedInteractions, &entry.HistoricSuccessfulInteractions, &entry.RecentFailedInteractions, &entry.RecentSuccessfulInteractions, &entry.LastHistoricUpdate, &entry.LastIPNetChange, &entry.PublicKey, &entry.Filtered); err != nil {
+				hdb.staticLog.Println("ERROR: could not load the host:", err)
+				continue
+			}
 
-		host := fromHostEntry(entry)
+			host := fromHostEntry(entry)
 
-		// Load the scan history.
-		scanRows, err = hdb.db.Query("SELECT time, success FROM scanhistory WHERE public_key = ?", entry.PublicKey)
-		if err != nil {
-			scanRows.Close()
-			return err
-		}
-		for scanRows.Next() {
-			if err := scanRows.Scan(&txt, &s); err != nil {
+			// Load the scan history.
+			scanRows, err = hdb.db.Query("SELECT time, success FROM scanhistory WHERE public_key = ?", entry.PublicKey)
+			if err != nil {
 				scanRows.Close()
-				return err
+				hdb.staticLog.Println("ERROR: could not load the scan history:", err)
+				continue
 			}
-			_ = t.UnmarshalText([]byte(txt))
-			host.ScanHistory = append(host.ScanHistory, modules.HostDBScan{t, s})
-		}
-		scanRows.Close()
+			for scanRows.Next() {
+				if err := scanRows.Scan(&txt, &s); err != nil {
+					scanRows.Close()
+					hdb.staticLog.Println("ERROR: could not load the scan history:", err)
+					continue
+				}
+				_ = t.UnmarshalText([]byte(txt))
+				host.ScanHistory = append(host.ScanHistory, modules.HostDBScan{t, s})
+			}
+			scanRows.Close()
 
-		// Load the IP subnets.
-		ipRows, err = hdb.db.Query("SELECT ip_net FROM ipnets WHERE public_key = ?", entry.PublicKey)
-		if err != nil {
-			ipRows.Close()
-			return err
-		}
-		for ipRows.Next() {
-			if err := ipRows.Scan(&ip); err != nil {
+			// Load the IP subnets.
+			ipRows, err = hdb.db.Query("SELECT ip_net FROM ipnets WHERE public_key = ?", entry.PublicKey)
+			if err != nil {
 				ipRows.Close()
-				return err
+				hdb.staticLog.Println("ERROR: could not load the IP subnets:", err)
+				continue
 			}
-			host.IPNets = append(host.IPNets, ip)
-		}
-		ipRows.Close()
+			for ipRows.Next() {
+				if err := ipRows.Scan(&ip); err != nil {
+					ipRows.Close()
+					hdb.staticLog.Println("ERROR: could not load the IP subnets:", err)
+					continue
+				}
+				host.IPNets = append(host.IPNets, ip)
+			}
+			ipRows.Close()
 
-		// COMPATv1.1.0
-		//
-		// The host did not always track its block height correctly, meaning
-		// that previously the FirstSeen values and the blockHeight values
-		// could get out of sync.
-		if hdb.blockHeight < host.FirstSeen {
-			host.FirstSeen = hdb.blockHeight
-		}
+			// COMPATv1.1.0
+			//
+			// The host did not always track its block height correctly, meaning
+			// that previously the FirstSeen values and the blockHeight values
+			// could get out of sync.
+			if hdb.blockHeight < host.FirstSeen {
+				host.FirstSeen = hdb.blockHeight
+			}
 
-		err := hdb.insert(host)
-		if err != nil {
-			hdb.staticLog.Println("ERROR: could not insert host into hosttree while loading:", host.NetAddress)
-		}
+			err := hdb.insert(host)
+			if err != nil {
+				hdb.staticLog.Println("ERROR: could not insert host into hosttree while loading:", host.NetAddress)
+			}
 
-		// Make sure that all hosts have gone through the initial scanning.
-		if len(host.ScanHistory) < 2 {
-			hdb.queueScan(host)
+			// Make sure that all hosts have gone through the initial scanning.
+			if len(host.ScanHistory) < 2 {
+				hdb.queueScan(host)
+			}
 		}
-	}
+		hdb.loadingComplete = true
+	}()
+
 	return nil
 }
 
