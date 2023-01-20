@@ -193,6 +193,10 @@ type HostDB interface {
 	// manager.
 	RandomHostsWithAllowance(int, []types.SiaPublicKey, []types.SiaPublicKey, smodules.Allowance) ([]smodules.HostDBEntry, error)
 
+	// RandomHostsWithLimits works as RandomHostsWithAllowance but uses the
+	// limits set in the allowance instead of calculating the weight function.
+	RandomHostsWithLimits(int, smodules.Allowance) ([]smodules.HostDBEntry, error)
+
 	// ScoreBreakdown returns a detailed explanation of the various properties
 	// of the host.
 	ScoreBreakdown(smodules.HostDBEntry) (smodules.HostScoreBreakdown, error)

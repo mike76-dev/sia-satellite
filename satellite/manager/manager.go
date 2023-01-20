@@ -142,15 +142,6 @@ func (m *Manager) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPublicK
 		return err
 	}
 	defer m.threads.Done()
-	// Check to see how many hosts are needed for the allowance.
-	/*settings, err := s.m.Settings()
-	if err != nil {
-		return errors.AddContext(err, "error getting manager settings:")
-	}
-	minHosts := settings.Allowance.Hosts
-	if len(hosts) < int(minHosts) && lm == smodules.HostDBActiveWhitelist {
-		s.m.log.Printf("WARN: There are fewer whitelisted hosts than the allowance requires.  Have %v whitelisted hosts, need %v to support allowance\n", len(hosts), minHosts)
-	}*/ //TODO
 
 	// Set list mode filter for the hostdb.
 	if err := m.hostDB.SetFilterMode(lm, hosts, netAddresses); err != nil {
@@ -176,23 +167,13 @@ func (m *Manager) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBrea
 
 // EstimateHostScore returns the estimated host score.
 func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance) (smodules.HostScoreBreakdown, error) {
-	/*if reflect.DeepEqual(a, smodules.Allowance{}) {
-		settings, err := s.m.Settings()
-		if err != nil {
-			return smodules.HostScoreBreakdown{}, errors.AddContext(err, "error getting renter settings:")
-		}
-		a = settings.Allowance
-	}
-	if reflect.DeepEqual(a, smodules.Allowance{}) {
-		a = smodules.DefaultAllowance
-	}*/ //TODO
 	return m.hostDB.EstimateHostScore(e, a)
 }
 
 // RandomHosts picks up to the specified number of random hosts from the
 // hostdb sorted by weight.
 func (m *Manager) RandomHosts(n uint64, a smodules.Allowance) ([]smodules.HostDBEntry, error) {
-	return m.hostDB.RandomHostsWithAllowance(int(n), nil, nil, a)
+	return m.hostDB.RandomHostsWithLimits(int(n), a)
 }
 
 // GetAverages retrieves the host network averages from HostDB.
