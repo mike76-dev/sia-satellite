@@ -90,16 +90,16 @@ async function checkStatus() {
 
 	switch (paymentIntent.status) {
 		case 'succeeded':
-			showMessage('Payment succeeded!');
+			showTextAndReload('Payment succeeded!');
 			break;
 		case 'processing':
-			showMessage('Your payment is processing.');
+			showTextAndReload('Your payment is processing.');
 			break;
 		case 'requires_payment_method':
-			showMessage('Your payment was not successful, please try again.');
+			showTextAndReload('Your payment was not successful, please try again.');
 			break;
 		default:
-			showMessage('Something went wrong.');
+			showTextAndReload('Something went wrong.');
 			break;
 	}
 }
@@ -118,6 +118,18 @@ function showMessage(messageText) {
 	}, 4000);
 }
 
+function showTextAndReload(text) {
+	const textContainer = document.querySelector('#payment-result');
+	textContainer.innerHTML = text;
+	textContainer.classList.remove('disabled');
+	setTimeout(() => {
+		let i = window.location.href.indexOf('?');
+		if (i >= 0) {
+			window.location.replace(window.location.href.slice(0, i));
+		}
+	}, 4000);
+}
+
 // Show a spinner on payment submission
 function setLoading(isLoading) {
 	if (isLoading) {
@@ -131,3 +143,5 @@ function setLoading(isLoading) {
 		document.querySelector('#payment-text').classList.remove('disabled');
 	}
 }
+
+checkStatus();

@@ -480,7 +480,6 @@ function calculatePayment() {
 
 function toPayment() {
 	initialize();
-	checkStatus();
 	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
 		paymentCurrency;
 	document.getElementById('select').classList.add('disabled');

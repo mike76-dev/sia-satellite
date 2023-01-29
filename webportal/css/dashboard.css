@@ -268,6 +268,13 @@ select {
 	padding-top: 0.75rem;
 }
 
+#payment-result {
+	color: #cfcfcf;
+	font-size: 1rem;
+	line-height: 1.25rem;
+	margin-top: 0.5rem;
+}
+
 #payment-element {
   margin-bottom: 1.5rem;
 }
