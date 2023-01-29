@@ -1,15 +1,13 @@
 // This is your publishable API key.
 const stripe = Stripe('pk_live_51MB3TeCVw2rpdJXxUHIBPaLJdqBjVCUFKCPLukldKsIiElXqkCBEwhnapR9YC7K5RzCCMiJ6xUsgIyuexy4ZMupJ00bT79EkUF');
 
-// The items the customer wants to buy
-const items = [{ id: 'storage' }];
-
 let elements;
 
 // Fetches a payment intent and captures the client secret
 async function initialize() {
 	document.getElementById('payment-submit').classList.add('disabled');
 	document.getElementById('payment-back').classList.add('disabled');
+	let items = [{ id: 'storage/' + paymentCurrency }];
 	const response = await fetch(apiBaseURL + '/stripe/create-payment-intent', {
 		method:  'POST',
 		headers: { 'Content-Type': 'application/json' },

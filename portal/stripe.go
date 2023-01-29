@@ -3,6 +3,7 @@ package portal
 import (
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -14,7 +15,8 @@ type item struct {
 	ID string `json:"id"`
 }
 
-func (p *Portal) calculateOrderAmount(email string, items []item) int64 {
+// calculateOrderAmount returns the amount to charge the user from.
+func (p *Portal) calculateOrderAmount(email string) int64 {
 	// Retrieve the pending payment amount.
 	up, err := p.getPendingPayment(email)
 	
@@ -24,6 +26,11 @@ func (p *Portal) calculateOrderAmount(email string, items []item) int64 {
 	}
 
 	return int64(up.Amount * 100)
+}
+
+// orderCurrency returns the order currency.
+func orderCurrency(items []item) string {
+	return strings.ToLower(strings.TrimPrefix(items[0].ID, "storage/"))
 }
 
 // paymentHandlerPOST handles the POST /stripe/create-payment-intent requests.
@@ -88,8 +95,8 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 
 	// Create a PaymentIntent with amount and currency
 	params := &stripe.PaymentIntentParams{
-		Amount:   stripe.Int64(api.portal.calculateOrderAmount(email, data.Items)),
-		Currency: stripe.String(string(stripe.CurrencyUSD)),
+		Amount:   stripe.Int64(api.portal.calculateOrderAmount(email)),
+		Currency: stripe.String(orderCurrency(data.Items)),
 		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
 			Enabled: stripe.Bool(true),
 		},
