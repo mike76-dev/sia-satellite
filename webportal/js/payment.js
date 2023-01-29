@@ -1,5 +1,5 @@
-// This is your test publishable API key.
-const stripe = Stripe('pk_test_51MB3TeCVw2rpdJXxh9r0U4K51ZjyT8fD8JeMF5hRvxvYsDx1oNqWhhRy9qh91xkLi0s7bOGW3lS5L99MQWP7EZ6w00gqrmUH8J');
+// This is your publishable API key.
+const stripe = Stripe('pk_live_51MB3TeCVw2rpdJXxUHIBPaLJdqBjVCUFKCPLukldKsIiElXqkCBEwhnapR9YC7K5RzCCMiJ6xUsgIyuexy4ZMupJ00bT79EkUF');
 
 // The items the customer wants to buy
 const items = [{ id: 'storage' }];
