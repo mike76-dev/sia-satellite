@@ -12,6 +12,7 @@ import (
 	"github.com/stripe/stripe-go/v74"
 	"github.com/stripe/stripe-go/v74/customer"
 	"github.com/stripe/stripe-go/v74/paymentintent"
+	"github.com/stripe/stripe-go/v74/webhook"
 )
 
 // maxBodyBytes specifies the maximum body size for /webhook requests.
@@ -194,10 +195,11 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	event := stripe.Event{}
-
-	if err := json.Unmarshal(payload, &event); err != nil {
-		api.portal.log.Println("Failed to parse webhook body json:", err)
+	// Verify the Stripe signature.
+	endpointSecret := os.Getenv("SATD_STRIPE_WEBHOOK_KEY")
+	event, err := webhook.ConstructEvent(payload, req.Header.Get("Stripe-Signature"), endpointSecret)
+	if err != nil {
+		api.portal.log.Println("Error verifying webhook signature:", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
