@@ -127,9 +127,11 @@ func (p *Portal) deleteAccount(email string) error {
 func (p *Portal) getBalance(email string) (*userBalance, error) {
 	var s bool
 	var b float64
-	var c string
-	err := p.db.QueryRow("SELECT subscribed, balance, currency FROM balances WHERE email = ?", email).Scan(&s, &b, &c)
-
+	var c, id string
+	err := p.db.QueryRow(`
+		SELECT subscribed, balance, currency, stripe_id
+		FROM balances WHERE email = ?
+	`, email).Scan(&s, &b, &c, &id)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
@@ -139,9 +141,38 @@ func (p *Portal) getBalance(email string) (*userBalance, error) {
 		Subscribed: s,
 		Balance:    b,
 		Currency:   c,
+		StripeID:   id,
 	}
 
 	return ub, nil
+}
+
+// updateBalance updates the balance information on the account.
+func (p *Portal) updateBalance(email string, ub *userBalance) error {
+	// Check if there is a record already.
+	var c int
+	err := p.db.QueryRow("SELECT COUNT(*) FROM balances WHERE email = ?", email).Scan(&c)
+	if err != nil {
+		return err
+	}
+
+	// There is a record.
+	if c > 0 {
+		_, err := p.db.Exec(`
+			UPDATE balances
+			SET subscribed = ?, balance = ?, currency = ?, stripe_id = ?
+			WHERE email = ?
+		`, ub.Subscribed, ub.Balance, ub.Currency, ub.StripeID, email)
+		return err
+	}
+
+	// No records found.
+	_, err = p.db.Exec(`
+		INSERT INTO balances (email, subscribed, balance, currency, stripe_id)
+		VALUES (?, ?, ?, ?, ?)
+	`, email, ub.Subscribed, ub.Balance, ub.Currency, ub.StripeID)
+
+	return err
 }
 
 // flushPendingPayments removes any pending payments for the given
@@ -151,8 +182,8 @@ func (p *Portal) flushPendingPayments(email string) error {
 	return err
 }
 
-// putPendingPayment inserts a pending payment into the database.
-func (p *Portal) putPendingPayment(email string, amount float64, currency string) error {
+// putPayment inserts a payment into the database.
+func (p *Portal) putPayment(email string, amount float64, currency string, pending bool) error {
 	// Convert the amount to USD.
 	p.mu.Lock()
 	rate, exists := p.exchRates[currency]
@@ -169,12 +200,12 @@ func (p *Portal) putPendingPayment(email string, amount float64, currency string
 		return err
 	}
 
-	// Insert a pending payment.
+	// Insert the payment.
 	amountUSD := amount / rate
 	timestamp := time.Now().Unix()
 	_, err := p.db.Exec(`
 		INSERT INTO payments (email, amount, currency, amount_usd, made, pending)
-		VALUES (?, ?, ?, ?, ?, ?)`, email, amount, currency, amountUSD, timestamp, true)
+		VALUES (?, ?, ?, ?, ?, ?)`, email, amount, currency, amountUSD, timestamp, pending)
 
 	return err
 }
@@ -195,11 +226,78 @@ func (p *Portal) getPendingPayment(email string) (*userPayment, error) {
 	}
 
 	up := &userPayment{
-		Amount: amount,
-		Currency: currency,
+		Amount:    amount,
+		Currency:  currency,
 		AmountUSD: amountUSD,
 		Timestamp: timestamp,
 	}
 
 	return up, nil
+}
+
+// addPayment updates the payments and balances tables with a new payment.
+func (p *Portal) addPayment(id string, amount float64, currency string) error {
+	// Sanity checks.
+	if id == "" || currency == "" || amount == 0 {
+		return errors.New("one or more empty parameters provided")
+	}
+	rate, exists := p.exchRates[currency]
+	if !exists {
+		return errors.New("unsupported currency")
+	}
+	if rate == 0 {
+		return errors.New("unable to get exchange rate")
+	}
+
+	// Fetch the account.
+	var email string
+	var s bool
+	var b float64
+	var c string
+	err := p.db.QueryRow(`
+		SELECT email, subscribed, balance, currency
+		FROM balances WHERE stripe_id = ?
+	`, id).Scan(&email, &s, &b, &c)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	// No record found. This should not happen.
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		return errors.New("no balance record found")
+	}
+
+	// Update the payments table.
+	if err = p.putPayment(email, amount, currency, false); err != nil {
+		return err
+	}
+
+	// Calculate the new balance.
+	ub := &userBalance{
+		IsUser:     true,
+		Subscribed: s,
+		Balance:    b,
+		Currency:   c,
+		StripeID:   id,
+	}
+	if ub.Currency == "" {
+		ub.Currency = currency
+	}
+
+	if ub.Currency == currency {
+		ub.Balance += amount
+	} else {
+		currRate, _ := p.exchRates[ub.Currency]
+		if currRate == 0 {
+			return errors.New("unable to get exchange rate")
+		}
+		balanceUSD := ub.Balance / currRate
+		balanceUSD += amount / rate
+		ub.Balance = ub.Balance * currRate
+	}
+
+	// Update the balances table.
+	err = p.updateBalance(email, ub)
+
+	return err
 }

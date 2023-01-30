@@ -115,6 +115,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.POST("/stripe/create-payment-intent", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.paymentHandlerPOST(w, req, ps)
 	})
+	router.POST("/stripe/webhook", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.webhookHandlerPOST(w, req, ps)
+	})
 
 	api.routerMu.Lock()
 	api.router = router

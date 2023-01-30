@@ -23,6 +23,7 @@ type (
 		Balance    float64 `json:"balance"`
 		Currency   string  `json:"currency"`
 		SCBalance  float64 `json:"scbalance"`
+		StripeID   string  `json:"stripeid"`
 	}
 
 	// sensibleHostAverages contains the human-readable host network
@@ -395,7 +396,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	payment := math.Ceil(estimation / precision)
 
 	// Update the payment amount.
-	pErr := api.portal.putPendingPayment(email, payment, data.Currency)
+	pErr := api.portal.putPayment(email, payment, data.Currency, true)
 	if pErr != nil {
 		api.portal.log.Printf("ERROR: error recording the payment: %v\n", pErr)
 		writeError(w,

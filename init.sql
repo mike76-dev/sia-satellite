@@ -17,6 +17,7 @@ CREATE TABLE balances (
 	subscribed BOOL NOT NULL,
 	balance    FLOAT NOT NULL,
 	currency   VARCHAR(8) NOT NULL,
+	stripe_id  VARCHAR(32) NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );
