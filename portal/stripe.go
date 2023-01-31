@@ -215,7 +215,9 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		w.WriteHeader(http.StatusOK)
 		api.portal.handlePaymentIntentSucceeded(paymentIntent)
+		return
 
 	default:
 		api.portal.log.Printf("Unhandled event type: %s\n", event.Type)
