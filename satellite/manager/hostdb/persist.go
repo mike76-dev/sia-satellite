@@ -3,13 +3,13 @@ package hostdb
 import (
 	"database/sql"
 	"encoding/hex"
-	"math/big"
 	"path/filepath"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/satellite/manager/hostdb/hosttree"
 
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	"go.sia.tech/siad/types"
 )
@@ -70,9 +70,9 @@ type hdbPersist struct {
 	FilteredDomains          []string
 	BlockHeight              types.BlockHeight
 	DisableIPViolationsCheck bool
-	LastChange               modules.ConsensusChangeID
+	LastChange               smodules.ConsensusChangeID
 	FilteredHosts            map[string]types.SiaPublicKey
-	FilterMode               modules.FilterMode
+	FilterMode               smodules.FilterMode
 }
 
 // persistData returns the data in the hostdb that will be saved to disk.
@@ -165,7 +165,7 @@ func (hdb *HostDB) load() error {
 					continue
 				}
 				_ = t.UnmarshalText([]byte(txt))
-				host.ScanHistory = append(host.ScanHistory, modules.HostDBScan{t, s})
+				host.ScanHistory = append(host.ScanHistory, smodules.HostDBScan{t, s})
 			}
 			scanRows.Close()
 
@@ -237,7 +237,7 @@ func (hdb *HostDB) threadedSaveLoop() {
 
 // updateHost updates the host entry in the database.
 // A lock should be acquired before calling this function.
-func (hdb *HostDB) updateHost(host modules.HostDBEntry) error {
+func (hdb *HostDB) updateHost(host smodules.HostDBEntry) error {
 	// Fetch the data first.
 	entry := toHostEntry(host)
 	hostIPNets := host.IPNets
@@ -349,10 +349,10 @@ func (hdb *HostDB) updateHost(host modules.HostDBEntry) error {
 
 // updateScanHistory updates the scan history of the host entry in the
 // database. A lock should be acquired before calling this function.
-func (hdb *HostDB) updateScanHistory(host modules.HostDBEntry) error {
+func (hdb *HostDB) updateScanHistory(host smodules.HostDBEntry) error {
 	// Fetch the variables first.
 	pk := host.PublicKey.String()
-	var history modules.HostDBScans
+	var history smodules.HostDBScans
 	for _, scan := range host.ScanHistory {
 		history = append(history, scan)
 	}
@@ -406,7 +406,7 @@ func (hdb *HostDB) updateScanHistory(host modules.HostDBEntry) error {
 
 // toHostEntry is a helper function converting the in-memory representation
 // of a HostDB entry to a MySQL database entry.
-func toHostEntry(entry modules.HostDBEntry) (he hostEntry) {
+func toHostEntry(entry smodules.HostDBEntry) (he hostEntry) {
 	he.AcceptingContracts = entry.AcceptingContracts
 	he.MaxDownloadBatchSize = entry.MaxDownloadBatchSize
 	he.MaxDuration = uint64(entry.MaxDuration)
@@ -448,28 +448,28 @@ func toHostEntry(entry modules.HostDBEntry) (he hostEntry) {
 
 // fromHostEntry is a helper function converting a MySQL database entry
 // to the in-memory representation of a HostDB entry.
-func fromHostEntry(he hostEntry) (entry modules.HostDBEntry) {
+func fromHostEntry(he hostEntry) (entry smodules.HostDBEntry) {
 	entry.AcceptingContracts = he.AcceptingContracts
 	entry.MaxDownloadBatchSize = he.MaxDownloadBatchSize
 	entry.MaxDuration = types.BlockHeight(he.MaxDuration)
 	entry.MaxReviseBatchSize = he.MaxReviseBatchSize
-	entry.NetAddress = modules.NetAddress(he.NetAddress)
+	entry.NetAddress = smodules.NetAddress(he.NetAddress)
 	entry.RemainingStorage = he.RemainingStorage
 	entry.SectorSize = he.SectorSize
 	entry.TotalStorage = he.TotalStorage
 	uh, _ := hex.DecodeString(he.UnlockHash)
 	copy(entry.UnlockHash[:], uh[:])
 	entry.WindowSize = types.BlockHeight(he.WindowSize)
-	entry.Collateral = readCurrency(he.Collateral)
-	entry.MaxCollateral = readCurrency(he.MaxCollateral)
-	entry.BaseRPCPrice = readCurrency(he.BaseRPCPrice)
-	entry.ContractPrice = readCurrency(he.ContractPrice)
-	entry.DownloadBandwidthPrice = readCurrency(he.DownloadBandwidthPrice)
-	entry.SectorAccessPrice = readCurrency(he.SectorAccessPrice)
-	entry.SectorAccessPrice = readCurrency(he.StoragePrice)
-	entry.UploadBandwidthPrice = readCurrency(he.UploadBandwidthPrice)
+	entry.Collateral = modules.ReadCurrency(he.Collateral)
+	entry.MaxCollateral = modules.ReadCurrency(he.MaxCollateral)
+	entry.BaseRPCPrice = modules.ReadCurrency(he.BaseRPCPrice)
+	entry.ContractPrice = modules.ReadCurrency(he.ContractPrice)
+	entry.DownloadBandwidthPrice = modules.ReadCurrency(he.DownloadBandwidthPrice)
+	entry.SectorAccessPrice = modules.ReadCurrency(he.SectorAccessPrice)
+	entry.SectorAccessPrice = modules.ReadCurrency(he.StoragePrice)
+	entry.UploadBandwidthPrice = modules.ReadCurrency(he.UploadBandwidthPrice)
 	entry.EphemeralAccountExpiry = time.Duration(he.EphemeralAccountExpiry) * time.Second
-	entry.MaxEphemeralAccountBalance = readCurrency(he.MaxEphemeralAccountBalance)
+	entry.MaxEphemeralAccountBalance = modules.ReadCurrency(he.MaxEphemeralAccountBalance)
 	entry.RevisionNumber = he.RevisionNumber
 	entry.Version = he.Version
 	entry.SiaMuxPort = he.SiaMuxPort
@@ -490,7 +490,7 @@ func fromHostEntry(he hostEntry) (entry modules.HostDBEntry) {
 
 // removeHost removes the host entry from the database.
 // A lock should be acquired before calling this function.
-func (hdb *HostDB) removeHost(host modules.HostDBEntry) error {
+func (hdb *HostDB) removeHost(host smodules.HostDBEntry) error {
 	// Fetch the host's public key.
 	pk := host.PublicKey.String()
 
@@ -510,14 +510,4 @@ func (hdb *HostDB) removeHost(host modules.HostDBEntry) error {
 	_, err = hdb.db.Exec("DELETE FROM hosts WHERE public_key = ?", pk)
 
 	return err
-}
-
-// readCurrency converts a string to types.Currency.
-func readCurrency(s string) types.Currency {
-	i := new(big.Int)
-	i, ok := i.SetString(s, 10)
-	if ok {
-		return types.NewCurrency(i)
-	}
-	return types.ZeroCurrency
 }

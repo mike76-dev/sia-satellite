@@ -93,3 +93,102 @@ CREATE TABLE ipnets (
 	PRIMARY KEY (id),
 	FOREIGN KEY (public_key) REFERENCES hosts(public_key)
 );
+
+DROP TABLE IF EXISTS renters;
+DROP TABLE IF EXISTS contracts;
+DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS keys;
+
+CREATE TABLE renters (
+	id                           INT NOT NULL AUTO_INCREMENT,
+	email                        VARCHAR(48) NOT NULL UNIQUE,
+	public_key                   VARCHAR(128) NOT NULL UNIQUE,
+	current_period               BIGINT UNSIGNED NOT NULL,
+	funds                        VARCHAR(64) NOT NULL,
+	hosts                        BIGINT UNSIGNED NOT NULL,
+	period                       BIGINT UNSIGNED NOT NULL,
+	renew_window                 BIGINT UNSIGNED NOT NULL,
+	expected_storage             BIGINT UNSIGNED NOT NULL,
+	expected_upload              BIGINT UNSIGNED NOT NULL,
+	expected_download            BIGINT UNSIGNED NOT NULL,
+	expected_redundancy          DOUBLE NOT NULL,
+	max_rpc_price                VARCHAR(64) NOT NULL,
+	max_contract_price           VARCHAR(64) NOT NULL,
+	max_download_bandwidth_price VARCHAR(64) NOT NULL,
+	max_sector_access_price      VARCHAR(64) NOT NULL,
+	max_storage_price            VARCHAR(64) NOT NULL,
+	max_upload_bandwidth_price   VARCHAR(64) NOT NULL,	
+	PRIMARY KEY (id),
+	FOREIGN KEY (email) REFERENCES accounts(email)
+);
+
+CREATE TABLE contracts (
+	id                      INT NOT NULL AUTO_INCREMENT,
+	contract_id             VARCHAR(64) NOT NULL UNIQUE,
+	start_height            BIGINT UNSIGNED NOT NULL,
+	secret_key              VARCHAR(128) NOT NULL,
+	download_spending       VARCHAR(64) NOT NULL,
+	fund_account_spending   VARCHAR(64) NOT NULL,
+	storage_spending        VARCHAR(64) NOT NULL,
+	upload_spending         VARCHAR(64) NOT NULL,
+	total_cost              VARCHAR(64) NOT NULL,
+	contract_fee            VARCHAR(64) NOT NULL,
+	txn_fee                 VARCHAR(64) NOT NULL,
+	siafund_fee             VARCHAR(64) NOT NULL,
+	account_balance_cost    VARCHAR(64) NOT NULL,
+	fund_account_cost       VARCHAR(64) NOT NULL,
+	update_price_table_cost VARCHAR(64) NOT NULL,
+	good_for_upload         BOOL NOT NULL,
+	good_for_renew          BOOL NOT NULL,
+	bad_contract            BOOL NOT NULL,
+	last_oos_error          BIGINT UNSIGNED NOT NULL,
+	locked                  BOOL NOT NULL,
+	renewed_from            VARCHAR(64) NOT NULL,
+	renewed_to              VARCHAR(64) NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE transactions (
+	id                           INT NOT NULL AUTO_INCREMENT,
+	contract_id                  VARCHAR(64) NOT NULL UNIQUE,
+	parent_id                    VARCHAR(64) NOT NULL,
+	uc_timelock                  BIGINT UNSIGNED NOT NULL,
+	uc_renter_pk                 VARCHAR(64) NOT NULL,
+	uc_host_pk                   VARCHAR(64) NOT NULL,
+	signatures_required          INT NOT NULL,
+	new_revision_number          BIGINT UNSIGNED NOT NULL,
+	new_file_size                BIGINT UNSIGNED NOT NULL,
+	new_file_merkle_root         VARCHAR(64) NOT NULL,
+	new_window_start             BIGINT UNSIGNED NOT NULL,
+	new_window_end               BIGINT UNSIGNED NOT NULL,
+	new_valid_proof_output_0     VARCHAR(64) NOT NULL,
+	new_valid_proof_output_uh_0  VARCHAR(64) NOT NULL,
+	new_valid_proof_output_1     VARCHAR(64) NOT NULL,
+	new_valid_proof_output_uh_1  VARCHAR(64) NOT NULL,
+	new_missed_proof_output_0    VARCHAR(64) NOT NULL,
+	new_missed_proof_output_uh_0 VARCHAR(64) NOT NULL,
+	new_missed_proof_output_1    VARCHAR(64) NOT NULL,
+	new_missed_proof_output_uh_1 VARCHAR(64) NOT NULL,
+	new_missed_proof_output_2    VARCHAR(64) NOT NULL,
+	new_missed_proof_output_uh_2 VARCHAR(64) NOT NULL,
+	new_unlock_hash              VARCHAR(64) NOT NULL,
+	t_parent_id_0                VARCHAR(64) NOT NULL,
+	pk_index_0                   BIGINT UNSIGNED NOT NULL,
+	timelock_0                   BIGINT UNSIGNED NOT NULL,
+	signature_0                  VARCHAR(128) NOT NULL,
+	t_parent_id_1                VARCHAR(64) NOT NULL,
+	pk_index_1                   BIGINT UNSIGNED NOT NULL,
+	timelock_1                   BIGINT UNSIGNED NOT NULL,
+	signature_1                  VARCHAR(128) NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
+);
+
+CREATE TABLE keys (
+	id          INT NOT NULL AUTO_INCREMENT,
+	renter_pk   VARCHAR(64) NOT NULL,
+	host_pk     VARCHAR(64) NOT NULL,
+	contract_id VARCHAR(64)NOT NULL UNIQUE,
+	PRIMARY KEY (id),
+	FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
+);

@@ -116,10 +116,11 @@ func (p *Portal) threadedPruneUnverifiedAccounts() {
 
 // deleteAccount deletes the user account from the database.
 func (p *Portal) deleteAccount(email string) error {
+	_, err0 := p.db.Exec("DELETE FROM renters WHERE email = ?", email)
 	_, err1 := p.db.Exec("DELETE FROM payments WHERE email = ?", email)
 	_, err2 := p.db.Exec("DELETE FROM balances WHERE email = ?", email)
 	_, err3 := p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
-	return nerrors.Compose(err1, err2, err3)
+	return nerrors.Compose(err0, err1, err2, err3)
 }
 
 // getBalance retrieves the balance information on the account.

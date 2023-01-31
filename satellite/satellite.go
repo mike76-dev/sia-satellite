@@ -223,5 +223,11 @@ func (s *Satellite) GetAverages() modules.HostAverages { return s.m.GetAverages(
 // a transaction.
 func (s *Satellite) FeeEstimation() (min, max types.Currency) { return s.tpool.FeeEstimation() }
 
+// GetWalletSeed returns the wallet seed.
+func (s *Satellite) GetWalletSeed() (seed smodules.Seed, err error) {
+	seed, _, err = s.wallet.PrimarySeed()
+	return
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

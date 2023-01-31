@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"gitlab.com/NebulousLabs/fastrand"
+
 	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
@@ -71,6 +73,9 @@ type Satellite interface {
 	// FeeEstimation returns the minimum and the maximum estimated fees for
 	// a transaction.
 	FeeEstimation() (min, max types.Currency)
+
+	// GetWalletSeed returns the wallet seed.
+	GetWalletSeed() (smodules.Seed, error)
 }
 
 // Manager implements the methods necessary to communicate with the
@@ -213,4 +218,16 @@ type HostDB interface {
 	// LoadingComplete indicates if the HostDB has finished loading the hosts
 	// from the database.
 	LoadingComplete() bool
+}
+
+// DeriveRenterSeed derives a seed to be used by the renter for accessing the
+// file contracts.
+// NOTE: The seed returned by this function should be wiped once it's no longer
+// in use.
+func DeriveRenterSeed(walletSeed smodules.Seed, email string) smodules.RenterSeed {
+	var renterSeed smodules.RenterSeed
+	rs := crypto.HashAll(walletSeed, []byte(email))
+	defer fastrand.Read(rs[:])
+	copy(renterSeed[:], rs[:])
+	return renterSeed
 }
