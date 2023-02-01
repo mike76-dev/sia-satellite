@@ -220,7 +220,7 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 	t.TransactionSignatures = make([]types.TransactionSignature, numSignatures)
 	var b []byte
 	b, _ = hex.DecodeString(tp.ParentID)
-	copy(t.FileContractRevisions[0].ParentID[:], b[:])
+	copy(t.FileContractRevisions[0].ParentID[:], b)
 	t.FileContractRevisions[0].UnlockConditions = types.UnlockConditions{
 		Timelock:           types.BlockHeight(tp.Timelock),
 		PublicKeys:         make([]types.SiaPublicKey, 2),
@@ -231,52 +231,48 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 	t.FileContractRevisions[0].NewRevisionNumber = tp.NewRevisionNumber
 	t.FileContractRevisions[0].NewFileSize = tp.NewFileSize
 	b, _ = hex.DecodeString(tp.NewFileMerkleRoot)
-	copy(t.FileContractRevisions[0].NewFileMerkleRoot[:], b[:])
+	copy(t.FileContractRevisions[0].NewFileMerkleRoot[:], b)
 	t.FileContractRevisions[0].NewWindowStart = types.BlockHeight(tp.NewWindowStart)
 	t.FileContractRevisions[0].NewWindowEnd = types.BlockHeight(tp.NewWindowEnd)
 	t.FileContractRevisions[0].NewValidProofOutputs = make(types.SiacoinOutput, 2)
 	t.FileContractRevisions[0].NewMissedProofOutputs = make(types.SiacoinOutput, 3)
 	t.FileContractRevisions[0].NewValidProofOutputs[0].Value = modules.ReadCurrency(tp.ValidValue0)
 	b, _ = hex.DecodeString(tp.ValidUnlockHash0)
-	copy(t.FileContractRevisions[0].NewValidProofOutputs[0].UnlockHash[:], b[:])
+	copy(t.FileContractRevisions[0].NewValidProofOutputs[0].UnlockHash[:], b)
 	t.FileContractRevisions[0].NewValidProofOutputs[1].Value = modules.ReadCurrency(tp.ValidValue1)
 	b, _ = hex.DecodeString(tp.ValidUnlockHash1)
-	copy(t.FileContractRevisions[0].NewValidProofOutputs[1].UnlockHash[:], b[:])
+	copy(t.FileContractRevisions[0].NewValidProofOutputs[1].UnlockHash[:], b)
 	t.FileContractRevisions[0].NewMissedProofOutputs[0].Value = modules.ReadCurrency(tp.MissedValue0)
 	b, _ = hex.DecodeString(tp.MissedUnlockHash0)
-	copy(t.FileContractRevisions[0].NewMissedProofOutputs[0].UnlockHash[:], b[:])
+	copy(t.FileContractRevisions[0].NewMissedProofOutputs[0].UnlockHash[:], b)
 	t.FileContractRevisions[0].NewMissedProofOutputs[1].Value = modules.ReadCurrency(tp.MissedValue1)
 	b, _ = hex.DecodeString(tp.MissedUnlockHash1)
-	copy(t.FileContractRevisions[0].NewMissedProofOutputs[1].UnlockHash[:], b[:])
+	copy(t.FileContractRevisions[0].NewMissedProofOutputs[1].UnlockHash[:], b)
 	t.FileContractRevisions[0].NewMissedProofOutputs[2].Value = modules.ReadCurrency(tp.MissedValue2)
 	b, _ = hex.DecodeString(tp.MissedUnlockHash2)
-	copy(t.FileContractRevisions[0].NewMissedProofOutputs[2].UnlockHash[:], b[:])
+	copy(t.FileContractRevisions[0].NewMissedProofOutputs[2].UnlockHash[:], b)
 	b, _ = hex.DecodeString(tp.NewUnlockHash)
-	copy(t.FileContractRevisions[0].NewUnlockHash[:], b[:])
+	copy(t.FileContractRevisions[0].NewUnlockHash[:], b)
 	if numSignatures > 0 {
 		b, _ = hex.DecodeString(tp.ParentID0)
-		copy(t.TransactionSignatures[0].ParentID[:], b[:])
+		copy(t.TransactionSignatures[0].ParentID[:], b)
 		t.TransactionSignatures[0].PublicKeyIndex = tp.PublicKeyIndex0
 		t.TransactionSignatures[0].Timelock = types.BlockHeight(tp.Timelock0)
 		b, _ = hex.DecodeString(tp.Signature0)
-		copy(t.TransactionSignatures[0].Signature[:], b[:])
+		copy(t.TransactionSignatures[0].Signature[:], b)
 		t.TransactionSignatures[0].CoveredFields = types.CoveredFields{
-			WholeTransaction: false,
 			FileContractRevisions: []uint64{0},
-			TransactionSignatures: []uint64{0},
 		}
 	}
 	if numSignatures > 1 {
 		b, _ = hex.DecodeString(tp.ParentID1)
-		copy(t.TransactionSignatures[1].ParentID[:], b[:])
+		copy(t.TransactionSignatures[1].ParentID[:], b)
 		t.TransactionSignatures[1].PublicKeyIndex = tp.PublicKeyIndex1
 		t.TransactionSignatures[1].Timelock = types.BlockHeight(tp.Timelock1)
 		b, _ = hex.DecodeString(tp.Signature1)
-		copy(t.TransactionSignatures[1].Signature[:], b[:])
+		copy(t.TransactionSignatures[1].Signature[:], b)
 		t.TransactionSignatures[1].CoveredFields = types.CoveredFields{
-			WholeTransaction: false,
 			FileContractRevisions: []uint64{0},
-			TransactionSignatures: []uint64{0},
 		}
 	}
 
@@ -285,7 +281,7 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 	h.Transaction = t
 	h.StartHeight = types.BlockHeight(cp.StartHeight)
 	b, _ = hex.DecodeString(cp.SecretKey)
-	copy(h.SecretKey[:], b[:])
+	copy(h.SecretKey[:], b)
 	h.DownloadSpending = modules.ReadCurrency(cp.DownloadSpending)
 	h.FundAccountSpending = modules.ReadCurrency(cp.FundAccountSpending)
 	h.StorageSpending = modules.ReadCurrency(cp.StorageSpending)
@@ -335,7 +331,7 @@ func loadContracts(db *sql.DB) (map[string]types.FileContractID, error) {
 			continue
 		}
 		b, _ = hex.DecodeString(id)
-		copy(fcid[:], b[:])
+		copy(fcid[:], b)
 		keys[rpk + hpk] = fcid
 	}
 
