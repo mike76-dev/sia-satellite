@@ -141,7 +141,7 @@ CREATE TABLE contracts (
 	good_for_upload         BOOL NOT NULL,
 	good_for_renew          BOOL NOT NULL,
 	bad_contract            BOOL NOT NULL,
-	last_oos_error          BIGINT UNSIGNED NOT NULL,
+	last_oos_err            BIGINT UNSIGNED NOT NULL,
 	locked                  BOOL NOT NULL,
 	renewed_from            VARCHAR(64) NOT NULL,
 	renewed_to              VARCHAR(64) NOT NULL,

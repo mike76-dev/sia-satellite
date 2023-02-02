@@ -4,28 +4,109 @@ package manager
 import (
 	"database/sql"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/satellite/manager/contractor"
 	"github.com/mike76-dev/sia-satellite/satellite/manager/hostdb"
 
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/siamux"
 
+	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
 	"go.sia.tech/siad/types"
 )
 
+// A hostContractor negotiates, revises, renews, and provides access to file
+// contracts.
+type hostContractor interface {
+	smodules.Alerter
+
+	// SetAllowance sets the amount of money the contractor is allowed to
+	// spend on contracts over a given time period, divided among the number
+	// of hosts specified. Note that contractor can start forming contracts as
+	// soon as SetAllowance is called; that is, it may block.
+	SetAllowance(types.SiaPublicKey, smodules.Allowance) error
+
+	// Allowance returns the current allowance of the renter.
+	Allowance(types.SiaPublicKey) smodules.Allowance
+
+	// Close closes the hostContractor.
+	Close() error
+
+	// CancelContract cancels the Renter's contract.
+	CancelContract(types.FileContractID) error
+
+	// Contracts returns the staticContracts of the renter's hostContractor.
+	Contracts() []modules.RenterContract
+
+	// ContractByPublicKeys returns the contract associated with the renter
+	// and the host keys.
+	ContractByPublicKeys(types.SiaPublicKey, types.SiaPublicKey) (modules.RenterContract, bool)
+
+	// ContractPublicKey returns the public key capable of verifying the renter's
+	// signature on a contract.
+	ContractPublicKey(types.SiaPublicKey, types.SiaPublicKey) (crypto.PublicKey, bool)
+
+	// ContractUtility returns the utility field for a given contract, along
+	// with a bool indicating if it exists.
+	ContractUtility(types.SiaPublicKey, types.SiaPublicKey) (smodules.ContractUtility, bool)
+
+	// ContractStatus returns the status of the given contract within the
+	// watchdog.
+	ContractStatus(fcID types.FileContractID) (smodules.ContractWatchStatus, bool)
+
+	// CurrentPeriod returns the height at which the current allowance period
+	// of the renter began.
+	CurrentPeriod(types.SiaPublicKey) types.BlockHeight
+
+	// PeriodSpending returns the amount spent on contracts during the current
+	// billing period of the renter.
+	PeriodSpending(types.SiaPublicKey) (smodules.ContractorSpending, error)
+
+	// ProvidePayment takes a stream and a set of payment details and handles
+	// the payment for an RPC by sending and processing payment request and
+	// response objects to the host. It returns an error in case of failure.
+	ProvidePayment(stream io.ReadWriter, pt *smodules.RPCPriceTable, details contractor.PaymentDetails) error
+
+	// OldContracts returns the oldContracts of the renter's hostContractor.
+	OldContracts() []modules.RenterContract
+
+	// IsOffline reports whether the specified host is considered offline.
+	IsOffline(types.SiaPublicKey) bool
+
+	// Session creates a Session from the specified contract ID.
+	Session(types.SiaPublicKey, types.SiaPublicKey, <-chan struct{}) (contractor.Session, error)
+
+	// RefreshedContract checks if the contract was previously refreshed.
+	RefreshedContract(fcid types.FileContractID) bool
+
+	// RenewContract takes an established connection to a host and renews the
+	// given contract with that host.
+	RenewContract(conn net.Conn, fcid types.FileContractID, params smodules.ContractParams, txnBuilder smodules.TransactionBuilder, tpool smodules.TransactionPool, hdb modules.HostDB, pt *smodules.RPCPriceTable) (modules.RenterContract, []types.Transaction, error)
+
+	// Synced returns a channel that is closed when the contractor is fully
+	// synced with the peer-to-peer network.
+	Synced() <-chan struct{}
+
+	// UpdateWorkerPool updates the workerpool currently in use by the contractor.
+	UpdateWorkerPool(smodules.WorkerPool)
+}
+
 // A Manager contains the information necessary to communicate with the
 // hosts.
 type Manager struct {
 	// Dependencies.
-	db     *sql.DB
-	hostDB modules.HostDB
+	db             *sql.DB
+	hostContractor hostContractor
+	hostDB         modules.HostDB
 
 	// Atomic properties.
 	hostAverages modules.HostAverages
@@ -51,12 +132,20 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 		return nil, errChan
 	}
 
+	// Create the Contractor.
+	hc, errChanContractor := contractor.New(cs, wallet, tpool, hdb, db, persistDir)
+	if err := smodules.PeekErr(errChanContractor); err != nil {
+		errChan <- err
+		return nil, errChan
+	}
+
 	// Create the Manager object.
 	m := &Manager{
-		db:            db,
-		hostDB:        hdb,
-		persistDir:    persistDir,
-		staticAlerter: smodules.NewAlerter("manager"),
+		db:             db,
+		hostContractor: hc,
+		hostDB:         hdb,
+		persistDir:     persistDir,
+		staticAlerter:  smodules.NewAlerter("manager"),
 	}
 
 	// Call stop in the event of a partial startup.
@@ -118,7 +207,7 @@ func (m *Manager) AllHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.A
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return errors.Compose(m.threads.Stop(), m.hostDB.Close(), m.saveSync())
+	return errors.Compose(m.threads.Stop(), m.hostDB.Close(), m.hostContractor.Close(), m.saveSync())
 }
 
 // Filter returns the hostdb's filterMode and filteredHosts.

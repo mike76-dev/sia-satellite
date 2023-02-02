@@ -31,7 +31,7 @@ type (
 		GoodForUpload        bool
 		GoodForRenew         bool
 		BadContract          bool
-		LastOOSError         uint64
+		LastOOSErr           uint64
 		Locked               bool
 	}
 
@@ -76,7 +76,8 @@ func (fc *FileContract) saveContract() error {
 	h := fc.header
 	fc.mu.Unlock()
 	rev := h.LastRevision()
-	id := hex.EncodeToString(h.ID()[:])
+	hid := h.ID()
+	id := hex.EncodeToString(hid[:])
 	var ts0, ts1 types.TransactionSignature
 	if len(h.Transaction.TransactionSignatures) > 0 {
 		copy(ts0.ParentID[:], h.Transaction.TransactionSignatures[0].ParentID[:])
@@ -107,15 +108,15 @@ func (fc *FileContract) saveContract() error {
 				total_cost = ?, contract_fee = ?, txn_fee = ?, siafund_fee = ?,
 				account_balance_cost = ?, fund_account_cost = ?,
 				update_price_table_cost = ?, good_for_upload = ?, good_for_renew = ?,
-				bad_contract = ?, last_oos_error = ?, locked = ?
+				bad_contract = ?, last_oos_err = ?, locked = ?
 			WHERE contract_id = ?
-		`, h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSError, h.Utility.Locked, id)
+		`, h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, id)
 		if err != nil {
 			return err
 		}
 
 		// Update transaction.
-		_, err := fc.db.Exec(`
+		_, err = fc.db.Exec(`
 			UPDATE transactions
 			SET parent_id = ?, uc_timelock = ?, uc_renter_pk = ?, uc_host_pk = ?,
 				signatures_required = ?, new_revision_number = ?, new_file_size = ?,
@@ -135,21 +136,21 @@ func (fc *FileContract) saveContract() error {
 	}
 
 	// Insert new contract.
-	_, err := fc.db.Exec(`
+	_, err = fc.db.Exec(`
 		INSERT INTO contracts
 			(contract_id, start_height, secret_key, download_spending,
 			fund_account_spending, storage_spending, upload_spending, total_cost,
 			contract_fee, txn_fee, siafund_fee, account_balance_cost,
 			fund_account_cost, update_price_table_cost, good_for_upload,
-			good_for_renew, bad_contract, last_oos_error, locked)
+			good_for_renew, bad_contract, last_oos_err, locked)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSError, h.Utility.Locked)
+	`, id, h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked)
 	if err != nil {
 		return err
 	}
 
 	// Insert new transaction.
-	_, err := fc.db.Exec(`
+	_, err = fc.db.Exec(`
 		INSERT INTO transactions
 			(contract_id, parent_id, uc_timelock, uc_renter_pk, uc_host_pk,
 			signatures_required, new_revision_number, new_file_size,
@@ -180,16 +181,16 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 			storage_spending, upload_spending, total_cost, contract_fee, txn_fee,
 			siafund_fee, account_balance_cost, fund_account_cost,
 			update_price_table_cost, good_for_upload, good_for_renew, bad_contract,
-			last_oos_error, locked
+			last_oos_err, locked
 		FROM contracts
 		WHERE contract_id = ?
-	`, id).Scan(&cp.StartHeight, &cp.SecretKey, &cp.DownloadSpending, &cp.FundAccountSpending, &cp.StorageSpending, &cp.UploadSpending, &cp.TotalCost, &cp.ContractFee, &cp.TxnFee, &cp.SiafundFee, &cp.AccountBalanceCost, &cp.FundAccountCost, &cp.UpdatePriceTableCost, &cp.GoodForUpload, &cp.GoodForRenew, &cp.BadContract, &cp.LastOOSError, &cp.Locked)
+	`, id).Scan(&cp.StartHeight, &cp.SecretKey, &cp.DownloadSpending, &cp.FundAccountSpending, &cp.StorageSpending, &cp.UploadSpending, &cp.TotalCost, &cp.ContractFee, &cp.TxnFee, &cp.SiafundFee, &cp.AccountBalanceCost, &cp.FundAccountCost, &cp.UpdatePriceTableCost, &cp.GoodForUpload, &cp.GoodForRenew, &cp.BadContract, &cp.LastOOSErr, &cp.Locked)
 	if err != nil {
 		return contractHeader{}, err
 	}
 
 	// Load transaction data.
-	err := db.QueryRow(`
+	err = db.QueryRow(`
 		SELECT parent_id, uc_timelock, uc_renter_pk, uc_host_pk,
 			signatures_required, new_revision_number, new_file_size,
 			new_file_merkle_root, new_window_start, new_window_end,
@@ -234,8 +235,8 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 	copy(t.FileContractRevisions[0].NewFileMerkleRoot[:], b)
 	t.FileContractRevisions[0].NewWindowStart = types.BlockHeight(tp.NewWindowStart)
 	t.FileContractRevisions[0].NewWindowEnd = types.BlockHeight(tp.NewWindowEnd)
-	t.FileContractRevisions[0].NewValidProofOutputs = make(types.SiacoinOutput, 2)
-	t.FileContractRevisions[0].NewMissedProofOutputs = make(types.SiacoinOutput, 3)
+	t.FileContractRevisions[0].NewValidProofOutputs = make([]types.SiacoinOutput, 2)
+	t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 3)
 	t.FileContractRevisions[0].NewValidProofOutputs[0].Value = modules.ReadCurrency(tp.ValidValue0)
 	b, _ = hex.DecodeString(tp.ValidUnlockHash0)
 	copy(t.FileContractRevisions[0].NewValidProofOutputs[0].UnlockHash[:], b)
@@ -295,11 +296,13 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 		FundAccountCost:      modules.ReadCurrency(cp.FundAccountCost),
 		UpdatePriceTableCost: modules.ReadCurrency(cp.UpdatePriceTableCost),
 	}
-	h.GoodForUpload = cp.GoodForUpload
-	h.GoodForRenew = cp.GoodForRenew
-	h.BadContract = cp.BadContract
-	h.LastOOSError = types.BlockHeight(cp.LastOOSError)
-	h.Locked = cp.Locked
+	h.Utility = smodules.ContractUtility{
+		GoodForUpload: cp.GoodForUpload,
+		GoodForRenew:  cp.GoodForRenew,
+		BadContract:   cp.BadContract,
+		LastOOSErr:    types.BlockHeight(cp.LastOOSErr),
+		Locked:        cp.Locked,
+	}
 
 	return h, nil
 }

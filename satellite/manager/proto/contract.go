@@ -2,12 +2,6 @@ package proto
 
 import (
 	"database/sql"
-	"encoding/json"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -322,19 +316,19 @@ func (cs *ContractSet) managedInsertContract(h contractHeader) (modules.RenterCo
 		return modules.RenterContract{}, err
 	}
 
-	c := &FileContract{
+	fc := &FileContract{
 		header: h,
 		db:     cs.db,
 	}
 	// Compatv144 fix missing void output.
 	cs.mu.Lock()
-	if _, exists := cs.contracts[c.header.ID()]; exists {
+	if _, exists := cs.contracts[fc.header.ID()]; exists {
 		cs.log.Println("CRITICAL: Trying to overwrite existing contract")
 	}
-	cs.contracts[sc.header.ID()] = c
-	cs.pubKeys[h.RenterPublicKey().String() + h.HostPublicKey().String()] = c.header.ID()
+	cs.contracts[fc.header.ID()] = fc
+	cs.pubKeys[h.RenterPublicKey().String() + h.HostPublicKey().String()] = fc.header.ID()
 	cs.mu.Unlock()
-	return c.Metadata(), c.saveContract()
+	return fc.Metadata(), fc.saveContract()
 }
 
 // loadFileContract loads a contract and adds it to the contractset if it is valid.

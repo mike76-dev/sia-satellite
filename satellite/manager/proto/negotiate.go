@@ -29,7 +29,7 @@ func startRevision(conn net.Conn, host modules.HostDBEntry) error {
 	if err != nil {
 		return err
 	}
-	return smodules.WriteNegotiationAcceptance(conn)
+	return modules.WriteNegotiationAcceptance(conn)
 }
 
 // verifySettings reads a signed HostSettings object from conn, validates the

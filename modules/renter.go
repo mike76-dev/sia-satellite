@@ -1,6 +1,9 @@
 package modules
 
 import (
+	"gitlab.com/NebulousLabs/fastrand"
+
+	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
@@ -84,6 +87,18 @@ type Renter struct {
 
 // contractEndHeight returns the height at which the renter's contracts
 // end.
-func (r *Renter) contractEndHeight() types.BlockHeight {
+func (r *Renter) ContractEndHeight() types.BlockHeight {
 	return r.CurrentPeriod + r.Allowance.Period + r.Allowance.RenewWindow
+}
+
+// DeriveRenterSeed derives a seed to be used by the renter for accessing the
+// file contracts.
+// NOTE: The seed returned by this function should be wiped once it's no longer
+// in use.
+func DeriveRenterSeed(walletSeed smodules.Seed, email string) smodules.RenterSeed {
+	var renterSeed smodules.RenterSeed
+	rs := crypto.HashAll(walletSeed, []byte(email))
+	defer fastrand.Read(rs[:])
+	copy(renterSeed[:], rs[:])
+	return renterSeed
 }

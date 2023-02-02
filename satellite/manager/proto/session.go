@@ -1,14 +1,9 @@
 package proto
 
 import (
-	"bytes"
 	"crypto/cipher"
 	"encoding/json"
-	"fmt"
-	"io"
-	"math/bits"
 	"net"
-	"sort"
 	"sync"
 	"time"
 
@@ -37,6 +32,7 @@ type Session struct {
 	host        modules.HostDBEntry
 	once        sync.Once
 	logger      *persist.Logger
+	renter      types.SiaPublicKey
 }
 
 // writeRequest sends an encrypted RPC request to the host.
@@ -151,13 +147,13 @@ func (s *Session) Close() error {
 }
 
 // NewSession initiates the RPC loop with a host and returns a Session.
-func (cs *ContractSet) NewSession(host modules.HostDBEntry, id types.FileContractID, currentHeight types.BlockHeight, hdb hostDB, logger *persist.Logger, cancel <-chan struct{}) (_ *Session, err error) {
+func (cs *ContractSet) NewSession(host modules.HostDBEntry, renter types.SiaPublicKey, id types.FileContractID, currentHeight types.BlockHeight, hdb hostDB, logger *persist.Logger, cancel <-chan struct{}) (_ *Session, err error) {
 	sc, ok := cs.Acquire(id)
 	if !ok {
 		return nil, errors.New("could not locate contract to create session")
 	}
 	defer cs.Return(sc)
-	s, err := cs.managedNewSession(host, currentHeight, hdb, logger, cancel)
+	s, err := cs.managedNewSession(host, renter, currentHeight, hdb, logger, cancel)
 	if err != nil {
 		return nil, errors.AddContext(err, "unable to create a new session with the host")
 	}
@@ -181,12 +177,12 @@ func (cs *ContractSet) NewSession(host modules.HostDBEntry, id types.FileContrac
 }
 
 // NewRawSession creates a new session unassociated with any contract.
-func (cs *ContractSet) NewRawSession(host modules.HostDBEntry, currentHeight types.BlockHeight, hdb hostDB, logger *persist.Logger, cancel <-chan struct{}) (_ *Session, err error) {
-	return cs.managedNewSession(host, currentHeight, hdb, logger, cancel)
+func (cs *ContractSet) NewRawSession(host modules.HostDBEntry, renter types.SiaPublicKey, currentHeight types.BlockHeight, hdb hostDB, logger *persist.Logger, cancel <-chan struct{}) (_ *Session, err error) {
+	return cs.managedNewSession(host, renter, currentHeight, hdb, logger, cancel)
 }
 
 // managedNewSession initiates the RPC loop with a host and returns a Session.
-func (cs *ContractSet) managedNewSession(host modules.HostDBEntry, currentHeight types.BlockHeight, hdb hostDB, logger *persist.Logger, cancel <-chan struct{}) (_ *Session, err error) {
+func (cs *ContractSet) managedNewSession(host modules.HostDBEntry, renter types.SiaPublicKey, currentHeight types.BlockHeight, hdb hostDB, logger *persist.Logger, cancel <-chan struct{}) (_ *Session, err error) {
 	// Increase Successful/Failed interactions accordingly.
 	defer func() {
 		if err != nil {
@@ -232,7 +228,8 @@ func (cs *ContractSet) managedNewSession(host modules.HostDBEntry, currentHeight
 		hdb:         hdb,
 		height:      currentHeight,
 		host:        host,
-		logger:      logger
+		logger:      logger,
+		renter:      renter,
 	}
 
 	return s, nil

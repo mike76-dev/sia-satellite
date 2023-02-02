@@ -81,7 +81,7 @@ func (cs *ContractSet) managedNewRenewAndClear(oldContract *FileContract, params
 	}()
 
 	// Initiate protocol.
-	s, err := cs.NewRawSession(host, startHeight, hdb, cancel)
+	s, err := cs.NewRawSession(host, types.Ed25519PublicKey(renterPKNew), startHeight, hdb, cs.log, cancel)
 	if err != nil {
 		return modules.RenterContract{}, nil, err
 	}
@@ -231,7 +231,7 @@ func (cs *ContractSet) managedNewRenewAndClear(oldContract *FileContract, params
 		TxnFee:          txnFee,
 		SiafundFee:      types.Tax(startHeight, fc.Payout),
 		StorageSpending: basePrice,
-		Utility: modules.ContractUtility{
+		Utility: smodules.ContractUtility{
 			GoodForUpload: true,
 			GoodForRenew:  true,
 		},
@@ -426,7 +426,7 @@ func (cs *ContractSet) RenewContract(conn net.Conn, fcid types.FileContractID, p
 	txnBuilder.AddMinerFee(txnFee)
 
 	// Add FileContract identifier.
-	si, hk := modules.PrefixedSignedIdentifier(params.RenterSeed, fcTxn, host.PublicKey)
+	si, hk := smodules.PrefixedSignedIdentifier(params.RenterSeed, fcTxn, host.PublicKey)
 	_ = txnBuilder.AddArbitraryData(append(si[:], hk[:]...))
 
 	// Create transaction set.

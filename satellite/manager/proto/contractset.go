@@ -3,18 +3,11 @@ package proto
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	"gitlab.com/NebulousLabs/errors"
-
 	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	"go.sia.tech/siad/types"
 )
@@ -78,12 +71,14 @@ func (cs *ContractSet) Delete(c *FileContract) {
 
 // IDs returns the fcid of each contract with in the set. The contracts are not
 // locked.
-func (cs *ContractSet) IDs() []types.FileContractID {
+func (cs *ContractSet) IDs(rpk types.SiaPublicKey) []types.FileContractID {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	pks := make([]types.FileContractID, 0, len(cs.contracts))
-	for fcid := range cs.contracts {
-		pks = append(pks, fcid)
+	for fcid, fc := range cs.contracts {
+		if fc.header.RenterPublicKey().String() == rpk.String() {
+			pks = append(pks, fcid)
+		}
 	}
 	return pks
 }
@@ -165,6 +160,19 @@ func (cs *ContractSet) ViewAll() []modules.RenterContract {
 	return contracts
 }
 
+// ByRenter works the same as ViewAll but filters the contracts by the renter.
+func (cs *ContractSet) ByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	contracts := make([]modules.RenterContract, 0, len(cs.contracts))
+	for _, fileContract := range cs.contracts {
+		if fileContract.header.RenterPublicKey().String() == rpk.String() {
+			contracts = append(contracts, fileContract.Metadata())
+		}
+	}
+	return contracts
+}
+
 // NewContractSet returns a ContractSet storing its contracts in the specified
 // database.
 func NewContractSet(db *sql.DB, log *persist.Logger) (*ContractSet, error) {
@@ -182,7 +190,6 @@ func NewContractSet(db *sql.DB, log *persist.Logger) (*ContractSet, error) {
 	}
 
 	// Load the contracts from the database.
-	var err error
 	for _, fcid := range keys {
 		err = cs.loadFileContract(fcid)
 		if err != nil {

@@ -127,7 +127,7 @@ func (cs *ContractSet) FormContract(params smodules.ContractParams, txnBuilder t
 	}()
 
 	// Initiate protocol.
-	s, err := cs.NewRawSession(host, startHeight, hdb, cancel)
+	s, err := cs.NewRawSession(host, types.Ed25519PublicKey(renterPK), startHeight, hdb, cs.log, cancel)
 	if err != nil {
 		return modules.RenterContract{}, nil, types.Transaction{}, nil, err
 	}
@@ -207,7 +207,7 @@ func (cs *ContractSet) FormContract(params smodules.ContractParams, txnBuilder t
 		ContractSignatures: addedSignatures,
 		RevisionSignature:  revisionTxn.TransactionSignatures[0],
 	}
-	if err := modules.WriteRPCResponse(s.conn, s.aead, renterSigs, nil); err != nil {
+	if err := smodules.WriteRPCResponse(s.conn, s.aead, renterSigs, nil); err != nil {
 		return modules.RenterContract{}, nil, types.Transaction{}, nil, err
 	}
 
