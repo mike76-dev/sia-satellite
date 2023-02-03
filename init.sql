@@ -184,11 +184,11 @@ CREATE TABLE transactions (
 	FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
 );
 
-CREATE TABLE keys (
+CREATE TABLE renterkeys (
 	id          INT NOT NULL AUTO_INCREMENT,
 	renter_pk   VARCHAR(64) NOT NULL,
 	host_pk     VARCHAR(64) NOT NULL,
-	contract_id VARCHAR(64)NOT NULL UNIQUE,
+	contract_id VARCHAR(64) NOT NULL UNIQUE,
 	PRIMARY KEY (id),
 	FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
 );
