@@ -494,6 +494,9 @@ func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp s
 		return nil, err
 	}
 
+	// Spin up a goroutine to periodically save the Contractor.
+	go c.threadedSaveLoop()
+
 	// Update the pubkeysToContractID map.
 	c.managedUpdatePubKeysToContractIDMap()
 

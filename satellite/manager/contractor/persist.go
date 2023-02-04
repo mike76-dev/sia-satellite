@@ -2,6 +2,7 @@ package contractor
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
@@ -21,11 +22,13 @@ var (
 	PersistFilename = "contractor.json"
 )
 
+// saveFrequency determines how often the Contractor will be saved.
+const saveFrequency = 2 * time.Minute
+
 // contractorPersist defines what Contractor data persists across sessions.
 type contractorPersist struct {
 	BlockHeight          types.BlockHeight               `json:"blockheight"`
 	LastChange           smodules.ConsensusChangeID      `json:"lastchange"`
-	RecentRecoveryChange smodules.ConsensusChangeID      `json:"recentrecoverychange"`
 	OldContracts         []modules.RenterContract        `json:"oldcontracts"`
 	DoubleSpentContracts map[string]types.BlockHeight    `json:"doublespentcontracts"`
 	RenewedFrom          map[string]types.FileContractID `json:"renewedfrom"`
@@ -120,4 +123,27 @@ func (c *Contractor) save() error {
 	persistData := c.persistData()
 	filename := filepath.Join(c.persistDir, PersistFilename)
 	return persist.SaveJSON(persistMeta, persistData, filename)
+}
+
+// threadedSaveLoop periodically saves the Contractor persistence.
+func (c *Contractor) threadedSaveLoop() {
+	err := c.tg.Add()
+	if err != nil {
+		return
+	}
+	defer c.tg.Done()
+
+	for {
+		select {
+		case <-c.tg.StopChan():
+			return
+		case <-time.After(saveFrequency):
+			c.mu.Lock()
+			err = c.save()
+			c.mu.Unlock()
+			if err != nil {
+				c.log.Println("Difficulties saving the Contractor:", err)
+			}
+		}
+	}
 }
