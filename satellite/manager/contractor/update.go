@@ -73,6 +73,13 @@ func (c *Contractor) managedArchiveContracts() {
 // is a change in the blockchain. Updates will always be called in order.
 func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
 	c.mu.Lock()
+
+	c.blockHeight = cc.InitialHeight()
+	for _, block := range cc.AppliedBlocks {
+		if block.ID() != types.GenesisID {
+			c.blockHeight++
+		}
+	}
 	c.staticWatchdog.callScanConsensusChange(cc)
 
 	// If the allowance is set and we have entered the next period, update
