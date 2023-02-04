@@ -157,7 +157,6 @@ func (w *watchdog) callAllowanceUpdated(rpk types.SiaPublicKey, a smodules.Allow
 func (w *watchdog) callMonitorContract(args monitorContractArgs) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.contractor.log.Printf("callMonitorContract for contract: %v at height %v (Watchdog height: %v)\n", args.fcID, args.blockHeight, w.blockHeight)
 
 	if _, ok := w.contracts[args.fcID]; ok {
 		w.contractor.log.Println("watchdog asked to watch contract it already knowns: ", args.fcID)
@@ -369,8 +368,6 @@ func removeTxnFromSet(txn types.Transaction, txnSet []types.Transaction) ([]type
 // contracts and also for double-spends of any outputs which monitored contracts
 // depend on.
 func (w *watchdog) scanAppliedBlock(block types.Block) {
-	w.contractor.log.Println("Watchdog scanning applied block at height: ", w.blockHeight)
-
 	for _, txn := range block.Transactions {
 		for i := range txn.FileContracts {
 			fcID := txn.FileContractID(uint64(i))
@@ -659,7 +656,6 @@ func (w *watchdog) addDependencyToContractFormationSet(fcID types.FileContractID
 func (w *watchdog) callCheckContracts() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.contractor.log.Println("Watchdog checking contracts at height:", w.blockHeight)
 
 	for fcID, contractData := range w.contracts {
 		if !contractData.contractFound {
