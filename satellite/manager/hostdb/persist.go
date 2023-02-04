@@ -23,7 +23,7 @@ var (
 	// version of the hostdb persistence file.
 	persistMetadata = persist.Metadata{
 		Header:  "HostDB Persistence",
-		Version: "0.1",
+		Version: "0.1.0",
 	}
 )
 
