@@ -433,7 +433,6 @@ func New(cs smodules.ConsensusSet, wallet smodules.Wallet, tpool smodules.Transa
 	// Non-blocking startup.
 	go func() {
 		// Subscribe to the consensus set in a separate goroutine.
-		defer close(errChan)
 		if err := c.tg.Add(); err != nil {
 			errChan <- err
 			return
