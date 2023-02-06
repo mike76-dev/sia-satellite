@@ -217,6 +217,10 @@ button:disabled {
 	text-align: left;
 }
 
+.container {
+	width: 100%;
+}
+
 .content {
 	display: flex;
 	flex-direction: row;
@@ -252,9 +256,30 @@ button:disabled {
 }
 
 select {
-	width: 100%;
 	padding: 0.5rem;
 	font-size: 1rem;
+}
+
+table {
+	font-size: 1rem;
+	margin-top: 1rem;
+	width: 100%;
+	color: #afafaf;
+	border-collapse: collapse;
+}
+
+th {
+	text-align: left;
+}
+
+tbody > tr:nth-child(odd) {
+	background-color: #000f9f;
+}
+
+.history-button {
+	width: 4rem;
+	background-color: #000f9f;
+	border: 1px solid #afafaf;
 }
 
 #payment-amount {
@@ -370,5 +395,9 @@ button:hover .spinner:after {
 	.page h1 {
 		font-size: 1.5rem;
 		margin-left: 2rem;
+	}
+
+	table {
+		font-size: 0.8rem;
 	}
 }

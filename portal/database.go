@@ -302,3 +302,43 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 
 	return err
 }
+
+// getPayments retrieves up to the given number of payments from
+// the account payment history. The numbering starts from one.
+func (p *Portal) getPayments(email string, from, to int) ([]userPayment, error) {
+	// Sanity check.
+	if from <= 0 || to <= 0 || from > to {
+		return nil, errors.New("wrong range provided")
+	}
+
+	rows, err := p.db.Query(`
+		SELECT amount, currency, amount_usd, made FROM payments
+		WHERE email = ? AND pending = ?
+	`, email, false)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	payments := make([]userPayment, 0)
+	var payment userPayment
+
+	for rows.Next() {
+		if from > 1 {
+			from--
+			to--
+			continue
+		}
+		err := rows.Scan(&payment.Amount, &payment.Currency, &payment.AmountUSD, &payment.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+		payments = append(payments, payment)
+		if to == 1 {
+			break
+		}
+		to--
+	}
+
+	return payments, nil
+}

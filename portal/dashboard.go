@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -69,7 +70,7 @@ type (
 		Amount    float64 `json:"amount"`
 		Currency  string  `json:"currency"`
 		AmountUSD float64 `json:"amountusd"`
-		Timestamp uint64  `json:"timestamp:`
+		Timestamp uint64  `json:"timestamp"`
 	}
 )
 
@@ -415,4 +416,86 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	writeJSON(w, resp)
+}
+
+// paymentsHandlerGET handles the GET /dashboard/payments requests.
+func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	prefix, email, expires, tErr := api.portal.decodeToken(token)
+	if tErr != nil || prefix != cookiePrefix {
+		writeError(w,
+			Error{
+				Code: httpErrorTokenInvalid,
+				Message: "invalid token",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	if expires.Before(time.Now()) {
+		writeError(w,
+		Error{
+			Code: httpErrorTokenExpired,
+			Message: "token already expired",
+		}, http.StatusBadRequest)
+		return
+	}
+
+	// Check if the user account exists.
+	count, cErr := api.portal.countEmails(email)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// No such account. Can only happen if it was deleted.
+	if count == 0 {
+		writeError(w,
+			Error{
+				Code: httpErrorNotFound,
+				Message: "no such account",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the payment history.
+	var from, to int
+	from, cErr = strconv.Atoi(req.FormValue("from"))
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorBadRequest,
+				Message: "wrong numeric value",
+			}, http.StatusBadRequest)
+		return
+	}
+	to, cErr = strconv.Atoi(req.FormValue("to"))
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorBadRequest,
+				Message: "wrong numeric value",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	var ups []userPayment
+	if ups, cErr = api.portal.getPayments(email, from, to); cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, ups)
 }

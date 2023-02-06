@@ -63,6 +63,9 @@ retrieveAverages();
 window.setInterval(retrieveBalance, 300000);
 window.setInterval(retrieveAverages, 600000);
 
+var paymentsFrom = 1;
+var paymentsStep = 10;
+
 function setActiveMenuIndex(ind) {
 	let li, p;
 	if (ind > menu.childElementCount) return;
@@ -80,6 +83,9 @@ function setActiveMenuIndex(ind) {
 	document.getElementById('menu-button').classList.remove('mobile-hidden');
 	document.getElementById('menu-container').classList.add('mobile-hidden');
 	clearErrors();
+	if (ind == 4) {
+		getPayments();
+	}
 }
 
 function showMenu(e) {
@@ -488,4 +494,72 @@ function toPayment() {
 function backToSelect() {
 	document.getElementById('payment').classList.add('disabled');
 	document.getElementById('select').classList.remove('disabled');
+}
+
+function changePaymentsStep(s) {
+	paymentsStep = parseInt(s.value);
+	getPayments();
+}
+
+function getPayments() {
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/payments?from=' + paymentsFrom + '&to=' + (paymentsFrom + paymentsStep - 1), options)
+		.then(response => response.json())
+		.then(data => {
+			if (data.code) {
+				console.log(data);
+			} else {
+				if (data.length > 0 || paymentsFrom > 1) {
+					document.getElementById('history-empty').classList.add('disabled');
+					document.getElementById('history-non-empty').classList.remove('disabled');
+				}
+				if (data.length > 0) {
+					tbody = document.getElementById('history-table');
+					tbody.innerHTML = '';
+					let tr;
+					data.forEach((row, i) => {
+						timestamp = new Date(row.timestamp * 1000);
+						tr = document.createElement('tr');
+						tr.innerHTML = '<td>' + (i + paymentsFrom) + '</td>';
+						tr.innerHTML += '<td>' + timestamp.toLocaleString() + '</td>';
+						tr.innerHTML += '<td>' + row.amount.toFixed(2) + '</td>';
+						tr.innerHTML += '<td>' + row.currency + '</td>';
+						tr.innerHTML += '<td>' + row.amountusd.toFixed(2) + ' USD</td>';
+						tbody.appendChild(tr);
+					});
+					document.getElementById('history-next').disabled = data.length != paymentsStep;
+				} else {
+					if (paymentsFrom > 1) {
+						paymentsFrom = paymentsFrom - paymentsStep;
+						if (paymentsFrom < 1) paymentsFrom = 1;
+						if (paymentsFrom == 1) {
+							document.getElementById('history-prev').disabled = true;
+						}
+					}
+					document.getElementById('history-next').disabled = true;
+				}
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function paymentsPrev() {
+	paymentsFrom = paymentsFrom - paymentsStep;
+	if (paymentsFrom < 1) paymentsFrom = 1;
+	if (paymentsFrom == 1) {
+		document.getElementById('history-prev').disabled = true;
+	}
+	document.getElementById('history-next').disabled = false;
+	getPayments();
+}
+
+function paymentsNext() {
+	paymentsFrom = paymentsFrom + paymentsStep;
+	document.getElementById('history-prev').disabled = false;
+	getPayments();
 }
