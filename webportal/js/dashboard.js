@@ -41,13 +41,6 @@ for (let i = 0; i < menu.childElementCount; i++) {
 
 setActiveMenuIndex(0);
 
-var account = {
-	email:      '',
-	subscribed: false,
-	balance:    0.0,
-	currency:   ''
-}
-
 var averages = {
 	currency: 'USD',
 	numHosts: 0,
@@ -66,8 +59,8 @@ var paymentAmount;
 var paymentCurrency;
 
 retrieveBalance();
-//window.setInterval(retrieveBalance, 30000); TODO
 retrieveAverages();
+window.setInterval(retrieveBalance, 300000);
 window.setInterval(retrieveAverages, 600000);
 
 function setActiveMenuIndex(ind) {
@@ -312,6 +305,12 @@ function retrieveBalance() {
 				let c = data.currency == '' ? 'USD' : data.currency;
 				b.innerHTML = data.balance.toFixed(2) + ' ' + c;
 				averages.currency = c;
+				if (data.isuser) {
+					message = 'Your payment plan: ' + (data.subscribed ? 'Subscription' : 'Pre-payment');
+					message += '<br>Remaining balance: ' + data.balance.toFixed(2) + ' ' + c;
+					document.getElementById('select-info').innerHTML = message;
+					document.getElementById('select-currency').value = c;
+				}
 			}
 		})
 		.catch(error => console.log(error));
