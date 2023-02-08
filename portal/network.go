@@ -93,8 +93,8 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.POST("/auth/reset/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.resetResendHandlerPOST(w, req, ps)
 	})
-	router.GET("/auth/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		api.changeHandlerGET(w, req, ps)
+	router.POST("/auth/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.changeHandlerPOST(w, req, ps)
 	})
 	router.GET("/auth/delete", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.deleteHandlerGET(w, req, ps)

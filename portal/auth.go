@@ -615,8 +615,8 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 	writeSuccess(w)
 }
 
-// changeHandlerGET handles the GET /auth/change requests.
-func (api *portalAPI) changeHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+// changeHandlerPOST handles the POST /auth/change requests.
+func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Check password for validity.	
 	password := req.Header.Get("Satellite-Password")
 	if err := checkPassword(password); err.Code != httpErrorNone {

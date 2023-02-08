@@ -177,7 +177,7 @@ function changeClick() {
 		return;
 	}
 	let options = {
-		method: 'GET',
+		method: 'POST',
 		headers: {
 			'Content-Type':       'application/json;charset=utf-8',
 			'Satellite-Password': p.value
