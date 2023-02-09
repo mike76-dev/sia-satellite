@@ -6,7 +6,6 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
 
@@ -81,51 +80,15 @@ type (
 func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
-	prefix, email, expires, tErr := api.portal.decodeToken(token)
-	if tErr != nil || prefix != cookiePrefix {
-		writeError(w,
-			Error{
-				Code: httpErrorTokenInvalid,
-				Message: "invalid token",
-			}, http.StatusBadRequest)
-		return
-	}
-
-	if expires.Before(time.Now()) {
-		writeError(w,
-		Error{
-			Code: httpErrorTokenExpired,
-			Message: "token already expired",
-		}, http.StatusBadRequest)
-		return
-	}
-
-	// Check if the user account exists.
-	count, cErr := api.portal.countEmails(email)
-	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
-		return
-	}
-
-	// No such account. Can only happen if it was deleted.
-	if count == 0 {
-		writeError(w,
-			Error{
-				Code: httpErrorNotFound,
-				Message: "no such account",
-			}, http.StatusBadRequest)
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
 		return
 	}
 
 	// Retrieve the balance information from the database.
 	var ub *userBalance
-	if ub, cErr = api.portal.getBalance(email); cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+	if ub, err = api.portal.getBalance(email); err != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
 				Code: httpErrorInternal,
@@ -218,57 +181,21 @@ func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAver
 func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
-	prefix, email, expires, tErr := api.portal.decodeToken(token)
-	if tErr != nil || prefix != cookiePrefix {
-		writeError(w,
-			Error{
-				Code: httpErrorTokenInvalid,
-				Message: "invalid token",
-			}, http.StatusBadRequest)
-		return
-	}
-
-	if expires.Before(time.Now()) {
-		writeError(w,
-		Error{
-			Code: httpErrorTokenExpired,
-			Message: "token already expired",
-		}, http.StatusBadRequest)
-		return
-	}
-
-	// Check if the user account exists.
-	count, cErr := api.portal.countEmails(email)
-	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
-		return
-	}
-
-	// No such account. Can only happen if it was deleted.
-	if count == 0 {
-		writeError(w,
-			Error{
-				Code: httpErrorNotFound,
-				Message: "no such account",
-			}, http.StatusBadRequest)
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
 		return
 	}
 
 	// Decode the request body.
-	dec, decErr := prepareDecoder(w, req)
-	if decErr != nil {
+	dec, err := prepareDecoder(w, req)
+	if err != nil {
 		return
 	}
 
 	var data hostsRequest
-	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	hdErr, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
-		writeError(w, err, code)
+		writeError(w, hdErr, code)
 		return
 	}
 
@@ -316,8 +243,8 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	a.MaxDownloadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxDownloadPrice / rate)
 
 	// Pick random hosts.
-	hosts, hErr := api.portal.satellite.RandomHosts(a.Hosts, a)
-	if hErr != nil {
+	hosts, err := api.portal.satellite.RandomHosts(a.Hosts, a)
+	if err != nil {
 		api.portal.log.Println("ERROR: could not get random hosts", err)
 		writeError(w,
 			Error{
@@ -391,7 +318,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	totalPayout := taxableAmount.Add(siafundFee)
 
 	// Increase estimates by a factor of safety to account for host churn and
-	// any potential missed additions
+	// any potential missed additions.
 	totalPayout = totalPayout.MulFloat(1.2)
 
 	// Apply exchange rate and round up to the whole number.
@@ -400,9 +327,9 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	payment := math.Ceil(estimation / precision)
 
 	// Update the payment amount.
-	pErr := api.portal.putPayment(email, payment, data.Currency, true)
-	if pErr != nil {
-		api.portal.log.Printf("ERROR: error recording the payment: %v\n", pErr)
+	err = api.portal.putPayment(email, payment, data.Currency, true)
+	if err != nil {
+		api.portal.log.Printf("ERROR: error recording the payment: %v\n", err)
 		writeError(w,
 			Error{
 				Code: httpErrorInternal,
@@ -425,52 +352,16 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
-	prefix, email, expires, tErr := api.portal.decodeToken(token)
-	if tErr != nil || prefix != cookiePrefix {
-		writeError(w,
-			Error{
-				Code: httpErrorTokenInvalid,
-				Message: "invalid token",
-			}, http.StatusBadRequest)
-		return
-	}
-
-	if expires.Before(time.Now()) {
-		writeError(w,
-		Error{
-			Code: httpErrorTokenExpired,
-			Message: "token already expired",
-		}, http.StatusBadRequest)
-		return
-	}
-
-	// Check if the user account exists.
-	count, cErr := api.portal.countEmails(email)
-	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
-		return
-	}
-
-	// No such account. Can only happen if it was deleted.
-	if count == 0 {
-		writeError(w,
-			Error{
-				Code: httpErrorNotFound,
-				Message: "no such account",
-			}, http.StatusBadRequest)
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
 		return
 	}
 
 	// Retrieve the payment history.
 	var from, to int
-	from, cErr = strconv.Atoi(req.FormValue("from"))
-	if cErr != nil {
-		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", cErr)
+	from, err = strconv.Atoi(req.FormValue("from"))
+	if err != nil {
+		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", err)
 		writeError(w,
 			Error{
 				Code: httpErrorBadRequest,
@@ -478,9 +369,9 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 			}, http.StatusBadRequest)
 		return
 	}
-	to, cErr = strconv.Atoi(req.FormValue("to"))
-	if cErr != nil {
-		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", cErr)
+	to, err = strconv.Atoi(req.FormValue("to"))
+	if err != nil {
+		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", err)
 		writeError(w,
 			Error{
 				Code: httpErrorBadRequest,
@@ -490,8 +381,8 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 	}
 
 	var ups []userPayment
-	if ups, cErr = api.portal.getPayments(email, from, to); cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+	if ups, err = api.portal.getPayments(email, from, to); err != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
 				Code: httpErrorInternal,
@@ -508,51 +399,15 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
-	prefix, email, expires, tErr := api.portal.decodeToken(token)
-	if tErr != nil || prefix != cookiePrefix {
-		writeError(w,
-			Error{
-				Code: httpErrorTokenInvalid,
-				Message: "invalid token",
-			}, http.StatusBadRequest)
-		return
-	}
-
-	if expires.Before(time.Now()) {
-		writeError(w,
-		Error{
-			Code: httpErrorTokenExpired,
-			Message: "token already expired",
-		}, http.StatusBadRequest)
-		return
-	}
-
-	// Check if the user account exists.
-	count, cErr := api.portal.countEmails(email)
-	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
-		return
-	}
-
-	// No such account. Can only happen if it was deleted.
-	if count == 0 {
-		writeError(w,
-			Error{
-				Code: httpErrorNotFound,
-				Message: "no such account",
-			}, http.StatusBadRequest)
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
 		return
 	}
 
 	// Retrieve the account balance.
 	var ub *userBalance
-	if ub, cErr = api.portal.getBalance(email); cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+	if ub, err = api.portal.getBalance(email); err != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
 				Code: httpErrorInternal,
@@ -572,10 +427,10 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	}
 
 	// Generate the seed and wipe it after use.
-	walletSeed, cErr := api.portal.satellite.GetWalletSeed()
+	walletSeed, err := api.portal.satellite.GetWalletSeed()
 	defer fastrand.Read(walletSeed[:])
-	if cErr != nil {
-		api.portal.log.Printf("ERROR: error retrieving wallet seed: %v\n", cErr)
+	if err != nil {
+		api.portal.log.Printf("ERROR: error retrieving wallet seed: %v\n", err)
 		writeError(w,
 			Error{
 				Code: httpErrorInternal,

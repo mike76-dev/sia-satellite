@@ -2,6 +2,7 @@ package portal
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -693,8 +694,32 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
-	prefix, email, expires, tErr := api.portal.decodeToken(token)
-	if tErr != nil || prefix != cookiePrefix {
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// TODO Check if the account is allowed to be deleted.
+
+	// Remove the account from the database.
+	if err = api.portal.deleteAccount(email); err != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeSuccess(w)
+}
+
+// verifyCookie is a helper function that verifies the satellite token.
+func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email string, err error) {
+	// Decode the token.
+	prefix, email, expires, err := api.portal.decodeToken(token)
+	if err != nil || prefix != cookiePrefix {
 		writeError(w,
 			Error{
 				Code: httpErrorTokenInvalid,
@@ -703,19 +728,21 @@ func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
+	// Check if the token has expired.
 	if expires.Before(time.Now()) {
 		writeError(w,
 		Error{
 			Code: httpErrorTokenExpired,
 			Message: "token already expired",
 		}, http.StatusBadRequest)
+		err = errors.New("token already expired")
 		return
 	}
 
 	// Check if the user account exists.
-	count, cErr := api.portal.countEmails(email)
-	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+	count, err := api.portal.countEmails(email)
+	if err != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
 				Code: httpErrorInternal,
@@ -731,21 +758,9 @@ func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request,
 				Code: httpErrorNotFound,
 				Message: "no such account",
 			}, http.StatusBadRequest)
+		err = errors.New("no such account")
 		return
 	}
 
-	// TODO Check if the account is allowed to be deleted.
-
-	// Remove the account from the database.
-	if cErr := api.portal.deleteAccount(email); cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
-		return
-	}
-
-	writeSuccess(w)
+	return
 }
