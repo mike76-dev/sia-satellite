@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+
+	"gitlab.com/NebulousLabs/fastrand"
 
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
@@ -498,4 +501,91 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 	}
 
 	writeJSON(w, ups)
+}
+
+// seedHandlerGET handles the GET /dashboard/seed requests.
+// paymentsHandlerGET handles the GET /dashboard/payments requests.
+func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	prefix, email, expires, tErr := api.portal.decodeToken(token)
+	if tErr != nil || prefix != cookiePrefix {
+		writeError(w,
+			Error{
+				Code: httpErrorTokenInvalid,
+				Message: "invalid token",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	if expires.Before(time.Now()) {
+		writeError(w,
+		Error{
+			Code: httpErrorTokenExpired,
+			Message: "token already expired",
+		}, http.StatusBadRequest)
+		return
+	}
+
+	// Check if the user account exists.
+	count, cErr := api.portal.countEmails(email)
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// No such account. Can only happen if it was deleted.
+	if count == 0 {
+		writeError(w,
+			Error{
+				Code: httpErrorNotFound,
+				Message: "no such account",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the account balance.
+	var ub *userBalance
+	if ub, cErr = api.portal.getBalance(email); cErr != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// No balance yet.
+	if !ub.IsUser {
+		writeError(w,
+			Error{
+				Code: httpErrorNotFound,
+				Message: "no such account",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// Generate the seed and wipe it after use.
+	walletSeed, cErr := api.portal.satellite.GetWalletSeed()
+	defer fastrand.Read(walletSeed[:])
+	if cErr != nil {
+		api.portal.log.Printf("ERROR: error retrieving wallet seed: %v\n", cErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+	renterSeed := modules.DeriveRenterSeed(walletSeed, email)
+	defer fastrand.Read(renterSeed[:])
+	
+	w.Header().Set("Renter-Seed", hex.EncodeToString(renterSeed[:]))
+	writeSuccess(w)
 }

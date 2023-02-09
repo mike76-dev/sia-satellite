@@ -316,6 +316,7 @@ function retrieveBalance() {
 					message += '<br>Remaining balance: ' + data.balance.toFixed(2) + ' ' + c;
 					document.getElementById('select-info').innerHTML = message;
 					document.getElementById('select-currency').value = c;
+					document.getElementById('reveal').classList.remove('disabled');
 				}
 			}
 		})
@@ -562,4 +563,41 @@ function paymentsNext() {
 	paymentsFrom = paymentsFrom + paymentsStep;
 	document.getElementById('history-prev').disabled = false;
 	getPayments();
+}
+
+function revealSeed() {
+	b = document.getElementById('reveal-button');
+	t = document.getElementById('reveal-text');
+	if (b.innerText == 'Copy') {
+		b.disabled = true;
+		t.select();
+		t.setSelectionRange(0, 99);
+		navigator.clipboard.writeText(t.value);
+		b.innerText = 'Copied!';
+		window.setTimeout(function() {
+			t.value = '';
+			b.innerText = 'Show';
+			b.disabled = false;
+		}, 1000);
+		return;
+	}
+	b.disabled = true;
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/seed', options)
+		.then(response => {
+			if (response.status == 204) {
+				h = response.headers.get('Renter-Seed');
+				t.value = h;
+				b.innerText = 'Copy';
+				b.disabled = false;
+				return '';
+			} else return response.json();
+		})
+		.then(data => console.log(data))
+		.catch(error => console.log(error));
 }
