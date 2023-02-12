@@ -97,7 +97,7 @@ CREATE TABLE ipnets (
 DROP TABLE IF EXISTS renters;
 DROP TABLE IF EXISTS contracts;
 DROP TABLE IF EXISTS transactions;
-DROP TABLE IF EXISTS keys;
+DROP TABLE IF EXISTS contractkeys;
 
 CREATE TABLE renters (
 	id                           INT NOT NULL AUTO_INCREMENT,
@@ -184,7 +184,7 @@ CREATE TABLE transactions (
 	FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
 );
 
-CREATE TABLE renterkeys (
+CREATE TABLE contractkeys (
 	id          INT NOT NULL AUTO_INCREMENT,
 	renter_pk   VARCHAR(64) NOT NULL,
 	host_pk     VARCHAR(64) NOT NULL,
