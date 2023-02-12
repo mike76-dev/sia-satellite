@@ -15,8 +15,8 @@ import (
 var defaultConfig = persist.SatdConfig{
 	UserAgent:     "Sat-Agent",
 	GatewayAddr:   ":0",
-	APIAddr:       "localhost:10080",
-	SatelliteAddr: ":10082",
+	APIAddr:       "localhost:9990",
+	SatelliteAddr: ":9992",
 	SiamuxAddr:    ":0",
 	SiamuxWSAddr:  ":0",
 	Dir:           ".",
