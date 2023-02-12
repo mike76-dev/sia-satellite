@@ -10,16 +10,19 @@ import (
 
 	"gitlab.com/NebulousLabs/errors"
 
+	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
+	"go.sia.tech/siad/types"
 )
 
 // A Provider contains the information necessary to communicate with the
 // renters.
 type Provider struct {
 	// Dependencies.
-	g modules.Gateway
+	g         modules.Gateway
+	Satellite satellite
 
 	autoAddress modules.NetAddress // Determined using automatic tooling in network.go
 
@@ -32,6 +35,13 @@ type Provider struct {
 	port          string
 	threads       siasync.ThreadGroup
 	staticAlerter *modules.GenericAlerter
+}
+
+// satellite is the minimal interface for Satellite.
+type satellite interface {
+	PublicKey() types.SiaPublicKey
+	SecretKey() crypto.SecretKey
+	UserExists(rpk types.SiaPublicKey) (bool, error)
 }
 
 // New returns an initialized Provider.

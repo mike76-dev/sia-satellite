@@ -128,6 +128,7 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 		persistDir:    persistDir,
 		staticAlerter: smodules.NewAlerter("satellite"),
 	}
+	p.Satellite = s
 
 	// Call stop in the event of a partial startup.
 	defer func() {
@@ -226,6 +227,15 @@ func (s *Satellite) FeeEstimation() (min, max types.Currency) { return s.tpool.F
 // GetWalletSeed returns the wallet seed.
 func (s *Satellite) GetWalletSeed() (seed smodules.Seed, err error) {
 	seed, _, err = s.wallet.PrimarySeed()
+	return
+}
+
+// UserExists returns true if the renter's public key is found in the
+// database. An error is returned as well.
+func (s *Satellite) UserExists(rpk types.SiaPublicKey) (exists bool, err error) {
+	var count int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM renters WHERE public_key = ?", rpk.String()).Scan(&count)
+	exists = count > 0
 	return
 }
 
