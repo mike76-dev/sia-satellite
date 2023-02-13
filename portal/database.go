@@ -7,10 +7,16 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/modules"
+
 	nerrors "gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 
+	"go.sia.tech/siad/crypto"
+	"go.sia.tech/siad/types"
+
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/ed25519"
 )
 
 const (
@@ -282,6 +288,20 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 		StripeID:   id,
 	}
 	if ub.Currency == "" {
+		// New renter, need to create a new record.
+		seed, err := p.satellite.GetWalletSeed()
+		defer fastrand.Read(seed[:])
+		if err != nil {
+			return err
+		}
+		renterSeed := modules.DeriveRenterSeed(seed, email)
+		defer fastrand.Read(renterSeed[:])
+		var sk crypto.SecretKey
+		copy(sk[:], ed25519.NewKeyFromSeed(renterSeed[:]))
+		pk := types.Ed25519PublicKey(sk.PublicKey())
+		if err = p.createNewRenter(email, pk); err != nil {
+			return err
+		}
 		ub.Currency = currency
 	}
 
@@ -341,4 +361,17 @@ func (p *Portal) getPayments(email string, from, to int) ([]userPayment, error) 
 	}
 
 	return payments, nil
+}
+
+// createNewRenter creates a new renter record in the database.
+func (p *Portal) createNewRenter(email string, pk types.SiaPublicKey) error {
+	_, err := p.db.Exec(`
+		INSERT INTO renters (email, public_key, current_period, funds, hosts,
+			renew_window, expected_storage, expected_upload, expected_download,
+			expected_redundancy, max_rpc_price, max_contract_price,
+			max_download_bandwidth_price, max_sector_access_price,
+			max_storage_price, max_upload_bandwidth_price)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, pk.String(), 0, "", 0, 0, 0, 0, 0, 0, "", "", "", "", "", "")
+	return err
 }
