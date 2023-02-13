@@ -1,10 +1,15 @@
 package provider
 
 import (
+	"io"
 	"net"
 	"time"
 
+	"gitlab.com/NebulousLabs/errors"
+
+	core "go.sia.tech/core/types"
 	"go.sia.tech/siad/modules"
+	"go.sia.tech/siad/types"
 )
 
 // defaultConnectionDeadline is the default read and write deadline which is set
@@ -14,6 +19,10 @@ const defaultConnectionDeadline = 5 * time.Minute
 // rpcRatelimit prevents someone from spamming the provider connections,
 // causing it to spin up enough goroutines to crash.
 const rpcRatelimit = time.Millisecond * 50
+
+// publicKeySpecifier is used when a renter requests the public key of the
+// satellite.
+var publicKeySpecifier = types.NewSpecifier("PublicKey")
 
 // threadedUpdateHostname periodically runs 'managedLearnHostname', which
 // checks if the Satellite's hostname has changed.
@@ -179,6 +188,27 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		return
 	}
 
-	p.log.Println("INFO: inbound connection from:", conn.RemoteAddr())
+	d := core.NewDecoder(io.LimitedReader{R: conn, N: 8 + 16})
+
+	// Read the specifier.
+	b := d.ReadBytes()
+	if d.Err() != nil {
+		p.log.Printf("WARN: incoming conn %v was malformed: %v\n", conn.RemoteAddr(), d.Err())
+		return
+	}
+	id := types.NewSpecifier(string(b))
+
+	switch id {
+	case publicKeySpecifier:
+		err = p.managedRequestKey(conn)
+		if err != nil {
+			err = errors.Extend(errors.New("incoming RPCRequestKey failed: "), err)
+		}
+	default:
+		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
+	}
+	if err != nil {
+		p.log.Printf("ERROR: error with %v: %v\n", conn.RemoteAddr(), err)
+	}
 }
 

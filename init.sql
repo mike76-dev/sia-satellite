@@ -106,7 +106,6 @@ CREATE TABLE renters (
 	current_period               BIGINT UNSIGNED NOT NULL,
 	funds                        VARCHAR(64) NOT NULL,
 	hosts                        BIGINT UNSIGNED NOT NULL,
-	period                       BIGINT UNSIGNED NOT NULL,
 	renew_window                 BIGINT UNSIGNED NOT NULL,
 	expected_storage             BIGINT UNSIGNED NOT NULL,
 	expected_upload              BIGINT UNSIGNED NOT NULL,

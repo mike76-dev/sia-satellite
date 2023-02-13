@@ -37,7 +37,6 @@ var (
 // the renters and with the hosts.
 type Satellite struct {
 	// Dependencies.
-	mux    *siamux.SiaMux
 	db     *sql.DB
 	cs     smodules.ConsensusSet
 	g      smodules.Gateway
@@ -117,13 +116,14 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 
 	// Create the satellite object.
 	s := &Satellite{
-		cs:            cs,
-		g:             g,
-		tpool:         tpool,
-		wallet:        wallet,
+		cs:     cs,
+		g:      g,
+		tpool:  tpool,
+		wallet: wallet,
 
-		m:             m,
-		p:             p,
+		db: db,
+		m:  m,
+		p:  p,
 
 		persistDir:    persistDir,
 		staticAlerter: smodules.NewAlerter("satellite"),
@@ -235,6 +235,9 @@ func (s *Satellite) GetWalletSeed() (seed smodules.Seed, err error) {
 func (s *Satellite) UserExists(rpk types.SiaPublicKey) (exists bool, err error) {
 	var count int
 	err = s.db.QueryRow("SELECT COUNT(*) FROM renters WHERE public_key = ?", rpk.String()).Scan(&count)
+	if err != nil {
+		s.log.Println("ERROR: could not query database", err)
+	}
 	exists = count > 0
 	return
 }
