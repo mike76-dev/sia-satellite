@@ -62,6 +62,7 @@ retrieveBalance();
 retrieveAverages();
 window.setInterval(retrieveBalance, 300000);
 window.setInterval(retrieveAverages, 600000);
+retrieveKey();
 
 var paymentsFrom = 1;
 var paymentsStep = 10;
@@ -599,5 +600,23 @@ function revealSeed() {
 			} else return response.json();
 		})
 		.then(data => console.log(data))
+		.catch(error => console.log(error));
+}
+
+function retrieveKey() {
+	k = document.getElementById('reveal-key');
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/key', options)
+		.then(response => response.json())
+		.then(data => {
+			if (data.key) {
+				k.innerHTML = data.key;
+			}
+		})
 		.catch(error => console.log(error));
 }

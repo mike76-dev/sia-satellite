@@ -395,7 +395,6 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 }
 
 // seedHandlerGET handles the GET /dashboard/seed requests.
-// paymentsHandlerGET handles the GET /dashboard/payments requests.
 func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
@@ -443,4 +442,9 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	
 	w.Header().Set("Renter-Seed", hex.EncodeToString(renterSeed[:]))
 	writeSuccess(w)
+}
+
+// keyHandlerGET handles the GET /dashboard/key requests.
+func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	writeJSON(w, struct{Key string `json:"key"`}{Key: api.portal.satellite.PublicKey().String()})
 }
