@@ -4,6 +4,6 @@ import (
 	"time"
 )
 
-// requestKeyTime defines the amount of time that the renter and
-// the satellite have to exchange their public keys.
-const requestKeyTime = 60 * time.Second
+// formContractsTime defines the amount of time that the provider
+// has to form contracts with the hosts.
+const formContractsTime = 10 * time.Minute
