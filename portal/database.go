@@ -133,12 +133,12 @@ func (p *Portal) deleteAccount(email string) error {
 // An empty struct is returned when there is no data.
 func (p *Portal) getBalance(email string) (*userBalance, error) {
 	var s bool
-	var b float64
+	var b, l float64
 	var c, id string
 	err := p.db.QueryRow(`
-		SELECT subscribed, balance, currency, stripe_id
+		SELECT subscribed, balance, locked, currency, stripe_id
 		FROM balances WHERE email = ?
-	`, email).Scan(&s, &b, &c, &id)
+	`, email).Scan(&s, &b, &l, &c, &id)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
@@ -147,6 +147,7 @@ func (p *Portal) getBalance(email string) (*userBalance, error) {
 		IsUser:     !errors.Is(err, sql.ErrNoRows),
 		Subscribed: s,
 		Balance:    b,
+		Locked:     l,
 		Currency:   c,
 		StripeID:   id,
 	}
@@ -167,17 +168,17 @@ func (p *Portal) updateBalance(email string, ub *userBalance) error {
 	if c > 0 {
 		_, err := p.db.Exec(`
 			UPDATE balances
-			SET subscribed = ?, balance = ?, currency = ?, stripe_id = ?
+			SET subscribed = ?, balance = ?, locked = ?, currency = ?, stripe_id = ?
 			WHERE email = ?
-		`, ub.Subscribed, ub.Balance, ub.Currency, ub.StripeID, email)
+		`, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID, email)
 		return err
 	}
 
 	// No records found.
 	_, err = p.db.Exec(`
-		INSERT INTO balances (email, subscribed, balance, currency, stripe_id)
+		INSERT INTO balances (email, subscribed, balance, locked, currency, stripe_id)
 		VALUES (?, ?, ?, ?, ?)
-	`, email, ub.Subscribed, ub.Balance, ub.Currency, ub.StripeID)
+	`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID)
 
 	return err
 }
@@ -259,12 +260,12 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	// Fetch the account.
 	var email string
 	var s bool
-	var b float64
+	var b, l float64
 	var c string
 	err := p.db.QueryRow(`
-		SELECT email, subscribed, balance, currency
+		SELECT email, subscribed, balance, locked, currency
 		FROM balances WHERE stripe_id = ?
-	`, id).Scan(&email, &s, &b, &c)
+	`, id).Scan(&email, &s, &b, &l, &c)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -284,6 +285,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 		IsUser:     true,
 		Subscribed: s,
 		Balance:    b,
+		Locked:     l,
 		Currency:   c,
 		StripeID:   id,
 	}

@@ -16,6 +16,7 @@ CREATE TABLE balances (
 	email      VARCHAR(48) NOT NULL,
 	subscribed BOOL NOT NULL,
 	balance    FLOAT NOT NULL,
+	locked     FLOAT NOT NULL,
 	currency   VARCHAR(8) NOT NULL,
 	stripe_id  VARCHAR(32) NOT NULL,
 	PRIMARY KEY (id),

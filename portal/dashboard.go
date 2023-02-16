@@ -24,6 +24,7 @@ type (
 		IsUser     bool    `json:"isuser"`
 		Subscribed bool    `json:"subscribed"`
 		Balance    float64 `json:"balance"`
+		Locked     float64 `json:"locked"`
 		Currency   string  `json:"currency"`
 		SCBalance  float64 `json:"scbalance"`
 		StripeID   string  `json:"stripeid"`
