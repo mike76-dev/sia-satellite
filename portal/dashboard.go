@@ -432,3 +432,8 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	w.Header().Set("Renter-Seed", hex.EncodeToString(renterSeed[:]))
 	writeSuccess(w)
 }
+
+// keyHandlerGET handles the GET /dashboard/key requests.
+func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	writeJSON(w, struct{Key string `json:"key"`}{Key: api.portal.satellite.PublicKey().String()})
+}
