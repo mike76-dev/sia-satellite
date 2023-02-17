@@ -10,10 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/mike76-dev/sia-satellite/external"
 )
 
 const (
@@ -23,13 +21,6 @@ const (
 
 	// httpMaxBodySize enforces a maximum read of 1MiB from the request body.
 	httpMaxBodySize = 1048576 // 1MiB.
-
-	// exchangeRateFetchInterval is how often currency exchange rates are
-	// retrieved.
-	exchangeRateFetchInterval = 24 * time.Hour
-
-	// scusdRateFetchInterval is how often SC-USD rate is retrieved.
-	scusdRateFetchInterval = 10 * time.Minute
 )
 
 // Error codes provided in an HTTP response.
@@ -325,76 +316,4 @@ func getCookie(r *http.Request, name string) string {
 		return strings.TrimPrefix(v, name + "=")
 	}
 	return ""
-}
-
-// fetchExchangeRates retrieves the fiat currency exchange rates.
-func (p *Portal) fetchExchangeRates() {
-	data, err := external.FetchExchangeRates()
-	if err != nil {
-		p.log.Println("ERROR:", err)
-		return
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for k, v := range data {
-		p.exchRates[k] = v
-	}
-}
-
-// threadedFetchExchangeRates performs the fetch with set intervals.
-func (p *Portal) threadedFetchExchangeRates() {
-	err := p.threads.Add()
-	if err != nil {
-		return
-	}
-	defer p.threads.Done()
-
-	p.fetchExchangeRates()
-
-	for {
-		select {
-		case <-p.threads.StopChan():
-			return
-		case <-time.After(exchangeRateFetchInterval):
-		}
-
-		p.fetchExchangeRates()
-	}
-}
-
-// fetchSCUSDRate retrieves the SC-USD rate.
-func (p *Portal) fetchSCUSDRate() {
-	data, err := external.FetchSCUSDRate()
-	if err != nil {
-		p.log.Println("ERROR:", err)
-		return
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.scusdRate = data
-}
-
-// threadedFetchSCUSDRate performs the fetch with set intervals.
-func (p *Portal) threadedFetchSCUSDRate() {
-	err := p.threads.Add()
-	if err != nil {
-		return
-	}
-	defer p.threads.Done()
-
-	p.fetchSCUSDRate()
-
-	for {
-		select {
-		case <-p.threads.StopChan():
-			return
-		case <-time.After(scusdRateFetchInterval):
-		}
-
-		p.fetchSCUSDRate()
-	}
 }

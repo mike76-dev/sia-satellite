@@ -86,29 +86,15 @@ func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	// Calculate the Siacoin balance.
-	if ub.IsUser {
-		api.portal.mu.Lock()
-		defer api.portal.mu.Unlock()
-
-		fiatRate, ok := api.portal.exchRates[ub.Currency]
-		if ok && fiatRate > 0 && api.portal.scusdRate > 0 {
-			ub.SCBalance = ub.Balance / fiatRate / api.portal.scusdRate
-		}
-	}
-
 	writeJSON(w, ub)
 }
 
 // averagesHandlerGET handles the GET /dashboard/averages requests.
 func (api *portalAPI) averagesHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	api.portal.mu.Lock()
-	defer api.portal.mu.Unlock()
-
 	// Get the currency parameter and check it.
 	currency := req.FormValue("currency")
-	fiatRate, ok := api.portal.exchRates[currency]
-	if !ok {
+	scRate, err := api.portal.satellite.GetSiacoinRate(currency)
+	if err != nil {
 		writeError(w,
 			Error{
 				Code: httpErrorNotFound,
@@ -118,8 +104,7 @@ func (api *portalAPI) averagesHandlerGET(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Convert the averages into human-readable values.
-	rate := fiatRate * api.portal.scusdRate
-	sha := convertHostAverages(api.portal.satellite.GetAverages(), rate)
+	sha := convertHostAverages(api.portal.satellite.GetAverages(), scRate)
 
 	writeJSON(w, sha)
 }
@@ -189,10 +174,8 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	// Calculate the exchange rate.
-	api.portal.mu.Lock()
-
-	fiatRate, ok := api.portal.exchRates[data.Currency]
-	if !ok {
+	scRate, err := api.portal.satellite.GetSiacoinRate(data.Currency)
+	if err != nil {
 		writeError(w,
 			Error{
 				Code: httpErrorNotFound,
@@ -200,12 +183,9 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 			}, http.StatusBadRequest)
 		return
 	}
-	rate := fiatRate * api.portal.scusdRate
-
-	api.portal.mu.Unlock()
 
 	// Sanity check.
-	if rate == 0 {
+	if scRate == 0 {
 		api.portal.log.Println("ERROR: zero exchange rate")
 		writeError(w,
 			Error{
@@ -217,7 +197,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Create an allowance.
 	a := smodules.DefaultAllowance
-	a.Funds = types.SiacoinPrecision.MulFloat(data.Estimation / rate)
+	a.Funds = types.SiacoinPrecision.MulFloat(data.Estimation / scRate)
 	a.Hosts = data.Hosts
 	a.Period = types.BlockHeight(data.Duration * float64(types.BlocksPerWeek))
 	a.ExpectedStorage = uint64(data.Storage * (1 << 30))
@@ -226,10 +206,10 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	a.ExpectedRedundancy = data.Redundancy
 	a.MaxRPCPrice = modules.MaxRPCPrice
 	a.MaxSectorAccessPrice = modules.MaxSectorAccessPrice
-	a.MaxContractPrice = types.SiacoinPrecision.MulFloat(data.MaxContractPrice / rate)
-	a.MaxStoragePrice = types.SiacoinPrecision.MulFloat(data.MaxStoragePrice / rate)
-	a.MaxUploadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxUploadPrice / rate)
-	a.MaxDownloadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxDownloadPrice / rate)
+	a.MaxContractPrice = types.SiacoinPrecision.MulFloat(data.MaxContractPrice / scRate)
+	a.MaxStoragePrice = types.SiacoinPrecision.MulFloat(data.MaxStoragePrice / scRate)
+	a.MaxUploadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxUploadPrice / scRate)
+	a.MaxDownloadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxDownloadPrice / scRate)
 
 	// Pick random hosts.
 	hosts, err := api.portal.satellite.RandomHosts(a.Hosts, a)
@@ -312,7 +292,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Apply exchange rate and round up to the whole number.
 	precision, _ := types.SiacoinPrecision.Float64()
-	estimation, _ := totalPayout.MulFloat(rate).Float64()
+	estimation, _ := totalPayout.MulFloat(scRate).Float64()
 	payment := math.Ceil(estimation / precision)
 
 	// Update the payment amount.

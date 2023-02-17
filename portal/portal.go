@@ -32,8 +32,6 @@ type Portal struct {
 
 	// Atomic stats.
 	authStats     map[string]authenticationStats
-	exchRates     map[string]float64
-	scusdRate     float64
 
 	// Utilities.
 	listener      net.Listener
@@ -56,13 +54,12 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, db *sql.DB, persist
 
 	// Create the portal object.
 	p := &Portal{
-		db:            db,
-		satellite:     s,
+		db:        db,
+		satellite: s,
 
-		apiPort:       config.PortalPort,
+		apiPort: config.PortalPort,
 
-		authStats:     make(map[string]authenticationStats),
-		exchRates:     make(map[string]float64),
+		authStats: make(map[string]authenticationStats),
 
 		persistDir:    persistDir,
 		staticAlerter: smodules.NewAlerter("portal"),
@@ -122,10 +119,6 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, db *sql.DB, persist
 			p.log.Println("ERROR: unable to save portal:", err)
 		}
 	})
-
-	// Spawn the threads to fetch the exchange rates.
-	go p.threadedFetchExchangeRates()
-	go p.threadedFetchSCUSDRate()
 
 	// Start listening to API requests.
 	if err = p.initNetworking("127.0.0.1" + p.apiPort); err != nil {

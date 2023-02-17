@@ -46,6 +46,8 @@ type Satellite struct {
 	// ACID fields - these fields need to be updated in serial, ACID transactions.
 	publicKey types.SiaPublicKey
 	secretKey crypto.SecretKey
+	exchRates map[string]float64
+	scusdRate float64
 
 	// Submodules.
 	m *manager.Manager
@@ -121,6 +123,8 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 		tpool:  tpool,
 		wallet: wallet,
 
+		exchRates: make(map[string]float64),
+
 		db: db,
 		m:  m,
 		p:  p,
@@ -168,6 +172,10 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 			s.log.Println("ERROR: Unable to save satellite:", err)
 		}
 	})
+
+	// Spawn the threads to fetch the exchange rates.
+	go s.threadedFetchExchangeRates()
+	go s.threadedFetchSCUSDRate()
 
 	return s, nil
 }

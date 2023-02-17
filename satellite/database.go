@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+
+	"go.sia.tech/siad/types"
 )
 
 // GetBalance retrieves the balance information on the account.
@@ -21,6 +23,8 @@ func (s *Satellite) GetBalance(email string) (*modules.UserBalance, error) {
 		return nil, err
 	}
 
+	scRate, _ := s.GetSiacoinRate(c)
+
 	ub := &modules.UserBalance{
 		IsUser:     !errors.Is(err, sql.ErrNoRows),
 		Subscribed: sub,
@@ -28,6 +32,7 @@ func (s *Satellite) GetBalance(email string) (*modules.UserBalance, error) {
 		Locked:     l,
 		Currency:   c,
 		StripeID:   id,
+		SCBalance:  b * scRate,
 	}
 
 	return ub, nil
@@ -59,4 +64,10 @@ func (s *Satellite) UpdateBalance(email string, ub *modules.UserBalance) error {
 	`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID)
 
 	return err
+}
+
+// getRenter retrieves the user email by the public key.
+func (s *Satellite) getRenter(pk types.SiaPublicKey) (email string, err error) {
+	err = s.db.QueryRow("SELECT email FROM renters WHERE public_key = ?", pk.String()).Scan(&email)
+	return
 }

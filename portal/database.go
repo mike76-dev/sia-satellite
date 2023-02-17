@@ -139,11 +139,9 @@ func (p *Portal) flushPendingPayments(email string) error {
 // putPayment inserts a payment into the database.
 func (p *Portal) putPayment(email string, amount float64, currency string, pending bool) error {
 	// Convert the amount to USD.
-	p.mu.Lock()
-	rate, exists := p.exchRates[currency]
-	p.mu.Unlock()
-	if !exists {
-		return errors.New("unsupported currency")
+	rate, err := p.satellite.GetExchangeRate(currency)
+	if err != nil {
+		return err
 	}
 	if rate == 0 {
 		return errors.New("unable to get exchange rate")
@@ -157,7 +155,7 @@ func (p *Portal) putPayment(email string, amount float64, currency string, pendi
 	// Insert the payment.
 	amountUSD := amount / rate
 	timestamp := time.Now().Unix()
-	_, err := p.db.Exec(`
+	_, err = p.db.Exec(`
 		INSERT INTO payments (email, amount, currency, amount_usd, made, pending)
 		VALUES (?, ?, ?, ?, ?, ?)`, email, amount, currency, amountUSD, timestamp, pending)
 
@@ -195,9 +193,9 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	if id == "" || currency == "" || amount == 0 {
 		return errors.New("one or more empty parameters provided")
 	}
-	rate, exists := p.exchRates[currency]
-	if !exists {
-		return errors.New("unsupported currency")
+	rate, err := p.satellite.GetExchangeRate(currency)
+	if err != nil {
+		return err
 	}
 	if rate == 0 {
 		return errors.New("unable to get exchange rate")
@@ -208,7 +206,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	var s bool
 	var b, l float64
 	var c string
-	err := p.db.QueryRow(`
+	err = p.db.QueryRow(`
 		SELECT email, subscribed, balance, locked, currency
 		FROM balances WHERE stripe_id = ?
 	`, id).Scan(&email, &s, &b, &l, &c)
@@ -256,7 +254,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	if ub.Currency == currency {
 		ub.Balance += amount
 	} else {
-		currRate, _ := p.exchRates[ub.Currency]
+		currRate, _ := p.satellite.GetExchangeRate(ub.Currency)
 		if currRate == 0 {
 			return errors.New("unable to get exchange rate")
 		}
