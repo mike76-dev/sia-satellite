@@ -23,7 +23,11 @@ func (s *Satellite) GetBalance(email string) (*modules.UserBalance, error) {
 		return nil, err
 	}
 
+	var scBalance float64
 	scRate, _ := s.GetSiacoinRate(c)
+	if scRate > 0 {
+		scBalance = b / scRate
+	}
 
 	ub := &modules.UserBalance{
 		IsUser:     !errors.Is(err, sql.ErrNoRows),
@@ -32,7 +36,7 @@ func (s *Satellite) GetBalance(email string) (*modules.UserBalance, error) {
 		Locked:     l,
 		Currency:   c,
 		StripeID:   id,
-		SCBalance:  b * scRate,
+		SCBalance:  scBalance,
 	}
 
 	return ub, nil
