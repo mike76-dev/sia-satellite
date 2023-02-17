@@ -60,7 +60,7 @@ func DefaultOptions() (Options, error) {
 		return Options{}, errors.New("Could not locate api password")
 	}
 	return Options{
-		Address:   "localhost:10080",
+		Address:   "localhost:9990",
 		Password:  pwd,
 		UserAgent: "Sat-Agent",
 	}, nil
