@@ -86,7 +86,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Retrieve account balance.
-	ub, cErr := api.portal.getBalance(email)
+	ub, cErr := api.portal.satellite.GetBalance(email)
 	if cErr != nil {
 		api.portal.log.Println("ERROR: Could not fetch account balance:", cErr)
 		writeError(w,
@@ -128,7 +128,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 		// Update the database record.
 		ub.IsUser = true
 		ub.StripeID = cust.ID
-		cErr = api.portal.updateBalance(email, ub)
+		cErr = api.portal.satellite.UpdateBalance(email, ub)
 		if cErr != nil {
 			api.portal.log.Println("ERROR: Could not update balance:", cErr)
 			writeError(w,

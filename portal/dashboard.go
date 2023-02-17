@@ -18,18 +18,6 @@ import (
 )
 
 type (
-	// userBalance holds the current balance as well as
-	// the data on the chosen payment scheme.
-	userBalance struct {
-		IsUser     bool    `json:"isuser"`
-		Subscribed bool    `json:"subscribed"`
-		Balance    float64 `json:"balance"`
-		Locked     float64 `json:"locked"`
-		Currency   string  `json:"currency"`
-		SCBalance  float64 `json:"scbalance"`
-		StripeID   string  `json:"stripeid"`
-	}
-
 	// sensibleHostAverages contains the human-readable host network
 	// averages.
 	sensibleHostAverages struct {
@@ -87,8 +75,8 @@ func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request
 	}
 
 	// Retrieve the balance information from the database.
-	var ub *userBalance
-	if ub, err = api.portal.getBalance(email); err != nil {
+	var ub *modules.UserBalance
+	if ub, err = api.portal.satellite.GetBalance(email); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
@@ -405,8 +393,8 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	}
 
 	// Retrieve the account balance.
-	var ub *userBalance
-	if ub, err = api.portal.getBalance(email); err != nil {
+	var ub *modules.UserBalance
+	if ub, err = api.portal.satellite.GetBalance(email); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{

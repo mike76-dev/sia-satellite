@@ -19,6 +19,18 @@ type HostAverages struct {
 	SectorAccessPrice      types.Currency    `json:"sectoraccessprice"`
 }
 
+// userBalance holds the current balance as well as
+// the data on the chosen payment scheme.
+type UserBalance struct {
+	IsUser     bool    `json:"isuser"`
+	Subscribed bool    `json:"subscribed"`
+	Balance    float64 `json:"balance"`
+	Locked     float64 `json:"locked"`
+	Currency   string  `json:"currency"`
+	SCBalance  float64 `json:"scbalance"`
+	StripeID   string  `json:"stripeid"`
+}
+
 // Satellite implements the methods necessary to communicate both with the
 // renters and the hosts.
 type Satellite interface {

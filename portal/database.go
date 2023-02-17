@@ -129,60 +129,6 @@ func (p *Portal) deleteAccount(email string) error {
 	return nerrors.Compose(err0, err1, err2, err3)
 }
 
-// getBalance retrieves the balance information on the account.
-// An empty struct is returned when there is no data.
-func (p *Portal) getBalance(email string) (*userBalance, error) {
-	var s bool
-	var b, l float64
-	var c, id string
-	err := p.db.QueryRow(`
-		SELECT subscribed, balance, locked, currency, stripe_id
-		FROM balances WHERE email = ?
-	`, email).Scan(&s, &b, &l, &c, &id)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-
-	ub := &userBalance{
-		IsUser:     !errors.Is(err, sql.ErrNoRows),
-		Subscribed: s,
-		Balance:    b,
-		Locked:     l,
-		Currency:   c,
-		StripeID:   id,
-	}
-
-	return ub, nil
-}
-
-// updateBalance updates the balance information on the account.
-func (p *Portal) updateBalance(email string, ub *userBalance) error {
-	// Check if there is a record already.
-	var c int
-	err := p.db.QueryRow("SELECT COUNT(*) FROM balances WHERE email = ?", email).Scan(&c)
-	if err != nil {
-		return err
-	}
-
-	// There is a record.
-	if c > 0 {
-		_, err := p.db.Exec(`
-			UPDATE balances
-			SET subscribed = ?, balance = ?, locked = ?, currency = ?, stripe_id = ?
-			WHERE email = ?
-		`, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID, email)
-		return err
-	}
-
-	// No records found.
-	_, err = p.db.Exec(`
-		INSERT INTO balances (email, subscribed, balance, locked, currency, stripe_id)
-		VALUES (?, ?, ?, ?, ?)
-	`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID)
-
-	return err
-}
-
 // flushPendingPayments removes any pending payments for the given
 // user account.
 func (p *Portal) flushPendingPayments(email string) error {
@@ -281,7 +227,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	}
 
 	// Calculate the new balance.
-	ub := &userBalance{
+	ub := &modules.UserBalance{
 		IsUser:     true,
 		Subscribed: s,
 		Balance:    b,
@@ -320,7 +266,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	}
 
 	// Update the balances table.
-	err = p.updateBalance(email, ub)
+	err = p.satellite.UpdateBalance(email, ub)
 
 	return err
 }
