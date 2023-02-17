@@ -314,7 +314,7 @@ func (c *Contractor) managedFindMinAllowedHostScores(rpk types.SiaPublicKey) (ty
 	// be used as a baseline for determining whether our existing contracts are
 	// worthwhile.
 	hostCount := int(renter.Allowance.Hosts)
-	hosts, err := c.hdb.RandomHostsWithLimits(hostCount + randomHostsBufferForScore, renter.Allowance)
+	hosts, err := c.hdb.RandomHostsWithLimits(hostCount + randomHostsBufferForScore, nil, nil, renter.Allowance)
 	if err != nil {
 		return types.Currency{}, types.Currency{}, err
 	}
@@ -1339,8 +1339,8 @@ func (c *Contractor) threadedContractMaintenance() {
 		minInitialContractFunds := renter.Allowance.Funds.Div64(renter.Allowance.Hosts).Div64(MinInitialContractFundingDivFactor)
 		c.mu.RUnlock()
 
-		// Get Hosts
-		hosts, err := c.hdb.RandomHostsWithLimits(neededContracts * 4 + randomHostsBufferForScore, renter.Allowance)
+		// Get Hosts.
+		hosts, err := c.hdb.RandomHostsWithLimits(neededContracts * 4 + randomHostsBufferForScore, blacklist, addressBlacklist, renter.Allowance)
 		if err != nil {
 			c.log.Println("WARN: not forming new contracts:", err)
 			return

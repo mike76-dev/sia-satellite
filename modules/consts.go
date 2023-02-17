@@ -4,6 +4,10 @@ import (
 	"go.sia.tech/siad/types"
 )
 
+// SatelliteOverhead determines how much extra a renter is charged for
+// using the service. This should include any payment processing fees.
+const SatelliteOverhead = 1.1
+
 var (
 	// MaxRPCPrice is how much the Satellite is willing to pay
 	// for a single RPC call.

@@ -118,6 +118,11 @@ type Manager interface {
 
 	// GetAverages retrieves the host network averages.
 	GetAverages() HostAverages
+
+	// PriceEstimation estimates the cost in siacoins of performing various
+	// storage and data operations. The estimation will be done using the provided
+	// allowance. The final allowance used will be returned.
+	PriceEstimation(smodules.Allowance) (float64, smodules.Allowance, error)
 }
 
 // Provider implements the methods necessary to communicate with the
@@ -198,7 +203,7 @@ type HostDB interface {
 
 	// RandomHostsWithLimits works as RandomHostsWithAllowance but uses the
 	// limits set in the allowance instead of calculating the weight function.
-	RandomHostsWithLimits(int, smodules.Allowance) ([]smodules.HostDBEntry, error)
+	RandomHostsWithLimits(int, []types.SiaPublicKey, []types.SiaPublicKey, smodules.Allowance) ([]smodules.HostDBEntry, error)
 
 	// ScoreBreakdown returns a detailed explanation of the various properties
 	// of the host.

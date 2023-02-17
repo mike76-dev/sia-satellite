@@ -66,7 +66,7 @@ func (hdb *HostDB) RandomHostsWithAllowance(n int, blacklist, addressBlacklist [
 
 // RandomHostsWithLimits works as RandomHostsWithAllowance but uses the
 // limits set in the allowance instead of calculating the weight function.
-func (hdb *HostDB) RandomHostsWithLimits(n int, allowance modules.Allowance) ([]modules.HostDBEntry, error) {
+func (hdb *HostDB) RandomHostsWithLimits(n int, blacklist, addressBlacklist []types.SiaPublicKey, allowance modules.Allowance) ([]modules.HostDBEntry, error) {
 	hdb.mu.RLock()
 	initialScanComplete := hdb.initialScanComplete
 	filteredHosts := hdb.filteredHosts
@@ -101,7 +101,7 @@ func (hdb *HostDB) RandomHostsWithLimits(n int, allowance modules.Allowance) ([]
 	}
 
 	// Select hosts from the temporary hosttree.
-	return ht.SelectRandom(n, nil, nil), insertErrs
+	return ht.SelectRandom(n, blacklist, addressBlacklist), insertErrs
 }
 
 // limitsExceeded checks if the host falls out of the limits set

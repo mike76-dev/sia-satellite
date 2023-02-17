@@ -41,10 +41,10 @@ type hostContractor interface {
 	// Close closes the hostContractor.
 	Close() error
 
-	// CancelContract cancels the Renter's contract.
+	// CancelContract cancels the renter's contract.
 	CancelContract(types.FileContractID) error
 
-	// Contracts returns the staticContracts of the renter's hostContractor.
+	// Contracts returns the staticContracts of the manager's hostContractor.
 	Contracts() []modules.RenterContract
 
 	// ContractByPublicKeys returns the contract associated with the renter
@@ -104,12 +104,15 @@ type hostContractor interface {
 // hosts.
 type Manager struct {
 	// Dependencies.
+	cs             smodules.ConsensusSet
 	db             *sql.DB
 	hostContractor hostContractor
 	hostDB         modules.HostDB
+	tpool          smodules.TransactionPool
 
 	// Atomic properties.
-	hostAverages modules.HostAverages
+	hostAverages        modules.HostAverages
+	lastEstimationHosts []smodules.HostDBEntry
 
 	// Utilities.
 	log           *persist.Logger
@@ -141,11 +144,13 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 
 	// Create the Manager object.
 	m := &Manager{
+		cs:             cs,
 		db:             db,
 		hostContractor: hc,
 		hostDB:         hdb,
 		persistDir:     persistDir,
 		staticAlerter:  smodules.NewAlerter("manager"),
+		tpool:          tpool,
 	}
 
 	// Call stop in the event of a partial startup.
@@ -193,6 +198,25 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 
 	// Spawn a thread to calculate the host network averages.
 	go m.threadedCalculateAverages()
+
+	// Subscribe to the consensus set in a separate goroutine.
+	go func() {
+		defer close(errChan)
+		if err := m.threads.Add(); err != nil {
+			errChan <- err
+			return
+		}
+		defer m.threads.Done()
+		err := cs.ConsensusSetSubscribe(m, smodules.ConsensusChangeRecent, m.threads.StopChan())
+		if err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Unsubscribe on shutdown.
+	m.threads.AfterStop(func() {
+		cs.Unsubscribe(m)
+	})
 
 	return m, errChan
 }
@@ -262,7 +286,7 @@ func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance
 // RandomHosts picks up to the specified number of random hosts from the
 // hostdb sorted by weight.
 func (m *Manager) RandomHosts(n uint64, a smodules.Allowance) ([]smodules.HostDBEntry, error) {
-	return m.hostDB.RandomHostsWithLimits(int(n), a)
+	return m.hostDB.RandomHostsWithLimits(int(n), nil, nil, a)
 }
 
 // GetAverages retrieves the host network averages from HostDB.
@@ -270,4 +294,205 @@ func (m *Manager) GetAverages() modules.HostAverages {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.hostAverages
+}
+
+// Contracts returns the hostContractor's contracts.
+func (m *Manager) Contracts() []modules.RenterContract {
+	return m.hostContractor.Contracts()
+}
+
+// ProcessConsensusChange processes the consensus change.
+func (m *Manager) ProcessConsensusChange(cc smodules.ConsensusChange) {
+	m.mu.Lock()
+	m.lastEstimationHosts = []smodules.HostDBEntry{}
+	m.mu.Unlock()
+}
+
+// PriceEstimation estimates the cost in siacoins of forming contracts with
+// the hosts. The estimation will be done using the provided allowance.
+// The final allowance used will be returned.
+func (m *Manager) PriceEstimation(allowance smodules.Allowance) (float64, smodules.Allowance, error) {
+	if err := m.threads.Add(); err != nil {
+		return 0, smodules.Allowance{}, err
+	}
+	defer m.threads.Done()
+
+	// Get hosts for the estimate.
+	var hosts []smodules.HostDBEntry
+	hostmap := make(map[string]struct{})
+
+	// Start by grabbing hosts from the contracts.
+	contracts := m.Contracts()
+	var pks []types.SiaPublicKey
+	for _, c := range contracts {
+		u, ok := m.hostContractor.ContractUtility(c.RenterPublicKey, c.HostPublicKey)
+		if !ok {
+			continue
+		}
+		// Check for active contracts only.
+		if !u.GoodForRenew {
+			continue
+		}
+		pks = append(pks, c.HostPublicKey)
+	}
+
+	// Get hosts from the pubkeys.
+	for _, pk := range pks {
+		host, ok, err := m.hostDB.Host(pk)
+		if !ok || host.Filtered || err != nil {
+			continue
+		}
+		// Confirm if the host wasn't already added.
+		if _, ok := hostmap[host.PublicKey.String()]; ok {
+			continue
+		}
+		hosts = append(hosts, host)
+		hostmap[host.PublicKey.String()] = struct{}{}
+	}
+
+	// Add hosts from the previous estimate cache if needed.
+	if len(hosts) < int(allowance.Hosts) {
+		m.mu.Lock()
+		cachedHosts := m.lastEstimationHosts
+		m.mu.Unlock()
+		for _, host := range cachedHosts {
+			// Confirm if the host wasn't already added.
+			if _, ok := hostmap[host.PublicKey.String()]; ok {
+				continue
+			}
+			hosts = append(hosts, host)
+			hostmap[host.PublicKey.String()] = struct{}{}
+		}
+	}
+
+	// Add random hosts if needed.
+	if len(hosts) < int(allowance.Hosts) {
+		// Re-initialize the list with SiaPublicKeys to hold the public keys
+		// from the current set of hosts. This list will be used as address
+		// filter when requesting random hosts.
+		var pks []types.SiaPublicKey
+		for _, host := range hosts {
+			pks = append(pks, host.PublicKey)
+		}
+		// Grab hosts to perform the estimation.
+		var err error
+		randHosts, err := m.hostDB.RandomHostsWithLimits(int(allowance.Hosts) - len(hosts), pks, pks, allowance)
+		if err != nil {
+			return 0, allowance, errors.AddContext(err, "could not generate estimate, could not get random hosts")
+		}
+		// As the returned random hosts are checked for IP violations and double
+		// entries against the current slice of hosts, the returned hosts can be
+		// safely added to the current slice.
+		hosts = append(hosts, randHosts...)
+	}
+	// Check if there are zero hosts, which means no estimation can be made.
+	if len(hosts) == 0 {
+		return 0, allowance, errors.New("estimate cannot be made, there are no hosts")
+	}
+
+	// Add up the costs for each host.
+	var totalContractCost types.Currency
+	var totalDownloadCost types.Currency
+	var totalStorageCost types.Currency
+	var totalUploadCost types.Currency
+	for _, host := range hosts {
+		totalContractCost = totalContractCost.Add(host.ContractPrice)
+		totalDownloadCost = totalDownloadCost.Add(host.DownloadBandwidthPrice)
+		totalStorageCost = totalStorageCost.Add(host.StoragePrice)
+		totalUploadCost = totalUploadCost.Add(host.UploadBandwidthPrice)
+	}
+
+	// Convert values to match the allowance.
+	totalDownloadCost = totalDownloadCost.Mul64(allowance.ExpectedDownload).Div64(uint64(allowance.Period))
+	totalStorageCost = totalStorageCost.Mul64(allowance.ExpectedStorage)
+	totalUploadCost = totalUploadCost.Mul64(allowance.ExpectedUpload).Div64(uint64(allowance.Period))
+
+	// Factor in redundancy.
+	totalStorageCost = totalStorageCost.MulFloat(allowance.ExpectedRedundancy)
+	totalUploadCost = totalUploadCost.MulFloat(allowance.ExpectedRedundancy)
+
+	// Perform averages.
+	totalContractCost = totalContractCost.Div64(uint64(len(hosts)))
+	totalDownloadCost = totalDownloadCost.Div64(uint64(len(hosts)))
+	totalStorageCost = totalStorageCost.Div64(uint64(len(hosts)))
+	totalUploadCost = totalUploadCost.Div64(uint64(len(hosts)))
+
+	// Take the average of the host set to estimate the overall cost of the
+	// contract forming. This is to protect against the case where less hosts
+	// were gathered for the estimate that the allowance requires.
+	totalContractCost = totalContractCost.Mul64(allowance.Hosts)
+
+	// Add the cost of paying the transaction fees and then double the contract
+	// costs to account for renewing a full set of contracts.
+	_, feePerByte := m.tpool.FeeEstimation()
+	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(uint64(allowance.Hosts))
+	totalContractCost = totalContractCost.Add(txnsFees)
+	totalContractCost = totalContractCost.Mul64(2)
+
+	// Try to figure out what the total contract cost would be for the
+	// Siafund fee.
+	totalCost := totalContractCost.Add(totalDownloadCost)
+	totalCost = totalCost.Add(totalUploadCost)
+	totalCost = totalCost.Add(totalStorageCost)
+	totalCost = totalCost.Mul64(3) // Quite generous.
+
+	// Determine host collateral to be added to Siafund fee.
+	var hostCollateral types.Currency
+	contractCostPerHost := totalContractCost.Div64(allowance.Hosts)
+	fundingPerHost := totalCost.Div64(allowance.Hosts)
+	numHosts := uint64(0)
+	for _, host := range hosts {
+		// Assume that the ContractPrice equals contractCostPerHost and that
+		// the txnFee was zero. It doesn't matter since RenterPayoutsPreTax
+		// simply subtracts both values from the funding.
+		host.ContractPrice = contractCostPerHost
+		expectedStorage := allowance.ExpectedStorage / uint64(len(hosts))
+		_, _, collateral, err := smodules.RenterPayoutsPreTax(host, fundingPerHost, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, allowance.Period, expectedStorage)
+		if err != nil {
+			continue
+		}
+		hostCollateral = hostCollateral.Add(collateral)
+		numHosts++
+	}
+
+	// Divide by zero check. The only way to get 0 numHosts is if
+	// RenterPayoutsPreTax errors for every host. This would happen if the
+	// funding of the allowance is not enough as that would cause the
+	// fundingPerHost to be less than the contract price
+	if numHosts == 0 {
+		return 0, allowance, errors.New("funding insufficient for number of hosts")
+	}
+	// Calculate average collateral and determine collateral for allowance.
+	hostCollateral = hostCollateral.Div64(numHosts)
+	hostCollateral = hostCollateral.Mul64(allowance.Hosts)
+
+	// Add in siafund fee. which should be around 10%. The 10% siafund fee
+	// accounts for paying 3.9% siafund on transactions and host collateral. We
+	// estimate the renter to spend all of it's allowance so the siafund fee
+	// will be calculated on the sum of the allowance and the hosts collateral
+	totalPayout := totalCost.Add(hostCollateral)
+	siafundFee := types.Tax(m.cs.Height(), totalPayout)
+	totalContractCost = totalContractCost.Add(siafundFee)
+
+	// Increase estimates by a factor of safety to account for host churn and
+	// any potential missed additions
+	totalContractCost = totalContractCost.MulFloat(1.2)
+	totalDownloadCost = totalDownloadCost.MulFloat(1.2)
+	totalStorageCost = totalStorageCost.MulFloat(1.2)
+	totalUploadCost = totalUploadCost.MulFloat(1.2)
+
+	est := totalContractCost.Add(totalDownloadCost)
+	est = est.Add(totalStorageCost)
+	est = est.Add(totalUploadCost)
+	est.MulFloat(modules.SatelliteOverhead)
+
+	cost, _ := est.Float64()
+	h, _ := types.SiacoinPrecision.Float64()
+	allowance.Funds = totalCost
+
+	m.mu.Lock()
+	m.lastEstimationHosts = hosts
+	m.mu.Unlock()
+
+	return cost / h, allowance, nil
 }
