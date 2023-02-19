@@ -67,6 +67,9 @@ type hostContractor interface {
 	// of the renter began.
 	CurrentPeriod(types.SiaPublicKey) types.BlockHeight
 
+	// GetRenter returns the renter with the given public key.
+	GetRenter(types.SiaPublicKey) (modules.Renter, error)
+
 	// PeriodSpending returns the amount spent on contracts during the current
 	// billing period of the renter.
 	PeriodSpending(types.SiaPublicKey) (smodules.ContractorSpending, error)
@@ -495,4 +498,14 @@ func (m *Manager) PriceEstimation(allowance smodules.Allowance) (float64, smodul
 	m.mu.Unlock()
 
 	return cost / h, allowance, nil
+}
+
+// SetAllowance calls hostContractor.SetAllowance.
+func (m *Manager) SetAllowance(rpk types.SiaPublicKey, a smodules.Allowance) error {
+	return m.hostContractor.SetAllowance(rpk, a)
+}
+
+// GetRenter calls hostContractor.GetRenter.
+func (m *Manager) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
+	return m.hostContractor.GetRenter(rpk)
 }

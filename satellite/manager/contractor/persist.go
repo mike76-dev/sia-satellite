@@ -39,6 +39,28 @@ type contractorPersist struct {
 	WatchdogData watchdogPersist `json:"watchdogdata"`
 }
 
+// renterData holds the MySQL entry of modules.Renter.
+type renterData struct {
+	Email         string
+	PublicKey     string
+	CurrentPeriod uint64
+	Funds         string
+	Hosts         uint64
+	RenewWindow   uint64
+
+	ExpectedStorage    uint64
+	ExpectedUpload    uint64
+	ExpectedDownload   uint64
+	ExpectedRedundancy float64
+
+	MaxRPCPrice               string
+	MaxContractPrice          string
+	MaxDownloadBandwidthPrice string
+	MaxSectorAccessPrice      string
+	MaxStoragePrice           string
+	MaxUploadBandwidthPrice   string
+}
+
 // persistData returns the data in the Contractor that will be saved to disk.
 func (c *Contractor) persistData() contractorPersist {
 	synced := false
@@ -113,6 +135,52 @@ func (c *Contractor) load() error {
 		return err
 	}
 	c.staticWatchdog.blockHeight = data.BlockHeight
+
+	// Load the renters from the database.
+	rows, err := c.db.Query(`
+		SELECT email, public_key, current_period, funds, hosts, renew_window,
+			expected_storage, expected_upload, expected_download, expected_redundancy,
+			max_rpc_price, max_contract_price, max_download_bandwidth_price,
+			max_sector_access_price, max_storage_price, max_upload_bandwidth_price
+		FROM renters`)
+	if err != nil {
+		c.log.Println("ERROR: could not load the renters:", err)
+		return err
+	}
+	defer rows.Close()
+
+	var entry renterData
+	for rows.Next() {
+		if err := rows.Scan(&entry.Email, &entry.PublicKey, &entry.CurrentPeriod, &entry.Funds, &entry.Hosts, &entry.RenewWindow, &entry.ExpectedStorage, &entry.ExpectedUpload, &entry.ExpectedDownload, &entry.ExpectedRedundancy, &entry.MaxRPCPrice, &entry.MaxContractPrice, &entry.MaxDownloadBandwidthPrice, &entry.MaxSectorAccessPrice, &entry.MaxStoragePrice, &entry.MaxUploadBandwidthPrice); err != nil {
+			c.log.Println("ERROR: could not load the renter:", err)
+			continue
+		}
+
+		c.renters[entry.PublicKey] = modules.Renter{
+			Allowance: smodules.Allowance{
+				Funds:       modules.ReadCurrency(entry.Funds),
+				Hosts:       entry.Hosts,
+				Period:      types.BlockHeight(entry.CurrentPeriod),
+				RenewWindow: types.BlockHeight(entry.RenewWindow),
+
+				ExpectedStorage:    entry.ExpectedStorage,
+				ExpectedUpload:     entry.ExpectedUpload,
+				ExpectedDownload:   entry.ExpectedDownload,
+				ExpectedRedundancy: entry.ExpectedRedundancy,
+
+				MaxRPCPrice:               modules.ReadCurrency(entry.MaxRPCPrice),
+				MaxContractPrice:          modules.ReadCurrency(entry.MaxContractPrice),
+				MaxDownloadBandwidthPrice: modules.ReadCurrency(entry.MaxDownloadBandwidthPrice),
+				MaxSectorAccessPrice:      modules.ReadCurrency(entry.MaxSectorAccessPrice),
+				MaxStoragePrice:           modules.ReadCurrency(entry.MaxStoragePrice),
+				MaxUploadBandwidthPrice:   modules.ReadCurrency(entry.MaxUploadBandwidthPrice),
+			},
+			CurrentPeriod: types.BlockHeight(entry.CurrentPeriod),
+			PublicKey:     modules.ReadPublicKey(entry.PublicKey),
+			Email:         entry.Email,
+		}
+	}
+
 	return nil
 }
 
@@ -146,4 +214,19 @@ func (c *Contractor) threadedSaveLoop() {
 			}
 		}
 	}
+}
+
+// UpdateRenter updates the renter record in the database.
+// The record must have already been created.
+func (c *Contractor) UpdateRenter(renter modules.Renter) error {
+	_, err := c.db.Exec(`
+		UPDATE renters
+		SET current_period = ?, funds = ?, hosts = ?, renew_window = ?,
+			expected_storage = ?, expected_upload = ?, expected_download = ?,
+			expected_redundancy = ?, max_rpc_price = ?, max_contract_price = ?,
+			max_download_bandwidth_price = ?, max_sector_access_price = ?,
+			max_storage_price = ?, max_upload_bandwidth_price = ?
+		WHERE email = ?
+	`, uint64(renter.CurrentPeriod), renter.Allowance.Funds.String(), renter.Allowance.Hosts, uint64(renter.Allowance.RenewWindow), renter.Allowance.ExpectedStorage, renter.Allowance.ExpectedUpload, renter.Allowance.ExpectedDownload, renter.Allowance.ExpectedRedundancy, renter.Allowance.MaxRPCPrice.String(), renter.Allowance.MaxContractPrice.String(), renter.Allowance.MaxDownloadBandwidthPrice.String(), renter.Allowance.MaxSectorAccessPrice.String(), renter.Allowance.MaxStoragePrice.String(), renter.Allowance.MaxUploadBandwidthPrice.String(), renter.Email)
+	return err
 }

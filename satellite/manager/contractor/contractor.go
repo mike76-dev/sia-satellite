@@ -584,3 +584,14 @@ func (c *Contractor) RenewContract(conn net.Conn, fcid types.FileContractID, par
 	c.mu.Unlock()
 	return newContract, txnSet, nil
 }
+
+// GetRenter returns the renter with the specified public key.
+func (c *Contractor) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
+	c.mu.RLock()
+	renter, exists := c.renters[rpk.String()]
+	c.mu.RUnlock()
+	if !exists {
+		return modules.Renter{}, ErrRenterNotFound
+	}
+	return renter, nil
+}
