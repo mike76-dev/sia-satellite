@@ -46,6 +46,7 @@ type renterData struct {
 	CurrentPeriod uint64
 	Funds         string
 	Hosts         uint64
+	Period        uint64
 	RenewWindow   uint64
 
 	ExpectedStorage    uint64
@@ -138,7 +139,7 @@ func (c *Contractor) load() error {
 
 	// Load the renters from the database.
 	rows, err := c.db.Query(`
-		SELECT email, public_key, current_period, funds, hosts, renew_window,
+		SELECT email, public_key, current_period, funds, hosts, period, renew_window,
 			expected_storage, expected_upload, expected_download, expected_redundancy,
 			max_rpc_price, max_contract_price, max_download_bandwidth_price,
 			max_sector_access_price, max_storage_price, max_upload_bandwidth_price
@@ -151,7 +152,7 @@ func (c *Contractor) load() error {
 
 	var entry renterData
 	for rows.Next() {
-		if err := rows.Scan(&entry.Email, &entry.PublicKey, &entry.CurrentPeriod, &entry.Funds, &entry.Hosts, &entry.RenewWindow, &entry.ExpectedStorage, &entry.ExpectedUpload, &entry.ExpectedDownload, &entry.ExpectedRedundancy, &entry.MaxRPCPrice, &entry.MaxContractPrice, &entry.MaxDownloadBandwidthPrice, &entry.MaxSectorAccessPrice, &entry.MaxStoragePrice, &entry.MaxUploadBandwidthPrice); err != nil {
+		if err := rows.Scan(&entry.Email, &entry.PublicKey, &entry.CurrentPeriod, &entry.Funds, &entry.Hosts, &entry.Period, &entry.RenewWindow, &entry.ExpectedStorage, &entry.ExpectedUpload, &entry.ExpectedDownload, &entry.ExpectedRedundancy, &entry.MaxRPCPrice, &entry.MaxContractPrice, &entry.MaxDownloadBandwidthPrice, &entry.MaxSectorAccessPrice, &entry.MaxStoragePrice, &entry.MaxUploadBandwidthPrice); err != nil {
 			c.log.Println("ERROR: could not load the renter:", err)
 			continue
 		}
@@ -160,7 +161,7 @@ func (c *Contractor) load() error {
 			Allowance: smodules.Allowance{
 				Funds:       modules.ReadCurrency(entry.Funds),
 				Hosts:       entry.Hosts,
-				Period:      types.BlockHeight(entry.CurrentPeriod),
+				Period:      types.BlockHeight(entry.Period),
 				RenewWindow: types.BlockHeight(entry.RenewWindow),
 
 				ExpectedStorage:    entry.ExpectedStorage,
@@ -221,12 +222,12 @@ func (c *Contractor) threadedSaveLoop() {
 func (c *Contractor) UpdateRenter(renter modules.Renter) error {
 	_, err := c.db.Exec(`
 		UPDATE renters
-		SET current_period = ?, funds = ?, hosts = ?, renew_window = ?,
+		SET current_period = ?, funds = ?, hosts = ?, period = ?, renew_window = ?,
 			expected_storage = ?, expected_upload = ?, expected_download = ?,
 			expected_redundancy = ?, max_rpc_price = ?, max_contract_price = ?,
 			max_download_bandwidth_price = ?, max_sector_access_price = ?,
 			max_storage_price = ?, max_upload_bandwidth_price = ?
 		WHERE email = ?
-	`, uint64(renter.CurrentPeriod), renter.Allowance.Funds.String(), renter.Allowance.Hosts, uint64(renter.Allowance.RenewWindow), renter.Allowance.ExpectedStorage, renter.Allowance.ExpectedUpload, renter.Allowance.ExpectedDownload, renter.Allowance.ExpectedRedundancy, renter.Allowance.MaxRPCPrice.String(), renter.Allowance.MaxContractPrice.String(), renter.Allowance.MaxDownloadBandwidthPrice.String(), renter.Allowance.MaxSectorAccessPrice.String(), renter.Allowance.MaxStoragePrice.String(), renter.Allowance.MaxUploadBandwidthPrice.String(), renter.Email)
+	`, uint64(renter.CurrentPeriod), renter.Allowance.Funds.String(), renter.Allowance.Hosts, uint64(renter.Allowance.Period), uint64(renter.Allowance.RenewWindow), renter.Allowance.ExpectedStorage, renter.Allowance.ExpectedUpload, renter.Allowance.ExpectedDownload, renter.Allowance.ExpectedRedundancy, renter.Allowance.MaxRPCPrice.String(), renter.Allowance.MaxContractPrice.String(), renter.Allowance.MaxDownloadBandwidthPrice.String(), renter.Allowance.MaxSectorAccessPrice.String(), renter.Allowance.MaxStoragePrice.String(), renter.Allowance.MaxUploadBandwidthPrice.String(), renter.Email)
 	return err
 }
