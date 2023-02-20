@@ -352,10 +352,9 @@ func (hdb *HostDB) priceAdjustments(entry modules.HostDBEntry, allowance modules
 func (hdb *HostDB) storageRemainingAdjustments(entry modules.HostDBEntry, allowance modules.Allowance) float64 {
 	// Determine how much data the renter is storing on this host.
 	var storedData float64
-	// TODO: Implement
-	/*if ci, exists := hdb.knownContracts[entry.PublicKey.String()]; exists {
+	if ci, exists := hdb.knownContracts[entry.PublicKey.String()]; exists {
 		storedData = float64(ci.StoredData)
-	}*/ 
+	}
 
 	// Divide by zero mitigation.
 	if allowance.Hosts == 0 {

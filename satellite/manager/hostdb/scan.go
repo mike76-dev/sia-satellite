@@ -273,11 +273,11 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 	// If the host has been offline for too long, delete the host from the
 	// hostdb. Only delete if there have been enough scans over a long enough
 	// period to be confident that the host really is offline for good.
-	// TODO Check if we have a contract with this host.
+	_, haveContractWithHost := hdb.knownContracts[newEntry.PublicKey.String()]
 	downPastMaxDowntime := time.Since(newEntry.ScanHistory[0].Timestamp) > maxHostDowntime && !recentUptime
-	if downPastMaxDowntime && len(newEntry.ScanHistory) >= minScans {
+	if !haveContractWithHost && downPastMaxDowntime && len(newEntry.ScanHistory) >= minScans {
 		if newEntry.HistoricUptime > 0 {
-			hdb.staticLog.Printf("Removing %v with historic uptime from hostdb. Recent downtime timestamp is %v.\n", newEntry.PublicKey.String(), newEntry.ScanHistory[0].Timestamp)
+			hdb.staticLog.Printf("Removing %v with historic uptime from hostdb. Recent downtime timestamp is %v. Hostdb knows about %v contracts.", newEntry.PublicKey.String(), newEntry.ScanHistory[0].Timestamp, len(hdb.knownContracts))
 		}
 		// Remove the host from the hostdb.
 		err := hdb.remove(newEntry.PublicKey)
@@ -575,6 +575,11 @@ func (hdb *HostDB) threadedScan() {
 	hdb.mu.Lock()
 	// Set the flag to indicate that the initial scan is complete.
 	hdb.initialScanComplete = true
+	// Copy the known contracts to avoid having to lock the hdb later.
+	knownContracts := make(map[string]contractInfo)
+	for k, c := range hdb.knownContracts {
+		knownContracts[k] = c
+	}
 	hdb.mu.Unlock()
 
 	for {
@@ -590,18 +595,22 @@ func (hdb *HostDB) threadedScan() {
 
 		// Grab a set of hosts to scan, grab hosts that are active, inactive, offline
 		// and known to get high diversity.
-		var onlineHosts, offlineHosts []modules.HostDBEntry
+		var onlineHosts, offlineHosts, knownHosts []modules.HostDBEntry
 		allHosts := hdb.staticHostTree.All()
 		for i := len(allHosts) - 1; i >= 0; i-- {
 			if len(onlineHosts) >= hostCheckupQuantity &&
-				len(offlineHosts) >= hostCheckupQuantity {
+				len(offlineHosts) >= hostCheckupQuantity &&
+				len(knownHosts) == len(knownContracts) {
 				break
 			}
 
 			// Figure out if the host is online or offline.
 			host := allHosts[i]
 			online := len(host.ScanHistory) > 0 && host.ScanHistory[len(host.ScanHistory) - 1].Success
-			if online && len(onlineHosts) < hostCheckupQuantity {
+			_, known := knownContracts[host.PublicKey.String()]
+			if known {
+				knownHosts = append(knownHosts, host)
+			} else if online && len(onlineHosts) < hostCheckupQuantity {
 				onlineHosts = append(onlineHosts, host)
 			} else if !online && len(offlineHosts) < hostCheckupQuantity {
 				offlineHosts = append(offlineHosts, host)
@@ -609,8 +618,11 @@ func (hdb *HostDB) threadedScan() {
 		}
 
 		// Queue the scans for each host.
-		hdb.staticLog.Println("Performing scan on", len(onlineHosts), "online hosts and", len(offlineHosts), "offline hosts.")
+		hdb.staticLog.Println("Performing scan on", len(onlineHosts), "online hosts and", len(offlineHosts), "offline hosts and", len(knownHosts), "known hosts.")
 		hdb.mu.Lock()
+		for _, host := range knownHosts {
+			hdb.queueScan(host)
+		}
 		for _, host := range onlineHosts {
 			hdb.queueScan(host)
 		}

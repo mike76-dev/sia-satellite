@@ -136,6 +136,12 @@ func (bd *filteredDomains) managedIsFiltered(addr smodules.NetAddress) bool {
 	return false
 }
 
+// contractInfo contains information about a contract relevant to the HostDB.
+type contractInfo struct {
+	HostPublicKey types.SiaPublicKey `json:"hostpublickey"`
+	StoredData    uint64             `json:"storeddata"`
+}
+
 // The HostDB is a database of potential hosts. It assigns a weight to each
 // host based on their hosting parameters, and then can select hosts at random
 // for uploading files.
@@ -153,6 +159,11 @@ type HostDB struct {
 	staticAlerter *smodules.GenericAlerter
 	tg            threadgroup.ThreadGroup
 	resolver      smodules.Resolver
+
+	// knownContracts are contracts which the HostDB was informed about by the
+	// Contractor. It contains infos about active contracts we have formed with
+	// hosts. The mapkey is a serialized SiaPublicKey.
+	knownContracts map[string]contractInfo
 
 	// The hostdb gets initialized with an allowance that can be modified. The
 	// allowance is used to build a weightFunc that the hosttree depends on to
@@ -282,6 +293,42 @@ func (hdb *HostDB) managedSynced() bool {
 	return hdb.synced
 }
 
+// updateContracts rebuilds the knownContracts of the HostDB using the provided
+// contracts.
+func (hdb *HostDB) updateContracts(contracts []modules.RenterContract) {
+	// Build a new set of known contracts.
+	knownContracts := make(map[string]contractInfo)
+	for _, contract := range contracts {
+		if n := len(contract.Transaction.FileContractRevisions); n != 1 {
+			hdb.staticLog.Println("CRITICAL: contract's transaction should contain 1 revision but had ", n)
+			continue
+		}
+		kc, exists := knownContracts[contract.HostPublicKey.String()]
+		if exists {
+			kc.StoredData += contract.Transaction.FileContractRevisions[0].NewFileSize
+			knownContracts[contract.HostPublicKey.String()] = kc
+		} else {
+			knownContracts[contract.HostPublicKey.String()] = contractInfo{
+				HostPublicKey: contract.HostPublicKey,
+				StoredData:    contract.Transaction.FileContractRevisions[0].NewFileSize,
+			}
+		}
+	}
+
+	// Update the set of known contracts in the hostdb, log if the number of
+	// contracts has decreased.
+	if len(hdb.knownContracts) > len(knownContracts) {
+		hdb.staticLog.Printf("Hostdb is decreasing from %v known contracts to %v known contracts", len(hdb.knownContracts), len(knownContracts))
+	}
+	hdb.knownContracts = knownContracts
+
+	// Save the hostdb to persist the update.
+	err := hdb.saveSync()
+	if err != nil {
+		hdb.staticLog.Println("Error saving set of known contracts:", err)
+	}
+}
+
 // hostdbBlockingStartup handles the blocking portion of New.
 func hostdbBlockingStartup(g smodules.Gateway, cs smodules.ConsensusSet, tpool smodules.TransactionPool, persistDir string, db *sql.DB, siamux *siamux.SiaMux) (*HostDB, error) {
 	// Check for nil inputs.
@@ -313,6 +360,7 @@ func hostdbBlockingStartup(g smodules.Gateway, cs smodules.ConsensusSet, tpool s
 
 		filteredDomains: newFilteredDomains(nil),
 		filteredHosts:   make(map[string]types.SiaPublicKey),
+		knownContracts:  make(map[string]contractInfo),
 		scanMap:         make(map[string]struct{}),
 		staticAlerter:   smodules.NewAlerter("hostdb"),
 	}
@@ -734,4 +782,17 @@ func (hdb *HostDB) SetIPViolationCheck(enabled bool) error {
 // from the database.
 func (hdb *HostDB) LoadingComplete() bool {
 	return hdb.loadingComplete
+}
+
+// UpdateContracts rebuilds the knownContracts of the HostBD using the provided
+// contracts.
+func (hdb *HostDB) UpdateContracts(contracts []modules.RenterContract) error {
+	if err := hdb.tg.Add(); err != nil {
+		return errors.AddContext(err, "error adding hostdb threadgroup:")
+	}
+	defer hdb.tg.Done()
+	hdb.mu.Lock()
+	defer hdb.mu.Unlock()
+	hdb.updateContracts(contracts)
+	return nil
 }
