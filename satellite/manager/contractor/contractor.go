@@ -595,3 +595,13 @@ func (c *Contractor) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
 	}
 	return renter, nil
 }
+
+// CreateNewRenter inserts a new renter into the map.
+func (c *Contractor) CreateNewRenter(email string, pk types.SiaPublicKey) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.renters[pk.String()] = modules.Renter{
+		Email:     email,
+		PublicKey: pk,
+	}
+}

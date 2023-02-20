@@ -250,5 +250,10 @@ func (s *Satellite) UserExists(rpk types.SiaPublicKey) (exists bool, err error) 
 	return
 }
 
+// CreateNewRenter calls Manager.CreateNewRenter.
+func (s *Satellite) CreateNewRenter(email string, pk types.SiaPublicKey) {
+	s.m.CreateNewRenter(email, pk)
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

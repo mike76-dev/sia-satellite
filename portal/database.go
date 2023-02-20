@@ -319,5 +319,10 @@ func (p *Portal) createNewRenter(email string, pk types.SiaPublicKey) error {
 			max_storage_price, max_upload_bandwidth_price)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, email, pk.String(), 0, "", 0, 0, 0, 0, 0, 0, "", "", "", "", "", "")
-	return err
+	if err != nil {
+		return err
+	}
+	p.satellite.CreateNewRenter(email, pk)
+
+	return nil
 }

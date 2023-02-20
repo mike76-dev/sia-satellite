@@ -63,6 +63,9 @@ type hostContractor interface {
 	// watchdog.
 	ContractStatus(fcID types.FileContractID) (smodules.ContractWatchStatus, bool)
 
+	// CreateNewRenter inserts a new renter into the map.
+	CreateNewRenter(string, types.SiaPublicKey)
+
 	// CurrentPeriod returns the height at which the current allowance period
 	// of the renter began.
 	CurrentPeriod(types.SiaPublicKey) types.BlockHeight
@@ -508,4 +511,9 @@ func (m *Manager) SetAllowance(rpk types.SiaPublicKey, a smodules.Allowance) err
 // GetRenter calls hostContractor.GetRenter.
 func (m *Manager) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
 	return m.hostContractor.GetRenter(rpk)
+}
+
+// CreateNewRenter calls hostContractor.CreateNewRenter.
+func (m *Manager) CreateNewRenter(email string, pk types.SiaPublicKey) {
+	m.hostContractor.CreateNewRenter(email, pk)
 }
