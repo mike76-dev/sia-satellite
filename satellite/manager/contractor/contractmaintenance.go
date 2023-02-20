@@ -363,7 +363,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 	if host.StoragePrice.Cmp(maxStoragePrice) > 0 {
 		return types.ZeroCurrency, modules.RenterContract{}, errTooExpensive
 	}
-	// Determine if host settings align with allowance period
+	// Determine if host settings align with allowance period.
 	c.mu.Lock()
 	if reflect.DeepEqual(renter.Allowance, smodules.Allowance{}) {
 		c.mu.Unlock()
@@ -377,7 +377,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 		err := errors.New("unable to form contract with host due to insufficient MaxDuration of host")
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
-	// cap host.MaxCollateral
+	// Cap host.MaxCollateral.
 	if host.MaxCollateral.Cmp(maxCollateral) > 0 {
 		host.MaxCollateral = maxCollateral
 	}
@@ -388,7 +388,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 		return types.ZeroCurrency, modules.RenterContract{}, errors.AddContext(err, "unable to form a contract due to price gouging detection")
 	}
 
-	// get an address to use for negotiation
+	// Get an address to use for negotiation.
 	uc, err := c.wallet.NextAddress()
 	if err != nil {
 		return types.ZeroCurrency, modules.RenterContract{}, err
@@ -409,7 +409,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 	renterSeed := modules.DeriveRenterSeed(seed, renter.Email)
 	defer fastrand.Read(renterSeed[:])
 
-	// create contract params
+	// Create contract params.
 	c.mu.RLock()
 	params := smodules.ContractParams{
 		Allowance:     renter.Allowance,
@@ -422,10 +422,10 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 	}
 	c.mu.RUnlock()
 
-	// wipe the renter seed once we are done using it.
+	// Wipe the renter seed once we are done using it.
 	defer fastrand.Read(params.RenterSeed[:])
 
-	// create transaction builder and trigger contract formation.
+	// Create transaction builder and trigger contract formation.
 	txnBuilder, err := c.wallet.StartTransaction()
 	if err != nil {
 		return types.ZeroCurrency, modules.RenterContract{}, err
@@ -469,11 +469,11 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 	contractValue := contract.RenterFunds
 	c.log.Printf("Formed contract %v with %v for %v\n", contract.ID, host.NetAddress, contractValue.HumanString())
 
-	// Update the hostdb to include the new contract. TODO
-	/*err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
+	// Update the hostdb to include the new contract.
+	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
 		c.log.Println("Unable to update hostdb contracts:", err)
-	}*/
+	}
 	return contractFunding, contract, nil
 }
 
@@ -485,7 +485,7 @@ func (c *Contractor) managedPruneRedundantAddressRange() {
 	var contracts []modules.RenterContract
 	for _, contract := range allContracts {
 		if contract.Utility.Locked && !contract.Utility.GoodForRenew && !contract.Utility.GoodForUpload {
-			// contract is canceled
+			// Contract is canceled.
 			continue
 		}
 		contracts = append(contracts, contract)
@@ -792,11 +792,11 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 	c.pubKeysToContractID[newContract.RenterPublicKey.String() + newContract.HostPublicKey.String()] = newContract.ID
 	c.mu.Unlock()
 
-	// Update the hostdb to include the new contract. TODO
-	/*err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
+	// Update the hostdb to include the new contract.
+	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
 		c.log.Println("Unable to update hostdb contracts:", err)
-	}*/
+	}
 
 	return newContract, nil
 }
@@ -1035,15 +1035,14 @@ func (c *Contractor) threadedContractMaintenance() {
 		c.log.Println("Unable to mark contract utilities:", err)
 		return
 	}
-	// TODO
-	/*err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
+	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
 		c.log.Println("Unable to update hostdb contracts:", err)
 		return
-	}*/
+	}
 	c.managedLimitGFUHosts()
 
-	// Check if all renters have anough contracts according to their allowances.
+	// Check if all renters have enough contracts according to their allowances.
 	c.mu.RLock()
 	renters := c.renters
 	blockHeight := c.blockHeight
@@ -1461,4 +1460,181 @@ func (c *Contractor) threadedContractMaintenance() {
 	}
 	c.numFailedRenews = newFirstFailedRenew
 	c.mu.Unlock()
+}
+
+// FormContracts forms up to the specified number of contracts, puts them
+// in the contract set, and returns them.
+func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
+	// No contract formation until the contractor is synced.
+	if !c.managedSynced() {
+		return nil, errors.New("contractor isn't synced yet")
+	}
+
+	// Check if we know this renter.
+	c.mu.RLock()
+	renter, exists := c.renters[rpk.String()]
+	if !exists {
+		c.mu.RUnlock()
+		return nil, ErrRenterNotFound
+	}
+	blockHeight := c.blockHeight
+	if renter.CurrentPeriod == types.BlockHeight(0) {
+		renter.CurrentPeriod = blockHeight
+		c.renters[rpk.String()] = renter
+	}
+	c.mu.RUnlock()
+	err := c.UpdateRenter(renter)
+	if err != nil {
+		c.log.Println("Unable to update renter:", err)
+	}
+
+	// Register or unregister and alerts related to contract formation.
+	var registerLowFundsAlert bool
+	defer func() {
+		if registerLowFundsAlert {
+			c.staticAlerter.RegisterAlert(smodules.AlertIDRenterAllowanceLowFunds, AlertMSGAllowanceLowFunds, AlertCauseInsufficientAllowanceFunds, smodules.SeverityWarning)
+		} else {
+			c.staticAlerter.UnregisterAlert(smodules.AlertIDRenterAllowanceLowFunds)
+		}
+	}()
+
+	// Check if the renter has enough contracts according to their allowance.
+	var fundsRemaining types.Currency
+	numHosts := renter.Allowance.Hosts
+	if numHosts == 0 {
+		return nil, errors.New("zero number of hosts specified")
+	}
+	endHeight := blockHeight + renter.Allowance.Period + renter.Allowance.RenewWindow
+
+	// Depend on the PeriodSpending function to get a breakdown of spending in
+	// the contractor. Then use that to determine how many funds remain
+	// available in the allowance.
+	spending, err := c.PeriodSpending(renter.PublicKey)
+	if err != nil {
+		// This should only error if the contractor is shutting down.
+		return nil, err
+	}
+
+	// Check for an underflow. This can happen if the user reduced their
+	// allowance at some point to less than what we've already spent.
+	fundsRemaining = renter.Allowance.Funds
+	if spending.TotalAllocated.Cmp(fundsRemaining) < 0 {
+		fundsRemaining = fundsRemaining.Sub(spending.TotalAllocated)
+	}
+
+	// Count the number of contracts which are good for uploading, and then make
+	// more as needed to fill the gap.
+	uploadContracts := 0
+	for _, contract := range c.staticContracts.ByRenter(renter.PublicKey) {
+		if cu, ok := c.managedContractUtility(contract.ID); ok && cu.GoodForUpload {
+			uploadContracts++
+		}
+	}
+	neededContracts := int(renter.Allowance.Hosts) - uploadContracts
+	if neededContracts > 0 {
+		c.log.Println("need more contracts:", neededContracts)
+	}
+
+	// Assemble two exclusion lists. The first one includes all hosts that we
+	// already have contracts with and the second one includes all hosts we
+	// have active contracts with. Then select a new batch of hosts to attempt
+	// contract formation with.
+	allContracts := c.staticContracts.ByRenter(renter.PublicKey)
+	var blacklist []types.SiaPublicKey
+	var addressBlacklist []types.SiaPublicKey
+	for _, contract := range allContracts {
+		blacklist = append(blacklist, contract.HostPublicKey)
+		if !contract.Utility.Locked || contract.Utility.GoodForRenew || contract.Utility.GoodForUpload {
+			addressBlacklist = append(addressBlacklist, contract.HostPublicKey)
+		}
+	}
+
+	// Determine the max and min initial contract funding based on the
+	// allowance settings.
+	maxInitialContractFunds := renter.Allowance.Funds.Div64(renter.Allowance.Hosts).Mul64(MaxInitialContractFundingMulFactor).Div64(MaxInitialContractFundingDivFactor)
+	minInitialContractFunds := renter.Allowance.Funds.Div64(renter.Allowance.Hosts).Div64(MinInitialContractFundingDivFactor)
+
+	// Get Hosts.
+	hosts, err := c.hdb.RandomHostsWithLimits(neededContracts * 4 + randomHostsBufferForScore, blacklist, addressBlacklist, renter.Allowance)
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate the anticipated transaction fee.
+	_, maxFee := c.tpool.FeeEstimation()
+	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize)
+
+	// Form contracts with the hosts one at a time, until we have enough
+	// contracts.
+	contractSet := make([]modules.RenterContract, 0, neededContracts)
+	for _, host := range hosts {
+		// Return here if an interrupt or kill signal has been sent.
+		select {
+		case <-c.tg.StopChan():
+			return nil, errors.New("the manager was stopped")
+			default:
+		}
+
+		// If no more contracts are needed, break.
+		if neededContracts <= 0 {
+			break
+		}
+
+		// Calculate the contract funding with the host.
+		contractFunds := host.ContractPrice.Add(txnFee).Mul64(ContractFeeFundingMulFactor)
+
+		// Check that the contract funding is reasonable compared to the max and
+		// min initial funding. This is to protect against increases to
+		// allowances being used up to fast and not being able to spread the
+		// funds across new contracts properly, as well as protecting against
+		// contracts renewing too quickly.
+		if contractFunds.Cmp(maxInitialContractFunds) > 0 {
+			contractFunds = maxInitialContractFunds
+		}
+		if contractFunds.Cmp(minInitialContractFunds) < 0 {
+			contractFunds = minInitialContractFunds
+		}
+
+		// Confirm that the wallet is unlocked.
+		unlocked, err := c.wallet.Unlocked()
+		if !unlocked || err != nil {
+			return nil, errors.New("the wallet is locked")
+		}
+
+		// Determine if we have enough money to form a new contract.
+		if fundsRemaining.Cmp(contractFunds) < 0 {
+			registerLowFundsAlert = true
+			c.log.Println("WARN: need to form new contracts, but unable to because of a low allowance")
+			break
+		}
+
+		// Attempt forming a contract with this host.
+		start := time.Now()
+		fundsSpent, newContract, err := c.managedNewContract(renter.PublicKey, host, contractFunds, endHeight)
+		if err != nil {
+			c.log.Printf("Attempted to form a contract with %v, time spent %v, but negotiation failed: %v\n", host.NetAddress, time.Since(start).Round(time.Millisecond), err)
+			continue
+		}
+		fundsRemaining = fundsRemaining.Sub(fundsSpent)
+		neededContracts--
+
+		// Add this contract to the contractor and save.
+		contractSet = append(contractSet, newContract)
+		err = c.managedAcquireAndUpdateContractUtility(newContract.ID, smodules.ContractUtility{
+			GoodForUpload: true,
+			GoodForRenew:  true,
+		})
+		if err != nil {
+			c.log.Println("Failed to update the contract utilities", err)
+			continue
+		}
+		c.mu.Lock()
+		err = c.save()
+		c.mu.Unlock()
+		if err != nil {
+			c.log.Println("Unable to save the contractor:", err)
+		}
+	}
+
+	return contractSet, nil
 }

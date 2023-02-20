@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/mike76-dev/sia-satellite/modules"
+
 	"gitlab.com/NebulousLabs/errors"
 
 	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
 	"go.sia.tech/siad/types"
@@ -21,10 +23,10 @@ import (
 // renters.
 type Provider struct {
 	// Dependencies.
-	g         modules.Gateway
+	g         smodules.Gateway
 	Satellite satellite
 
-	autoAddress modules.NetAddress // Determined using automatic tooling in network.go
+	autoAddress smodules.NetAddress // Determined using automatic tooling in network.go
 
 	// Utilities.
 	listener      net.Listener
@@ -34,7 +36,7 @@ type Provider struct {
 	persistDir    string
 	port          string
 	threads       siasync.ThreadGroup
-	staticAlerter *modules.GenericAlerter
+	staticAlerter *smodules.GenericAlerter
 }
 
 // satellite is the minimal interface for Satellite.
@@ -42,10 +44,11 @@ type satellite interface {
 	PublicKey() types.SiaPublicKey
 	SecretKey() crypto.SecretKey
 	UserExists(rpk types.SiaPublicKey) (bool, error)
+	FormContracts(types.SiaPublicKey, smodules.Allowance) ([]modules.RenterContract, error)
 }
 
 // New returns an initialized Provider.
-func New(g modules.Gateway, satelliteAddr string, persistDir string) (*Provider, <-chan error) {
+func New(g smodules.Gateway, satelliteAddr string, persistDir string) (*Provider, <-chan error) {
 	errChan := make(chan error, 1)
 	var err error
 
@@ -53,12 +56,12 @@ func New(g modules.Gateway, satelliteAddr string, persistDir string) (*Provider,
 	p := &Provider{
 		g:             g,
 		persistDir:    persistDir,
-		staticAlerter: modules.NewAlerter("provider"),
+		staticAlerter: smodules.NewAlerter("provider"),
 	}
 
 	// Call stop in the event of a partial startup.
 	defer func() {
-		if err = modules.PeekErr(errChan); err != nil {
+		if err = smodules.PeekErr(errChan); err != nil {
 			errChan <- errors.Compose(p.threads.Stop(), err)
 		}
 	}()

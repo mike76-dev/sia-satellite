@@ -6,8 +6,12 @@ import (
 	"time"
 
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/fastrand"
+
+	"golang.org/x/crypto/chacha20poly1305"
 
 	core "go.sia.tech/core/types"
+	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
@@ -20,9 +24,9 @@ const defaultConnectionDeadline = 5 * time.Minute
 // causing it to spin up enough goroutines to crash.
 const rpcRatelimit = time.Millisecond * 50
 
-// publicKeySpecifier is used when a renter requests the public key of the
-// satellite.
-var publicKeySpecifier = types.NewSpecifier("PublicKey")
+// formContractsSpecifier is used when a renter requests to form a number of
+// contracts om their behalf.
+var formContractsSpecifier = types.NewSpecifier("FormContracts")
 
 // threadedUpdateHostname periodically runs 'managedLearnHostname', which
 // checks if the Satellite's hostname has changed.
@@ -188,21 +192,86 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		return
 	}
 
-	d := core.NewDecoder(io.LimitedReader{R: conn, N: 8 + 16})
+	e := core.NewEncoder(conn)
+	d := core.NewDecoder(io.LimitedReader{R: conn, N: 1024})
 
-	// Read the specifier.
-	b := d.ReadBytes()
-	if d.Err() != nil {
-		p.log.Printf("WARN: incoming conn %v was malformed: %v\n", conn.RemoteAddr(), d.Err())
+	// Read renter's half of key exchange.
+	var req loopKeyExchangeRequest
+	req.DecodeFrom(d)
+	if err = d.Err(); err != nil {
+		p.log.Println("ERROR: could not read handshake request:", err)
 		return
 	}
-	id := types.NewSpecifier(string(b))
+	if req.Specifier != loopEnterSpecifier {
+		p.log.Println("ERROR: wrong handshake request specifier")
+		return
+	}
+
+	// Check for a supported cipher.
+	var supportsChaCha bool
+	for _, c := range req.Ciphers {
+		if c == cipherChaCha20Poly1305 {
+			supportsChaCha = true
+		}
+	}
+	if !supportsChaCha {
+		(&loopKeyExchangeResponse{Cipher: cipherNoOverlap}).EncodeTo(e)
+		p.log.Println("ERROR: no supported ciphers")
+		return
+	}
+
+	// Generate a session key, sign it, and derive the shared secret.
+	xsk, xpk := crypto.GenerateX25519KeyPair()
+	pubkeySig := crypto.SignHash(crypto.HashAll(req.PublicKey, xpk), p.Satellite.SecretKey())
+	cipherKey := crypto.DeriveSharedSecret(xsk, req.PublicKey)
+
+	// Send our half of the key exchange.
+	resp := loopKeyExchangeResponse{
+		Cipher:    cipherChaCha20Poly1305,
+		PublicKey: xpk,
+	}
+	copy(resp.Signature[:], pubkeySig[:])
+	resp.EncodeTo(e)
+	if err = e.Flush(); err != nil {
+		p.log.Println("ERROR: could not send handshake response:", err)
+		return
+	}
+
+	// Use cipherKey to initialize an AEAD cipher.
+	aead, err := chacha20poly1305.New(cipherKey[:])
+	if err != nil {
+		p.log.Println("ERROR: could not create cipher:", err)
+		return
+	}
+
+	// Create the session object.
+	s := &rpcSession{
+		conn: conn,
+		aead: aead,
+	}
+	fastrand.Read(s.challenge[:])
+
+	// Send encrypted challenge.
+	challengeReq := modules.LoopChallengeRequest{
+		Challenge: s.challenge,
+	}
+	if err := modules.WriteRPCMessage(conn, aead, challengeReq); err != nil {
+		p.log.Println("ERROR: could not send challenge:", err)
+		return
+	}
+
+	// Read the request specifier.
+	id, err := modules.ReadRPCID(conn, aead)
+	if err != nil {
+		p.log.Println("ERROR: could not read request specifier:", err)
+		return
+	}
 
 	switch id {
-	case publicKeySpecifier:
-		err = p.managedRequestKey(conn)
+	case formContractsSpecifier:
+		err = p.managedFormContracts(s)
 		if err != nil {
-			err = errors.Extend(errors.New("incoming RPCRequestKey failed: "), err)
+			err = errors.Extend(errors.New("incoming RPCFormContracts failed: "), err)
 		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO

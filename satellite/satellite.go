@@ -255,5 +255,39 @@ func (s *Satellite) CreateNewRenter(email string, pk types.SiaPublicKey) {
 	s.m.CreateNewRenter(email, pk)
 }
 
+// FormContracts forms the specified number of contracts with the hosts
+// and returns them.
+func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a smodules.Allowance) ([]modules.RenterContract, error) {
+	// Get the estimated costs and update the allowance with them.
+	estimation, a, err := s.m.PriceEstimation(a)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the user balance is sufficient to cover the costs.
+	renter, err := s.m.GetRenter(rpk)
+	if err != nil {
+		return nil, err
+	}
+	ub, err := s.GetBalance(renter.Email)
+	if err != nil {
+		return nil, err
+	}
+	if ub.SCBalance < estimation {
+		return nil, errors.New("insufficient account balance")
+	}
+
+	// Set the allowance.
+	err = s.m.SetAllowance(rpk, a)
+	if err != nil {
+		return nil, err
+	}
+
+	// Form the contracts.
+	contractSet, err := s.m.FormContracts(rpk)
+
+	return contractSet, err
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

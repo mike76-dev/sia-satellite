@@ -233,4 +233,8 @@ type HostDB interface {
 	// LoadingComplete indicates if the HostDB has finished loading the hosts
 	// from the database.
 	LoadingComplete() bool
+
+	// UpdateContracts rebuilds the knownContracts of the HostBD using the
+	// provided contracts.
+	UpdateContracts([]RenterContract) error
 }

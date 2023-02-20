@@ -1,10 +1,12 @@
 package modules
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"math/big"
 	"strings"
 
+	core "go.sia.tech/core/types"
 	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/types"
 )
@@ -32,4 +34,10 @@ func ReadPublicKey(s string) types.SiaPublicKey {
 	var pk crypto.PublicKey
 	copy(pk[:], b)
 	return types.Ed25519PublicKey(pk)
+}
+
+// ConvertCurrency converts a siad currency to a core currency.
+func ConvertCurrency(c types.Currency) core.Currency {
+	b := c.Big().Bytes()
+	return core.NewCurrency(binary.BigEndian.Uint64(b[8:]), binary.BigEndian.Uint64(b[:8]))
 }
