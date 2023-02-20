@@ -35,10 +35,6 @@ var (
 	// ErrAllowanceZeroExpectedRedundancy is returned if the allowance's expected
 	// redundancy is being set to zero when not cancelling the allowance.
 	ErrAllowanceZeroExpectedRedundancy = errors.New("expected redundancy must be non-zero")
-	// ErrAllowanceZeroMaxPeriodChurn is returned if the allowance's max period
-	// churn is being set to zero when not cancelling the allowance.
-	ErrAllowanceZeroMaxPeriodChurn = errors.New("max period churn must be non-zero")
-
 	// ErrRenterNotFound is returned when no renter matches the provided public
 	// key.
 	ErrRenterNotFound = errors.New("no renter found with this public key")
@@ -46,14 +42,7 @@ var (
 
 // SetAllowance sets the amount of money the Contractor is allowed to spend on
 // contracts over a given time period, divided among the number of hosts
-// specified. Note that Contractor can start forming contracts as soon as
-// SetAllowance is called; that is, it may block.
-//
-// In most cases, SetAllowance will renew existing contracts instead of
-// forming new ones. This preserves the data on those hosts. When this occurs,
-// the renewed contracts will atomically replace their previous versions. If
-// SetAllowance is interrupted, renewed contracts may be lost, though the
-// allocated funds will eventually be returned.
+// specified.
 //
 // If a is the empty allowance, SetAllowance will archive the current contract
 // set. The contracts will not be renewed.
@@ -82,8 +71,6 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 		return ErrAllowanceZeroExpectedDownload
 	} else if a.ExpectedRedundancy == 0 {
 		return ErrAllowanceZeroExpectedRedundancy
-	} else if a.MaxPeriodChurn == 0 {
-		return ErrAllowanceZeroMaxPeriodChurn
 	} else if !c.cs.Synced() {
 		return errAllowanceNotSynced
 	}
@@ -130,10 +117,10 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 	}
 	renter.Allowance = a
 	c.renters[rpk.String()] = renter
-	err := c.save()
 	c.mu.Unlock()
+	err := c.UpdateRenter(renter)
 	if err != nil {
-		c.log.Println("Unable to save contractor after setting allowance:", err)
+		c.log.Println("Unable to update renter after setting allowance:", err)
 	}
 
 	// Cycle through all contracts and unlock them again since they might have
@@ -158,16 +145,11 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 	// Inform the watchdog about the allowance change.
 	c.staticWatchdog.callAllowanceUpdated(rpk, a)
 
-	// Interrupt any existing maintenance and launch a new round of
-	// maintenance.
-	if err := c.tg.Add(); err != nil {
+	// We changed the allowance successfully. Update the hostdb.
+	err = c.hdb.SetAllowance(a)
+	if err != nil {
 		return err
 	}
-	go func() {
-		defer c.tg.Done()
-		c.callInterruptContractMaintenance()
-		c.threadedContractMaintenance()
-	}()
 
 	return nil
 }
@@ -214,14 +196,11 @@ func (c *Contractor) managedCancelAllowance(rpk types.SiaPublicKey) error {
 	renter.Allowance = modules.Allowance{}
 	renter.CurrentPeriod = 0
 	c.renters[rpk.String()] = renter
-	err := c.save()
 	c.mu.Unlock()
+	err := c.UpdateRenter(renter)
 	if err != nil {
 		return err
 	}
-
-	// Issue an interrupt to any in-progress contract maintenance thread.
-	c.callInterruptContractMaintenance()
 
 	// Cycle through all contracts and mark them as !goodForRenew and !goodForUpload
 	ids = c.staticContracts.IDs(rpk)
