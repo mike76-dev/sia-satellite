@@ -62,7 +62,7 @@ func (s *Satellite) UpdateBalance(email string, ub *modules.UserBalance) error {
 	// No records found.
 	_, err = s.db.Exec(`
 		INSERT INTO balances (email, subscribed, balance, locked, currency, stripe_id)
-		VALUES (?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?)
 	`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID)
 
 	return err
