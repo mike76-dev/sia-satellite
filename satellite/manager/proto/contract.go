@@ -191,13 +191,13 @@ func (c *FileContract) Sign(hash crypto.Hash) crypto.Signature {
 
 // UpdateUtility updates the utility field of a contract.
 func (c *FileContract) UpdateUtility(utility smodules.ContractUtility) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	// Construct new header.
+	c.mu.Lock()
 	newHeader := c.header
 	newHeader.Utility = utility
 
 	c.header = newHeader
+	c.mu.Unlock()
 
 	// Update the database.
 	return c.saveContract()
