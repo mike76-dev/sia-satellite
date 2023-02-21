@@ -460,7 +460,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 		txnBuilder.Drop()
 		// We need to return a funding value because money was spent on this
 		// host, even though the full process could not be completed.
-		c.log.Println("WARN: Attempted to form a new contract with a host that this renter already has a contrat with.")
+		c.log.Println("WARN: Attempted to form a new contract with a host that this renter already has a contract with.")
 		return contractFunding, modules.RenterContract{}, fmt.Errorf("%v already has a contract with host %v", contract.RenterPublicKey.String(), contract.HostPublicKey.String())
 	}
 	c.pubKeysToContractID[contract.RenterPublicKey.String() + contract.HostPublicKey.String()] = contract.ID
@@ -1473,19 +1473,10 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 	// Check if we know this renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk.String()]
-	if !exists {
-		c.mu.RUnlock()
-		return nil, ErrRenterNotFound
-	}
 	blockHeight := c.blockHeight
-	if renter.CurrentPeriod == types.BlockHeight(0) {
-		renter.CurrentPeriod = blockHeight
-		c.renters[rpk.String()] = renter
-	}
 	c.mu.RUnlock()
-	err := c.UpdateRenter(renter)
-	if err != nil {
-		c.log.Println("Unable to update renter:", err)
+	if !exists {
+		return nil, ErrRenterNotFound
 	}
 
 	// Register or unregister and alerts related to contract formation.

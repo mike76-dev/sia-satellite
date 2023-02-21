@@ -89,6 +89,10 @@ func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
 		if renter.Allowance.Active() && c.blockHeight >= renter.CurrentPeriod + renter.Allowance.Period {
 			renter.CurrentPeriod += renter.Allowance.Period
 			c.renters[key] = renter
+			err := c.UpdateRenter(renter)
+			if err != nil {
+				c.log.Println("Unable to update renter:", err)
+			}
 		}
 	}
 
