@@ -67,3 +67,63 @@ func (s *Satellite) UpdateBalance(email string, ub *modules.UserBalance) error {
 
 	return err
 }
+
+// LockSiacoins moves a part of the balance to "locked".
+func (s *Satellite) LockSiacoins(email string, amount float64) error {
+	// Sanity check.
+	if amount <= 0 {
+		return errors.New("wrong amount")
+	}
+
+	// Retrieve the user balance.
+	ub, err := s.GetBalance(email)
+	if err != nil {
+		return err
+	}
+	if amount > ub.SCBalance {
+		s.log.Println("WARN: trying to lock more than the available balance")
+		amount = ub.SCBalance
+	}
+
+	// Calculate the new balance.
+	scRate, _ := s.GetSiacoinRate(ub.Currency)
+	if scRate == 0 {
+		return errors.New("unable to fetch SC rate")
+	}
+	locked := amount * scRate
+	ub.Locked += locked
+	ub.Balance -= locked
+
+	// Save the new balance.
+	return s.UpdateBalance(email, ub)
+}
+
+// UnlockSiacoins moves the amount from "locked" to "available".
+func (s *Satellite) UnlockSiacoins(email string, amount float64) error {
+	// Sanity check.
+	if amount <= 0 {
+		return errors.New("wrong amount")
+	}
+
+	// Retrieve the user balance.
+	ub, err := s.GetBalance(email)
+	if err != nil {
+		return err
+	}
+
+	// Calculate the new balance.
+	scRate, _ := s.GetSiacoinRate(ub.Currency)
+	if scRate == 0 {
+		return errors.New("unable to fetch SC rate")
+	}
+	locked := amount * scRate
+	if locked > ub.Locked {
+		s.log.Println("WARN: trying to unlock more than the locked balance")
+		locked = ub.Locked
+	}
+	ub.Locked -= locked
+	ub.Balance += locked
+
+	// Save the new balance.
+	return s.UpdateBalance(email, ub)
+}

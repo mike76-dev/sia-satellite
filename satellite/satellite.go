@@ -284,7 +284,7 @@ func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a smodules.Allowance) 
 	}
 
 	// Form the contracts.
-	contractSet, err := s.m.FormContracts(rpk)
+	contractSet, err := s.m.FormContracts(s, rpk)
 
 	return contractSet, err
 }

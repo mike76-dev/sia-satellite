@@ -86,6 +86,12 @@ type Satellite interface {
 
 	// GetWalletSeed returns the wallet seed.
 	GetWalletSeed() (smodules.Seed, error)
+
+	// LockSiacoins moves a part of the balance to "locked".
+	LockSiacoins(string, float64) error
+
+	// UnlockSiacoins moves the amount from "locked" to "available".
+	UnlockSiacoins(string, float64) error
 }
 
 // Manager implements the methods necessary to communicate with the

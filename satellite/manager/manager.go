@@ -75,7 +75,7 @@ type hostContractor interface {
 
 	// FormContracts forms up to the specified number of contracts, puts them
 	// in the contract set, and returns them.
-	FormContracts(types.SiaPublicKey) ([]modules.RenterContract, error)
+	FormContracts(modules.Satellite, types.SiaPublicKey) ([]modules.RenterContract, error)
 
 	// PeriodSpending returns the amount spent on contracts during the current
 	// billing period of the renter.
@@ -523,6 +523,6 @@ func (m *Manager) CreateNewRenter(email string, pk types.SiaPublicKey) {
 }
 
 // FormContracts calls hostContractor.FormContracts.
-func (m *Manager) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
-	return m.hostContractor.FormContracts(rpk)
+func (m *Manager) FormContracts(s modules.Satellite, rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
+	return m.hostContractor.FormContracts(s, rpk)
 }
