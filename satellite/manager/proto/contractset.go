@@ -2,7 +2,6 @@ package proto
 
 import (
 	"database/sql"
-	"fmt"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -54,7 +53,7 @@ func (cs *ContractSet) Delete(c *FileContract) {
 	_, ok := cs.contracts[c.header.ID()]
 	if !ok {
 		cs.mu.Unlock()
-		fmt.Println("CRITICAL: Delete called on already deleted contract")
+		cs.log.Println("CRITICAL: Delete called on already deleted contract")
 		return
 	}
 	id := c.header.ID()
@@ -117,7 +116,7 @@ func (cs *ContractSet) Return(c *FileContract) {
 	_, ok := cs.contracts[c.header.ID()]
 	if !ok {
 		cs.mu.Unlock()
-		fmt.Println("CRITICAL: No contract with that key")
+		cs.log.Println("CRITICAL: No contract with that key")
 	}
 	cs.mu.Unlock()
 	c.revisionMu.Unlock()
