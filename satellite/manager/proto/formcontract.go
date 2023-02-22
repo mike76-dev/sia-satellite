@@ -66,7 +66,7 @@ func (cs *ContractSet) FormContract(params smodules.ContractParams, txnBuilder t
 	si, hk := smodules.PrefixedSignedIdentifier(params.RenterSeed, fcTxn, host.PublicKey)
 	_ = txnBuilder.AddArbitraryData(append(si[:], hk[:]...))
 	// Create our key.
-	renterSK, renterPK := smodules.GenerateContractKeyPair(params.RenterSeed, fcTxn)
+	renterSK, renterPK := crypto.GenerateKeyPairDeterministic([crypto.EntropySize]byte(params.RenterSeed))
 	// Create unlock conditions.
 	uc := types.UnlockConditions{
 		PublicKeys: []types.SiaPublicKey{
