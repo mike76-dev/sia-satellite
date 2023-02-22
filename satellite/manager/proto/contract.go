@@ -320,14 +320,17 @@ func (cs *ContractSet) managedInsertContract(h contractHeader) (modules.RenterCo
 		header: h,
 		db:     cs.db,
 	}
-	// Compatv144 fix missing void output.
+
+	// Check if this contract already exists in the set.
 	cs.mu.Lock()
 	if _, exists := cs.contracts[fc.header.ID()]; exists {
 		cs.log.Println("CRITICAL: Trying to overwrite existing contract")
 	}
+
 	cs.contracts[fc.header.ID()] = fc
 	cs.pubKeys[h.RenterPublicKey().String() + h.HostPublicKey().String()] = fc.header.ID()
 	cs.mu.Unlock()
+	
 	return fc.Metadata(), fc.saveContract()
 }
 
