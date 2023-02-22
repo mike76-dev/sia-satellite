@@ -1515,16 +1515,23 @@ func (c *Contractor) FormContracts(s modules.Satellite, rpk types.SiaPublicKey) 
 
 	// Count the number of contracts which are good for uploading, and then make
 	// more as needed to fill the gap.
+	contractSet := make([]modules.RenterContract, 0, renter.Allowance.Hosts)
 	uploadContracts := 0
 	for _, contract := range c.staticContracts.ByRenter(renter.PublicKey) {
 		if cu, ok := c.managedContractUtility(contract.ID); ok && cu.GoodForUpload {
+			contractSet = append(contractSet, contract)
 			uploadContracts++
+			if uploadContracts > int(renter.Allowance.Hosts) {
+				break
+			}
 		}
 	}
 	neededContracts := int(renter.Allowance.Hosts) - uploadContracts
-	if neededContracts > 0 {
-		c.log.Println("need more contracts:", neededContracts)
+	if neededContracts <= 0 {
+		return contractSet, nil
 	}
+
+	c.log.Println("need more contracts:", neededContracts)
 
 	// Assemble two exclusion lists. The first one includes all hosts that we
 	// already have contracts with and the second one includes all hosts we
@@ -1557,7 +1564,6 @@ func (c *Contractor) FormContracts(s modules.Satellite, rpk types.SiaPublicKey) 
 
 	// Form contracts with the hosts one at a time, until we have enough
 	// contracts.
-	contractSet := make([]modules.RenterContract, 0, neededContracts)
 	for _, host := range hosts {
 		// Return here if an interrupt or kill signal has been sent.
 		select {
