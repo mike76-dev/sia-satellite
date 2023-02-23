@@ -98,7 +98,6 @@ CREATE TABLE ipnets (
 DROP TABLE IF EXISTS renters;
 DROP TABLE IF EXISTS contracts;
 DROP TABLE IF EXISTS transactions;
-DROP TABLE IF EXISTS contractkeys;
 
 CREATE TABLE renters (
 	id                           INT NOT NULL AUTO_INCREMENT,
@@ -181,15 +180,6 @@ CREATE TABLE transactions (
 	pk_index_1                   BIGINT UNSIGNED NOT NULL,
 	timelock_1                   BIGINT UNSIGNED NOT NULL,
 	signature_1                  VARCHAR(128) NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
-);
-
-CREATE TABLE contractkeys (
-	id          INT NOT NULL AUTO_INCREMENT,
-	renter_pk   VARCHAR(64) NOT NULL,
-	host_pk     VARCHAR(64) NOT NULL,
-	contract_id VARCHAR(64) NOT NULL UNIQUE,
 	PRIMARY KEY (id),
 	FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
 );

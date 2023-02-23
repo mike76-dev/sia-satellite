@@ -310,7 +310,6 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 // deleteContract deletes the contract from the database.
 func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 	id := hex.EncodeToString(fcid[:])
-	_, err0 := db.Exec("DELETE FROM contractkeys WHERE contract_id = ?", id)
 	_, err1 := db.Exec("DELETE FROM transactions WHERE contract_id = ?", id)
 	_, err2 := db.Exec("DELETE FROM contracts WHERE contract_id = ?", id)
 	return errors.Compose(err0, err1, err2)
@@ -318,7 +317,7 @@ func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 
 // loadContracts loads the map[pubkey]contractID from the database.
 func loadContracts(db *sql.DB) (map[string]types.FileContractID, error) {
-	rows, err := db.Query("SELECT renter_pk, host_pk, contract_id FROM contractkeys")
+	rows, err := db.Query("SELECT uc_renter_pk, uc_host_pk, contract_id FROM transactions")
 	if err != nil {
 		return nil, err
 	}
