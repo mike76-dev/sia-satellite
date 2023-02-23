@@ -312,7 +312,7 @@ func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 	id := hex.EncodeToString(fcid[:])
 	_, err1 := db.Exec("DELETE FROM transactions WHERE contract_id = ?", id)
 	_, err2 := db.Exec("DELETE FROM contracts WHERE contract_id = ?", id)
-	return errors.Compose(err0, err1, err2)
+	return errors.Compose(err1, err2)
 }
 
 // loadContracts loads the map[pubkey]contractID from the database.
