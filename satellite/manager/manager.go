@@ -86,7 +86,7 @@ type hostContractor interface {
 	// response objects to the host. It returns an error in case of failure.
 	ProvidePayment(stream io.ReadWriter, pt *smodules.RPCPriceTable, details contractor.PaymentDetails) error
 
-	// OldContracts returns the oldContracts of the renter's hostContractor.
+	// OldContracts returns the oldContracts of the manager's hostContractor.
 	OldContracts() []modules.RenterContract
 
 	// IsOffline reports whether the specified host is considered offline.
@@ -101,6 +101,9 @@ type hostContractor interface {
 	// RenewContract takes an established connection to a host and renews the
 	// given contract with that host.
 	RenewContract(conn net.Conn, fcid types.FileContractID, params smodules.ContractParams, txnBuilder smodules.TransactionBuilder, tpool smodules.TransactionPool, hdb modules.HostDB, pt *smodules.RPCPriceTable) (modules.RenterContract, []types.Transaction, error)
+
+	// Renters return the list of renters.
+	Renters() []modules.Renter
 
 	// Synced returns a channel that is closed when the contractor is fully
 	// synced with the peer-to-peer network.
@@ -309,6 +312,16 @@ func (m *Manager) GetAverages() modules.HostAverages {
 // Contracts returns the hostContractor's contracts.
 func (m *Manager) Contracts() []modules.RenterContract {
 	return m.hostContractor.Contracts()
+}
+
+// RefreshedContract calls hostContractor.RefreshedContract
+func (m *Manager) RefreshedContract(fcid types.FileContractID) bool {
+	return m.hostContractor.RefreshedContract(fcid)
+}
+
+// OldContracts calls hostContractor.OldContracts expired.
+func (m *Manager) OldContracts() []modules.RenterContract {
+	return m.hostContractor.OldContracts()
 }
 
 // ProcessConsensusChange processes the consensus change.
@@ -525,4 +538,9 @@ func (m *Manager) CreateNewRenter(email string, pk types.SiaPublicKey) {
 // FormContracts calls hostContractor.FormContracts.
 func (m *Manager) FormContracts(s modules.Satellite, rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
 	return m.hostContractor.FormContracts(s, rpk)
+}
+
+// Renters calls hostContractor.Renters.
+func (m *Manager) Renters() []modules.Renter {
+	return m.hostContractor.Renters()
 }

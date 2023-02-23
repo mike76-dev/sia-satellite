@@ -255,6 +255,16 @@ func (s *Satellite) CreateNewRenter(email string, pk types.SiaPublicKey) {
 	s.m.CreateNewRenter(email, pk)
 }
 
+// GetRenter calls Manager.GetRenter.
+func (s *Satellite) GetRenter(pk types.SiaPublicKey) (modules.Renter, error) {
+	return s.m.GetRenter(pk)
+}
+
+// Renters calls Manager.Renters.
+func (s *Satellite) Renters() []modules.Renter {
+	return s.m.Renters()
+}
+
 // FormContracts forms the specified number of contracts with the hosts
 // and returns them.
 func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a smodules.Allowance) ([]modules.RenterContract, error) {
@@ -265,7 +275,7 @@ func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a smodules.Allowance) 
 	}
 
 	// Check if the user balance is sufficient to cover the costs.
-	renter, err := s.m.GetRenter(rpk)
+	renter, err := s.GetRenter(rpk)
 	if err != nil {
 		return nil, err
 	}
@@ -287,6 +297,21 @@ func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a smodules.Allowance) 
 	contractSet, err := s.m.FormContracts(s, rpk)
 
 	return contractSet, err
+}
+
+// Contracts calls Manager.Contracts.
+func (s *Satellite) Contracts() []modules.RenterContract {
+	return s.m.Contracts()
+}
+
+// RefreshedContract calls Manager.RefreshedContract
+func (s *Satellite) RefreshedContract(fcid types.FileContractID) bool {
+	return s.m.RefreshedContract(fcid)
+}
+
+// OldContracts calls Manager.OldContracts expired.
+func (s *Satellite) OldContracts() []modules.RenterContract {
+	return s.m.OldContracts()
 }
 
 // enforce that Satellite satisfies the modules.Satellite interface

@@ -77,12 +77,21 @@ type RenterContract struct {
 	SiafundFee  types.Currency
 }
 
+// Size returns the contract size.
+func (rc *RenterContract) Size() uint64 {
+	var size uint64
+	if len(rc.Transaction.FileContractRevisions) != 0 {
+		size = rc.Transaction.FileContractRevisions[0].NewFileSize
+	}
+	return size
+}
+
 // Renter holds the data related to the specific renter.
 type Renter struct {
-	Allowance     smodules.Allowance
-	CurrentPeriod types.BlockHeight
-	PublicKey     types.SiaPublicKey
-	Email         string // Link to the user account.
+	Allowance     smodules.Allowance `json:"allowance"`
+	CurrentPeriod types.BlockHeight  `json:"currentperiod"`
+	PublicKey     types.SiaPublicKey `json:"publickey"`
+	Email         string             `json:"email"` // Link to the user account.
 }
 
 // contractEndHeight returns the height at which the renter's contracts

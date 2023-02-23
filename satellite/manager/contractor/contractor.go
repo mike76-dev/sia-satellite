@@ -605,3 +605,14 @@ func (c *Contractor) CreateNewRenter(email string, pk types.SiaPublicKey) {
 		PublicKey: pk,
 	}
 }
+
+// Renters returns the list of renters.
+func (c *Contractor) Renters() []modules.Renter {
+	c.mu.Lock()
+	renters := make([]modules.Renter, 0, len(c.renters))
+	for _, renter := range c.renters {
+		renters = append(renters, renter)
+	}
+	c.mu.Unlock()
+	return renters
+}

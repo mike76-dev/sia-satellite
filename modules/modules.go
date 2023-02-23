@@ -92,6 +92,24 @@ type Satellite interface {
 
 	// UnlockSiacoins moves the amount from "locked" to "available".
 	UnlockSiacoins(string, float64) error
+
+	// GetRenter returns the renter by the public key.
+	GetRenter(types.SiaPublicKey) (Renter, error)
+
+	// Renters retrieves the list of renters.
+	Renters() []Renter
+
+	// GetBalance retrieves the balance information on the account.
+	GetBalance(string) (*UserBalance, error)
+
+	// Contracts returns storage contracts.
+	Contracts() []RenterContract
+
+	// RefreshedContract returns a bool indicating if the contract was refreshed.
+	RefreshedContract(types.FileContractID) bool
+
+	// OldContracts returns the contracts that have expired.
+	OldContracts() []RenterContract
 }
 
 // Manager implements the methods necessary to communicate with the
@@ -99,43 +117,8 @@ type Satellite interface {
 type Manager interface {
 	smodules.Alerter
 
-	// ActiveHosts provides the list of hosts that the manager is selecting,
-	// sorted by preference.
-	ActiveHosts() ([]smodules.HostDBEntry, error)
-
-	// AllHosts returns the full list of hosts known to the manager.
-	AllHosts() ([]smodules.HostDBEntry, error)
-
 	// Close safely shuts down the manager.
 	Close() error
-
-	// EstimateHostScore will return the score for a host with the provided
-	// settings, assuming perfect age and uptime adjustments.
-	EstimateHostScore(entry smodules.HostDBEntry, allowance smodules.Allowance) (smodules.HostScoreBreakdown, error)
-
-	// Filter returns the hostdb's filterMode and filteredHosts.
-	Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error)
-
-	// SetFilterMode sets the hostdb's filter mode.
-	SetFilterMode(smodules.FilterMode, []types.SiaPublicKey, []string) error
-
-	// Host provides the DB entry and score breakdown for the requested host.
-	Host(pk types.SiaPublicKey) (smodules.HostDBEntry, bool, error)
-
-	// InitialScanComplete returns a boolean indicating if the initial scan of
-	// the hostdb is completed.
-	InitialScanComplete() (bool, types.BlockHeight, error)
-
-	// ScoreBreakdown will return the score for a host db entry using the
-	// hostdb's weighting algorithm.
-	ScoreBreakdown(entry smodules.HostDBEntry) (smodules.HostScoreBreakdown, error)
-
-	// RandomHosts picks up to the specified number of random hosts from the
-	// hostdb sorted by weight.
-	RandomHosts(uint64, smodules.Allowance) ([]smodules.HostDBEntry, error)
-
-	// GetAverages retrieves the host network averages.
-	GetAverages() HostAverages
 
 	// PriceEstimation estimates the cost in siacoins of performing various
 	// storage and data operations. The estimation will be done using the provided
