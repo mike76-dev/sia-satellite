@@ -117,7 +117,22 @@ func statuscmd() {
 `)
 	}
 
-	// Gateway Rate Limits
+	// Satellite Info.
+	renters, err := httpClient.SatelliteRentersGet()
+	if err != nil {
+		die(err)
+	}
+	contracts, err := httpClient.SatelliteContractsGet("")
+	if err != nil {
+		die(err)
+	}
+
+	fmt.Printf(`Satellite:
+  Renters:          %v
+  Active Contracts: %v
+`, len(renters.Renters), len(contracts.ActiveContracts))
+
+	// Gateway Rate Limits.
 	gg, err := httpClient.GatewayGet()
 	if err != nil {
 		die("Could not get gateway:", err)
@@ -198,6 +213,9 @@ func initCmds() *cobra.Command {
 	root.AddCommand(hostdbCmd)
 	hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
 	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
+
+	root.AddCommand(satelliteCmd)
+	satelliteCmd.AddCommand(satelliteRentersCmd, satelliteRenterCmd, satelliteBalanceCmd, satelliteContractsCmd)
 
 	// Daemon Commands.
 	root.AddCommand(alertsCmd, stopCmd, versionCmd)
