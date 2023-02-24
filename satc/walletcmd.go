@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/spf13/cobra"
 
@@ -20,7 +21,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 
 	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/modules/wallet"
 	"go.sia.tech/siad/types"
 
@@ -411,9 +412,9 @@ Unlock the wallet to view balance
 	unconfirmedBalance := status.ConfirmedSiacoinBalance.Add(status.UnconfirmedIncomingSiacoins).Sub(status.UnconfirmedOutgoingSiacoins)
 	var delta string
 	if unconfirmedBalance.Cmp(status.ConfirmedSiacoinBalance) >= 0 {
-		delta = "+" + currencyUnits(unconfirmedBalance.Sub(status.ConfirmedSiacoinBalance))
+		delta = "+" + modules.CurrencyUnits(unconfirmedBalance.Sub(status.ConfirmedSiacoinBalance))
 	} else {
-		delta = "-" + currencyUnits(status.ConfirmedSiacoinBalance.Sub(unconfirmedBalance))
+		delta = "-" + modules.CurrencyUnits(status.ConfirmedSiacoinBalance.Sub(unconfirmedBalance))
 	}
 
 	fmt.Printf(`Wallet status:
@@ -423,7 +424,7 @@ Confirmed Balance:   %v
 Unconfirmed Delta:   %v
 Exact:               %v H
 Estimated Fee:       %v / KB
-`, encStatus, status.Height, currencyUnits(status.ConfirmedSiacoinBalance), delta,
+`, encStatus, status.Height, modules.CurrencyUnits(status.ConfirmedSiacoinBalance), delta,
 		status.ConfirmedSiacoinBalance, fees.Maximum.Mul64(1e3).HumanString())
 }
 
@@ -451,7 +452,7 @@ func walletsweepcmd() {
 	if err != nil {
 		die("Could not sweep seed:", err)
 	}
-	fmt.Printf("Swept %v from seed.\n", currencyUnits(swept.Coins))
+	fmt.Printf("Swept %v from seed.\n", modules.CurrencyUnits(swept.Coins))
 }
 
 // walletsigncmd signs a transaction.
@@ -484,7 +485,7 @@ func walletsigncmd(cmd *cobra.Command, args []string) {
 	} else {
 		// If satd is running, but the wallet is locked, assume the user
 		// wanted to sign with satd.
-		if strings.Contains(err.Error(), modules.ErrLockedWallet.Error()) {
+		if strings.Contains(err.Error(), smodules.ErrLockedWallet.Error()) {
 			die("Signing via API failed: satd is running, but the wallet is locked.")
 		}
 
@@ -511,7 +512,7 @@ func walletsigncmdoffline(txn *types.Transaction, toSign []crypto.Hash) {
 	if err != nil {
 		die("Reading seed failed:", err)
 	}
-	seed, err := modules.StringToSeed(seedString, mnemonics.English)
+	seed, err := smodules.StringToSeed(seedString, mnemonics.English)
 	if err != nil {
 		die("Invalid seed:", err)
 	}

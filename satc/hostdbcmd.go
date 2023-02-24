@@ -7,12 +7,13 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/NebulousLabs/errors"
 
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
 
@@ -103,8 +104,8 @@ func hostdbcmd() {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "\t\tAddress\tVersion\tPrice (per TB per Mo)")
 		for i, host := range info.Hosts {
-			price := host.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)
-			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\n", len(info.Hosts) - i, host.NetAddress, host.Version, currencyUnits(price))
+			price := host.StoragePrice.Mul(smodules.BlockBytesPerMonthTerabyte)
+			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\n", len(info.Hosts) - i, host.NetAddress, host.Version, modules.CurrencyUnits(price))
 		}
 		if err := w.Flush(); err != nil {
 			die("failed to flush writer")
@@ -184,10 +185,10 @@ func hostdbcmd() {
 
 			// Get a string representation of the historic outcomes of the most
 			// recent scans.
-			price := host.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)
-			downloadBWPrice := host.StoragePrice.Mul(modules.BytesPerTerabyte)
+			price := host.StoragePrice.Mul(smodules.BlockBytesPerMonthTerabyte)
+			downloadBWPrice := host.StoragePrice.Mul(smodules.BytesPerTerabyte)
 			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(offlineHosts) - i, host.PublicKeyString,
-				host.NetAddress, host.Version, modules.FilesizeUnits(host.RemainingStorage), currencyUnits(price), currencyUnits(downloadBWPrice), uptimeRatio, scanHistStr)
+				host.NetAddress, host.Version, smodules.FilesizeUnits(host.RemainingStorage), modules.CurrencyUnits(price), modules.CurrencyUnits(downloadBWPrice), uptimeRatio, scanHistStr)
 		}
 		if err := w.Flush(); err != nil {
 			die("failed to flush writer")
@@ -233,10 +234,10 @@ func hostdbcmd() {
 				}
 			}
 
-			price := host.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)
-			collateral := host.Collateral.Mul(modules.BlockBytesPerMonthTerabyte)
-			downloadBWPrice := host.DownloadBandwidthPrice.Mul(modules.BytesPerTerabyte)
-			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(inactiveHosts) - i, host.PublicKeyString, host.NetAddress, host.Version, modules.FilesizeUnits(host.RemainingStorage), currencyUnits(price), currencyUnits(collateral), currencyUnits(downloadBWPrice), uptimeRatio, scanHistStr)
+			price := host.StoragePrice.Mul(smodules.BlockBytesPerMonthTerabyte)
+			collateral := host.Collateral.Mul(smodules.BlockBytesPerMonthTerabyte)
+			downloadBWPrice := host.DownloadBandwidthPrice.Mul(smodules.BytesPerTerabyte)
+			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(inactiveHosts) - i, host.PublicKeyString, host.NetAddress, host.Version, smodules.FilesizeUnits(host.RemainingStorage), modules.CurrencyUnits(price), modules.CurrencyUnits(collateral), modules.CurrencyUnits(downloadBWPrice), uptimeRatio, scanHistStr)
 		}
 		fmt.Fprintln(w, "\t\tPubkey\tAddress\tVersion\tRemaining Storage\tPrice (/ TB / Month)\tCollateral (/ TB / Month)\tDownload Price (/ TB)\tUptime\tRecent Scans")
 		if err := w.Flush(); err != nil {
@@ -305,10 +306,10 @@ func hostdbcmd() {
 			}
 			score, _ := new(big.Rat).Mul(referenceScore, new(big.Rat).SetInt(hostInfo.ScoreBreakdown.Score.Big())).Float64()
 
-			price := host.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)
-			collateral := host.Collateral.Mul(modules.BlockBytesPerMonthTerabyte)
-			downloadBWPrice := host.DownloadBandwidthPrice.Mul(modules.BytesPerTerabyte)
-			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%12.6g\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(activeHosts) - i, host.PublicKeyString, host.NetAddress, host.Version, score, modules.FilesizeUnits(host.RemainingStorage), currencyUnits(host.ContractPrice), currencyUnits(price), currencyUnits(collateral), currencyUnits(downloadBWPrice), uptimeRatio, scanHistStr)
+			price := host.StoragePrice.Mul(smodules.BlockBytesPerMonthTerabyte)
+			collateral := host.Collateral.Mul(smodules.BlockBytesPerMonthTerabyte)
+			downloadBWPrice := host.DownloadBandwidthPrice.Mul(smodules.BytesPerTerabyte)
+			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%12.6g\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(activeHosts) - i, host.PublicKeyString, host.NetAddress, host.Version, score, smodules.FilesizeUnits(host.RemainingStorage), modules.CurrencyUnits(host.ContractPrice), modules.CurrencyUnits(price), modules.CurrencyUnits(collateral), modules.CurrencyUnits(downloadBWPrice), uptimeRatio, scanHistStr)
 		}
 		fmt.Fprintln(w, "\t\tPubkey\tAddress\tVersion\tScore\tRemaining Storage\tContract Fee\tPrice (/ TB / Month)\tCollateral (/ TB / Month)\tDownload Price (/TB)\tUptime\tRecent Scans")
 		if err := w.Flush(); err != nil {
@@ -340,7 +341,7 @@ func hostdbfiltermodecmd() {
 // hostdbsetfiltermodecmd is the handler for the command `satc hostdb
 // setfiltermode`. Sets the hostdb filtermode (whitelist, blacklist, disable).
 func hostdbsetfiltermodecmd(cmd *cobra.Command, args []string) {
-	var fm modules.FilterMode
+	var fm smodules.FilterMode
 	var filterModeStr string
 	var host types.SiaPublicKey
 	var hosts []types.SiaPublicKey
@@ -406,19 +407,19 @@ func hostdbviewcmd(pubkey string) {
 	fmt.Fprintln(w, "\t\tAccepting Contracts:\t", info.Entry.AcceptingContracts)
 	fmt.Fprintln(w, "\t\tMax Duration:\t", info.Entry.MaxDuration)
 	fmt.Fprintln(w, "\t\tWindow Size:\t", info.Entry.WindowSize)
-	fmt.Fprintln(w, "\t\tTotal Storage:\t", modules.FilesizeUnits(info.Entry.TotalStorage))
-	fmt.Fprintln(w, "\t\tRemaining Storage:\t", modules.FilesizeUnits(info.Entry.RemainingStorage))
-	fmt.Fprintln(w, "\t\tMax Download Batch Size:\t", modules.FilesizeUnits(info.Entry.MaxDownloadBatchSize))
-	fmt.Fprintln(w, "\t\tMax Revision Batch Size:\t", modules.FilesizeUnits(info.Entry.MaxReviseBatchSize))
-	fmt.Fprintln(w, "\t\tSector Size:\t", modules.FilesizeUnits(info.Entry.SectorSize))
-	fmt.Fprintln(w, "\n\t\tOffered Collateral (TB / Mo):\t", currencyUnits(info.Entry.Collateral.Mul(modules.BlockBytesPerMonthTerabyte)))
-	fmt.Fprintln(w, "\t\tMax Collateral:\t", currencyUnits(info.Entry.MaxCollateral))
-	fmt.Fprintln(w, "\t\tContract Price:\t", currencyUnits(info.Entry.ContractPrice))
-	fmt.Fprintln(w, "\t\tBase RPC Price:\t", currencyUnits(info.Entry.BaseRPCPrice))
-	fmt.Fprintln(w, "\t\tSector Access Price:\t", currencyUnits(info.Entry.SectorAccessPrice))
-	fmt.Fprintln(w, "\t\tStorage Price (TB / Mo):\t", currencyUnits(info.Entry.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)))
-	fmt.Fprintln(w, "\t\tDownload Price (1 TB):\t", currencyUnits(info.Entry.DownloadBandwidthPrice.Mul(modules.BytesPerTerabyte)))
-	fmt.Fprintln(w, "\t\tUpload Price (1 TB):\t", currencyUnits(info.Entry.UploadBandwidthPrice.Mul(modules.BytesPerTerabyte)))
+	fmt.Fprintln(w, "\t\tTotal Storage:\t", smodules.FilesizeUnits(info.Entry.TotalStorage))
+	fmt.Fprintln(w, "\t\tRemaining Storage:\t", smodules.FilesizeUnits(info.Entry.RemainingStorage))
+	fmt.Fprintln(w, "\t\tMax Download Batch Size:\t", smodules.FilesizeUnits(info.Entry.MaxDownloadBatchSize))
+	fmt.Fprintln(w, "\t\tMax Revision Batch Size:\t", smodules.FilesizeUnits(info.Entry.MaxReviseBatchSize))
+	fmt.Fprintln(w, "\t\tSector Size:\t", smodules.FilesizeUnits(info.Entry.SectorSize))
+	fmt.Fprintln(w, "\n\t\tOffered Collateral (TB / Mo):\t", modules.CurrencyUnits(info.Entry.Collateral.Mul(smodules.BlockBytesPerMonthTerabyte)))
+	fmt.Fprintln(w, "\t\tMax Collateral:\t", modules.CurrencyUnits(info.Entry.MaxCollateral))
+	fmt.Fprintln(w, "\t\tContract Price:\t", modules.CurrencyUnits(info.Entry.ContractPrice))
+	fmt.Fprintln(w, "\t\tBase RPC Price:\t", modules.CurrencyUnits(info.Entry.BaseRPCPrice))
+	fmt.Fprintln(w, "\t\tSector Access Price:\t", modules.CurrencyUnits(info.Entry.SectorAccessPrice))
+	fmt.Fprintln(w, "\t\tStorage Price (TB / Mo):\t", modules.CurrencyUnits(info.Entry.StoragePrice.Mul(smodules.BlockBytesPerMonthTerabyte)))
+	fmt.Fprintln(w, "\t\tDownload Price (1 TB):\t", modules.CurrencyUnits(info.Entry.DownloadBandwidthPrice.Mul(smodules.BytesPerTerabyte)))
+	fmt.Fprintln(w, "\t\tUpload Price (1 TB):\t", modules.CurrencyUnits(info.Entry.UploadBandwidthPrice.Mul(smodules.BytesPerTerabyte)))
 	fmt.Fprintln(w, "\t\tUnlock Hash:\t", info.Entry.UnlockHash)
 	fmt.Fprintln(w, "\n\t\tVersion:\t", info.Entry.Version)
 	fmt.Fprintln(w, "\t\tRevision Number:\t", info.Entry.RevisionNumber)

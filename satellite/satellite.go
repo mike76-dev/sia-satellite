@@ -314,5 +314,10 @@ func (s *Satellite) OldContracts() []modules.RenterContract {
 	return s.m.OldContracts()
 }
 
+// BlockHeight returns the current block height.
+func (s *Satellite) BlockHeight() types.BlockHeight {
+	return s.cs.Height()
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

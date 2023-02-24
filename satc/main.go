@@ -6,13 +6,14 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/node/api/client"
 	"github.com/spf13/cobra"
 
 	"gitlab.com/NebulousLabs/errors"
 
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 )
 
 var (
@@ -110,7 +111,7 @@ func statuscmd() {
 		fmt.Printf(`Wallet:
   Status:          unlocked
   Siacoin Balance: %v
-`, currencyUnits(walletStatus.ConfirmedSiacoinBalance))
+`, modules.CurrencyUnits(walletStatus.ConfirmedSiacoinBalance))
 	} else {
 		fmt.Printf(`Wallet:
   Status: Locked
@@ -178,7 +179,7 @@ func main() {
 		// Check for Critical Alerts.
 		alerts, err := httpClient.DaemonAlertsGet()
 		if err == nil && len(alerts.CriticalAlerts) > 0 && !alertSuppress {
-			printAlerts(alerts.CriticalAlerts, modules.SeverityCritical)
+			printAlerts(alerts.CriticalAlerts, smodules.SeverityCritical)
 			fmt.Println("------------------")
 			fmt.Printf("\n  The above %v critical alerts should be resolved ASAP\n\n", len(alerts.CriticalAlerts))
 		}

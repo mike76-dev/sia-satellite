@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/spf13/cobra"
 
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 )
 
 var (
@@ -84,8 +85,8 @@ Max Download Price:      %v
 Max Sector Access Price: %v
 Max Storage Price:       %v
 Max Upload Price:        %v
-`, renter.PublicKey.String(), renter.Email, renter.CurrentPeriod, renter.Allowance.Period, renter.Allowance.RenewWindow, renter.Allowance.Hosts, modules.FilesizeUnits(renter.Allowance.ExpectedStorage), modules.FilesizeUnits(renter.Allowance.ExpectedUpload), modules.FilesizeUnits(renter.Allowance.ExpectedDownload),
-renter.Allowance.ExpectedRedundancy, currencyUnits(renter.Allowance.MaxRPCPrice), currencyUnits(renter.Allowance.MaxContractPrice), currencyUnits(renter.Allowance.MaxDownloadBandwidthPrice), currencyUnits(renter.Allowance.MaxSectorAccessPrice), currencyUnits(renter.Allowance.MaxStoragePrice), currencyUnits(renter.Allowance.MaxUploadBandwidthPrice))
+`, renter.PublicKey.String(), renter.Email, renter.CurrentPeriod, renter.Allowance.Period, renter.Allowance.RenewWindow, renter.Allowance.Hosts, smodules.FilesizeUnits(renter.Allowance.ExpectedStorage), smodules.FilesizeUnits(renter.Allowance.ExpectedUpload), smodules.FilesizeUnits(renter.Allowance.ExpectedDownload),
+renter.Allowance.ExpectedRedundancy, modules.CurrencyUnits(renter.Allowance.MaxRPCPrice), modules.CurrencyUnits(renter.Allowance.MaxContractPrice), modules.CurrencyUnits(renter.Allowance.MaxDownloadBandwidthPrice), modules.CurrencyUnits(renter.Allowance.MaxSectorAccessPrice), modules.CurrencyUnits(renter.Allowance.MaxStoragePrice), modules.CurrencyUnits(renter.Allowance.MaxUploadBandwidthPrice))
 }
 
 // satellitebalancecmd is the handler for the command `satc satellite balance [public_key]`.
@@ -153,7 +154,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, currencyUnits(c.StorageSpending), currencyUnits(c.UploadSpending), currencyUnits(c.DownloadSpending), currencyUnits(c.FundAccountSpending), currencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), currencyUnits(c.Fees), currencyUnits(c.TotalCost), currencyUnits(c.RenterFunds), modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, modules.CurrencyUnits(c.StorageSpending), modules.CurrencyUnits(c.UploadSpending), modules.CurrencyUnits(c.DownloadSpending), modules.CurrencyUnits(c.FundAccountSpending), modules.CurrencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), modules.CurrencyUnits(c.Fees), modules.CurrencyUnits(c.TotalCost), modules.CurrencyUnits(c.RenterFunds), smodules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -180,7 +181,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, currencyUnits(c.StorageSpending), currencyUnits(c.UploadSpending), currencyUnits(c.DownloadSpending), currencyUnits(c.FundAccountSpending), currencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), currencyUnits(c.Fees), currencyUnits(c.TotalCost), currencyUnits(c.RenterFunds), modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, modules.CurrencyUnits(c.StorageSpending), modules.CurrencyUnits(c.UploadSpending), modules.CurrencyUnits(c.DownloadSpending), modules.CurrencyUnits(c.FundAccountSpending), modules.CurrencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), modules.CurrencyUnits(c.Fees), modules.CurrencyUnits(c.TotalCost), modules.CurrencyUnits(c.RenterFunds), smodules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -207,7 +208,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, currencyUnits(c.StorageSpending), currencyUnits(c.UploadSpending), currencyUnits(c.DownloadSpending), currencyUnits(c.FundAccountSpending), currencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), currencyUnits(c.Fees), currencyUnits(c.TotalCost), currencyUnits(c.RenterFunds), modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, modules.CurrencyUnits(c.StorageSpending), modules.CurrencyUnits(c.UploadSpending), modules.CurrencyUnits(c.DownloadSpending), modules.CurrencyUnits(c.FundAccountSpending), modules.CurrencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), modules.CurrencyUnits(c.Fees), modules.CurrencyUnits(c.TotalCost), modules.CurrencyUnits(c.RenterFunds), smodules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -234,7 +235,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, currencyUnits(c.StorageSpending), currencyUnits(c.UploadSpending), currencyUnits(c.DownloadSpending), currencyUnits(c.FundAccountSpending), currencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), currencyUnits(c.Fees), currencyUnits(c.TotalCost), currencyUnits(c.RenterFunds), modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, modules.CurrencyUnits(c.StorageSpending), modules.CurrencyUnits(c.UploadSpending), modules.CurrencyUnits(c.DownloadSpending), modules.CurrencyUnits(c.FundAccountSpending), modules.CurrencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), modules.CurrencyUnits(c.Fees), modules.CurrencyUnits(c.TotalCost), modules.CurrencyUnits(c.RenterFunds), smodules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -261,7 +262,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, currencyUnits(c.StorageSpending), currencyUnits(c.UploadSpending), currencyUnits(c.DownloadSpending), currencyUnits(c.FundAccountSpending), currencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), currencyUnits(c.Fees), currencyUnits(c.TotalCost), currencyUnits(c.RenterFunds), modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, modules.CurrencyUnits(c.StorageSpending), modules.CurrencyUnits(c.UploadSpending), modules.CurrencyUnits(c.DownloadSpending), modules.CurrencyUnits(c.FundAccountSpending), modules.CurrencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), modules.CurrencyUnits(c.Fees), modules.CurrencyUnits(c.TotalCost), modules.CurrencyUnits(c.RenterFunds), smodules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -288,7 +289,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, currencyUnits(c.StorageSpending), currencyUnits(c.UploadSpending), currencyUnits(c.DownloadSpending), currencyUnits(c.FundAccountSpending), currencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), currencyUnits(c.Fees), currencyUnits(c.TotalCost), currencyUnits(c.RenterFunds), modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, modules.CurrencyUnits(c.StorageSpending), modules.CurrencyUnits(c.UploadSpending), modules.CurrencyUnits(c.DownloadSpending), modules.CurrencyUnits(c.FundAccountSpending), modules.CurrencyUnits(c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost)), modules.CurrencyUnits(c.Fees), modules.CurrencyUnits(c.TotalCost), modules.CurrencyUnits(c.RenterFunds), smodules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 	}
 }
