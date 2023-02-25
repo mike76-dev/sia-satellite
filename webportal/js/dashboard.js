@@ -58,8 +58,10 @@ var paymentEstimation;
 var paymentAmount;
 var paymentCurrency;
 
+retrieveBlockHeight();
 retrieveBalance();
 retrieveAverages();
+window.setInterval(retrieveBlockHeight, 60000);
 window.setInterval(retrieveBalance, 300000);
 window.setInterval(retrieveAverages, 600000);
 retrieveKey();
@@ -621,6 +623,24 @@ function retrieveKey() {
 		.then(data => {
 			if (data.key) {
 				k.innerHTML = data.key;
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function retrieveBlockHeight() {
+	bh = document.getElementById('block-height');
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/blockheight', options)
+		.then(response => response.json())
+		.then(data => {
+			if (data.height) {
+				bh.innerHTML = data.height;
 			}
 		})
 		.catch(error => console.log(error));

@@ -676,3 +676,8 @@ func (api *portalAPI) getContracts(renter modules.Renter, ac, ps, rf, ds, ex, er
 
 	return rc
 }
+
+// blockHeightHandlerGET handles the GET /dashboard/blockheight requests.
+func (api *portalAPI) blockHeightHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	writeJSON(w, struct{Height uint64 `json:"height"`}{Height: uint64(api.portal.satellite.BlockHeight())})
+}
