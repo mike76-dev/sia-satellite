@@ -61,7 +61,7 @@ func checkEmail(address string) (string, Error) {
 			Message: "the email address is invalid",
 		}
 	}
-	if len(address) > 48 {
+	if len(address) > 64 {
 		return "", Error{
 			Code: httpErrorEmailTooLong,
 			Message: "the email address is too long",
@@ -188,7 +188,16 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Login successful, generate a cookie.
 	t := time.Now().Add(7 * 24 * time.Hour)
-	token := api.portal.generateToken(cookiePrefix, email, t)
+	token, tErr := api.portal.generateToken(cookiePrefix, email, t)
+	if tErr != nil {
+		api.portal.log.Printf("ERROR: error generating token: %v\n", tErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
 	cookie := http.Cookie{
 		Name:    "satellite",
 		Value:   token,
@@ -283,11 +292,6 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		}
 	}
 
-	// Send verification link by email.
-	if !api.sendVerificationLinkByMail(w, req, email) {
-		return
-	}
-
 	// Create a new account.
 	if cErr := api.portal.updateAccount(email, password, false); cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
@@ -296,6 +300,11 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 				Code: httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
+		return
+	}
+
+	// Send verification link by email.
+	if !api.sendVerificationLinkByMail(w, req, email) {
 		return
 	}
 
@@ -316,7 +325,16 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 	}
 
 	// Generate a verification link.
-	token := api.portal.generateToken(verifyPrefix, email, time.Now().Add(24 * time.Hour))
+	token, err := api.portal.generateToken(verifyPrefix, email, time.Now().Add(24 * time.Hour))
+	if err != nil {
+		api.portal.log.Printf("ERROR: error generating token: %v\n", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return false
+	}
 	path := req.Header["Referer"]
 	if len(path) == 0 {
 		api.portal.log.Printf("ERROR: unable to fetch referer URL")
@@ -334,7 +352,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 
 	// Generate email body.
 	t := template.New("verify")
-	t, err := t.Parse(verifyTemplate)
+	t, err = t.Parse(verifyTemplate)
 	if err != nil {
 		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
 		writeError(w,
@@ -366,7 +384,16 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 // password reset link by email.
 func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *http.Request, email string) bool {
 	// Generate a password reset link.
-	token := api.portal.generateToken(resetPrefix, email, time.Now().Add(time.Hour))
+	token, err := api.portal.generateToken(resetPrefix, email, time.Now().Add(time.Hour))
+	if err != nil {
+		api.portal.log.Printf("ERROR: error generating token: %v\n", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return false
+	}
 	path := req.Header["Referer"]
 	if len(path) == 0 {
 		api.portal.log.Printf("ERROR: unable to fetch referer URL")
@@ -384,7 +411,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 
 	// Generate email body.
 	t := template.New("reset")
-	t, err := t.Parse(resetTemplate)
+	t, err = t.Parse(resetTemplate)
 	if err != nil {
 		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
 		writeError(w,
@@ -510,7 +537,16 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 		// Generate a change cookie. This one has a different name, so
 		// that a password reset is not confused for a password change.
 		// Set the expiration the same as of the password reset token.
-		ct := api.portal.generateToken(changePrefix, email, expires)
+		ct, err := api.portal.generateToken(changePrefix, email, expires)
+		if err != nil {
+			api.portal.log.Printf("ERROR: error generating token: %v\n", err)
+			writeError(w,
+				Error{
+					Code: httpErrorInternal,
+					Message: "internal error",
+				}, http.StatusInternalServerError)
+			return
+		}
 		cookie := http.Cookie{
 			Name:    "satellite-change",
 			Value:   ct,

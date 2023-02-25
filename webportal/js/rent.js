@@ -20,7 +20,7 @@ var status = '';
 var query = window.location.search;
 if (query.startsWith('?token=')) {
 	let token = query.slice(7);
-	if (token.length == 128) {
+	if (token.length == 256) {
 		let options = {
 			method: 'GET',
 			headers: {

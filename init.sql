@@ -4,16 +4,17 @@ DROP TABLE IF EXISTS accounts;
 
 CREATE TABLE accounts (
 	id             INT NOT NULL AUTO_INCREMENT,
-	email          VARCHAR(48) NOT NULL UNIQUE,
+	email          VARCHAR(64) NOT NULL UNIQUE,
 	password_hash  VARCHAR(64) NOT NULL,
 	verified       BOOL NOT NULL,
 	created        INT NOT NULL,
+	nonce          VARCHAR(32) NOT NULL,
 	PRIMARY KEY (id)
 );
 
 CREATE TABLE balances (
 	id         INT NOT NULL AUTO_INCREMENT,
-	email      VARCHAR(48) NOT NULL,
+	email      VARCHAR(64) NOT NULL UNIQUE,
 	subscribed BOOL NOT NULL,
 	balance    FLOAT NOT NULL,
 	locked     FLOAT NOT NULL,
@@ -25,7 +26,7 @@ CREATE TABLE balances (
 
 CREATE TABLE payments (
 	id         INT NOT NULL AUTO_INCREMENT,
-	email      VARCHAR(48) NOT NULL,
+	email      VARCHAR(64) NOT NULL,
 	amount     FLOAT NOT NULL,
 	currency   VARCHAR(8) NOT NULL,
 	amount_usd FLOAT NOT NULL,
@@ -101,7 +102,7 @@ DROP TABLE IF EXISTS transactions;
 
 CREATE TABLE renters (
 	id                           INT NOT NULL AUTO_INCREMENT,
-	email                        VARCHAR(48) NOT NULL UNIQUE,
+	email                        VARCHAR(64) NOT NULL UNIQUE,
 	public_key                   VARCHAR(128) NOT NULL UNIQUE,
 	current_period               BIGINT UNSIGNED NOT NULL,
 	funds                        VARCHAR(64) NOT NULL,

@@ -68,8 +68,8 @@ func (p *Portal) updateAccount(email, password string, verified bool) error {
 		}
 		pwHash := passwordHash(password)
 		_, err := p.db.Exec(`
-			INSERT INTO accounts (email, password_hash, verified, created)
-			VALUES (?, ?, ?, ?)`, email, pwHash, false, time.Now().Unix())
+			INSERT INTO accounts (email, password_hash, verified, created, nonce)
+			VALUES (?, ?, ?, ?, ?)`, email, pwHash, false, time.Now().Unix(), "")
 		return err
 	}
 
@@ -325,4 +325,23 @@ func (p *Portal) createNewRenter(email string, pk types.SiaPublicKey) error {
 	p.satellite.CreateNewRenter(email, pk)
 
 	return nil
+}
+
+// saveNonce updates a user account with the nonce value.
+func (p* Portal) saveNonce(email string, nonce []byte) error {
+	_, err := p.db.Exec("UPDATE accounts SET nonce = ? WHERE email = ?", hex.EncodeToString(nonce), email)
+	return err
+}
+
+// verifyNonce verifies the nonce value against the user account.
+func (p* Portal) verifyNonce(email string, nonce []byte) (bool, error) {
+	var n string
+	err := p.db.QueryRow("SELECT nonce FROM accounts WHERE email = ?", email).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+
+	ns := hex.EncodeToString(nonce)
+	
+	return ns == n, nil
 }
