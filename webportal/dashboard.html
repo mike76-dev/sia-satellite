@@ -68,6 +68,70 @@
 				</div>
 				<div class="page disabled">
 					<h1>Contract Information</h1>
+					<section>
+						<div class="contracts-checkbox-container">
+							<div>
+								<input id="contracts-active" type="checkbox" checked
+									onchange="contractsChanged()">
+								<label for="contracts-active">Active</label>
+							</div>
+							<div>
+								<input id="contracts-passive" type="checkbox" onchange="contractsChanged()">
+								<label for="contracts-passive">Passive</label>
+							</div>
+							<div>
+								<input id="contracts-refreshed" type="checkbox" onchange="contractsChanged()">
+								<label for="contracts-refreshed">Refreshed</label>
+							</div>
+							<div>
+								<input id="contracts-disabled" type="checkbox" onchange="contractsChanged()">
+								<label for="contracts-disabled">Disabled</label>
+							</div>
+							<div>
+								<input id="contracts-expired" type="checkbox" onchange="contractsChanged()">
+								<label for="contracts-expired">Expired</label>
+							</div>
+							<div>
+								<input id="contracts-exref" type="checkbox" onchange="contractsChanged()">
+								<label for="contracts-exref">Expired/Refreshed</label>
+							</div>
+						</div>
+						<p id="contracts-empty">No contracts found.</p>
+						<div id="contracts-non-empty" class="container disabled">
+							<div>
+								<label for="contracts-rows">Rows to Display:</label>
+								<select id="contracts-rows" onchange="changeContractsStep(this)">
+									<option value="10">10</option>
+									<option value="20">20</option>
+									<option value="50">50</option>
+								</select>
+								<button id="contracts-prev" class="history-button"
+									onclick="contractsPrev()" disabled>Prev
+								</button>
+								<button id="contracts-next" class="history-button"
+									onclick="contractsNext()" disabled>Next
+								</button>
+							</div>
+							<div class="table-container">
+								<table>
+									<thead>
+										<tr>
+											<th style="width: 4rem">No.</th>
+											<th style="width: 12rem">ID</th>
+											<th style="width: 4rem">Start</th>
+											<th style="width: 4rem">End</th>
+											<th style="width: 12rem">Host</th>
+											<th style="width: 4rem">Size</th>
+											<th style="width: 6rem">Total Cost</th>
+											<th>Status</th>
+										</tr>
+									</thead>
+									<tbody id="contracts-table">
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</section>
 				</div>
 				<div class="page disabled">
 					<h1>Current Spendings</h1>
@@ -256,19 +320,21 @@
 									onclick="paymentsNext()" disabled>Next
 								</button>
 							</div>
-							<table>
-								<thead>
-									<tr>
-										<th style="width: 4rem">No.</th>
-										<th style="width: 13rem">Timestamp</th>
-										<th style="width: 5rem">Amount</th>
-										<th style="width: 6rem">Currency</th>
-										<th>USD Equivalent</th>
-									</tr>
-								</thead>
-								<tbody id="history-table">
-								</tbody>
-							</table>
+							<div class="table-container">
+								<table>
+									<thead>
+										<tr>
+											<th style="width: 4rem">No.</th>
+											<th style="width: 13rem">Timestamp</th>
+											<th style="width: 5rem">Amount</th>
+											<th style="width: 6rem">Currency</th>
+											<th>USD Equivalent</th>
+										</tr>
+									</thead>
+									<tbody id="history-table">
+									</tbody>
+								</table>
+							</div>
 						</div>
 					</section>
 				</div>

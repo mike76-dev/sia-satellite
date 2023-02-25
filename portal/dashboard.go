@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
-
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"gitlab.com/NebulousLabs/fastrand"
@@ -62,6 +61,29 @@ type (
 		Currency  string  `json:"currency"`
 		AmountUSD float64 `json:"amountusd"`
 		Timestamp uint64  `json:"timestamp"`
+	}
+
+	// renterContract represents a contract formed by the renter.
+	renterContract struct {
+		DownloadSpending    string `json:"downloadspending"`
+		EndHeight           uint64 `json:"endheight"`
+		Fees                string `json:"fees"`
+		FundAccountSpending string `json:"fundaccountspending"`
+		HostPublicKey       string `json:"hostpublickey"`
+		HostVersion         string `json:"hostversion"`
+		ID                  string `json:"id"`
+		MaintenanceSpending string `json:"maintenancespending"`
+		NetAddress          string `json:"netaddress"`
+		RenterFunds         string `json:"renterfunds"`
+		Size                string `json:"size"`
+		StartHeight         uint64 `json:"startheight"`
+		Status              string `json:"status"`
+		StorageSpending     string `json:"storagespending"`
+		TotalCost           string `json:"totalcost"`
+		UploadSpending      string `json:"uploadspending"`
+		GoodForUpload       bool   `json:"goodforupload"`
+		GoodForRenew        bool   `json:"goodforrenew"`
+		BadContract         bool   `json:"badcontract"`
 	}
 )
 
@@ -329,8 +351,8 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 	// Retrieve the payment history.
 	var from, to int
 	from, err = strconv.Atoi(req.FormValue("from"))
-	if err != nil {
-		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", err)
+	if err != nil || from <= 0 {
+		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", from)
 		writeError(w,
 			Error{
 				Code: httpErrorBadRequest,
@@ -339,8 +361,8 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	to, err = strconv.Atoi(req.FormValue("to"))
-	if err != nil {
-		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", err)
+	if err != nil || to < from {
+		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", to)
 		writeError(w,
 			Error{
 				Code: httpErrorBadRequest,
@@ -414,6 +436,243 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 }
 
 // keyHandlerGET handles the GET /dashboard/key requests.
-func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	writeJSON(w, struct{Key string `json:"key"`}{Key: api.portal.satellite.PublicKey().String()})
+}
+
+// contractsHandlerGet handles the GET /dashboard/contracts requests.
+func (api *portalAPI) contractsHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Fetch request params.
+	var active, passive, refreshed, disabled, expired, expiredRefreshed bool
+	ac := req.FormValue("active")
+	ps := req.FormValue("passive")
+	rf := req.FormValue("refreshed")
+	ds := req.FormValue("disabled")
+	ex := req.FormValue("expired")
+	er := req.FormValue("expired-refreshed")
+	if ac != "" {
+		active, err = strconv.ParseBool(ac)
+		if err != nil {
+			active = false
+		}
+	}
+	if ps != "" {
+		passive, err = strconv.ParseBool(ps)
+		if err != nil {
+			passive = false
+		}
+	}
+	if rf != "" {
+		refreshed, err = strconv.ParseBool(rf)
+		if err != nil {
+			refreshed = false
+		}
+	}
+	if ds != "" {
+		disabled, err = strconv.ParseBool(ds)
+		if err != nil {
+			disabled = false
+		}
+	}
+	if ex != "" {
+		expired, err = strconv.ParseBool(ex)
+		if err != nil {
+			expired = false
+		}
+	}
+	if er != "" {
+		expiredRefreshed, err = strconv.ParseBool(er)
+		if err != nil {
+			expiredRefreshed = false
+		}
+	}
+
+	var from, to int
+	from, err = strconv.Atoi(req.FormValue("from"))
+	if err != nil || from <= 0 {
+		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", from)
+		writeError(w,
+			Error{
+				Code: httpErrorBadRequest,
+				Message: "wrong numeric value",
+			}, http.StatusBadRequest)
+		return
+	}
+	to, err = strconv.Atoi(req.FormValue("to"))
+	if err != nil || to < from {
+		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", to)
+		writeError(w,
+			Error{
+				Code: httpErrorBadRequest,
+				Message: "wrong numeric value",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// Get the renter.
+	var renter modules.Renter
+	renters := api.portal.satellite.Renters()
+	for _, r := range renters {
+		if r.Email == email {
+			renter = r
+			break
+		}
+	}
+
+	// Filter the contracts.
+	contracts := api.getContracts(renter, active, passive, refreshed, disabled, expired, expiredRefreshed)
+	if from > len(contracts) {
+		writeJSON(w, []renterContract{})
+		return
+	}
+	if to > len(contracts) {
+		to = len(contracts)
+	}
+
+	writeJSON(w, contracts[from - 1 : to])
+}
+
+// getContracts filters the satellite contracts by the given parameters.
+func (api *portalAPI) getContracts(renter modules.Renter, ac, ps, rf, ds, ex, er bool) []renterContract {
+	var rc []renterContract
+	currentBlockHeight := api.portal.satellite.BlockHeight()
+
+	for _, c := range api.portal.satellite.Contracts() {
+		// Skip contracts that don't belong to the renter.
+		if renter.PublicKey.String() != c.RenterPublicKey.String() {
+			continue
+		}
+
+		// Fetch host address.
+		var netAddress smodules.NetAddress
+		hdbe, exists, _ := api.portal.satellite.Host(c.HostPublicKey)
+		if exists {
+			netAddress = hdbe.NetAddress
+		}
+
+		// Build the contract.
+		maintenanceSpending := c.MaintenanceSpending.AccountBalanceCost
+		maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.FundAccountCost)
+		maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.UpdatePriceTableCost)
+		contract := renterContract{
+			BadContract:         c.Utility.BadContract,
+			DownloadSpending:    modules.CurrencyUnits(c.DownloadSpending),
+			EndHeight:           uint64(c.EndHeight),
+			Fees:                modules.CurrencyUnits(c.TxnFee.Add(c.SiafundFee).Add(c.ContractFee)),
+			FundAccountSpending: modules.CurrencyUnits(c.FundAccountSpending),
+			GoodForUpload:       c.Utility.GoodForUpload,
+			GoodForRenew:        c.Utility.GoodForRenew,
+			HostPublicKey:       c.HostPublicKey.String(),
+			HostVersion:         hdbe.Version,
+			ID:                  c.ID.String(),
+			NetAddress:          string(netAddress),
+			MaintenanceSpending: modules.CurrencyUnits(maintenanceSpending),
+			RenterFunds:         modules.CurrencyUnits(c.RenterFunds),
+			Size:                smodules.FilesizeUnits(c.Size()),
+			StartHeight:         uint64(c.StartHeight),
+			StorageSpending:     modules.CurrencyUnits(c.StorageSpending),
+			TotalCost:           modules.CurrencyUnits(c.TotalCost),
+			UploadSpending:      modules.CurrencyUnits(c.UploadSpending),
+		}
+
+		// Determine contract status.
+		refreshed := api.portal.satellite.RefreshedContract(c.ID)
+		active := c.Utility.GoodForUpload && c.Utility.GoodForRenew && !refreshed
+		passive := !c.Utility.GoodForUpload && c.Utility.GoodForRenew && !refreshed
+		disabledContract := !active && !passive && !refreshed
+
+		// A contract can either be active, passive, refreshed, or disabled.
+		statusErr := active && passive && refreshed || active && refreshed || active && passive || passive && refreshed
+		if statusErr {
+			fmt.Println("CRITICAL: Contract has multiple status types, this should never happen")
+		} else if active && ac {
+			contract.Status = "active"
+			rc = append(rc, contract)
+		} else if passive && ps {
+			contract.Status = "passive"
+			rc = append(rc, contract)
+		} else if refreshed && rf {
+			contract.Status = "refreshed"
+			rc = append(rc, contract)
+		} else if disabledContract && ds {
+			contract.Status = "disabled"
+			rc = append(rc, contract)
+		}
+	}
+
+	// Process old contracts.
+	for _, c := range api.portal.satellite.OldContracts() {
+		// Skip contracts that don't belong to the renter.
+		if renter.PublicKey.String() != c.RenterPublicKey.String() {
+			continue
+		}
+		var size uint64
+		if len(c.Transaction.FileContractRevisions) != 0 {
+			size = c.Transaction.FileContractRevisions[0].NewFileSize
+		}
+
+		// Fetch host address.
+		var netAddress smodules.NetAddress
+		hdbe, exists, _ := api.portal.satellite.Host(c.HostPublicKey)
+		if exists {
+			netAddress = hdbe.NetAddress
+		}
+
+		// Build the contract.
+		maintenanceSpending := c.MaintenanceSpending.AccountBalanceCost
+		maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.FundAccountCost)
+		maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.UpdatePriceTableCost)
+		contract := renterContract{
+			BadContract:         c.Utility.BadContract,
+			DownloadSpending:    modules.CurrencyUnits(c.DownloadSpending),
+			EndHeight:           uint64(c.EndHeight),
+			Fees:                modules.CurrencyUnits(c.TxnFee.Add(c.SiafundFee).Add(c.ContractFee)),
+			FundAccountSpending: modules.CurrencyUnits(c.FundAccountSpending),
+			GoodForUpload:       c.Utility.GoodForUpload,
+			GoodForRenew:        c.Utility.GoodForRenew,
+			HostPublicKey:       c.HostPublicKey.String(),
+			HostVersion:         hdbe.Version,
+			ID:                  c.ID.String(),
+			NetAddress:          string(netAddress),
+			MaintenanceSpending: modules.CurrencyUnits(maintenanceSpending),
+			RenterFunds:         modules.CurrencyUnits(c.RenterFunds),
+			Size:                smodules.FilesizeUnits(size),
+			StartHeight:         uint64(c.StartHeight),
+			StorageSpending:     modules.CurrencyUnits(c.StorageSpending),
+			TotalCost:           modules.CurrencyUnits(c.TotalCost),
+			UploadSpending:      modules.CurrencyUnits(c.UploadSpending),
+		}
+
+		// Determine contract status.
+		refreshed := api.portal.satellite.RefreshedContract(c.ID)
+		endHeightInPast := c.EndHeight < currentBlockHeight || c.StartHeight < renter.CurrentPeriod
+		expiredContract := endHeightInPast && !refreshed
+		expiredRefreshed := endHeightInPast && refreshed
+		refreshedContract := refreshed && !endHeightInPast
+		disabledContract := !refreshed && !endHeightInPast
+
+		// A contract can only be refreshed, disabled, expired, or expired refreshed.
+		if expiredContract && ex {
+			contract.Status = "expired"
+			rc = append(rc, contract)
+		} else if expiredRefreshed && er {
+			contract.Status = "expired-refreshed"
+			rc = append(rc, contract)
+		} else if refreshedContract && rf {
+			contract.Status = "refreshed"
+			rc = append(rc, contract)
+		} else if disabledContract && ds {
+			contract.Status = "disabled"
+			rc = append(rc, contract)
+		}
+	}
+
+	return rc
 }

@@ -31,6 +31,7 @@
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
+	min-width: 9rem;
 	max-width: 9rem;
 	flex-grow: 1;
 	background-color: #0f1f6f;
@@ -62,6 +63,7 @@
 .pages {
 	flex-grow: 1;
 	padding: 1rem;
+	max-width: 100%;
 }
 
 .page {
@@ -260,12 +262,20 @@ select {
 	font-size: 1rem;
 }
 
+.table-container {
+	width: 100%;
+	overflow: auto;
+}
+
 table {
 	font-size: 1rem;
 	margin-top: 1rem;
 	width: 100%;
+	max-width: 100%;
 	color: #afafaf;
 	border-collapse: collapse;
+	table-layout: fixed;
+	white-space: nowrap;
 }
 
 th {
@@ -276,10 +286,40 @@ tbody > tr:nth-child(odd) {
 	background-color: #000f9f;
 }
 
+.cell-overflow {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.cell-overflow:hover {
+	overflow: visible;
+	position: absolute;
+	background-color: #7f7f7f;
+}
+
 .history-button {
 	width: 4rem;
 	background-color: #000f9f;
 	border: 1px solid #afafaf;
+}
+
+.contracts-checkbox-container {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.contracts-checkbox-container div {
+	margin-right: 0.5rem;
+}
+
+.contracts-checkbox-container div:last-child {
+	margin-right: 0;
+}
+
+.contracts-checkbox-container input {
+	margin-right: 0;
+	cursor: pointer;
 }
 
 #payment-amount {
