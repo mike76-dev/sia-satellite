@@ -9,7 +9,6 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	nerrors "gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 
 	"go.sia.tech/siad/crypto"
@@ -126,7 +125,16 @@ func (p *Portal) deleteAccount(email string) error {
 	_, err1 := p.db.Exec("DELETE FROM payments WHERE email = ?", email)
 	_, err2 := p.db.Exec("DELETE FROM balances WHERE email = ?", email)
 	_, err3 := p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
-	return nerrors.Compose(err0, err1, err2, err3)
+	if err0 != nil {
+		return err0
+	}
+	if err1 != nil {
+		return err1
+	}
+	if err2 != nil {
+		return err2
+	}
+	return err3
 }
 
 // flushPendingPayments removes any pending payments for the given

@@ -18,6 +18,7 @@ require (
 	go.sia.tech/siad v1.5.10-0.20221206172719-7f3713a01004
 	golang.org/x/crypto v0.4.0
 	golang.org/x/term v0.3.0
+	lukechampine.com/frand v1.4.2
 )
 
 require (
@@ -39,5 +40,4 @@ require (
 	golang.org/x/net v0.3.0 // indirect
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/text v0.5.0 // indirect
-	lukechampine.com/frand v1.4.2 // indirect
 )
