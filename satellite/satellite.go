@@ -133,6 +133,7 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 		staticAlerter: smodules.NewAlerter("satellite"),
 	}
 	p.Satellite = s
+	m.SetSatellite(s)
 
 	// Call stop in the event of a partial startup.
 	defer func() {
@@ -294,7 +295,7 @@ func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a smodules.Allowance) 
 	}
 
 	// Form the contracts.
-	contractSet, err := s.m.FormContracts(s, rpk)
+	contractSet, err := s.m.FormContracts(rpk)
 
 	return contractSet, err
 }

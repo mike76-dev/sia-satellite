@@ -68,7 +68,7 @@ func (s *Satellite) UpdateBalance(email string, ub *modules.UserBalance) error {
 	return err
 }
 
-// LockSiacoins moves a part of the balance to "locked".
+// LockSiacoins implements FundLocker interface.
 func (s *Satellite) LockSiacoins(email string, amount float64) error {
 	// Sanity check.
 	if amount <= 0 {
@@ -98,7 +98,7 @@ func (s *Satellite) LockSiacoins(email string, amount float64) error {
 	return s.UpdateBalance(email, ub)
 }
 
-// UnlockSiacoins moves the amount from "locked" to "available".
+// UnlockSiacoins implements FundLocker interface.
 func (s *Satellite) UnlockSiacoins(email string, amount float64) error {
 	// Sanity check.
 	if amount <= 0 {

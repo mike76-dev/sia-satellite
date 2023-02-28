@@ -75,7 +75,7 @@ type hostContractor interface {
 
 	// FormContracts forms up to the specified number of contracts, puts them
 	// in the contract set, and returns them.
-	FormContracts(modules.Satellite, types.SiaPublicKey) ([]modules.RenterContract, error)
+	FormContracts(types.SiaPublicKey) ([]modules.RenterContract, error)
 
 	// PeriodSpending returns the amount spent on contracts during the current
 	// billing period of the renter.
@@ -111,6 +111,9 @@ type hostContractor interface {
 
 	// UpdateWorkerPool updates the workerpool currently in use by the contractor.
 	UpdateWorkerPool(smodules.WorkerPool)
+
+	// SetSatellite sets the satellite dependency.
+	SetSatellite(modules.FundLocker)
 }
 
 // A Manager contains the information necessary to communicate with the
@@ -536,11 +539,16 @@ func (m *Manager) CreateNewRenter(email string, pk types.SiaPublicKey) {
 }
 
 // FormContracts calls hostContractor.FormContracts.
-func (m *Manager) FormContracts(s modules.Satellite, rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
-	return m.hostContractor.FormContracts(s, rpk)
+func (m *Manager) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
+	return m.hostContractor.FormContracts(rpk)
 }
 
 // Renters calls hostContractor.Renters.
 func (m *Manager) Renters() []modules.Renter {
 	return m.hostContractor.Renters()
+}
+
+// SetSatellite sets the satellite dependency of the contractor.
+func (m *Manager) SetSatellite(fl modules.FundLocker) {
+	m.hostContractor.SetSatellite(fl)
 }

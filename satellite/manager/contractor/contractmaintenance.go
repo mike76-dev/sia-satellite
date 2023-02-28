@@ -1464,7 +1464,7 @@ func (c *Contractor) threadedContractMaintenance() {
 
 // FormContracts forms up to the specified number of contracts, puts them
 // in the contract set, and returns them.
-func (c *Contractor) FormContracts(s modules.Satellite, rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
+func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
 	// No contract formation until the contractor is synced.
 	if !c.managedSynced() {
 		return nil, errors.New("contractor isn't synced yet")
@@ -1521,7 +1521,7 @@ func (c *Contractor) FormContracts(s modules.Satellite, rpk types.SiaPublicKey) 
 		if cu, ok := c.managedContractUtility(contract.ID); ok && cu.GoodForUpload {
 			contractSet = append(contractSet, contract)
 			uploadContracts++
-			if uploadContracts > int(renter.Allowance.Hosts) {
+			if uploadContracts >= int(renter.Allowance.Hosts) {
 				break
 			}
 		}
@@ -1619,7 +1619,7 @@ func (c *Contractor) FormContracts(s modules.Satellite, rpk types.SiaPublicKey) 
 		funds, _ := fundsSpent.Float64()
 		hastings, _ := types.SiacoinPrecision.Float64()
 		amount := funds / hastings
-		err = s.LockSiacoins(renter.Email, amount)
+		err = c.satellite.LockSiacoins(renter.Email, amount)
 		if err != nil {
 			c.log.Println("ERROR: couldn't lock funds")
 		}

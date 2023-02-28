@@ -87,12 +87,6 @@ type Satellite interface {
 	// GetWalletSeed returns the wallet seed.
 	GetWalletSeed() (smodules.Seed, error)
 
-	// LockSiacoins moves a part of the balance to "locked".
-	LockSiacoins(string, float64) error
-
-	// UnlockSiacoins moves the amount from "locked" to "available".
-	UnlockSiacoins(string, float64) error
-
 	// GetRenter returns the renter by the public key.
 	GetRenter(types.SiaPublicKey) (Renter, error)
 
@@ -226,4 +220,13 @@ type HostDB interface {
 	// UpdateContracts rebuilds the knownContracts of the HostBD using the
 	// provided contracts.
 	UpdateContracts([]RenterContract) error
+}
+
+// FundLocker is the minimal interface needed to lock and unlock funds.
+type FundLocker interface {
+	// LockSiacoins moves a part of the balance to "locked".
+	LockSiacoins(string, float64) error
+
+	// UnlockSiacoins moves the amount from "locked" to "available".
+	UnlockSiacoins(string, float64) error
 }

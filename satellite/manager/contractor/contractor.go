@@ -48,6 +48,7 @@ type Contractor struct {
 	cs            smodules.ConsensusSet
 	db            *sql.DB
 	hdb           modules.HostDB
+	satellite     modules.FundLocker
 	log           *persist.Logger
 	mu            sync.RWMutex
 	persistDir    string
@@ -615,4 +616,34 @@ func (c *Contractor) Renters() []modules.Renter {
 	}
 	c.mu.Unlock()
 	return renters
+}
+
+// SetSatellite sets the satellite dependency.
+func (c *Contractor) SetSatellite(fl modules.FundLocker) {
+	c.satellite = fl
+}
+
+// UnlockBalance unlocks the renter funds after the contract ends.
+func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
+	contract, exists := c.staticContracts.View(fcid)
+	if !exists {
+		c.log.Println("ERROR: trying to unlock funds of a non-existing contract:", fcid)
+		return
+	}
+
+	renter, err := c.GetRenter(contract.RenterPublicKey)
+	if err != nil {
+		c.log.Println("ERROR: trying to unlock funds of a non-existing renter:", contract.RenterPublicKey.String())
+		return
+	}
+
+	revision := contract.Transaction.FileContractRevisions[0]
+	payout, _ := revision.NewValidProofOutputs[0].Value.Float64()
+	hastings, _ := types.SiacoinPrecision.Float64()
+	amount := payout / hastings
+
+	err = c.satellite.UnlockSiacoins(renter.Email, amount)
+	if err != nil {
+		c.log.Println("ERROR: unable to unlock funds:", err)
+	}
 }
