@@ -478,21 +478,33 @@ function calculatePayment() {
 				paymentAmount = data.estimation;
 				paymentCurrency = data.currency;
 				if (data.numhosts == hosts) {
-					text.innerHTML = 'Amount to pay: ' + paymentAmount.toFixed(2) + ' ' + paymentCurrency;
+					text.innerHTML = 'Suggested payment amount: ' + paymentAmount.toFixed(2) + ' ' + paymentCurrency;
 					button.innerHTML = 'Proceed to Payment';
 				} else {
 					text.innerHTML = 'Warning: only ' + data.numhosts +
-						' hosts found that match these conditions. Amount to pay: ' +
+						' hosts found that match these conditions. Suggested payment amount: ' +
 						paymentAmount.toFixed(2) + ' ' + paymentCurrency;
 					button.innerHTML = 'Proceed Anyway';
 				}
 				document.getElementById('payment-amount').classList.remove('disabled');
+				document.getElementById('payment-actual').value = paymentAmount;
+				document.getElementById('payment-currency').innerHTML = paymentCurrency;
 			}
 		})
 		.catch(error => console.log(error));
 }
 
+function paymentChange(obj) {
+	obj.classList.remove('content-error');
+}
+
 function toPayment() {
+	let a = document.getElementById('payment-actual');
+	if (a.value < paymentAmount) {
+		a.classList.add('content-error');
+		return;
+	}
+	paymentAmount = parseFloat(a.value);
 	initialize();
 	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
 		paymentCurrency;

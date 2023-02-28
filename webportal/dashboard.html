@@ -284,6 +284,10 @@
 						<div id="payment-amount" class="disabled">
 							<br>
 							<p id="amount-text"></p>
+							<label for="payment-actual">Amount to pay:</label>
+							<input id="payment-actual" class="input input-actual" type="number"
+								onchange="paymentChange(this)">
+							<span id="payment-currency"></span>
 							<button id="amount-proceed" onclick="toPayment()"></button>
 						</div>
 					</section>

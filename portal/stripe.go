@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/stripe/stripe-go/v74"
@@ -23,65 +22,22 @@ type item struct {
 }
 
 // calculateOrderAmount returns the amount to charge the user from.
-func (p *Portal) calculateOrderAmount(email string) int64 {
+func (p *Portal) calculateOrderAmount(email string) (int64, string, error) {
 	// Retrieve the pending payment amount.
 	up, err := p.getPendingPayment(email)
-	
-	// If an error occurs, return a non-zero amount.
 	if err != nil {
-		return 1
+		return 0, "", err
 	}
 
-	return int64(up.Amount * 100)
-}
-
-// orderCurrency returns the order currency.
-func orderCurrency(items []item) string {
-	return strings.ToLower(strings.TrimPrefix(items[0].ID, "storage/"))
+	return int64(up.Amount * 100), strings.ToLower(up.Currency), nil
 }
 
 // paymentHandlerPOST handles the POST /stripe/create-payment-intent requests.
 func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
-	prefix, email, expires, tErr := api.portal.decodeToken(token)
-	if tErr != nil || prefix != cookiePrefix {
-		writeError(w,
-			Error{
-				Code: httpErrorTokenInvalid,
-				Message: "invalid token",
-			}, http.StatusBadRequest)
-		return
-	}
-
-	if expires.Before(time.Now()) {
-		writeError(w,
-		Error{
-			Code: httpErrorTokenExpired,
-			Message: "token already expired",
-		}, http.StatusBadRequest)
-		return
-	}
-
-	// Check if the user account exists.
-	count, cErr := api.portal.countEmails(email)
+	email, cErr := api.verifyCookie(w, token)
 	if cErr != nil {
-		api.portal.log.Printf("ERROR: Error querying database: %v\n", cErr)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
-		return
-	}
-
-	// No such account. Can only happen if it was deleted.
-	if count == 0 {
-		writeError(w,
-			Error{
-				Code: httpErrorNotFound,
-				Message: "no such account",
-			}, http.StatusBadRequest)
 		return
 	}
 
@@ -156,10 +112,20 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Create a PaymentIntent with amount and currency.
+	amount, currency, pErr := api.portal.calculateOrderAmount(email)
+	if pErr != nil {
+		api.portal.log.Println("ERROR: couldn't read pending payment:", pErr)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
 	params := &stripe.PaymentIntentParams{
 		Customer: stripe.String(cust.ID),
-		Amount:   stripe.Int64(api.portal.calculateOrderAmount(email)),
-		Currency: stripe.String(orderCurrency(data.Items)),
+		Amount:   stripe.Int64(amount),
+		Currency: stripe.String(currency),
 		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
 			Enabled: stripe.Bool(true),
 		},

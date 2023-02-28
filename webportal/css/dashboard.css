@@ -112,6 +112,16 @@ label {
 	width: 100%;
 }
 
+.input-actual {
+	max-width: 6rem;
+}
+
+#payment-currency {
+	font-size: 1rem;
+	color: #afafaf;
+	margin-right: 0.5rem;
+}
+
 .error {
 	color: #df3f1f;
 }

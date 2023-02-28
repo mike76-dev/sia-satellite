@@ -7,7 +7,7 @@ let elements;
 async function initialize() {
 	document.getElementById('payment-submit').classList.add('disabled');
 	document.getElementById('payment-back').classList.add('disabled');
-	let items = [{ id: 'storage/' + paymentCurrency }];
+	let items = [{ id: 'storage'}];
 	const response = await fetch(apiBaseURL + '/stripe/create-payment-intent', {
 		method:  'POST',
 		headers: { 'Content-Type': 'application/json' },
