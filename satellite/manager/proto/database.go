@@ -211,14 +211,7 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 	// Construct the transaction.
 	var t types.Transaction
 	t.FileContractRevisions = make([]types.FileContractRevision, 1)
-	numSignatures := 0
-	if tp.Signature0 != "" {
-		numSignatures++
-	}
-	if tp.Signature1 != "" {
-		numSignatures++
-	}
-	t.TransactionSignatures = make([]types.TransactionSignature, numSignatures)
+	t.TransactionSignatures = make([]types.TransactionSignature, tp.SignaturesRequired)
 	var b []byte
 	b, _ = hex.DecodeString(tp.ParentID)
 	copy(t.FileContractRevisions[0].ParentID[:], b)
@@ -254,7 +247,7 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 	copy(t.FileContractRevisions[0].NewMissedProofOutputs[2].UnlockHash[:], b)
 	b, _ = hex.DecodeString(tp.NewUnlockHash)
 	copy(t.FileContractRevisions[0].NewUnlockHash[:], b)
-	if numSignatures > 0 {
+	if tp.SignaturesRequired > 0 {
 		b, _ = hex.DecodeString(tp.ParentID0)
 		copy(t.TransactionSignatures[0].ParentID[:], b)
 		t.TransactionSignatures[0].PublicKeyIndex = tp.PublicKeyIndex0
@@ -265,7 +258,7 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 			FileContractRevisions: []uint64{0},
 		}
 	}
-	if numSignatures > 1 {
+	if tp.SignaturesRequired > 1 {
 		b, _ = hex.DecodeString(tp.ParentID1)
 		copy(t.TransactionSignatures[1].ParentID[:], b)
 		t.TransactionSignatures[1].PublicKeyIndex = tp.PublicKeyIndex1
