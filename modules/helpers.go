@@ -41,7 +41,7 @@ func ReadPublicKey(s string) types.SiaPublicKey {
 func ConvertCurrency(c types.Currency) core.Currency {
 	b := c.Big().Bytes()
 	buf := make([]byte, 16)
-	copy(buf[:], b[:])
+	copy(buf[16 - len(b):], b[:])
 	return core.NewCurrency(binary.BigEndian.Uint64(buf[8:]), binary.BigEndian.Uint64(buf[:8]))
 }
 
