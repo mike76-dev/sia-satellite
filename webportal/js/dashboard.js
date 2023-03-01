@@ -556,11 +556,7 @@ function getPayments() {
 					document.getElementById('history-next').disabled = data.length != paymentsStep;
 				} else {
 					if (paymentsFrom > 1) {
-						paymentsFrom = paymentsFrom - paymentsStep;
-						if (paymentsFrom < 1) paymentsFrom = 1;
-						if (paymentsFrom == 1) {
-							document.getElementById('history-prev').disabled = true;
-						}
+						document.getElementById('history-prev').disabled = false;
 					}
 					document.getElementById('history-next').disabled = true;
 				}
@@ -705,11 +701,7 @@ function getContracts() {
 					document.getElementById('contracts-next').disabled = data.length != contractsStep;
 				} else {
 					if (contractsFrom > 1) {
-						contractsFrom = contractsFrom - contractsStep;
-						if (contractsFrom < 1) contractsFrom = 1;
-						if (contractsFrom == 1) {
-							document.getElementById('contracts-prev').disabled = true;
-						}
+						document.getElementById('contracts-prev').disabled = false;
 					}
 					document.getElementById('contracts-next').disabled = true;
 				}
