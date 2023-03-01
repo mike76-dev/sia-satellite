@@ -83,13 +83,15 @@ func (fc *FileContract) saveContract() error {
 		copy(ts0.ParentID[:], h.Transaction.TransactionSignatures[0].ParentID[:])
 		ts0.PublicKeyIndex = h.Transaction.TransactionSignatures[0].PublicKeyIndex
 		ts0.Timelock = h.Transaction.TransactionSignatures[0].Timelock
-		copy(ts0.Signature[:], h.Transaction.TransactionSignatures[0].Signature[:])
+		ts0.Signature = make([]byte, len(h.Transaction.TransactionSignatures[0].Signature))
+		copy(ts0.Signature, h.Transaction.TransactionSignatures[0].Signature)
 	}
 	if len(h.Transaction.TransactionSignatures) > 1 {
 		copy(ts1.ParentID[:], h.Transaction.TransactionSignatures[1].ParentID[:])
 		ts1.PublicKeyIndex = h.Transaction.TransactionSignatures[1].PublicKeyIndex
 		ts1.Timelock = h.Transaction.TransactionSignatures[1].Timelock
-		copy(ts1.Signature[:], h.Transaction.TransactionSignatures[1].Signature[:])
+		ts1.Signature = make([]byte, len(h.Transaction.TransactionSignatures[1].Signature))
+		copy(ts1.Signature, h.Transaction.TransactionSignatures[1].Signature)
 	}
 
 	// Check if the contract is already in the database.
@@ -253,7 +255,8 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 		t.TransactionSignatures[0].PublicKeyIndex = tp.PublicKeyIndex0
 		t.TransactionSignatures[0].Timelock = types.BlockHeight(tp.Timelock0)
 		b, _ = hex.DecodeString(tp.Signature0)
-		copy(t.TransactionSignatures[0].Signature[:], b)
+		t.TransactionSignatures[0].Signature = make([]byte, len(b))
+		copy(t.TransactionSignatures[0].Signature, b)
 		t.TransactionSignatures[0].CoveredFields = types.CoveredFields{
 			FileContractRevisions: []uint64{0},
 		}
@@ -264,7 +267,8 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 		t.TransactionSignatures[1].PublicKeyIndex = tp.PublicKeyIndex1
 		t.TransactionSignatures[1].Timelock = types.BlockHeight(tp.Timelock1)
 		b, _ = hex.DecodeString(tp.Signature1)
-		copy(t.TransactionSignatures[1].Signature[:], b)
+		t.TransactionSignatures[1].Signature = make([]byte, len(b))
+		copy(t.TransactionSignatures[1].Signature, b)
 		t.TransactionSignatures[1].CoveredFields = types.CoveredFields{
 			FileContractRevisions: []uint64{0},
 		}

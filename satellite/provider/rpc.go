@@ -161,6 +161,10 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 		fcr = contract.Transaction.FileContractRevisions[0]
 		ts0 = contract.Transaction.TransactionSignatures[0]
 		ts1 = contract.Transaction.TransactionSignatures[1]
+		renterSig := make([]byte, len(ts0.Signature))
+		hostSig := make([]byte, len(ts1.Signature))
+		copy(renterSig[:], ts0.Signature[:])
+		copy(hostSig[:], ts1.Signature[:])
 		cr = rhpv2.ContractRevision{
 			Revision: core.FileContractRevision{
 				ParentID:         core.FileContractID(contract.ID),
@@ -206,15 +210,15 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 				PublicKeyIndex: ts0.PublicKeyIndex,
 				Timelock:       uint64(ts0.Timelock),
 				CoveredFields:  core.CoveredFields{FileContractRevisions: []uint64{0},},
+				Signature:      renterSig,
 			}, {
 				ParentID:       core.Hash256(ts1.ParentID),
 				PublicKeyIndex: ts1.PublicKeyIndex,
 				Timelock:       uint64(ts1.Timelock),
 				CoveredFields:  core.CoveredFields{FileContractRevisions: []uint64{0},},
+				Signature:      hostSig,
 			}},
 		}
-		copy(cr.Signatures[0].Signature[:], ts0.Signature[:])
-		copy(cr.Signatures[1].Signature[:], ts1.Signature[:])
 		cs.contracts = append(cs.contracts, cr)
 	}
 
