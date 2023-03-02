@@ -308,6 +308,18 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 	return c.saveContract()
 }
 
+// UpdateContract updates the contract with the new revision.
+func (cs *ContractSet) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature) error {
+	cs.mu.Lock()
+	contract, exists := cs.contracts[rev.ParentID]
+	cs.mu.Unlock()
+	if !exists {
+		return errors.New("contract not found in the contract set")
+	}
+
+	return contract.managedSyncRevision(rev, sigs)
+}
+
 // managedInsertContract inserts a contract into a set. This will overwrite
 // existing contracts of the same name to make sure the update is idempotent.
 func (cs *ContractSet) managedInsertContract(h contractHeader) (modules.RenterContract, error) {

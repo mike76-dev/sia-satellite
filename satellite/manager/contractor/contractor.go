@@ -649,3 +649,11 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 		c.log.Println("ERROR: unable to unlock funds:", err)
 	}
 }
+
+// UpdateContract updates the contract with the new revision.
+func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature) {
+	err := c.staticContracts.UpdateContract(rev, sigs)
+	if err != nil {
+		c.log.Println("ERROR: revision update failed:", rev.ParentID)
+	}
+}

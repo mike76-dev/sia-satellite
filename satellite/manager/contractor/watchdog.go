@@ -380,10 +380,21 @@ func (w *watchdog) scanAppliedBlock(block types.Block) {
 			}
 		}
 
-		for _, rev := range txn.FileContractRevisions {
+		for num, rev := range txn.FileContractRevisions {
 			if contractData, ok := w.contracts[rev.ParentID]; ok {
 				contractData.revisionFound = rev.NewRevisionNumber
 				w.contractor.log.Println("Found revision for: ", rev.ParentID, rev.NewRevisionNumber)
+				// Look for the revision signatures.
+				sigs := make([]types.TransactionSignature, 2)
+				for _, sig := range txn.TransactionSignatures {
+					for _, revNum := range sig.CoveredFields.FileContractRevisions {
+						if revNum == uint64(num) {
+							sigs[sig.PublicKeyIndex] = sig
+							break
+						}
+					}
+				}
+				w.contractor.UpdateContract(rev, sigs)
 			}
 		}
 
