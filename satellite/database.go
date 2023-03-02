@@ -99,9 +99,9 @@ func (s *Satellite) LockSiacoins(email string, amount float64) error {
 }
 
 // UnlockSiacoins implements FundLocker interface.
-func (s *Satellite) UnlockSiacoins(email string, amount float64) error {
+func (s *Satellite) UnlockSiacoins(email string, amount, total float64) error {
 	// Sanity check.
-	if amount <= 0 {
+	if amount <= 0 || total <= 0 {
 		return errors.New("wrong amount")
 	}
 
@@ -116,13 +116,19 @@ func (s *Satellite) UnlockSiacoins(email string, amount float64) error {
 	if scRate == 0 {
 		return errors.New("unable to fetch SC rate")
 	}
-	locked := amount * scRate
-	if locked > ub.Locked {
+	unlocked := amount * scRate
+	burned := (total - amount) * scRate
+	if unlocked + burned > ub.Locked {
 		s.log.Println("WARN: trying to unlock more than the locked balance")
-		locked = ub.Locked
+		if burned < ub.Locked {
+			unlocked = ub.Locked - burned
+		} else {
+			burned = ub.Locked
+			unlocked = 0
+		}
 	}
-	ub.Locked -= locked
-	ub.Balance += locked
+	ub.Locked -= (unlocked + burned)
+	ub.Balance += unlocked
 
 	// Save the new balance.
 	return s.UpdateBalance(email, ub)

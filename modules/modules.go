@@ -227,6 +227,7 @@ type FundLocker interface {
 	// LockSiacoins moves a part of the balance to "locked".
 	LockSiacoins(string, float64) error
 
-	// UnlockSiacoins moves the amount from "locked" to "available".
-	UnlockSiacoins(string, float64) error
+	// UnlockSiacoins moves a part of the amount from "locked" to "available",
+	// while the other part (fees and other spent funds) is "burned".
+	UnlockSiacoins(string, float64, float64) error
 }
