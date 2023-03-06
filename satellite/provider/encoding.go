@@ -127,6 +127,76 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	fr.MaxSectorAccessPrice.EncodeTo(e)
 }
 
+// renewRequest is used when the renter requests contract renewals.
+type renewRequest struct {
+	PubKey      crypto.PublicKey
+	Contracts   []types.FileContractID
+	Period      uint64
+	RenewWindow uint64
+
+	Storage  uint64
+	Upload   uint64
+	Download uint64
+
+	MinShards   uint64
+	TotalShards uint64
+
+	MaxRPCPrice          types.Currency
+	MaxContractPrice     types.Currency
+	MaxDownloadPrice     types.Currency
+	MaxUploadPrice       types.Currency
+	MaxStoragePrice      types.Currency
+	MaxSectorAccessPrice types.Currency
+
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
+	copy(rr.PubKey[:], d.ReadBytes())
+	numContracts := int(d.ReadUint64())
+	rr.Contracts = make([]types.FileContractID, numContracts)
+	for i := 0; i < numContracts; i++ {
+		copy(rr.Contracts[i][:], d.ReadBytes())
+	}
+	rr.Period = d.ReadUint64()
+	rr.RenewWindow = d.ReadUint64()
+	rr.Storage = d.ReadUint64()
+	rr.Upload = d.ReadUint64()
+	rr.Download = d.ReadUint64()
+	rr.MinShards = d.ReadUint64()
+	rr.TotalShards = d.ReadUint64()
+	rr.MaxRPCPrice.DecodeFrom(d)
+	rr.MaxContractPrice.DecodeFrom(d)
+	rr.MaxDownloadPrice.DecodeFrom(d)
+	rr.MaxUploadPrice.DecodeFrom(d)
+	rr.MaxStoragePrice.DecodeFrom(d)
+	rr.MaxSectorAccessPrice.DecodeFrom(d)
+	rr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (rr *renewRequest) EncodeTo(e *types.Encoder) {
+	e.WriteBytes(rr.PubKey[:])
+	e.WriteUint64(uint64(len(rr.Contracts)))
+	for _, id := range rr.Contracts {
+		e.WriteBytes(id[:])
+	}
+	e.WriteUint64(rr.Period)
+	e.WriteUint64(rr.RenewWindow)
+	e.WriteUint64(rr.Storage)
+	e.WriteUint64(rr.Upload)
+	e.WriteUint64(rr.Download)
+	e.WriteUint64(rr.MinShards)
+	e.WriteUint64(rr.TotalShards)
+	rr.MaxRPCPrice.EncodeTo(e)
+	rr.MaxContractPrice.EncodeTo(e)
+	rr.MaxDownloadPrice.EncodeTo(e)
+	rr.MaxUploadPrice.EncodeTo(e)
+	rr.MaxStoragePrice.EncodeTo(e)
+	rr.MaxSectorAccessPrice.EncodeTo(e)
+}
+
 // contractSet is a collection of rhpv2.ContractRevision objects.
 type contractSet struct {
 	contracts []rhpv2.ContractRevision

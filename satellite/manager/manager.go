@@ -102,6 +102,9 @@ type hostContractor interface {
 	// given contract with that host.
 	RenewContract(conn net.Conn, fcid types.FileContractID, params smodules.ContractParams, txnBuilder smodules.TransactionBuilder, tpool smodules.TransactionPool, hdb modules.HostDB, pt *smodules.RPCPriceTable) (modules.RenterContract, []types.Transaction, error)
 
+	// RenewContracts tries to renew the given set of contracts.
+	RenewContracts(types.SiaPublicKey, []types.FileContractID) ([]modules.RenterContract, error)
+
 	// Renters return the list of renters.
 	Renters() []modules.Renter
 
@@ -541,6 +544,11 @@ func (m *Manager) CreateNewRenter(email string, pk types.SiaPublicKey) {
 // FormContracts calls hostContractor.FormContracts.
 func (m *Manager) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
 	return m.hostContractor.FormContracts(rpk)
+}
+
+// RenewContracts calls hostContractor.RenewContracts.
+func (m *Manager) RenewContracts(rpk types.SiaPublicKey, contracts []types.FileContractID) ([]modules.RenterContract, error) {
+	return m.hostContractor.RenewContracts(rpk, contracts)
 }
 
 // Renters calls hostContractor.Renters.

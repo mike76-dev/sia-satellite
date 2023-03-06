@@ -231,3 +231,12 @@ type FundLocker interface {
 	// while the other part (fees and other spent funds) is "burned".
 	UnlockSiacoins(string, float64, float64) error
 }
+
+// ContractFormer is the minimal interface to be used by Provider.
+type ContractFormer interface {
+	PublicKey() types.SiaPublicKey
+	SecretKey() crypto.SecretKey
+	UserExists(rpk types.SiaPublicKey) (bool, error)
+	FormContracts(types.SiaPublicKey, smodules.Allowance) ([]RenterContract, error)
+	RenewContracts(types.SiaPublicKey, smodules.Allowance, []types.FileContractID) ([]RenterContract, error)
+}

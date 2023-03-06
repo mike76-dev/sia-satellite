@@ -28,6 +28,10 @@ const rpcRatelimit = time.Millisecond * 50
 // contracts om their behalf.
 var formContractsSpecifier = types.NewSpecifier("FormContracts")
 
+// renewContractsSpecifier is used when a renter requests to renew a set of
+// contracts.
+var renewContractsSpecifier = types.NewSpecifier("RenewContracts")
+
 // threadedUpdateHostname periodically runs 'managedLearnHostname', which
 // checks if the Satellite's hostname has changed.
 func (p *Provider) threadedUpdateHostname(closeChan chan struct{}) {
@@ -222,7 +226,7 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 
 	// Generate a session key, sign it, and derive the shared secret.
 	xsk, xpk := crypto.GenerateX25519KeyPair()
-	pubkeySig := crypto.SignHash(crypto.HashAll(req.PublicKey, xpk), p.Satellite.SecretKey())
+	pubkeySig := crypto.SignHash(crypto.HashAll(req.PublicKey, xpk), p.satellite.SecretKey())
 	cipherKey := crypto.DeriveSharedSecret(xsk, req.PublicKey)
 
 	// Send our half of the key exchange.
@@ -272,6 +276,11 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		err = p.managedFormContracts(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCFormContracts failed: "), err)
+		}
+	case renewContractsSpecifier:
+		err = p.managedRenewContracts(s)
+		if err != nil {
+			err = errors.Extend(errors.New("incoming RPCRenewContracts failed: "), err)
 		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO

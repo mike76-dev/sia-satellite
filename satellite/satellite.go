@@ -132,7 +132,7 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 		persistDir:    persistDir,
 		staticAlerter: smodules.NewAlerter("satellite"),
 	}
-	p.Satellite = s
+	p.SetSatellite(s)
 	m.SetSatellite(s)
 
 	// Call stop in the event of a partial startup.
@@ -318,6 +318,41 @@ func (s *Satellite) OldContracts() []modules.RenterContract {
 // BlockHeight returns the current block height.
 func (s *Satellite) BlockHeight() types.BlockHeight {
 	return s.cs.Height()
+}
+
+// RenewContracts tries to renew the given set of contracts and returns them.
+// If the contracts are not up to being renewed yet, existing contracts are
+// returned.
+func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, a smodules.Allowance, contracts []types.FileContractID) ([]modules.RenterContract, error) {
+	// Get the estimated costs and update the allowance with them.
+	estimation, a, err := s.m.PriceEstimation(a)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the user balance is sufficient to cover the costs.
+	renter, err := s.GetRenter(rpk)
+	if err != nil {
+		return nil, err
+	}
+	ub, err := s.GetBalance(renter.Email)
+	if err != nil {
+		return nil, err
+	}
+	if ub.SCBalance < estimation {
+		return nil, errors.New("insufficient account balance")
+	}
+
+	// Set the allowance.
+	err = s.m.SetAllowance(rpk, a)
+	if err != nil {
+		return nil, err
+	}
+
+	// Renew the contracts.
+	contractSet, err := s.m.RenewContracts(rpk, contracts)
+
+	return contractSet, err
 }
 
 // enforce that Satellite satisfies the modules.Satellite interface

@@ -31,8 +31,6 @@ type contractorPersist struct {
 	LastChange           smodules.ConsensusChangeID      `json:"lastchange"`
 	OldContracts         []modules.RenterContract        `json:"oldcontracts"`
 	DoubleSpentContracts map[string]types.BlockHeight    `json:"doublespentcontracts"`
-	RenewedFrom          map[string]types.FileContractID `json:"renewedfrom"`
-	RenewedTo            map[string]types.FileContractID `json:"renewedto"`
 	Synced               bool                            `json:"synced"`
 
 	// Subsystem persistence:
@@ -73,16 +71,8 @@ func (c *Contractor) persistData() contractorPersist {
 	data := contractorPersist{
 		BlockHeight:          c.blockHeight,
 		LastChange:           c.lastChange,
-		RenewedFrom:          make(map[string]types.FileContractID),
-		RenewedTo:            make(map[string]types.FileContractID),
 		DoubleSpentContracts: make(map[string]types.BlockHeight),
 		Synced:               synced,
-	}
-	for k, v := range c.renewedFrom {
-		data.RenewedFrom[k.String()] = v
-	}
-	for k, v := range c.renewedTo {
-		data.RenewedTo[k.String()] = v
 	}
 	for _, contract := range c.oldContracts {
 		data.OldContracts = append(data.OldContracts, contract)
@@ -109,18 +99,6 @@ func (c *Contractor) load() error {
 		close(c.synced)
 	}
 	var fcid types.FileContractID
-	for k, v := range data.RenewedFrom {
-		if err := fcid.LoadString(k); err != nil {
-			return err
-		}
-		c.renewedFrom[fcid] = v
-	}
-	for k, v := range data.RenewedTo {
-		if err := fcid.LoadString(k); err != nil {
-			return err
-		}
-		c.renewedTo[fcid] = v
-	}
 	for _, contract := range data.OldContracts {
 		c.oldContracts[contract.ID] = contract
 	}
@@ -129,6 +107,10 @@ func (c *Contractor) load() error {
 			return err
 		}
 		c.doubleSpentContracts[fcid] = height
+	}
+	err = c.loadRenewHistory()
+	if err != nil {
+		return err
 	}
 
 	c.staticWatchdog, err = newWatchdogFromPersist(c, data.WatchdogData)
@@ -179,6 +161,44 @@ func (c *Contractor) load() error {
 			CurrentPeriod: types.BlockHeight(entry.CurrentPeriod),
 			PublicKey:     modules.ReadPublicKey(entry.PublicKey),
 			Email:         entry.Email,
+		}
+	}
+
+	return nil
+}
+
+// loadRenewHistory loads the renewal history from the database.
+func (c *Contractor) loadRenewHistory() error {
+	rows, err := c.db.Query("SELECT contract_id, renewed_from, renewed_to FROM contracts")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var id, from, to string
+	var fcid, fcidNew, fcidOld types.FileContractID
+	for rows.Next() {
+		if err := rows.Scan(&id, &from, &to); err != nil {
+			c.log.Println("Error scanning database row:", err)
+			continue
+		}
+		if err := fcid.LoadString(id); err != nil {
+			c.log.Println("ERROR: wrong contract ID:", err)
+			continue
+		}
+		if from != "" {
+			if err := fcidOld.LoadString(from); err != nil {
+				c.log.Println("ERROR: wrong contract ID:", err)
+				continue
+			}
+			c.renewedFrom[fcid] = fcidOld
+		}
+		if to != "" {
+			if err := fcidNew.LoadString(to); err != nil {
+				c.log.Println("ERROR: wrong contract ID:", err)
+				continue
+			}
+			c.renewedTo[fcid] = fcidNew
 		}
 	}
 

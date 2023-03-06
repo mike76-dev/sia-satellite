@@ -12,11 +12,9 @@ import (
 
 	"gitlab.com/NebulousLabs/errors"
 
-	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
-	"go.sia.tech/siad/types"
 )
 
 // A Provider contains the information necessary to communicate with the
@@ -24,7 +22,7 @@ import (
 type Provider struct {
 	// Dependencies.
 	g         smodules.Gateway
-	Satellite satellite
+	satellite modules.ContractFormer
 
 	autoAddress smodules.NetAddress // Determined using automatic tooling in network.go
 
@@ -37,14 +35,6 @@ type Provider struct {
 	port          string
 	threads       siasync.ThreadGroup
 	staticAlerter *smodules.GenericAlerter
-}
-
-// satellite is the minimal interface for Satellite.
-type satellite interface {
-	PublicKey() types.SiaPublicKey
-	SecretKey() crypto.SecretKey
-	UserExists(rpk types.SiaPublicKey) (bool, error)
-	FormContracts(types.SiaPublicKey, smodules.Allowance) ([]modules.RenterContract, error)
 }
 
 // New returns an initialized Provider.
@@ -118,4 +108,9 @@ func (p *Provider) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.saveSync()
+}
+
+// SetSatellite sets the satellite dependency of the Provider.
+func (p *Provider) SetSatellite(cf modules.ContractFormer) {
+	p.satellite = cf
 }
