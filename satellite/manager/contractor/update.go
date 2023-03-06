@@ -128,8 +128,8 @@ func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
 
 	// Perform contract maintenance if our blockchain is synced. Use a separate
 	// goroutine so that the rest of the contractor is not blocked during
-	// maintenance. TODO
+	// maintenance.
 	if cc.Synced {
-		// go c.threadedContractMaintenance()
+		go c.threadedContractMaintenance()
 	}
 }
