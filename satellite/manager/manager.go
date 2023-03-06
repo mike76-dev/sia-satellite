@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -98,10 +97,6 @@ type hostContractor interface {
 	// RefreshedContract checks if the contract was previously refreshed.
 	RefreshedContract(fcid types.FileContractID) bool
 
-	// RenewContract takes an established connection to a host and renews the
-	// given contract with that host.
-	RenewContract(conn net.Conn, fcid types.FileContractID, params smodules.ContractParams, txnBuilder smodules.TransactionBuilder, tpool smodules.TransactionPool, hdb modules.HostDB, pt *smodules.RPCPriceTable) (modules.RenterContract, []types.Transaction, error)
-
 	// RenewContracts tries to renew the given set of contracts.
 	RenewContracts(types.SiaPublicKey, []types.FileContractID) ([]modules.RenterContract, error)
 
@@ -111,9 +106,6 @@ type hostContractor interface {
 	// Synced returns a channel that is closed when the contractor is fully
 	// synced with the peer-to-peer network.
 	Synced() <-chan struct{}
-
-	// UpdateWorkerPool updates the workerpool currently in use by the contractor.
-	UpdateWorkerPool(smodules.WorkerPool)
 
 	// SetSatellite sets the satellite dependency.
 	SetSatellite(modules.FundLocker)

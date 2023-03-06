@@ -739,32 +739,15 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 	var newContract modules.RenterContract
 	var formationTxnSet []types.Transaction
 
-	var w smodules.Worker
-	w, err = c.workerPool.Worker(hpk)
-	if err != nil {
-		txnBuilder.Drop() // Return unused outputs to wallet.
-		return modules.RenterContract{}, err
+	oldContract, ok := c.staticContracts.Acquire(id)
+	if !ok {
+		return modules.RenterContract{}, errContractNotFound
 	}
-	nc, formationTxnSet, err := w.RenewContract(c.tg.StopCtx(), id, params, txnBuilder)
-	newContract = modules.RenterContract{
-		ID:                  nc.ID,
-		HostPublicKey:       nc.HostPublicKey,
-		RenterPublicKey:     rpk,
-		Transaction:         nc.Transaction,
-		StartHeight:         nc.StartHeight,
-		EndHeight:           nc.EndHeight,
-		RenterFunds:         nc.RenterFunds,
-		DownloadSpending:    nc.DownloadSpending,
-		FundAccountSpending: nc.FundAccountSpending,
-		MaintenanceSpending: nc.MaintenanceSpending,
-		StorageSpending:     nc.StorageSpending,
-		UploadSpending:      nc.UploadSpending,
-		Utility:             nc.Utility,
-		TotalCost:           nc.TotalCost,
-		ContractFee:         nc.ContractFee,
-		TxnFee:              nc.TxnFee,
-		SiafundFee:          nc.SiafundFee,
+	if !oldContract.Utility().GoodForRenew {
+		return modules.RenterContract{}, errContractNotGFR
 	}
+	newContract, formationTxnSet, err = c.staticContracts.Renew(oldContract, params, txnBuilder, c.tpool, c.hdb, c.tg.StopChan())
+	c.staticContracts.Return(oldContract)
 	if err != nil {
 		txnBuilder.Drop() // Return unused outputs to wallet.
 		return modules.RenterContract{}, err

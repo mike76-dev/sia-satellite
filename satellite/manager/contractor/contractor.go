@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,14 +32,6 @@ var (
 	errContractNotFound = errors.New("contract not found")
 )
 
-// emptyWorkerPool is the workerpool that a contractor is initialized with.
-type emptyWorkerPool struct{}
-
-// Worker implements the WorkerPool interface.
-func (emptyWorkerPool) Worker(_ types.SiaPublicKey) (smodules.Worker, error) {
-	return nil, errors.New("empty worker pool")
-}
-
 // A Contractor negotiates, revises, renews, and provides access to file
 // contracts.
 type Contractor struct {
@@ -56,7 +47,6 @@ type Contractor struct {
 	tg            threadgroup.ThreadGroup
 	tpool         smodules.TransactionPool
 	wallet        smodules.Wallet
-	workerPool    smodules.WorkerPool
 
 	// Only one thread should be performing contract maintenance at a time.
 	interruptMaintenance chan struct{}
@@ -233,13 +223,6 @@ func (c *Contractor) CurrentPeriod(rpk types.SiaPublicKey) types.BlockHeight {
 		return types.BlockHeight(0)
 	}
 	return renter.CurrentPeriod
-}
-
-// UpdateWorkerPool updates the workerpool currently in use by the contractor.
-func (c *Contractor) UpdateWorkerPool(wp smodules.WorkerPool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.workerPool = wp
 }
 
 // ProvidePayment takes a stream and a set of payment details and handles
@@ -473,7 +456,6 @@ func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp s
 		renewing:             make(map[types.FileContractID]bool),
 		renewedFrom:          make(map[types.FileContractID]types.FileContractID),
 		renewedTo:            make(map[types.FileContractID]types.FileContractID),
-		workerPool:           emptyWorkerPool{},
 	}
 	c.staticWatchdog = newWatchdog(c)
 
@@ -568,22 +550,6 @@ func newPayByContractRequest(rev types.FileContractRevision, sig crypto.Signatur
 		req.NewMissedProofValues[i] = o.Value
 	}
 	return req
-}
-
-// RenewContract takes an established connection to a host and renews the
-// contract with that host.
-func (c *Contractor) RenewContract(conn net.Conn, fcid types.FileContractID, params smodules.ContractParams, txnBuilder smodules.TransactionBuilder, tpool smodules.TransactionPool, hdb modules.HostDB, pt *smodules.RPCPriceTable) (modules.RenterContract, []types.Transaction, error) {
-	newContract, txnSet, err := c.staticContracts.RenewContract(conn, fcid, params, txnBuilder, tpool, hdb, pt)
-	if err != nil {
-		return modules.RenterContract{}, nil, errors.AddContext(err, "RenewContract: failed to renew contract")
-	}
-	// Update various mappings in the contractor after a successful renewal.
-	c.mu.Lock()
-	c.renewedFrom[newContract.ID] = fcid
-	c.renewedTo[fcid] = newContract.ID
-	c.pubKeysToContractID[newContract.RenterPublicKey.String() + newContract.HostPublicKey.String()] = newContract.ID
-	c.mu.Unlock()
-	return newContract, txnSet, nil
 }
 
 // GetRenter returns the renter with the specified public key.
