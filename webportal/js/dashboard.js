@@ -62,7 +62,7 @@ retrieveBlockHeight();
 retrieveBalance();
 retrieveAverages();
 window.setInterval(retrieveBlockHeight, 60000);
-window.setInterval(retrieveBalance, 300000);
+window.setInterval(retrieveBalance, 60000);
 window.setInterval(retrieveAverages, 600000);
 retrieveKey();
 
