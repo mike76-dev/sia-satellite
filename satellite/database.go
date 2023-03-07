@@ -80,9 +80,12 @@ func (s *Satellite) LockSiacoins(email string, amount float64) error {
 	if err != nil {
 		return err
 	}
-	if amount > ub.SCBalance {
+
+	// Include the Satellite fee.
+	amountWithFee := amount * modules.SatelliteOverhead
+	if amountWithFee > ub.SCBalance {
 		s.log.Println("WARN: trying to lock more than the available balance")
-		amount = ub.SCBalance
+		amountWithFee = ub.SCBalance
 	}
 
 	// Calculate the new balance.
@@ -90,7 +93,7 @@ func (s *Satellite) LockSiacoins(email string, amount float64) error {
 	if scRate == 0 {
 		return errors.New("unable to fetch SC rate")
 	}
-	locked := amount * scRate
+	locked := amountWithFee * scRate
 	ub.Locked += locked
 	ub.Balance -= locked
 
@@ -101,7 +104,7 @@ func (s *Satellite) LockSiacoins(email string, amount float64) error {
 // UnlockSiacoins implements FundLocker interface.
 func (s *Satellite) UnlockSiacoins(email string, amount, total float64) error {
 	// Sanity check.
-	if amount <= 0 || total <= 0 {
+	if amount <= 0 || total <= 0 || amount > total {
 		return errors.New("wrong amount")
 	}
 
@@ -111,13 +114,16 @@ func (s *Satellite) UnlockSiacoins(email string, amount, total float64) error {
 		return err
 	}
 
+	// Include the Satellite fee.
+	totalWithFee := total * modules.SatelliteOverhead
+
 	// Calculate the new balance.
 	scRate, _ := s.GetSiacoinRate(ub.Currency)
 	if scRate == 0 {
 		return errors.New("unable to fetch SC rate")
 	}
 	unlocked := amount * scRate
-	burned := (total - amount) * scRate
+	burned := (totalWithFee - amount) * scRate
 	if unlocked + burned > ub.Locked {
 		s.log.Println("WARN: trying to unlock more than the locked balance")
 		if burned < ub.Locked {
