@@ -523,7 +523,7 @@ func (c *Contractor) managedPruneRedundantAddressRange() {
 		// to iterate through those, too.
 		for _, fcid := range cids[host.String()] {
 			if err := c.managedCancelContract(fcid); err != nil {
-				c.log.Println("WARNING: Wasn't able to cancel contract in managedPruneRedundantAddressRange", err)
+				c.log.Println("WARN: unable to cancel contract in managedPruneRedundantAddressRange", err)
 			}
 		}
 	}

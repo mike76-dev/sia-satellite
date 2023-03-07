@@ -267,9 +267,6 @@ func (w *watchdog) archiveContract(fcID types.FileContractID, doubleSpendHeight 
 		WindowEnd:                 contractData.windowEnd,
 	}
 	delete(w.contracts, fcID)
-
-	// Inform the Contractor to unlock the user balance.
-	w.contractor.UnlockBalance(fcID)
 }
 
 // addOutputDependency marks the contract with fcID as dependent on this Siacoin
