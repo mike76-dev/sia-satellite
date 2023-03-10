@@ -39,7 +39,7 @@ func (cs *ContractSet) managedNewRenewAndClear(oldContract *FileContract, params
 	fcTxn, _ := txnBuilder.View()
 	host, funding, startHeight, endHeight := params.Host, params.Funding, params.StartHeight, params.EndHeight
 	renterSKOld := contract.SecretKey
-	renterSKNew, renterPKNew := smodules.GenerateContractKeyPair(params.RenterSeed, fcTxn)
+	renterSKNew, renterPKNew := crypto.GenerateKeyPairDeterministic([crypto.EntropySize]byte(params.RenterSeed))
 	lastRev := contract.LastRevision()
 
 	// Calculate the anticipated transaction fee.
@@ -242,6 +242,7 @@ func (cs *ContractSet) managedNewRenewAndClear(oldContract *FileContract, params
 	if err != nil {
 		return modules.RenterContract{}, nil, err
 	}
+
 	// Commit changes to old contract.
 	if err := oldContract.managedCommitClearContract(finalRevTxn, bandwidthCost); err != nil {
 		return modules.RenterContract{}, nil, err

@@ -69,12 +69,11 @@ type (
 	}
 )
 
-// saveContract saves the FileContract in the database.
+// saveContract saves the FileContract in the database. A lock must be acquired
+// on the contract.
 func (fc *FileContract) saveContract() error {
 	// Prepare the necessary variables.
-	fc.mu.Lock()
 	h := fc.header
-	fc.mu.Unlock()
 	rev := h.LastRevision()
 	hid := h.ID()
 	id := hex.EncodeToString(hid[:])
@@ -117,7 +116,14 @@ func (fc *FileContract) saveContract() error {
 			return err
 		}
 
-		// Update transaction.
+		// Update transaction. It may contain a variable number of missed proof
+		// outputs, so check that first.
+		var value, hash string
+		if len(rev.NewMissedProofOutputs) > 2 {
+			value = rev.NewMissedProofOutputs[2].Value.String()
+			hash = hex.EncodeToString(rev.NewMissedProofOutputs[2].UnlockHash[:])
+		}
+
 		_, err = fc.db.Exec(`
 			UPDATE transactions
 			SET parent_id = ?, uc_timelock = ?, uc_renter_pk = ?, uc_host_pk = ?,
@@ -132,7 +138,7 @@ func (fc *FileContract) saveContract() error {
 				signature_0 = ?, t_parent_id_1 = ?, pk_index_1 = ?, timelock_1 = ?,
 				signature_1 = ?
 			WHERE contract_id = ?
-		`, hex.EncodeToString(rev.ParentID[:]), rev.UnlockConditions.Timelock, rev.UnlockConditions.PublicKeys[0].String(), rev.UnlockConditions.PublicKeys[1].String(), rev.UnlockConditions.SignaturesRequired, rev.NewRevisionNumber, rev.NewFileSize, hex.EncodeToString(rev.NewFileMerkleRoot[:]), rev.NewWindowStart, rev.NewWindowEnd, rev.NewValidProofOutputs[0].Value.String(), hex.EncodeToString(rev.NewValidProofOutputs[0].UnlockHash[:]), rev.NewValidProofOutputs[1].Value.String(), hex.EncodeToString(rev.NewValidProofOutputs[1].UnlockHash[:]), rev.NewMissedProofOutputs[0].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[0].UnlockHash[:]), rev.NewMissedProofOutputs[1].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[1].UnlockHash[:]), rev.NewMissedProofOutputs[2].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[2].UnlockHash[:]), hex.EncodeToString(rev.NewUnlockHash[:]), hex.EncodeToString(ts0.ParentID[:]), ts0.PublicKeyIndex, ts0.Timelock, hex.EncodeToString(ts0.Signature), hex.EncodeToString(ts1.ParentID[:]), ts1.PublicKeyIndex, ts1.Timelock, hex.EncodeToString(ts1.Signature), id)
+		`, hex.EncodeToString(rev.ParentID[:]), rev.UnlockConditions.Timelock, rev.UnlockConditions.PublicKeys[0].String(), rev.UnlockConditions.PublicKeys[1].String(), rev.UnlockConditions.SignaturesRequired, rev.NewRevisionNumber, rev.NewFileSize, hex.EncodeToString(rev.NewFileMerkleRoot[:]), rev.NewWindowStart, rev.NewWindowEnd, rev.NewValidProofOutputs[0].Value.String(), hex.EncodeToString(rev.NewValidProofOutputs[0].UnlockHash[:]), rev.NewValidProofOutputs[1].Value.String(), hex.EncodeToString(rev.NewValidProofOutputs[1].UnlockHash[:]), rev.NewMissedProofOutputs[0].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[0].UnlockHash[:]), rev.NewMissedProofOutputs[1].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[1].UnlockHash[:]), value, hash, hex.EncodeToString(rev.NewUnlockHash[:]), hex.EncodeToString(ts0.ParentID[:]), ts0.PublicKeyIndex, ts0.Timelock, hex.EncodeToString(ts0.Signature), hex.EncodeToString(ts1.ParentID[:]), ts1.PublicKeyIndex, ts1.Timelock, hex.EncodeToString(ts1.Signature), id)
 
 		return err
 	}
@@ -231,7 +237,11 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 	t.FileContractRevisions[0].NewWindowStart = types.BlockHeight(tp.NewWindowStart)
 	t.FileContractRevisions[0].NewWindowEnd = types.BlockHeight(tp.NewWindowEnd)
 	t.FileContractRevisions[0].NewValidProofOutputs = make([]types.SiacoinOutput, 2)
-	t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 3)
+	if tp.MissedValue2 != "" && tp.MissedUnlockHash2 != "" {
+		t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 3)
+	} else {
+		t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 2)
+	}
 	t.FileContractRevisions[0].NewValidProofOutputs[0].Value = modules.ReadCurrency(tp.ValidValue0)
 	b, _ = hex.DecodeString(tp.ValidUnlockHash0)
 	copy(t.FileContractRevisions[0].NewValidProofOutputs[0].UnlockHash[:], b)
@@ -244,9 +254,11 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 	t.FileContractRevisions[0].NewMissedProofOutputs[1].Value = modules.ReadCurrency(tp.MissedValue1)
 	b, _ = hex.DecodeString(tp.MissedUnlockHash1)
 	copy(t.FileContractRevisions[0].NewMissedProofOutputs[1].UnlockHash[:], b)
-	t.FileContractRevisions[0].NewMissedProofOutputs[2].Value = modules.ReadCurrency(tp.MissedValue2)
-	b, _ = hex.DecodeString(tp.MissedUnlockHash2)
-	copy(t.FileContractRevisions[0].NewMissedProofOutputs[2].UnlockHash[:], b)
+	if tp.MissedValue2 != "" && tp.MissedUnlockHash2 != "" {
+		t.FileContractRevisions[0].NewMissedProofOutputs[2].Value = modules.ReadCurrency(tp.MissedValue2)
+		b, _ = hex.DecodeString(tp.MissedUnlockHash2)
+		copy(t.FileContractRevisions[0].NewMissedProofOutputs[2].UnlockHash[:], b)
+	}
 	b, _ = hex.DecodeString(tp.NewUnlockHash)
 	copy(t.FileContractRevisions[0].NewUnlockHash[:], b)
 	if tp.SignaturesRequired > 0 {
