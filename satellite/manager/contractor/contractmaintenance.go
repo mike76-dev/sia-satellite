@@ -990,13 +990,12 @@ func (c *Contractor) threadedContractMaintenance() {
 		c.log.Println("Skipping contract maintenance since consensus isn't synced yet")
 		return
 	}
-	c.log.Println("starting contract maintenance")
 
 	// Only one instance of this thread should be running at a time. It is
 	// fine to return early if another thread is already doing maintenance.
 	// The next block will trigger another round.
 	if !c.maintenanceLock.TryLock() {
-		c.log.Println("maintenance lock could not be obtained")
+		c.log.Println("WARN: maintenance lock could not be obtained")
 		return
 	}
 	defer c.maintenanceLock.Unlock()
