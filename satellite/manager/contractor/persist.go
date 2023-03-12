@@ -29,7 +29,6 @@ const saveFrequency = 2 * time.Minute
 type contractorPersist struct {
 	BlockHeight          types.BlockHeight               `json:"blockheight"`
 	LastChange           smodules.ConsensusChangeID      `json:"lastchange"`
-	OldContracts         []modules.RenterContract        `json:"oldcontracts"`
 	DoubleSpentContracts map[string]types.BlockHeight    `json:"doublespentcontracts"`
 	Synced               bool                            `json:"synced"`
 
@@ -74,9 +73,6 @@ func (c *Contractor) persistData() contractorPersist {
 		DoubleSpentContracts: make(map[string]types.BlockHeight),
 		Synced:               synced,
 	}
-	for _, contract := range c.oldContracts {
-		data.OldContracts = append(data.OldContracts, contract)
-	}
 	for fcID, height := range c.doubleSpentContracts {
 		data.DoubleSpentContracts[fcID.String()] = height
 	}
@@ -99,9 +95,6 @@ func (c *Contractor) load() error {
 		close(c.synced)
 	}
 	var fcid types.FileContractID
-	for _, contract := range data.OldContracts {
-		c.oldContracts[contract.ID] = contract
-	}
 	for fcIDString, height := range data.DoubleSpentContracts {
 		if err := fcid.LoadString(fcIDString); err != nil {
 			return err

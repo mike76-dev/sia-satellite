@@ -61,10 +61,13 @@ func (cs *ContractSet) Delete(c *FileContract) {
 	delete(cs.pubKeys, c.header.RenterPublicKey().String() + c.header.HostPublicKey().String())
 	cs.mu.Unlock()
 	c.revisionMu.Unlock()
+}
 
-	// Delete from the database.
-	if err := deleteContract(id, cs.db); err != nil {
-		cs.log.Printf("Unable to delete contract %v from database: %v\n", id, err)
+// Erase removes a contract from the database.
+func (cs *ContractSet) Erase(fcid types.FileContractID) {
+	err := deleteContract(fcid, cs.db)
+	if err != nil {
+		cs.log.Println("ERROR: unable to delete the contract:", fcid)
 	}
 }
 
@@ -174,27 +177,31 @@ func (cs *ContractSet) ByRenter(rpk types.SiaPublicKey) []modules.RenterContract
 
 // NewContractSet returns a ContractSet storing its contracts in the specified
 // database.
-func NewContractSet(db *sql.DB, log *persist.Logger) (*ContractSet, error) {
+func NewContractSet(db *sql.DB, log *persist.Logger, height types.BlockHeight) (*ContractSet, map[types.FileContractID]modules.RenterContract, error) {
 	// Load the contract IDs.
 	keys, err := loadContracts(db)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	
 	cs := &ContractSet{
-		contracts: make(map[types.FileContractID]*FileContract),
-		pubKeys:   keys,
-		db:        db,
-		log:       log,
+		contracts:    make(map[types.FileContractID]*FileContract),
+		pubKeys:      keys,
+		db:           db,
+		log:          log,
 	}
 
 	// Load the contracts from the database.
+	oldContracts := make(map[types.FileContractID]modules.RenterContract)
 	for _, fcid := range keys {
-		err = cs.loadFileContract(fcid)
+		oldContract, err := cs.loadFileContract(fcid, height)
 		if err != nil {
 			cs.log.Printf("Error inserting contract %v: %v\n", fcid, err)
 		}
+		if oldContract != nil {
+			oldContracts[fcid] = *oldContract
+		}
 	}
 
-	return cs, nil
+	return cs, oldContracts, nil
 }

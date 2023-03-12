@@ -347,14 +347,14 @@ func (cs *ContractSet) managedInsertContract(h contractHeader) (modules.RenterCo
 }
 
 // loadFileContract loads a contract and adds it to the contractset if it is valid.
-func (cs *ContractSet) loadFileContract(fcid types.FileContractID) (err error) {
-	header, err := loadContract(fcid, cs.db)
+func (cs *ContractSet) loadFileContract(fcid types.FileContractID, height types.BlockHeight) (*modules.RenterContract, error) {
+	header, renewed, err := loadContract(fcid, cs.db)
 	if err != nil {
-		return errors.AddContext(err, "unable to load contract header")
+		return nil, errors.AddContext(err, "unable to load contract header")
 	}
 
 	if err := header.validate(); err != nil {
-		return errors.AddContext(err, "invalid contract header")
+		return nil, errors.AddContext(err, "invalid contract header")
 	}
 
 	// Add to the set.
@@ -363,10 +363,16 @@ func (cs *ContractSet) loadFileContract(fcid types.FileContractID) (err error) {
 		db:     cs.db,
 	}
 
+	// Check if the contract has expired.
+	if renewed || height > header.EndHeight() {
+		oldContract := fc.Metadata()
+		return &oldContract, nil
+	}
+
 	if _, exists := cs.contracts[fcid]; exists {
 		cs.log.Println("CRITICAL: Trying to overwrite existing contract")
 	}
 	cs.contracts[fcid] = fc
 
-	return nil
+	return nil, nil
 }

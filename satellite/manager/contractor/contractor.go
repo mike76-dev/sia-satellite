@@ -401,14 +401,14 @@ func New(cs smodules.ConsensusSet, wallet smodules.Wallet, tpool smodules.Transa
 		return nil, errChan
 	}
 	// Create the contract set.
-	contractSet, err := proto.NewContractSet(db, logger)
+	contractSet, oldContracts, err := proto.NewContractSet(db, logger, cs.Height())
 	if err != nil {
 		errChan <- err
 		return nil, errChan
 	}
 
 	// Handle blocking startup.
-	c, err := contractorBlockingStartup(cs, wallet, tpool, hdb, persistDir, contractSet, db, logger)
+	c, err := contractorBlockingStartup(cs, wallet, tpool, hdb, persistDir, contractSet, oldContracts, db, logger)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
@@ -432,7 +432,7 @@ func New(cs smodules.ConsensusSet, wallet smodules.Wallet, tpool smodules.Transa
 }
 
 // contractorBlockingStartup handles the blocking portion of New.
-func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp smodules.TransactionPool, hdb modules.HostDB, persistDir string, contractSet *proto.ContractSet, db *sql.DB, l *persist.Logger) (*Contractor, error) {
+func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp smodules.TransactionPool, hdb modules.HostDB, persistDir string, contractSet *proto.ContractSet, oldContracts map[types.FileContractID]modules.RenterContract, db *sql.DB, l *persist.Logger) (*Contractor, error) {
 	// Create the Contractor object.
 	c := &Contractor{
 		staticAlerter: smodules.NewAlerter("contractor"),
@@ -451,7 +451,7 @@ func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp s
 
 		staticContracts:      contractSet,
 		sessions:             make(map[types.FileContractID]*hostSession),
-		oldContracts:         make(map[types.FileContractID]modules.RenterContract),
+		oldContracts:         oldContracts,
 		doubleSpentContracts: make(map[types.FileContractID]types.BlockHeight),
 		renewing:             make(map[types.FileContractID]bool),
 		renewedFrom:          make(map[types.FileContractID]types.FileContractID),

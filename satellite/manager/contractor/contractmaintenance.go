@@ -131,6 +131,11 @@ func (c *Contractor) managedCheckForDuplicates() {
 			}
 			c.mu.Unlock()
 			c.staticContracts.Delete(oldSC)
+			c.staticContracts.Erase(oldSC.Metadata().ID)
+			err = c.updateRenewedContract(oldContract.ID, newContract.ID)
+			if err != nil {
+				c.log.Println("ERROR: failed to update renewal history.")
+			}
 
 			// Update the pubkeys map to contain the newest contract id.
 			pubkeys[key] = newContract.ID
@@ -913,11 +918,6 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 	c.renewedTo[id] = newContract.ID
 	// Store the contract in the record of historic contracts.
 	c.oldContracts[id] = oldContract.Metadata()
-	// Save the contractor.
-	err = c.save()
-	if err != nil {
-		c.log.Println("Failed to save the contractor after creating a new contract.")
-	}
 	c.mu.Unlock()
 
 	// Update the database.

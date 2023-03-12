@@ -178,9 +178,10 @@ func (fc *FileContract) saveContract() error {
 }
 
 // loadContract loads the contract from the database.
-func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error) {
+func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, bool, error) {
 	var cp contractPersist
 	var tp transactionPersist
+	var renewedTo string
 	id := hex.EncodeToString(fcid[:])
 
 	// Load contract data.
@@ -189,12 +190,12 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 			storage_spending, upload_spending, total_cost, contract_fee, txn_fee,
 			siafund_fee, account_balance_cost, fund_account_cost,
 			update_price_table_cost, good_for_upload, good_for_renew, bad_contract,
-			last_oos_err, locked
+			last_oos_err, locked, renewed_to
 		FROM contracts
 		WHERE contract_id = ?
-	`, id).Scan(&cp.StartHeight, &cp.SecretKey, &cp.DownloadSpending, &cp.FundAccountSpending, &cp.StorageSpending, &cp.UploadSpending, &cp.TotalCost, &cp.ContractFee, &cp.TxnFee, &cp.SiafundFee, &cp.AccountBalanceCost, &cp.FundAccountCost, &cp.UpdatePriceTableCost, &cp.GoodForUpload, &cp.GoodForRenew, &cp.BadContract, &cp.LastOOSErr, &cp.Locked)
+	`, id).Scan(&cp.StartHeight, &cp.SecretKey, &cp.DownloadSpending, &cp.FundAccountSpending, &cp.StorageSpending, &cp.UploadSpending, &cp.TotalCost, &cp.ContractFee, &cp.TxnFee, &cp.SiafundFee, &cp.AccountBalanceCost, &cp.FundAccountCost, &cp.UpdatePriceTableCost, &cp.GoodForUpload, &cp.GoodForRenew, &cp.BadContract, &cp.LastOOSErr, &cp.Locked, &renewedTo)
 	if err != nil {
-		return contractHeader{}, err
+		return contractHeader{}, false, err
 	}
 
 	// Load transaction data.
@@ -213,7 +214,7 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 		WHERE contract_id = ?
 	`, id).Scan(&tp.ParentID, &tp.Timelock, &tp.PublicKey0, &tp.PublicKey1, &tp.SignaturesRequired, &tp.NewRevisionNumber, &tp.NewFileSize, &tp.NewFileMerkleRoot, &tp.NewWindowStart, &tp.NewWindowEnd, &tp.ValidValue0, &tp.ValidUnlockHash0, &tp.ValidValue1, &tp.ValidUnlockHash1, &tp.MissedValue0, &tp.MissedUnlockHash0, &tp.MissedValue1, &tp.MissedUnlockHash1, &tp.MissedValue2, &tp.MissedUnlockHash2, &tp.NewUnlockHash, &tp.ParentID0, &tp.PublicKeyIndex0, &tp.Timelock0, &tp.Signature0, &tp.ParentID1, &tp.PublicKeyIndex1, &tp.Timelock1, &tp.Signature1)
 	if err != nil {
-		return contractHeader{}, err
+		return contractHeader{}, false, err
 	}
 
 	// Construct the transaction.
@@ -313,7 +314,7 @@ func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, error)
 		Locked:        cp.Locked,
 	}
 
-	return h, nil
+	return h, renewedTo != "", nil
 }
 
 // deleteContract deletes the contract from the database.
