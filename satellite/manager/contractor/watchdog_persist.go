@@ -102,6 +102,11 @@ func newWatchdogFromPersist(contractor *Contractor, persistData watchdogPersist)
 		}
 		w.contracts[fcID] = contractData
 
+		// Load the renew windows.
+		for _, renter := range w.contractor.renters {
+			w.renewWindows[renter.PublicKey.String()] = renter.Allowance.RenewWindow
+		}
+
 		// Add all parent outputs the formation txn.
 		parentOutputs := getParentOutputIDs(data.FormationTxnSet)
 		for _, oid := range parentOutputs {

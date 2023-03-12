@@ -117,16 +117,12 @@ type monitorContractArgs struct {
 
 // newWatchdog creates a new watchdog.
 func newWatchdog(contractor *Contractor) *watchdog {
-	renewWindows := make(map[string]types.BlockHeight)
-	for _, renter := range contractor.renters {
-		renewWindows[renter.PublicKey.String()] = renter.Allowance.RenewWindow
-	}
 	return &watchdog{
 		contracts:          make(map[types.FileContractID]*fileContractStatus),
 		archivedContracts:  make(map[types.FileContractID]smodules.ContractWatchStatus),
 		outputDependencies: make(map[types.SiacoinOutputID]map[types.FileContractID]struct{}),
 
-		renewWindows: renewWindows,
+		renewWindows: make(map[string]types.BlockHeight),
 		blockHeight:  contractor.blockHeight,
 
 		tpool:      contractor.tpool,
@@ -653,7 +649,7 @@ func (w *watchdog) addDependencyToContractFormationSet(fcID types.FileContractID
 }
 
 // callCheckContracts checks if the watchdog needs to take any actions for
-// any contracts its watching at this blockHeight.  For newly formed contracts,
+// any contracts its watching at this blockHeight. For newly formed contracts,
 // it checks if a contract has been seen on-chain yet, if not the watchdog will
 // re-broadcast the initial transaction. If enough time has elapsed the watchdog
 // will double-spend the inputs used to create that file contract.
@@ -676,7 +672,12 @@ func (w *watchdog) callCheckContracts() {
 		// Fetch the contract metadata.
 		contract, exists := w.contractor.staticContracts.View(fcID)
 		if !exists {
-			w.contractor.log.Printf("ERROR: Contract %v not found by the watchdog\n", fcID.String())
+			// Check if the contract was moved to oldContracts.
+			contract, exists = w.contractor.oldContracts[fcID]
+			if !exists {
+				w.contractor.log.Printf("ERROR: Contract %v not found by the watchdog\n", fcID.String())
+			}
+			w.archiveContract(fcID, 0)
 			continue
 		}
 		rw, exists := w.renewWindows[contract.RenterPublicKey.String()]

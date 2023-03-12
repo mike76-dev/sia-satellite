@@ -106,12 +106,6 @@ func (c *Contractor) load() error {
 		return err
 	}
 
-	c.staticWatchdog, err = newWatchdogFromPersist(c, data.WatchdogData)
-	if err != nil {
-		return err
-	}
-	c.staticWatchdog.blockHeight = data.BlockHeight
-
 	// Load the renters from the database.
 	rows, err := c.db.Query(`
 		SELECT email, public_key, current_period, funds, hosts, period, renew_window,
@@ -156,6 +150,12 @@ func (c *Contractor) load() error {
 			Email:         entry.Email,
 		}
 	}
+
+	c.staticWatchdog, err = newWatchdogFromPersist(c, data.WatchdogData)
+	if err != nil {
+		return err
+	}
+	c.staticWatchdog.blockHeight = data.BlockHeight
 
 	return nil
 }
