@@ -593,8 +593,11 @@ func (c *Contractor) SetSatellite(fl modules.FundLocker) {
 func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 	contract, exists := c.staticContracts.View(fcid)
 	if !exists {
-		c.log.Println("ERROR: trying to unlock funds of a non-existing contract:", fcid)
-		return
+		contract, exists = c.oldContracts[fcid]
+		if !exists {
+			c.log.Println("ERROR: trying to unlock funds of a non-existing contract:", fcid)
+			return
+		}
 	}
 
 	renter, err := c.GetRenter(contract.RenterPublicKey)
