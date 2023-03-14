@@ -463,7 +463,6 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 	if err != nil {
 		hdb.staticLog.Printf("Scan of host at %v failed: %v\n", pubKey, err)
 	} else {
-		hdb.staticLog.Printf("Scan of host at %v succeeded\n.", pubKey)
 		entry.HostExternalSettings = settings
 	}
 	success := err == nil
