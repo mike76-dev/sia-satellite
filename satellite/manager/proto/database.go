@@ -325,27 +325,38 @@ func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 	return errors.Compose(err1, err2)
 }
 
-// loadContracts loads the map[pubkey]contractID from the database.
-func loadContracts(db *sql.DB) (map[string]types.FileContractID, error) {
-	rows, err := db.Query("SELECT uc_renter_pk, uc_host_pk, contract_id FROM transactions")
+// loadKeys loads the map[pubkey]contractID from the database.
+func loadKeys(db *sql.DB, height types.BlockHeight) (map[string]types.FileContractID, []types.FileContractID, error) {
+	rows, err := db.Query(`
+		SELECT uc_renter_pk, uc_host_pk, new_window_start, new_window_end, contract_id
+		FROM transactions
+	`)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
 	keys := make(map[string]types.FileContractID)
+	var ids []types.FileContractID
+	windows := make(map[string]uint64)
 	var rpk, hpk, id string
+	var ws, we uint64
 	var b []byte
 	var fcid types.FileContractID
 
 	for rows.Next() {
-		if err := rows.Scan(&rpk, &hpk, &id); err != nil {
+		if err := rows.Scan(&rpk, &hpk, &ws, &we, &id); err != nil {
 			continue
 		}
-		b, _ = hex.DecodeString(id)
-		copy(fcid[:], b)
-		keys[rpk + hpk] = fcid
+		windowStart, exists := windows[rpk + hpk]
+		if (!exists || ws > windowStart) && we >= uint64(height) {
+			windows[rpk + hpk] = ws
+			b, _ = hex.DecodeString(id)
+			copy(fcid[:], b)
+			keys[rpk + hpk] = fcid
+		}
+		ids = append(ids, fcid)
 	}
 
-	return keys, nil
+	return keys, ids, nil
 }

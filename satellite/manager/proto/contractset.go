@@ -179,7 +179,7 @@ func (cs *ContractSet) ByRenter(rpk types.SiaPublicKey) []modules.RenterContract
 // database.
 func NewContractSet(db *sql.DB, log *persist.Logger, height types.BlockHeight) (*ContractSet, map[types.FileContractID]modules.RenterContract, error) {
 	// Load the contract IDs.
-	keys, err := loadContracts(db)
+	keys, ids, err := loadKeys(db, height)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -193,7 +193,7 @@ func NewContractSet(db *sql.DB, log *persist.Logger, height types.BlockHeight) (
 
 	// Load the contracts from the database.
 	oldContracts := make(map[types.FileContractID]modules.RenterContract)
-	for _, fcid := range keys {
+	for _, fcid := range ids {
 		oldContract, err := cs.loadFileContract(fcid, height)
 		if err != nil {
 			cs.log.Printf("Error inserting contract %v: %v\n", fcid, err)
