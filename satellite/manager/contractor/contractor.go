@@ -623,6 +623,10 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature) {
 	err := c.staticContracts.UpdateContract(rev, sigs)
 	if err != nil {
-		c.log.Println("ERROR: revision update failed:", rev.ParentID)
+		// Check if the contract has expired.
+		err = c.updateOldContract(rev, sigs)
+		if err != nil {
+			c.log.Println("ERROR: revision update failed:", rev.ParentID)
+		}
 	}
 }
