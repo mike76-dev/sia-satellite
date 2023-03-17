@@ -521,7 +521,7 @@ function backToSelect() {
 
 function changePaymentsStep(s) {
 	paymentsStep = parseInt(s.value);
-	getPayments();
+	renderPayments();
 }
 
 function renderPayments() {
@@ -660,7 +660,39 @@ function retrieveBlockHeight() {
 
 function changeContractsStep(s) {
 	contractsStep = parseInt(s.value);
-	getContracts();
+	renderContracts();
+}
+
+function renderContracts() {
+	let tbody = document.getElementById('contracts-table');
+	tbody.innerHTML = '';
+	if (contracts.length == 0) {
+		document.getElementById('contracts-non-empty').classList.add('disabled');
+		document.getElementById('contracts-empty').classList.remove('disabled');
+		document.getElementById('contracts-prev').disabled = true;
+		document.getElementById('contracts-next').disabled = true;
+		contractsFrom = 1;
+		return;
+	}
+	let tr;
+	contracts.forEach((row, i) => {
+		if (i < contractsFrom - 1) return;
+		if (i >= contractsFrom + contractsStep - 1) return;
+		tr = document.createElement('tr');
+		tr.innerHTML = '<td>' + (i + 1) + '</td>';
+		tr.innerHTML += '<td class="cell-overflow">' + row.id + '</td>';
+		tr.innerHTML += '<td>' + row.startheight + '</td>';
+		tr.innerHTML += '<td>' + row.endheight + '</td>';
+		tr.innerHTML += '<td class="cell-overflow">' + row.netaddress + '</td>';
+		tr.innerHTML += '<td>' + row.size + '</td>';
+		tr.innerHTML += '<td>' + row.totalcost + '</td>';
+		tr.innerHTML += '<td>' + row.status + '</td>';
+		tbody.appendChild(tr);
+	});
+	document.getElementById('contracts-empty').classList.add('disabled');
+	document.getElementById('contracts-non-empty').classList.remove('disabled');
+	document.getElementById('contracts-prev').disabled = contractsFrom == 1;
+	document.getElementById('contracts-next').disabled = contracts.length < contractsFrom + contractsStep;
 }
 
 function getContracts() {
@@ -676,39 +708,14 @@ function getContracts() {
 			'Content-Type': 'application/json;charset=utf-8'
 		}
 	}
-	fetch(apiBaseURL + '/dashboard/contracts?from=' + contractsFrom + '&to=' + (contractsFrom + contractsStep - 1) + '&active=' + active + '&passive=' + passive + '&refreshed=' + refreshed + '&disabled=' + disabled + '&expired=' + expired + '&expired-refreshed=' +exref, options)
+	fetch(apiBaseURL + '/dashboard/contracts?&active=' + active + '&passive=' + passive + '&refreshed=' + refreshed + '&disabled=' + disabled + '&expired=' + expired + '&expired-refreshed=' + exref, options)
 		.then(response => response.json())
 		.then(data => {
 			if (data.code) {
 				console.log(data);
 			} else {
-				tbody = document.getElementById('contracts-table');
-				tbody.innerHTML = '';
-				if (data.length > 0 || contractsFrom > 1) {
-					document.getElementById('contracts-empty').classList.add('disabled');
-					document.getElementById('contracts-non-empty').classList.remove('disabled');
-				}
-				if (data.length > 0) {
-					let tr;
-					data.forEach((row, i) => {
-						tr = document.createElement('tr');
-						tr.innerHTML = '<td>' + (i + contractsFrom) + '</td>';
-						tr.innerHTML += '<td class="cell-overflow">' + row.id + '</td>';
-						tr.innerHTML += '<td>' + row.startheight + '</td>';
-						tr.innerHTML += '<td>' + row.endheight + '</td>';
-						tr.innerHTML += '<td class="cell-overflow">' + row.netaddress + '</td>';
-						tr.innerHTML += '<td>' + row.size + '</td>';
-						tr.innerHTML += '<td>' + row.totalcost + '</td>';
-						tr.innerHTML += '<td>' + row.status + '</td>';
-						tbody.appendChild(tr);
-					});
-					document.getElementById('contracts-next').disabled = data.length != contractsStep;
-				} else {
-					if (contractsFrom > 1) {
-						document.getElementById('contracts-prev').disabled = false;
-					}
-					document.getElementById('contracts-next').disabled = true;
-				}
+				contracts = data;
+				renderContracts();
 			}
 		})
 		.catch(error => console.log(error));
@@ -717,22 +724,15 @@ function getContracts() {
 function contractsPrev() {
 	contractsFrom = contractsFrom - contractsStep;
 	if (contractsFrom < 1) contractsFrom = 1;
-	if (contractsFrom == 1) {
-		document.getElementById('contracts-prev').disabled = true;
-	}
-	document.getElementById('contracts-next').disabled = false;
-	getContracts();
+	renderContracts();
 }
 
 function contractsNext() {
 	contractsFrom = contractsFrom + contractsStep;
-	document.getElementById('contracts-prev').disabled = false;
-	getContracts();
+	renderContracts();
 }
 
 function contractsChanged() {
 	contractsFrom = 1;
-	document.getElementById('contracts-empty').classList.remove('disabled');
-	document.getElementById('contracts-non-empty').classList.add('disabled');
 	getContracts();
 }

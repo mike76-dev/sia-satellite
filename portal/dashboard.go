@@ -472,28 +472,6 @@ func (api *portalAPI) contractsHandlerGET(w http.ResponseWriter, req *http.Reque
 		}
 	}
 
-	var from, to int
-	from, err = strconv.Atoi(req.FormValue("from"))
-	if err != nil || from <= 0 {
-		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", from)
-		writeError(w,
-			Error{
-				Code: httpErrorBadRequest,
-				Message: "wrong numeric value",
-			}, http.StatusBadRequest)
-		return
-	}
-	to, err = strconv.Atoi(req.FormValue("to"))
-	if err != nil || to < from {
-		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", to)
-		writeError(w,
-			Error{
-				Code: httpErrorBadRequest,
-				Message: "wrong numeric value",
-			}, http.StatusBadRequest)
-		return
-	}
-
 	// Get the renter.
 	var renter modules.Renter
 	renters := api.portal.satellite.Renters()
@@ -506,15 +484,8 @@ func (api *portalAPI) contractsHandlerGET(w http.ResponseWriter, req *http.Reque
 
 	// Filter the contracts.
 	contracts := api.getContracts(renter, active, passive, refreshed, disabled, expired, expiredRefreshed)
-	if from > len(contracts) {
-		writeJSON(w, []renterContract{})
-		return
-	}
-	if to > len(contracts) {
-		to = len(contracts)
-	}
 
-	writeJSON(w, contracts[from - 1 : to])
+	writeJSON(w, contracts)
 }
 
 // getContracts filters the satellite contracts by the given parameters.
