@@ -268,9 +268,9 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 	defer c.mu.Unlock()
 
 	// Update the spending.
-	c.header.UploadSpending.Add(uploads)
-	c.header.DownloadSpending.Add(downloads)
-	c.header.FundAccountSpending.Add(fundAccount)
+	c.header.UploadSpending = c.header.UploadSpending.Add(uploads)
+	c.header.DownloadSpending = c.header.DownloadSpending.Add(downloads)
+	c.header.FundAccountSpending = c.header.FundAccountSpending.Add(fundAccount)
 
 	// Our current revision should always be signed. If it isn't, we have no
 	// choice but to accept the host's revision.
