@@ -66,8 +66,10 @@ window.setInterval(retrieveBalance, 60000);
 window.setInterval(retrieveAverages, 600000);
 retrieveKey();
 
+var payments = [];
 var paymentsFrom = 1;
 var paymentsStep = 10;
+var contracts = [];
 var contractsFrom = 1;
 var contractsStep = 10;
 
@@ -522,6 +524,36 @@ function changePaymentsStep(s) {
 	getPayments();
 }
 
+function renderPayments() {
+	let tbody = document.getElementById('history-table');
+	tbody.innerHTML = '';
+	if (payments.length == 0) {
+		document.getElementById('history-non-empty').classList.add('disabled');
+		document.getElementById('history-empty').classList.remove('disabled');
+		document.getElementById('history-prev').disabled = true;
+		document.getElementById('history-next').disabled = true;
+		paymentsFrom = 1;
+		return;
+	}
+	let tr;
+	payments.forEach((row, i) => {
+		if (i < paymentsFrom - 1) return;
+		if (i >= paymentsFrom + paymentsStep - 1) return;
+		timestamp = new Date(row.timestamp * 1000);
+		tr = document.createElement('tr');
+		tr.innerHTML = '<td>' + (i + 1) + '</td>';
+		tr.innerHTML += '<td>' + timestamp.toLocaleString() + '</td>';
+		tr.innerHTML += '<td>' + row.amount.toFixed(2) + '</td>';
+		tr.innerHTML += '<td>' + row.currency + '</td>';
+		tr.innerHTML += '<td>' + row.amountusd.toFixed(2) + ' USD</td>';
+		tbody.appendChild(tr);
+	});
+	document.getElementById('history-empty').classList.add('disabled');
+	document.getElementById('history-non-empty').classList.remove('disabled');
+	document.getElementById('history-prev').disabled = paymentsFrom == 1;
+	document.getElementById('history-next').disabled = payments.length < paymentsFrom + paymentsStep;
+}
+
 function getPayments() {
 	let options = {
 		method: 'GET',
@@ -529,37 +561,14 @@ function getPayments() {
 			'Content-Type': 'application/json;charset=utf-8'
 		}
 	}
-	fetch(apiBaseURL + '/dashboard/payments?from=' + paymentsFrom + '&to=' + (paymentsFrom + paymentsStep - 1), options)
+	fetch(apiBaseURL + '/dashboard/payments', options)
 		.then(response => response.json())
 		.then(data => {
 			if (data.code) {
 				console.log(data);
 			} else {
-				tbody = document.getElementById('history-table');
-				tbody.innerHTML = '';
-				if (data.length > 0 || paymentsFrom > 1) {
-					document.getElementById('history-empty').classList.add('disabled');
-					document.getElementById('history-non-empty').classList.remove('disabled');
-				}
-				if (data.length > 0) {
-					let tr;
-					data.forEach((row, i) => {
-						timestamp = new Date(row.timestamp * 1000);
-						tr = document.createElement('tr');
-						tr.innerHTML = '<td>' + (i + paymentsFrom) + '</td>';
-						tr.innerHTML += '<td>' + timestamp.toLocaleString() + '</td>';
-						tr.innerHTML += '<td>' + row.amount.toFixed(2) + '</td>';
-						tr.innerHTML += '<td>' + row.currency + '</td>';
-						tr.innerHTML += '<td>' + row.amountusd.toFixed(2) + ' USD</td>';
-						tbody.appendChild(tr);
-					});
-					document.getElementById('history-next').disabled = data.length != paymentsStep;
-				} else {
-					if (paymentsFrom > 1) {
-						document.getElementById('history-prev').disabled = false;
-					}
-					document.getElementById('history-next').disabled = true;
-				}
+				payments = data;
+				renderPayments();
 			}
 		})
 		.catch(error => console.log(error));
@@ -568,17 +577,12 @@ function getPayments() {
 function paymentsPrev() {
 	paymentsFrom = paymentsFrom - paymentsStep;
 	if (paymentsFrom < 1) paymentsFrom = 1;
-	if (paymentsFrom == 1) {
-		document.getElementById('history-prev').disabled = true;
-	}
-	document.getElementById('history-next').disabled = false;
-	getPayments();
+	renderPayments();
 }
 
 function paymentsNext() {
 	paymentsFrom = paymentsFrom + paymentsStep;
-	document.getElementById('history-prev').disabled = false;
-	getPayments();
+	renderPayments();
 }
 
 function revealSeed() {

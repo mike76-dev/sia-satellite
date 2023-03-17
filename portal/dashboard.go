@@ -349,30 +349,8 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Retrieve the payment history.
-	var from, to int
-	from, err = strconv.Atoi(req.FormValue("from"))
-	if err != nil || from <= 0 {
-		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", from)
-		writeError(w,
-			Error{
-				Code: httpErrorBadRequest,
-				Message: "wrong numeric value",
-			}, http.StatusBadRequest)
-		return
-	}
-	to, err = strconv.Atoi(req.FormValue("to"))
-	if err != nil || to < from {
-		api.portal.log.Printf("ERROR: wrong numeric value: %v\n", to)
-		writeError(w,
-			Error{
-				Code: httpErrorBadRequest,
-				Message: "wrong numeric value",
-			}, http.StatusBadRequest)
-		return
-	}
-
 	var ups []userPayment
-	if ups, err = api.portal.getPayments(email, from, to); err != nil {
+	if ups, err = api.portal.getPayments(email); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
