@@ -126,8 +126,7 @@ func (c *Contractor) CancelContract(id types.FileContractID) error {
 }
 
 // Contracts returns the contracts formed by the contractor in the current
-// allowance period. Only contracts formed with currently online hosts are
-// returned.
+// allowance period.
 func (c *Contractor) Contracts() []modules.RenterContract {
 	return c.staticContracts.ViewAll()
 }
