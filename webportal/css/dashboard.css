@@ -332,6 +332,28 @@ tbody > tr:nth-child(odd) {
 	cursor: pointer;
 }
 
+.sort {
+	display: inline-block;
+	width: 0.8rem;
+	height: 0.8rem;
+	cursor: pointer;
+	margin-left: 0.2rem;
+}
+
+.sort svg {
+	display: inline-block;
+	width: 100%;
+	height: 100%;
+}
+
+.sort svg path {
+	fill: #7f7f7f;
+}
+
+.sort svg path.active {
+	fill: #ffffff;
+}
+
 #payment-amount {
 	width: 100%;
 }

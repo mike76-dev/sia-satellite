@@ -73,6 +73,9 @@ var contracts = [];
 var contractsFrom = 1;
 var contractsStep = 10;
 
+var sortByStart = 'inactive';
+var sortByEnd = 'inactive';
+
 function setActiveMenuIndex(ind) {
 	let li, p;
 	if (ind > menu.childElementCount) return;
@@ -715,6 +718,18 @@ function getContracts() {
 				console.log(data);
 			} else {
 				contracts = data;
+				if (sortByStart == 'ascending') {
+					contracts = contracts.sort((a, b) => a.startheight - b.startheight);
+				}
+				if (sortByStart == 'descending') {
+					contracts = contracts.sort((a, b) => b.startheight - a.startheight);
+				}
+				if (sortByEnd == 'ascending') {
+					contracts = contracts.sort((a, b) => a.endheight - b.endheight);
+				}
+				if (sortByEnd == 'decending') {
+					contracts = contracts.sort((a, b) => b.endheight - a.endheight);
+				}
 				renderContracts();
 			}
 		})
@@ -735,4 +750,58 @@ function contractsNext() {
 function contractsChanged() {
 	contractsFrom = 1;
 	getContracts();
+}
+
+function sortByContractStart() {
+	switch (sortByStart) {
+	case 'inactive':
+		sortByStart = 'ascending';
+		document.getElementById('contracts-start-asc').classList.add('active');
+		sortByEnd = 'inactive';
+		document.getElementById('contracts-end-desc').classList.remove('active');
+		document.getElementById('contracts-end-asc').classList.remove('active');
+		contracts = contracts.sort((a, b) => a.startheight - b.startheight);
+		break;
+	case 'ascending':
+		sortByStart = 'descending';
+		document.getElementById('contracts-start-desc').classList.add('active');
+		document.getElementById('contracts-start-asc').classList.remove('active');
+		contracts = contracts.sort((a, b) => b.startheight - a.startheight);
+		break;
+	case 'descending':
+		sortByStart = 'ascending';
+		document.getElementById('contracts-start-asc').classList.add('active');
+		document.getElementById('contracts-start-desc').classList.remove('active');
+		contracts = contracts.sort((a, b) => a.startheight - b.startheight);
+		break;
+	default:
+	}
+	renderContracts();
+}
+
+function sortByContractEnd() {
+	switch (sortByEnd) {
+	case 'inactive':
+		sortByEnd = 'ascending';
+		document.getElementById('contracts-end-asc').classList.add('active');
+		sortByStart = 'inactive';
+		document.getElementById('contracts-start-desc').classList.remove('active');
+		document.getElementById('contracts-start-asc').classList.remove('active');
+		contracts = contracts.sort((a, b) => a.endheight - b.endheight);
+		break;
+	case 'ascending':
+		sortByEnd = 'descending';
+		document.getElementById('contracts-end-desc').classList.add('active');
+		document.getElementById('contracts-end-asc').classList.remove('active');
+		contracts = contracts.sort((a, b) => b.endheight - a.endheight);
+		break;
+	case 'descending':
+		sortByEnd = 'ascending';
+		document.getElementById('contracts-end-asc').classList.add('active');
+		document.getElementById('contracts-end-desc').classList.remove('active');
+		contracts = contracts.sort((a, b) => a.endheight - b.endheight);
+		break;
+	default:
+	}
+	renderContracts();
 }

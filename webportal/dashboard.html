@@ -122,8 +122,22 @@
 										<tr>
 											<th style="width: 4rem">No.</th>
 											<th style="width: 12rem">ID</th>
-											<th style="width: 4rem">Start</th>
-											<th style="width: 4rem">End</th>
+											<th style="width: 4rem">Start
+												<span class="sort" onclick="sortByContractStart()">
+													<svg width="16" height="16" viewbox="0 0 16 16">
+														<path id="contracts-start-asc" d="M8 1 L14 6 L1 6 Z"/>
+														<path id="contracts-start-desc" d="M8 14 L14 9 L1 9 Z"/>
+													</svg>
+												</span>
+											</th>
+											<th style="width: 4rem">End
+												<span class="sort" onclick="sortByContractEnd()">
+													<svg width="16" height="16" viewbox="0 0 16 16">
+														<path id="contracts-end-asc" d="M8 1 L14 6 L1 6 Z"/>
+														<path id="contracts-end-desc" d="M8 14 L14 9 L1 9 Z"/>
+													</svg>
+												</span>
+											</th>
 											<th style="width: 12rem">Host</th>
 											<th style="width: 4rem">Size</th>
 											<th style="width: 6rem">Total Cost</th>
