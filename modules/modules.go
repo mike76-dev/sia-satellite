@@ -239,4 +239,5 @@ type ContractFormer interface {
 	UserExists(rpk types.SiaPublicKey) (bool, error)
 	FormContracts(types.SiaPublicKey, smodules.Allowance) ([]RenterContract, error)
 	RenewContracts(types.SiaPublicKey, smodules.Allowance, []types.FileContractID) ([]RenterContract, error)
+	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 }

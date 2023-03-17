@@ -263,9 +263,14 @@ func (c *FileContract) managedCommitClearContract(signedTxn types.Transaction, b
 // managedSyncRevision checks whether rev accords with the FileContract's most
 // recent revision. If the revisions do not match, and the host's revision is
 // ahead of the renter's, managedSyncRevision uses the host's revision.
-func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs []types.TransactionSignature) error {
+func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// Update the spending.
+	c.header.UploadSpending.Add(uploads)
+	c.header.DownloadSpending.Add(downloads)
+	c.header.FundAccountSpending.Add(fundAccount)
 
 	// Our current revision should always be signed. If it isn't, we have no
 	// choice but to accept the host's revision.
@@ -309,7 +314,7 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 }
 
 // UpdateContract updates the contract with the new revision.
-func (cs *ContractSet) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature) error {
+func (cs *ContractSet) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	cs.mu.Lock()
 	contract, exists := cs.contracts[rev.ParentID]
 	cs.mu.Unlock()
@@ -317,7 +322,7 @@ func (cs *ContractSet) UpdateContract(rev types.FileContractRevision, sigs []typ
 		return errors.New("contract not found in the contract set")
 	}
 
-	return contract.managedSyncRevision(rev, sigs)
+	return contract.managedSyncRevision(rev, sigs, uploads, downloads, fundAccount)
 }
 
 // managedInsertContract inserts a contract into a set. This will overwrite

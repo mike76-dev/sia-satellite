@@ -620,13 +620,15 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 }
 
 // UpdateContract updates the contract with the new revision.
-func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature) {
-	err := c.staticContracts.UpdateContract(rev, sigs)
+func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
+	err := c.staticContracts.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
 	if err != nil {
 		// Check if the contract has expired.
-		err = c.updateOldContract(rev, sigs)
+		err = c.updateOldContract(rev, sigs, uploads, downloads, fundAccount)
 		if err != nil {
 			c.log.Println("ERROR: revision update failed:", rev.ParentID)
 		}
 	}
+
+	return err
 }

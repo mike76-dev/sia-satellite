@@ -355,5 +355,10 @@ func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, a smodules.Allowance,
 	return contractSet, err
 }
 
+// UpdateContract updates the contract with the new revision.
+func (s *Satellite) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
+	return s.m.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

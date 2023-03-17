@@ -197,6 +197,40 @@ func (rr *renewRequest) EncodeTo(e *types.Encoder) {
 	rr.MaxSectorAccessPrice.EncodeTo(e)
 }
 
+// updateRequest is used when the renter submits a new revision.
+type updateRequest struct {
+	PubKey      crypto.PublicKey
+	Contract    rhpv2.ContractRevision
+	Uploads     types.Currency
+	Downloads   types.Currency
+	FundAccount types.Currency
+
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (ur *updateRequest) DecodeFrom(d *types.Decoder) {
+	copy(ur.PubKey[:], d.ReadBytes())
+	ur.Contract.Revision.DecodeFrom(d)
+	ur.Contract.Signatures[0].DecodeFrom(d)
+	ur.Contract.Signatures[1].DecodeFrom(d)
+	ur.Uploads.DecodeFrom(d)
+	ur.Downloads.DecodeFrom(d)
+	ur.FundAccount.DecodeFrom(d)
+	ur.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (ur *updateRequest) EncodeTo(e *types.Encoder) {
+	e.WriteBytes(ur.PubKey[:])
+	ur.Contract.Revision.EncodeTo(e)
+	ur.Contract.Signatures[0].EncodeTo(e)
+	ur.Contract.Signatures[1].EncodeTo(e)
+	ur.Uploads.EncodeTo(e)
+	ur.Downloads.EncodeTo(e)
+	ur.FundAccount.EncodeTo(e)
+}
+
 // contractSet is a collection of rhpv2.ContractRevision objects.
 type contractSet struct {
 	contracts []rhpv2.ContractRevision
@@ -214,5 +248,20 @@ func (cs contractSet) EncodeTo(e *types.Encoder) {
 
 // DecodeFrom implements requestBody.
 func (cs contractSet) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
+// rpcMessage represents an RPC response.
+type rpcMessage struct {
+	Error string
+}
+
+// EncodeTo implements requestBody.
+func (m rpcMessage) EncodeTo(e *types.Encoder) {
+	e.WriteString(m.Error)
+}
+
+// DecodeFrom implements requestBody.
+func (m rpcMessage) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
 }

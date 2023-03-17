@@ -165,7 +165,7 @@ func (cs *ContractSet) NewSession(host modules.HostDBEntry, renter types.SiaPubl
 	}
 
 	// Resynchronize.
-	err = sc.managedSyncRevision(rev, sigs)
+	err = sc.managedSyncRevision(rev, sigs, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency)
 	if err != nil {
 		logger.Printf("%v revision resync failed, err: %v\n", host.PublicKey.String(), err)
 		err = errors.Compose(err, s.Close())

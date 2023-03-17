@@ -109,6 +109,9 @@ type hostContractor interface {
 
 	// SetSatellite sets the satellite dependency.
 	SetSatellite(modules.FundLocker)
+
+	// UpdateContract updates the contract with the new revision.
+	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 }
 
 // A Manager contains the information necessary to communicate with the
@@ -551,4 +554,9 @@ func (m *Manager) Renters() []modules.Renter {
 // SetSatellite sets the satellite dependency of the contractor.
 func (m *Manager) SetSatellite(fl modules.FundLocker) {
 	m.hostContractor.SetSatellite(fl)
+}
+	
+// UpdateContract updates the contract with the new revision.
+func (m *Manager) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
+	return m.hostContractor.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
 }

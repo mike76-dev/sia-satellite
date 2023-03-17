@@ -92,7 +92,7 @@ func (cs *ContractSet) managedNewRenewAndClear(oldContract *FileContract, params
 	rev, sigs, err := s.Lock(contract.ID(), renterSKOld)
 	if err != nil {
 		return modules.RenterContract{}, nil, err
-	} else if err := oldContract.managedSyncRevision(rev, sigs); err != nil {
+	} else if err := oldContract.managedSyncRevision(rev, sigs, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency); err != nil {
 		return modules.RenterContract{}, nil, err
 	}
 

@@ -36,18 +36,34 @@ func (c *Contractor) updateRenewedContract(oldID, newID types.FileContractID) er
 }
 
 // updateOldContract updates an expired contract with the new revision.
-func (c *Contractor) updateOldContract(rev types.FileContractRevision, sigs []types.TransactionSignature) error {
+func (c *Contractor) updateOldContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	// Retrieve the contract.
-	c.mu.RLock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	contract, exists := c.oldContracts[rev.ParentID]
 	if !exists {
-		c.mu.RUnlock()
 		return errors.New("contract not found in old contracts")
 	}
 	contract.Transaction.FileContractRevisions[0] = rev
 	contract.Transaction.TransactionSignatures = sigs
+	id := hex.EncodeToString(contract.ID[:])
+
+	if !uploads.Equals(types.ZeroCurrency) || !downloads.Equals(types.ZeroCurrency) || !fundAccount.Equals(types.ZeroCurrency) {
+		// Update the contract metadata.
+		contract.UploadSpending.Add(uploads)
+		contract.DownloadSpending.Add(downloads)
+		contract.FundAccountSpending.Add(fundAccount)
+		_, err := c.db.Exec(`
+			UPDATE contracts
+			SET download_spending = ?, fund_account_spending = ?, upload_spending = ?
+			WHERE contract_id = ?
+		`, contract.DownloadSpending.String(), contract.FundAccountSpending.String(), contract.UploadSpending.String(), id)
+		if err != nil {
+			return err
+		}
+	}
+
 	c.oldContracts[rev.ParentID] = contract
-	c.mu.RUnlock()
 
 	// Update the contract transaction.
 	var value, hash string
@@ -55,8 +71,6 @@ func (c *Contractor) updateOldContract(rev types.FileContractRevision, sigs []ty
 		value = rev.NewMissedProofOutputs[2].Value.String()
 		hash = hex.EncodeToString(rev.NewMissedProofOutputs[2].UnlockHash[:])
 	}
-
-	id := hex.EncodeToString(contract.ID[:])
 	_, err := c.db.Exec(`
 		UPDATE transactions
 		SET parent_id = ?, uc_timelock = ?, uc_renter_pk = ?, uc_host_pk = ?,

@@ -108,7 +108,7 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 		return fmt.Errorf("could not find renter in the database: %v", err)
 	}
 
-	// Sanity checks
+	// Sanity checks.
 	if fr.Hosts == 0 {
 		return errors.New("can't form contracts with zero hosts")
 	}
@@ -189,7 +189,7 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 		return fmt.Errorf("could not find renter in the database: %v", err)
 	}
 
-	// Sanity checks
+	// Sanity checks.
 	if len(rr.Contracts) == 0 {
 		return errors.New("can't renew an empty set of contracts")
 	}
@@ -257,8 +257,8 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 	ts1 := c.Transaction.TransactionSignatures[1]
 	renterSig := make([]byte, len(ts0.Signature))
 	hostSig := make([]byte, len(ts1.Signature))
-	copy(renterSig[:], ts0.Signature[:])
-	copy(hostSig[:], ts1.Signature[:])
+	copy(renterSig, ts0.Signature)
+	copy(hostSig, ts1.Signature)
 	cr := rhpv2.ContractRevision{
 		Revision: core.FileContractRevision{
 			ParentID:         core.FileContractID(c.ID),
@@ -315,4 +315,109 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 	}
 
 	return cr
+}
+
+// managedUpdateRevision updates the contract with a new revision.
+func (p *Provider) managedUpdateRevision(s *rpcSession) error {
+	// Extend the deadline to meet the renewal of multiple contracts.
+	s.conn.SetDeadline(time.Now().Add(updateRevisionTime))
+
+	// Read the request.
+	var ur updateRequest
+	hash, err := s.readRequest(&ur, 65536)
+	if err != nil {
+		return fmt.Errorf("could not read renter request: %v", err)
+	}
+
+	// Verify the signature.
+	err = crypto.VerifyHash(crypto.Hash(hash), ur.PubKey, crypto.Signature(ur.Signature))
+	if err != nil {
+		return fmt.Errorf("could not verify renter signature: %v", err)
+	}
+
+	// Check if we know this renter.
+	rpk := types.Ed25519PublicKey(crypto.PublicKey(ur.PubKey))
+	exists, err := p.satellite.UserExists(rpk)
+	if !exists || err != nil {
+		return fmt.Errorf("could not find renter in the database: %v", err)
+	}
+
+	uploads := types.NewCurrency(ur.Uploads.Big())
+	downloads := types.NewCurrency(ur.Downloads.Big())
+	fundAccount := types.NewCurrency(ur.FundAccount.Big())
+	rev, sigs := convertRevision(ur.Contract)
+
+	// Update the contract.
+	err = p.satellite.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
+	
+	// Send a response.
+	var message rpcMessage
+	if err != nil {
+		message.Error = "couldn't update contract"
+	}
+	err = s.writeResponse(&message)
+
+	return err
+}
+
+// convertRevision converts a `core`-style revision into the `siad`-style.
+func convertRevision(rev rhpv2.ContractRevision) (types.FileContractRevision, []types.TransactionSignature) {
+	var rpk, hpk crypto.PublicKey
+	copy(rpk[:], rev.Revision.UnlockConditions.PublicKeys[0].Key)
+	copy(hpk[:], rev.Revision.UnlockConditions.PublicKeys[1].Key)
+	fcr := types.FileContractRevision{
+		ParentID:         types.FileContractID(rev.Revision.ParentID),
+		UnlockConditions: types.UnlockConditions{
+			Timelock:   types.BlockHeight(rev.Revision.UnlockConditions.Timelock),
+			PublicKeys: []types.SiaPublicKey{
+				types.Ed25519PublicKey(rpk),
+				types.Ed25519PublicKey(hpk),
+			},
+			SignaturesRequired: rev.Revision.UnlockConditions.SignaturesRequired,
+		},
+		NewRevisionNumber: rev.Revision.RevisionNumber,
+		NewFileSize:       rev.Revision.Filesize,
+		NewFileMerkleRoot: crypto.Hash(rev.Revision.FileMerkleRoot),
+		NewWindowStart:    types.BlockHeight(rev.Revision.WindowStart),
+		NewWindowEnd:      types.BlockHeight(rev.Revision.WindowEnd),
+
+		NewValidProofOutputs: []types.SiacoinOutput{{
+			Value:      types.NewCurrency(rev.Revision.ValidProofOutputs[0].Value.Big()),
+			UnlockHash: types.UnlockHash(rev.Revision.ValidProofOutputs[0].Address),
+		}, {
+			Value:      types.NewCurrency(rev.Revision.ValidProofOutputs[1].Value.Big()),
+			UnlockHash: types.UnlockHash(rev.Revision.ValidProofOutputs[1].Address),
+		}},
+		NewMissedProofOutputs: []types.SiacoinOutput{{
+			Value:      types.NewCurrency(rev.Revision.MissedProofOutputs[0].Value.Big()),
+			UnlockHash: types.UnlockHash(rev.Revision.MissedProofOutputs[0].Address),
+		}, {
+			Value:      types.NewCurrency(rev.Revision.MissedProofOutputs[1].Value.Big()),
+			UnlockHash: types.UnlockHash(rev.Revision.MissedProofOutputs[1].Address),
+		}, {
+			Value:      types.NewCurrency(rev.Revision.MissedProofOutputs[1].Value.Big()),
+			UnlockHash: types.UnlockHash(rev.Revision.MissedProofOutputs[1].Address),
+		}},
+		NewUnlockHash: types.UnlockHash(rev.Revision.UnlockHash),
+	}
+
+	renterSig := make([]byte, len(rev.Signatures[0].Signature))
+	copy(renterSig, rev.Signatures[0].Signature)
+	hostSig := make([]byte, len(rev.Signatures[1].Signature))
+	copy(hostSig, rev.Signatures[1].Signature)
+	sigs := []types.TransactionSignature{{
+		ParentID:       crypto.Hash(rev.Signatures[0].ParentID),
+		PublicKeyIndex: rev.Signatures[0].PublicKeyIndex,
+		Timelock:       types.BlockHeight(rev.Signatures[0].Timelock),
+		CoveredFields:  types.CoveredFields{FileContractRevisions: []uint64{0},},
+		Signature:      renterSig,
+	}, {
+		ParentID:       crypto.Hash(rev.Signatures[1].ParentID),
+		PublicKeyIndex: rev.Signatures[1].PublicKeyIndex,
+		Timelock:       types.BlockHeight(rev.Signatures[1].Timelock),
+		CoveredFields:  types.CoveredFields{FileContractRevisions: []uint64{0},},
+		Signature:      hostSig,
+	}}
+
+	return fcr, sigs
 }

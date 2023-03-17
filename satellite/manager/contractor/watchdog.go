@@ -387,7 +387,7 @@ func (w *watchdog) scanAppliedBlock(block types.Block) {
 						}
 					}
 				}
-				w.contractor.UpdateContract(rev, sigs)
+				w.contractor.UpdateContract(rev, sigs, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency)
 			}
 		}
 

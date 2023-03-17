@@ -32,6 +32,9 @@ var formContractsSpecifier = types.NewSpecifier("FormContracts")
 // contracts.
 var renewContractsSpecifier = types.NewSpecifier("RenewContracts")
 
+// updateRevisionSpecifier is used when a renter submits a new revision.
+var updateRevisionSpecifier = types.NewSpecifier("UpdateRevision")
+
 // threadedUpdateHostname periodically runs 'managedLearnHostname', which
 // checks if the Satellite's hostname has changed.
 func (p *Provider) threadedUpdateHostname(closeChan chan struct{}) {
@@ -279,6 +282,11 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		}
 	case renewContractsSpecifier:
 		err = p.managedRenewContracts(s)
+		if err != nil {
+			err = errors.Extend(errors.New("incoming RPCRenewContracts failed: "), err)
+		}
+	case updateRevisionSpecifier:
+		err = p.managedUpdateRevision(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCRenewContracts failed: "), err)
 		}
