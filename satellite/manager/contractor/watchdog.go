@@ -673,7 +673,7 @@ func (w *watchdog) callCheckContracts() {
 		contract, exists := w.contractor.staticContracts.View(fcID)
 		if !exists {
 			// Check if the contract was moved to oldContracts.
-			contract, exists = w.contractor.oldContracts[fcID]
+			contract, exists = w.contractor.staticContracts.OldContract(fcID)
 			if !exists {
 				w.contractor.log.Printf("ERROR: Contract %v not found by the watchdog\n", fcID.String())
 			}
@@ -767,7 +767,7 @@ func (w *watchdog) managedCheckMonitoredRevision(fcID types.FileContractID, heig
 		// Try old contracts. If the contract was renewed already it won't be in the
 		// contractset.
 		w.contractor.mu.RLock()
-		contract, ok := w.contractor.oldContracts[fcID]
+		contract, ok := w.contractor.staticContracts.OldContract(fcID)
 		if !ok {
 			w.contractor.log.Println("Unable to Acquire monitored contract from oldContracts", fcID)
 			w.contractor.mu.RUnlock()

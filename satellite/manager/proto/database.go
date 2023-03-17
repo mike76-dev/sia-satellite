@@ -177,146 +177,6 @@ func (fc *FileContract) saveContract() error {
 	return err
 }
 
-// loadContract loads the contract from the database.
-func loadContract(fcid types.FileContractID, db *sql.DB) (contractHeader, bool, error) {
-	var cp contractPersist
-	var tp transactionPersist
-	var renewedTo string
-	id := hex.EncodeToString(fcid[:])
-
-	// Load contract data.
-	err := db.QueryRow(`
-		SELECT start_height, secret_key, download_spending, fund_account_spending,
-			storage_spending, upload_spending, total_cost, contract_fee, txn_fee,
-			siafund_fee, account_balance_cost, fund_account_cost,
-			update_price_table_cost, good_for_upload, good_for_renew, bad_contract,
-			last_oos_err, locked, renewed_to
-		FROM contracts
-		WHERE contract_id = ?
-	`, id).Scan(&cp.StartHeight, &cp.SecretKey, &cp.DownloadSpending, &cp.FundAccountSpending, &cp.StorageSpending, &cp.UploadSpending, &cp.TotalCost, &cp.ContractFee, &cp.TxnFee, &cp.SiafundFee, &cp.AccountBalanceCost, &cp.FundAccountCost, &cp.UpdatePriceTableCost, &cp.GoodForUpload, &cp.GoodForRenew, &cp.BadContract, &cp.LastOOSErr, &cp.Locked, &renewedTo)
-	if err != nil {
-		return contractHeader{}, false, err
-	}
-
-	// Load transaction data.
-	err = db.QueryRow(`
-		SELECT parent_id, uc_timelock, uc_renter_pk, uc_host_pk,
-			signatures_required, new_revision_number, new_file_size,
-			new_file_merkle_root, new_window_start, new_window_end,
-			new_valid_proof_output_0, new_valid_proof_output_uh_0,
-			new_valid_proof_output_1, new_valid_proof_output_uh_1,
-			new_missed_proof_output_0, new_missed_proof_output_uh_0,
-			new_missed_proof_output_1, new_missed_proof_output_uh_1,
-			new_missed_proof_output_2, new_missed_proof_output_uh_2,
-			new_unlock_hash, t_parent_id_0, pk_index_0, timelock_0, signature_0,
-			t_parent_id_1, pk_index_1, timelock_1, signature_1
-		FROM transactions
-		WHERE contract_id = ?
-	`, id).Scan(&tp.ParentID, &tp.Timelock, &tp.PublicKey0, &tp.PublicKey1, &tp.SignaturesRequired, &tp.NewRevisionNumber, &tp.NewFileSize, &tp.NewFileMerkleRoot, &tp.NewWindowStart, &tp.NewWindowEnd, &tp.ValidValue0, &tp.ValidUnlockHash0, &tp.ValidValue1, &tp.ValidUnlockHash1, &tp.MissedValue0, &tp.MissedUnlockHash0, &tp.MissedValue1, &tp.MissedUnlockHash1, &tp.MissedValue2, &tp.MissedUnlockHash2, &tp.NewUnlockHash, &tp.ParentID0, &tp.PublicKeyIndex0, &tp.Timelock0, &tp.Signature0, &tp.ParentID1, &tp.PublicKeyIndex1, &tp.Timelock1, &tp.Signature1)
-	if err != nil {
-		return contractHeader{}, false, err
-	}
-
-	// Construct the transaction.
-	var t types.Transaction
-	t.FileContractRevisions = make([]types.FileContractRevision, 1)
-	t.TransactionSignatures = make([]types.TransactionSignature, tp.SignaturesRequired)
-	var b []byte
-	b, _ = hex.DecodeString(tp.ParentID)
-	copy(t.FileContractRevisions[0].ParentID[:], b)
-	t.FileContractRevisions[0].UnlockConditions = types.UnlockConditions{
-		Timelock:           types.BlockHeight(tp.Timelock),
-		PublicKeys:         make([]types.SiaPublicKey, 2),
-		SignaturesRequired: tp.SignaturesRequired,
-	}
-	_ = t.FileContractRevisions[0].UnlockConditions.PublicKeys[0].LoadString(tp.PublicKey0)
-	_ = t.FileContractRevisions[0].UnlockConditions.PublicKeys[1].LoadString(tp.PublicKey1)
-	t.FileContractRevisions[0].NewRevisionNumber = tp.NewRevisionNumber
-	t.FileContractRevisions[0].NewFileSize = tp.NewFileSize
-	b, _ = hex.DecodeString(tp.NewFileMerkleRoot)
-	copy(t.FileContractRevisions[0].NewFileMerkleRoot[:], b)
-	t.FileContractRevisions[0].NewWindowStart = types.BlockHeight(tp.NewWindowStart)
-	t.FileContractRevisions[0].NewWindowEnd = types.BlockHeight(tp.NewWindowEnd)
-	t.FileContractRevisions[0].NewValidProofOutputs = make([]types.SiacoinOutput, 2)
-	if tp.MissedValue2 != "" && tp.MissedUnlockHash2 != "" {
-		t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 3)
-	} else {
-		t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 2)
-	}
-	t.FileContractRevisions[0].NewValidProofOutputs[0].Value = modules.ReadCurrency(tp.ValidValue0)
-	b, _ = hex.DecodeString(tp.ValidUnlockHash0)
-	copy(t.FileContractRevisions[0].NewValidProofOutputs[0].UnlockHash[:], b)
-	t.FileContractRevisions[0].NewValidProofOutputs[1].Value = modules.ReadCurrency(tp.ValidValue1)
-	b, _ = hex.DecodeString(tp.ValidUnlockHash1)
-	copy(t.FileContractRevisions[0].NewValidProofOutputs[1].UnlockHash[:], b)
-	t.FileContractRevisions[0].NewMissedProofOutputs[0].Value = modules.ReadCurrency(tp.MissedValue0)
-	b, _ = hex.DecodeString(tp.MissedUnlockHash0)
-	copy(t.FileContractRevisions[0].NewMissedProofOutputs[0].UnlockHash[:], b)
-	t.FileContractRevisions[0].NewMissedProofOutputs[1].Value = modules.ReadCurrency(tp.MissedValue1)
-	b, _ = hex.DecodeString(tp.MissedUnlockHash1)
-	copy(t.FileContractRevisions[0].NewMissedProofOutputs[1].UnlockHash[:], b)
-	if tp.MissedValue2 != "" && tp.MissedUnlockHash2 != "" {
-		t.FileContractRevisions[0].NewMissedProofOutputs[2].Value = modules.ReadCurrency(tp.MissedValue2)
-		b, _ = hex.DecodeString(tp.MissedUnlockHash2)
-		copy(t.FileContractRevisions[0].NewMissedProofOutputs[2].UnlockHash[:], b)
-	}
-	b, _ = hex.DecodeString(tp.NewUnlockHash)
-	copy(t.FileContractRevisions[0].NewUnlockHash[:], b)
-	if tp.SignaturesRequired > 0 {
-		b, _ = hex.DecodeString(tp.ParentID0)
-		copy(t.TransactionSignatures[0].ParentID[:], b)
-		t.TransactionSignatures[0].PublicKeyIndex = tp.PublicKeyIndex0
-		t.TransactionSignatures[0].Timelock = types.BlockHeight(tp.Timelock0)
-		b, _ = hex.DecodeString(tp.Signature0)
-		t.TransactionSignatures[0].Signature = make([]byte, len(b))
-		copy(t.TransactionSignatures[0].Signature, b)
-		t.TransactionSignatures[0].CoveredFields = types.CoveredFields{
-			FileContractRevisions: []uint64{0},
-		}
-	}
-	if tp.SignaturesRequired > 1 {
-		b, _ = hex.DecodeString(tp.ParentID1)
-		copy(t.TransactionSignatures[1].ParentID[:], b)
-		t.TransactionSignatures[1].PublicKeyIndex = tp.PublicKeyIndex1
-		t.TransactionSignatures[1].Timelock = types.BlockHeight(tp.Timelock1)
-		b, _ = hex.DecodeString(tp.Signature1)
-		t.TransactionSignatures[1].Signature = make([]byte, len(b))
-		copy(t.TransactionSignatures[1].Signature, b)
-		t.TransactionSignatures[1].CoveredFields = types.CoveredFields{
-			FileContractRevisions: []uint64{0},
-		}
-	}
-
-	// Construct the contract header.
-	var h contractHeader
-	h.Transaction = t
-	h.StartHeight = types.BlockHeight(cp.StartHeight)
-	b, _ = hex.DecodeString(cp.SecretKey)
-	copy(h.SecretKey[:], b)
-	h.DownloadSpending = modules.ReadCurrency(cp.DownloadSpending)
-	h.FundAccountSpending = modules.ReadCurrency(cp.FundAccountSpending)
-	h.StorageSpending = modules.ReadCurrency(cp.StorageSpending)
-	h.UploadSpending = modules.ReadCurrency(cp.UploadSpending)
-	h.TotalCost = modules.ReadCurrency(cp.TotalCost)
-	h.ContractFee = modules.ReadCurrency(cp.ContractFee)
-	h.TxnFee = modules.ReadCurrency(cp.TxnFee)
-	h.SiafundFee = modules.ReadCurrency(cp.SiafundFee)
-	h.MaintenanceSpending = smodules.MaintenanceSpending{
-		AccountBalanceCost:   modules.ReadCurrency(cp.AccountBalanceCost),
-		FundAccountCost:      modules.ReadCurrency(cp.FundAccountCost),
-		UpdatePriceTableCost: modules.ReadCurrency(cp.UpdatePriceTableCost),
-	}
-	h.Utility = smodules.ContractUtility{
-		GoodForUpload: cp.GoodForUpload,
-		GoodForRenew:  cp.GoodForRenew,
-		BadContract:   cp.BadContract,
-		LastOOSErr:    types.BlockHeight(cp.LastOOSErr),
-		Locked:        cp.Locked,
-	}
-
-	return h, renewedTo != "", nil
-}
-
 // deleteContract deletes the contract from the database.
 func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 	id := hex.EncodeToString(fcid[:])
@@ -325,38 +185,164 @@ func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 	return errors.Compose(err1, err2)
 }
 
-// loadKeys loads the map[pubkey]contractID from the database.
-func loadKeys(db *sql.DB, height types.BlockHeight) (map[string]types.FileContractID, []types.FileContractID, error) {
-	rows, err := db.Query(`
-		SELECT uc_renter_pk, uc_host_pk, new_window_start, new_window_end, contract_id
-		FROM transactions
+// loadContracts loads the entire contracts table into the contract set.
+func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
+	// Load the contracts.
+	rows, err := cs.db.Query(`
+		SELECT contract_id, start_height, secret_key, download_spending,
+			fund_account_spending, storage_spending, upload_spending, total_cost,
+			contract_fee, txn_fee, siafund_fee, account_balance_cost, fund_account_cost,
+			update_price_table_cost, good_for_upload, good_for_renew, bad_contract,
+			last_oos_err, locked, renewed_to
+		FROM contracts
 	`)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 	defer rows.Close()
 
-	keys := make(map[string]types.FileContractID)
-	var ids []types.FileContractID
-	windows := make(map[string]uint64)
-	var rpk, hpk, id string
-	var ws, we uint64
-	var b []byte
-	var fcid types.FileContractID
-
+	// Iterate through each contract.
+	var cp contractPersist
+	var tp transactionPersist
+	var id, renewedTo string
 	for rows.Next() {
-		if err := rows.Scan(&rpk, &hpk, &ws, &we, &id); err != nil {
+		if err := rows.Scan(&id, &cp.StartHeight, &cp.SecretKey, &cp.DownloadSpending, &cp.FundAccountSpending, &cp.StorageSpending, &cp.UploadSpending, &cp.TotalCost, &cp.ContractFee, &cp.TxnFee, &cp.SiafundFee, &cp.AccountBalanceCost, &cp.FundAccountCost, &cp.UpdatePriceTableCost, &cp.GoodForUpload, &cp.GoodForRenew, &cp.BadContract, &cp.LastOOSErr, &cp.Locked, &renewedTo); err != nil {
+			cs.log.Println("ERROR: unable to load file contract:", err)
 			continue
 		}
-		windowStart, exists := windows[rpk + hpk]
-		if (!exists || ws > windowStart) && we >= uint64(height) {
-			windows[rpk + hpk] = ws
-			b, _ = hex.DecodeString(id)
-			copy(fcid[:], b)
-			keys[rpk + hpk] = fcid
+
+		// Load the transaction.
+		err = cs.db.QueryRow(`
+			SELECT parent_id, uc_timelock, uc_renter_pk, uc_host_pk,
+				signatures_required, new_revision_number, new_file_size,
+				new_file_merkle_root, new_window_start, new_window_end,
+				new_valid_proof_output_0, new_valid_proof_output_uh_0,
+				new_valid_proof_output_1, new_valid_proof_output_uh_1,
+				new_missed_proof_output_0, new_missed_proof_output_uh_0,
+				new_missed_proof_output_1, new_missed_proof_output_uh_1,
+				new_missed_proof_output_2, new_missed_proof_output_uh_2,
+				new_unlock_hash, t_parent_id_0, pk_index_0, timelock_0, signature_0,
+				t_parent_id_1, pk_index_1, timelock_1, signature_1
+			FROM transactions
+			WHERE contract_id = ?
+		`, id).Scan(&tp.ParentID, &tp.Timelock, &tp.PublicKey0, &tp.PublicKey1, &tp.SignaturesRequired, &tp.NewRevisionNumber, &tp.NewFileSize, &tp.NewFileMerkleRoot, &tp.NewWindowStart, &tp.NewWindowEnd, &tp.ValidValue0, &tp.ValidUnlockHash0, &tp.ValidValue1, &tp.ValidUnlockHash1, &tp.MissedValue0, &tp.MissedUnlockHash0, &tp.MissedValue1, &tp.MissedUnlockHash1, &tp.MissedValue2, &tp.MissedUnlockHash2, &tp.NewUnlockHash, &tp.ParentID0, &tp.PublicKeyIndex0, &tp.Timelock0, &tp.Signature0, &tp.ParentID1, &tp.PublicKeyIndex1, &tp.Timelock1, &tp.Signature1)
+		if err != nil {
+			cs.log.Println("ERROR: unable to load transaction:", err)
+			continue
 		}
-		ids = append(ids, fcid)
+
+		// Construct the transaction.
+		var t types.Transaction
+		t.FileContractRevisions = make([]types.FileContractRevision, 1)
+		t.TransactionSignatures = make([]types.TransactionSignature, tp.SignaturesRequired)
+		var b []byte
+		b, _ = hex.DecodeString(tp.ParentID)
+		copy(t.FileContractRevisions[0].ParentID[:], b)
+		t.FileContractRevisions[0].UnlockConditions = types.UnlockConditions{
+			Timelock:           types.BlockHeight(tp.Timelock),
+			PublicKeys:         make([]types.SiaPublicKey, 2),
+			SignaturesRequired: tp.SignaturesRequired,
+		}
+		_ = t.FileContractRevisions[0].UnlockConditions.PublicKeys[0].LoadString(tp.PublicKey0)
+		_ = t.FileContractRevisions[0].UnlockConditions.PublicKeys[1].LoadString(tp.PublicKey1)
+		t.FileContractRevisions[0].NewRevisionNumber = tp.NewRevisionNumber
+		t.FileContractRevisions[0].NewFileSize = tp.NewFileSize
+		b, _ = hex.DecodeString(tp.NewFileMerkleRoot)
+		copy(t.FileContractRevisions[0].NewFileMerkleRoot[:], b)
+		t.FileContractRevisions[0].NewWindowStart = types.BlockHeight(tp.NewWindowStart)
+		t.FileContractRevisions[0].NewWindowEnd = types.BlockHeight(tp.NewWindowEnd)
+		t.FileContractRevisions[0].NewValidProofOutputs = make([]types.SiacoinOutput, 2)
+		if tp.MissedValue2 != "" && tp.MissedUnlockHash2 != "" {
+			t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 3)
+		} else {
+			t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 2)
+		}
+		t.FileContractRevisions[0].NewValidProofOutputs[0].Value = modules.ReadCurrency(tp.ValidValue0)
+		b, _ = hex.DecodeString(tp.ValidUnlockHash0)
+		copy(t.FileContractRevisions[0].NewValidProofOutputs[0].UnlockHash[:], b)
+		t.FileContractRevisions[0].NewValidProofOutputs[1].Value = modules.ReadCurrency(tp.ValidValue1)
+		b, _ = hex.DecodeString(tp.ValidUnlockHash1)
+		copy(t.FileContractRevisions[0].NewValidProofOutputs[1].UnlockHash[:], b)
+		t.FileContractRevisions[0].NewMissedProofOutputs[0].Value = modules.ReadCurrency(tp.MissedValue0)
+		b, _ = hex.DecodeString(tp.MissedUnlockHash0)
+		copy(t.FileContractRevisions[0].NewMissedProofOutputs[0].UnlockHash[:], b)
+		t.FileContractRevisions[0].NewMissedProofOutputs[1].Value = modules.ReadCurrency(tp.MissedValue1)
+		b, _ = hex.DecodeString(tp.MissedUnlockHash1)
+		copy(t.FileContractRevisions[0].NewMissedProofOutputs[1].UnlockHash[:], b)
+		if tp.MissedValue2 != "" && tp.MissedUnlockHash2 != "" {
+			t.FileContractRevisions[0].NewMissedProofOutputs[2].Value = modules.ReadCurrency(tp.MissedValue2)
+			b, _ = hex.DecodeString(tp.MissedUnlockHash2)
+			copy(t.FileContractRevisions[0].NewMissedProofOutputs[2].UnlockHash[:], b)
+		}
+		b, _ = hex.DecodeString(tp.NewUnlockHash)
+		copy(t.FileContractRevisions[0].NewUnlockHash[:], b)
+		if tp.SignaturesRequired > 0 {
+			b, _ = hex.DecodeString(tp.ParentID0)
+			copy(t.TransactionSignatures[0].ParentID[:], b)
+			t.TransactionSignatures[0].PublicKeyIndex = tp.PublicKeyIndex0
+			t.TransactionSignatures[0].Timelock = types.BlockHeight(tp.Timelock0)
+			b, _ = hex.DecodeString(tp.Signature0)
+			t.TransactionSignatures[0].Signature = make([]byte, len(b))
+			copy(t.TransactionSignatures[0].Signature, b)
+			t.TransactionSignatures[0].CoveredFields = types.CoveredFields{
+				FileContractRevisions: []uint64{0},
+			}
+		}
+		if tp.SignaturesRequired > 1 {
+			b, _ = hex.DecodeString(tp.ParentID1)
+			copy(t.TransactionSignatures[1].ParentID[:], b)
+			t.TransactionSignatures[1].PublicKeyIndex = tp.PublicKeyIndex1
+			t.TransactionSignatures[1].Timelock = types.BlockHeight(tp.Timelock1)
+			b, _ = hex.DecodeString(tp.Signature1)
+			t.TransactionSignatures[1].Signature = make([]byte, len(b))
+			copy(t.TransactionSignatures[1].Signature, b)
+			t.TransactionSignatures[1].CoveredFields = types.CoveredFields{
+				FileContractRevisions: []uint64{0},
+			}
+		}
+
+		// Construct the contract header.
+		var h contractHeader
+		h.Transaction = t
+		h.StartHeight = types.BlockHeight(cp.StartHeight)
+		b, _ = hex.DecodeString(cp.SecretKey)
+		copy(h.SecretKey[:], b)
+		h.DownloadSpending = modules.ReadCurrency(cp.DownloadSpending)
+		h.FundAccountSpending = modules.ReadCurrency(cp.FundAccountSpending)
+		h.StorageSpending = modules.ReadCurrency(cp.StorageSpending)
+		h.UploadSpending = modules.ReadCurrency(cp.UploadSpending)
+		h.TotalCost = modules.ReadCurrency(cp.TotalCost)
+		h.ContractFee = modules.ReadCurrency(cp.ContractFee)
+		h.TxnFee = modules.ReadCurrency(cp.TxnFee)
+		h.SiafundFee = modules.ReadCurrency(cp.SiafundFee)
+		h.MaintenanceSpending = smodules.MaintenanceSpending{
+			AccountBalanceCost:   modules.ReadCurrency(cp.AccountBalanceCost),
+			FundAccountCost:      modules.ReadCurrency(cp.FundAccountCost),
+			UpdatePriceTableCost: modules.ReadCurrency(cp.UpdatePriceTableCost),
+		}
+		h.Utility = smodules.ContractUtility{
+			GoodForUpload: cp.GoodForUpload,
+			GoodForRenew:  cp.GoodForRenew,
+			BadContract:   cp.BadContract,
+			LastOOSErr:    types.BlockHeight(cp.LastOOSErr),
+			Locked:        cp.Locked,
+		}
+
+		// Create the file contract.
+		fc := &FileContract{
+			header: h,
+			db:     cs.db,
+		}
+
+		// Check if the contract has expired.
+		fcid := h.ID()
+		if renewedTo == "" && h.EndHeight() >= height {
+			cs.contracts[fcid] = fc
+			cs.pubKeys[tp.PublicKey0 + tp.PublicKey1] = fcid
+		} else {
+			cs.oldContracts[fcid] = fc
+		}
 	}
 
-	return keys, ids, nil
+	return nil
 }

@@ -72,7 +72,6 @@ type Contractor struct {
 	// doubleSpentContracts keep track of all contracts that were double spent by
 	// either the renter or host.
 	staticContracts      *proto.ContractSet
-	oldContracts         map[types.FileContractID]modules.RenterContract
 	doubleSpentContracts map[types.FileContractID]types.BlockHeight
 	renewedFrom          map[types.FileContractID]types.FileContractID
 	renewedTo            map[types.FileContractID]types.FileContractID
@@ -159,7 +158,7 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 	}
 
 	// Calculate needed spending to be reported from old contracts.
-	for _, contract := range c.oldContracts {
+	for _, contract := range c.OldContracts() {
 		// Filter out by renter.
 		if contract.RenterPublicKey.String() != key {
 			continue
@@ -333,7 +332,7 @@ func (c *Contractor) RefreshedContract(fcid types.FileContractID) bool {
 	}
 
 	// Grab the contract to check its end height.
-	contract, ok := c.oldContracts[fcid]
+	contract, ok := c.staticContracts.OldContract(fcid)
 	if !ok {
 		c.log.Println("Contract not found in oldContracts, despite there being a renewal to the contract")
 		return false
@@ -342,7 +341,7 @@ func (c *Contractor) RefreshedContract(fcid types.FileContractID) bool {
 	// Grab the contract it was renewed to to check its end height.
 	newContract, ok := c.staticContracts.View(newFCID)
 	if !ok {
-		newContract, ok = c.oldContracts[newFCID]
+		newContract, ok = c.staticContracts.OldContract(newFCID)
 		if !ok {
 			c.log.Println("Contract was not found in the database, despite their being another contract that claims to have renewed to it.")
 			return false
@@ -401,14 +400,14 @@ func New(cs smodules.ConsensusSet, wallet smodules.Wallet, tpool smodules.Transa
 		return nil, errChan
 	}
 	// Create the contract set.
-	contractSet, oldContracts, err := proto.NewContractSet(db, logger, cs.Height())
+	contractSet, err := proto.NewContractSet(db, logger, cs.Height())
 	if err != nil {
 		errChan <- err
 		return nil, errChan
 	}
 
 	// Handle blocking startup.
-	c, err := contractorBlockingStartup(cs, wallet, tpool, hdb, persistDir, contractSet, oldContracts, db, logger)
+	c, err := contractorBlockingStartup(cs, wallet, tpool, hdb, persistDir, contractSet, db, logger)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
@@ -432,7 +431,7 @@ func New(cs smodules.ConsensusSet, wallet smodules.Wallet, tpool smodules.Transa
 }
 
 // contractorBlockingStartup handles the blocking portion of New.
-func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp smodules.TransactionPool, hdb modules.HostDB, persistDir string, contractSet *proto.ContractSet, oldContracts map[types.FileContractID]modules.RenterContract, db *sql.DB, l *persist.Logger) (*Contractor, error) {
+func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp smodules.TransactionPool, hdb modules.HostDB, persistDir string, contractSet *proto.ContractSet, db *sql.DB, l *persist.Logger) (*Contractor, error) {
 	// Create the Contractor object.
 	c := &Contractor{
 		staticAlerter: smodules.NewAlerter("contractor"),
@@ -451,7 +450,6 @@ func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp s
 
 		staticContracts:      contractSet,
 		sessions:             make(map[types.FileContractID]*hostSession),
-		oldContracts:         oldContracts,
 		doubleSpentContracts: make(map[types.FileContractID]types.BlockHeight),
 		renewing:             make(map[types.FileContractID]bool),
 		renewedFrom:          make(map[types.FileContractID]types.FileContractID),
@@ -593,7 +591,7 @@ func (c *Contractor) SetSatellite(fl modules.FundLocker) {
 func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 	contract, exists := c.staticContracts.View(fcid)
 	if !exists {
-		contract, exists = c.oldContracts[fcid]
+		contract, exists = c.staticContracts.OldContract(fcid)
 		if !exists {
 			c.log.Println("ERROR: trying to unlock funds of a non-existing contract:", fcid)
 			return
@@ -623,11 +621,7 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	err := c.staticContracts.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
 	if err != nil {
-		// Check if the contract has expired.
-		err = c.updateOldContract(rev, sigs, uploads, downloads, fundAccount)
-		if err != nil {
-			c.log.Println("ERROR: revision update failed:", rev.ParentID)
-		}
+		c.log.Println("ERROR: revision update failed:", rev.ParentID)
 	}
 
 	return err

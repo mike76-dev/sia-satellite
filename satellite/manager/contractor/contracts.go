@@ -160,13 +160,7 @@ func (c *Contractor) MarkContractBad(id types.FileContractID) error {
 // OldContracts returns the contracts formed by the contractor that have
 // expired.
 func (c *Contractor) OldContracts() []modules.RenterContract {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	contracts := make([]modules.RenterContract, 0, len(c.oldContracts))
-	for _, c := range c.oldContracts {
-		contracts = append(contracts, c)
-	}
-	return contracts
+	return c.staticContracts.OldContracts()
 }
 
 // managedMarkContractBad marks an already acquired SafeContract as bad.

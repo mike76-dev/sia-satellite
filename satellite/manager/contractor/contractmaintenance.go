@@ -115,7 +115,7 @@ func (c *Contractor) managedCheckForDuplicates() {
 			c.mu.Lock()
 			c.renewedFrom[newContract.ID] = oldContract.ID
 			c.renewedTo[oldContract.ID] = newContract.ID
-			c.oldContracts[oldContract.ID] = oldSC.Metadata()
+			c.staticContracts.ReplaceOldContract(oldContract.ID, oldSC)
 
 			// Save the contractor and delete the contract.
 			//
@@ -194,7 +194,7 @@ func (c *Contractor) managedEstimateRenewFundingRequirements(contract modules.Re
 
 		// If the contract is not in oldContracts, that's probably a bug, but
 		// nothing to do otherwise.
-		currentContract, exists := c.oldContracts[currentID]
+		currentContract, exists := c.staticContracts.OldContract(currentID)
 		if !exists {
 			c.log.Println("WARN: A known previous contract is not found in c.oldContracts")
 			break
@@ -917,7 +917,7 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 	c.renewedFrom[newContract.ID] = id
 	c.renewedTo[id] = newContract.ID
 	// Store the contract in the record of historic contracts.
-	c.oldContracts[id] = oldContract.Metadata()
+	c.staticContracts.RetireContract(id)
 	c.mu.Unlock()
 
 	// Update the database.

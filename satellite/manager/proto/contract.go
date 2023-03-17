@@ -316,10 +316,13 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 // UpdateContract updates the contract with the new revision.
 func (cs *ContractSet) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	cs.mu.Lock()
+	defer cs.mu.Unlock()
 	contract, exists := cs.contracts[rev.ParentID]
-	cs.mu.Unlock()
 	if !exists {
-		return errors.New("contract not found in the contract set")
+		contract, exists = cs.oldContracts[rev.ParentID]
+		if !exists {
+			return errors.New("contract not found")
+		}
 	}
 
 	return contract.managedSyncRevision(rev, sigs, uploads, downloads, fundAccount)
@@ -349,35 +352,4 @@ func (cs *ContractSet) managedInsertContract(h contractHeader) (modules.RenterCo
 	cs.mu.Unlock()
 	
 	return fc.Metadata(), fc.saveContract()
-}
-
-// loadFileContract loads a contract and adds it to the contractset if it is valid.
-func (cs *ContractSet) loadFileContract(fcid types.FileContractID, height types.BlockHeight) (*modules.RenterContract, error) {
-	header, renewed, err := loadContract(fcid, cs.db)
-	if err != nil {
-		return nil, errors.AddContext(err, "unable to load contract header")
-	}
-
-	if err := header.validate(); err != nil {
-		return nil, errors.AddContext(err, "invalid contract header")
-	}
-
-	// Add to the set.
-	fc := &FileContract{
-		header: header,
-		db:     cs.db,
-	}
-
-	// Check if the contract has expired.
-	if renewed || height > header.EndHeight() {
-		oldContract := fc.Metadata()
-		return &oldContract, nil
-	}
-
-	if _, exists := cs.contracts[fcid]; exists {
-		cs.log.Println("CRITICAL: Trying to overwrite existing contract")
-	}
-	cs.contracts[fcid] = fc
-
-	return nil, nil
 }

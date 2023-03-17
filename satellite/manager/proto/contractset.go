@@ -15,11 +15,12 @@ import (
 // serialize modifications to individual contracts, as well as to provide
 // operations on the set as a whole.
 type ContractSet struct {
-	contracts map[types.FileContractID]*FileContract
-	pubKeys   map[string]types.FileContractID
-	mu        sync.Mutex
-	db        *sql.DB
-	log       *persist.Logger
+	contracts    map[types.FileContractID]*FileContract
+	oldContracts map[types.FileContractID]*FileContract
+	pubKeys      map[string]types.FileContractID
+	mu           sync.Mutex
+	db           *sql.DB
+	log          *persist.Logger
 }
 
 // Acquire looks up the contract for the specified host key and locks it before
@@ -69,6 +70,13 @@ func (cs *ContractSet) Erase(fcid types.FileContractID) {
 	if err != nil {
 		cs.log.Println("ERROR: unable to delete the contract:", fcid)
 	}
+}
+
+// ReplaceOldContract replaces the duplicated old contract.
+func (cs *ContractSet) ReplaceOldContract(fcid types.FileContractID, c *FileContract) {
+	cs.mu.Lock()
+	cs.oldContracts[fcid] = c
+	cs.mu.Unlock()
 }
 
 // IDs returns the fcid of each contract with in the set. The contracts are not
@@ -175,33 +183,56 @@ func (cs *ContractSet) ByRenter(rpk types.SiaPublicKey) []modules.RenterContract
 	return contracts
 }
 
+// OldContracts returns the metadata of each old contract.
+func (cs *ContractSet) OldContracts() []modules.RenterContract {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	oldContracts := make([]modules.RenterContract, 0, len(cs.oldContracts))
+	for _, oldContract := range cs.oldContracts {
+		oldContracts = append(oldContracts, oldContract.Metadata())
+	}
+	return oldContracts
+}
+
+// OldContract returns the metadata of the specified old contract.
+func (cs *ContractSet) OldContract(id types.FileContractID) (modules.RenterContract, bool) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	oldContract, ok := cs.oldContracts[id]
+	if !ok {
+		return modules.RenterContract{}, false
+	}
+	return oldContract.Metadata(), true
+}
+
+// RetireContract adds the contract to the old contracts map.
+func (cs *ContractSet) RetireContract(id types.FileContractID) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	c, exists := cs.contracts[id]
+	if !exists {
+		cs.log.Println("ERROR: trying to retire a non-existing contract")
+		return
+	}
+	cs.oldContracts[id] = c
+}
+
 // NewContractSet returns a ContractSet storing its contracts in the specified
 // database.
-func NewContractSet(db *sql.DB, log *persist.Logger, height types.BlockHeight) (*ContractSet, map[types.FileContractID]modules.RenterContract, error) {
-	// Load the contract IDs.
-	keys, ids, err := loadKeys(db, height)
-	if err != nil {
-		return nil, nil, err
-	}
-	
+func NewContractSet(db *sql.DB, log *persist.Logger, height types.BlockHeight) (*ContractSet, error) {
 	cs := &ContractSet{
 		contracts:    make(map[types.FileContractID]*FileContract),
-		pubKeys:      keys,
+		oldContracts: make(map[types.FileContractID]*FileContract),
+		pubKeys:      make(map[string]types.FileContractID),
 		db:           db,
 		log:          log,
 	}
 
 	// Load the contracts from the database.
-	oldContracts := make(map[types.FileContractID]modules.RenterContract)
-	for _, fcid := range ids {
-		oldContract, err := cs.loadFileContract(fcid, height)
-		if err != nil {
-			cs.log.Printf("Error inserting contract %v: %v\n", fcid, err)
-		}
-		if oldContract != nil {
-			oldContracts[fcid] = *oldContract
-		}
+	err := cs.loadContracts(height)
+	if err != nil {
+		return nil, err
 	}
 
-	return cs, oldContracts, nil
+	return cs, nil
 }

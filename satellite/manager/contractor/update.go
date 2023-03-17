@@ -48,9 +48,7 @@ func (c *Contractor) managedArchiveContracts() {
 		c.mu.RUnlock()
 		if currentHeight > contract.EndHeight || renewed {
 			id := contract.ID
-			c.mu.Lock()
-			c.oldContracts[id] = contract
-			c.mu.Unlock()
+			c.staticContracts.RetireContract(id)
 			expired = append(expired, id)
 			c.log.Println("INFO: archived expired contract", id)
 		}
