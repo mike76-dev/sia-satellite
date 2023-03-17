@@ -332,6 +332,10 @@ tbody > tr:nth-child(odd) {
 	cursor: pointer;
 }
 
+.contracts-expand {
+	font-size: 0.8rem;
+}
+
 .sort {
 	display: inline-block;
 	width: 0.8rem;

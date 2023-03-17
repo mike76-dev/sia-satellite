@@ -76,6 +76,8 @@ var contractsStep = 10;
 var sortByStart = 'inactive';
 var sortByEnd = 'inactive';
 
+var expandedContract = -1;
+
 function setActiveMenuIndex(ind) {
 	let li, p;
 	if (ind > menu.childElementCount) return;
@@ -663,6 +665,7 @@ function retrieveBlockHeight() {
 
 function changeContractsStep(s) {
 	contractsStep = parseInt(s.value);
+	expandedContract = -1;
 	renderContracts();
 }
 
@@ -690,12 +693,40 @@ function renderContracts() {
 		tr.innerHTML += '<td>' + row.size + '</td>';
 		tr.innerHTML += '<td>' + row.totalcost + '</td>';
 		tr.innerHTML += '<td>' + row.status + '</td>';
+		tr.index = i;
+		tr.addEventListener("click", expandContract);
 		tbody.appendChild(tr);
 	});
 	document.getElementById('contracts-empty').classList.add('disabled');
 	document.getElementById('contracts-non-empty').classList.remove('disabled');
 	document.getElementById('contracts-prev').disabled = contractsFrom == 1;
 	document.getElementById('contracts-next').disabled = contracts.length < contractsFrom + contractsStep;
+}
+
+function expandContract(e) {
+	let tbody = document.getElementById('contracts-table');
+	let index = e.currentTarget.index
+	if (expandedContract == index) {
+		expandedContract = -1;
+		tbody.removeChild(tbody.children[index - contractsFrom + 2]);
+		return;
+	}
+	if (expandedContract >= 0) {
+		tbody.removeChild(tbody.children[expandedContract - contractsFrom + 2]);
+	}
+	expandedContract = index;
+	tr = document.createElement('tr');
+	tr.classList.add('contracts-expand');
+	tr.innerHTML = '<td></td>';
+	tr.innerHTML += '<td>Contract ID:<br>Host:<br>Host Public Key:<br>Host Version:<br>' +
+		'Storage Spending:<br>Upload Spending:<br>Download Spending:<br>' +
+		'Fund Account Spending:<br>Fees:</td>';
+	tr.innerHTML += '<td colspan="6">' + contracts[index].id + '<br>' +
+		contracts[index].netaddress + '<br>' + contracts[index].hostpublickey + '<br>' +
+		contracts[index].hostversion + '<br>' + contracts[index].storagespending + '<br>' +
+		contracts[index].uploadspending + '<br>' + contracts[index].downloadspending + '<br>' +
+		contracts[index].fundaccountspending + '<br>' + contracts[index].fees + '</td>';
+	tbody.children[index - contractsFrom + 1].insertAdjacentElement("afterend", tr);
 }
 
 function getContracts() {
@@ -739,16 +770,19 @@ function getContracts() {
 function contractsPrev() {
 	contractsFrom = contractsFrom - contractsStep;
 	if (contractsFrom < 1) contractsFrom = 1;
+	expandedContract = -1;
 	renderContracts();
 }
 
 function contractsNext() {
 	contractsFrom = contractsFrom + contractsStep;
+	expandedContract = -1;
 	renderContracts();
 }
 
 function contractsChanged() {
 	contractsFrom = 1;
+	expandedContract = -1;
 	getContracts();
 }
 
@@ -776,6 +810,7 @@ function sortByContractStart() {
 		break;
 	default:
 	}
+	expandedContract = -1;
 	renderContracts();
 }
 
@@ -803,5 +838,6 @@ function sortByContractEnd() {
 		break;
 	default:
 	}
+	expandedContract = -1;
 	renderContracts();
 }
