@@ -526,6 +526,7 @@ function backToSelect() {
 
 function changePaymentsStep(s) {
 	paymentsStep = parseInt(s.value);
+	paymentsFrom = 1;
 	renderPayments();
 }
 
@@ -665,6 +666,7 @@ function retrieveBlockHeight() {
 
 function changeContractsStep(s) {
 	contractsStep = parseInt(s.value);
+	contractsFrom = 1;
 	expandedContract = -1;
 	renderContracts();
 }
