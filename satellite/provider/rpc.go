@@ -21,6 +21,8 @@ import (
 	"go.sia.tech/siad/types"
 )
 
+const bytesInTerabyte = 1024 * 1024 * 1024 * 1024
+
 // An rpcSession contains the state of an RPC session with a renter.
 type rpcSession struct {
 	conn      net.Conn
@@ -142,10 +144,10 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 
 		MaxRPCPrice:               types.NewCurrency(fr.MaxRPCPrice.Big()),
 		MaxContractPrice:          types.NewCurrency(fr.MaxContractPrice.Big()),
-		MaxDownloadBandwidthPrice: types.NewCurrency(fr.MaxDownloadPrice.Big()),
+		MaxDownloadBandwidthPrice: types.NewCurrency(fr.MaxDownloadPrice.Big()).Div64(bytesInTerabyte),
 		MaxSectorAccessPrice:      types.NewCurrency(fr.MaxSectorAccessPrice.Big()),
-		MaxStoragePrice:           types.NewCurrency(fr.MaxStoragePrice.Big()),
-		MaxUploadBandwidthPrice:   types.NewCurrency(fr.MaxUploadPrice.Big()),
+		MaxStoragePrice:           types.NewCurrency(fr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
+		MaxUploadBandwidthPrice:   types.NewCurrency(fr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
 	}
 
 	// Form the contracts.
@@ -223,10 +225,10 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 
 		MaxRPCPrice:               types.NewCurrency(rr.MaxRPCPrice.Big()),
 		MaxContractPrice:          types.NewCurrency(rr.MaxContractPrice.Big()),
-		MaxDownloadBandwidthPrice: types.NewCurrency(rr.MaxDownloadPrice.Big()),
+		MaxDownloadBandwidthPrice: types.NewCurrency(rr.MaxDownloadPrice.Big()).Div64(bytesInTerabyte),
 		MaxSectorAccessPrice:      types.NewCurrency(rr.MaxSectorAccessPrice.Big()),
-		MaxStoragePrice:           types.NewCurrency(rr.MaxStoragePrice.Big()),
-		MaxUploadBandwidthPrice:   types.NewCurrency(rr.MaxUploadPrice.Big()),
+		MaxStoragePrice:           types.NewCurrency(rr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
+		MaxUploadBandwidthPrice:   types.NewCurrency(rr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
 	}
 
 	// Renew the contracts.
