@@ -84,6 +84,7 @@ type formRequest struct {
 	MaxUploadPrice       types.Currency
 	MaxStoragePrice      types.Currency
 	MaxSectorAccessPrice types.Currency
+	MinMaxCollateral     types.Currency
 
 	Signature types.Signature
 }
@@ -105,6 +106,7 @@ func (fr *formRequest) DecodeFrom(d *types.Decoder) {
 	fr.MaxUploadPrice.DecodeFrom(d)
 	fr.MaxStoragePrice.DecodeFrom(d)
 	fr.MaxSectorAccessPrice.DecodeFrom(d)
+	fr.MinMaxCollateral.DecodeFrom(d)
 	fr.Signature.DecodeFrom(d)
 }
 
@@ -125,6 +127,7 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	fr.MaxUploadPrice.EncodeTo(e)
 	fr.MaxStoragePrice.EncodeTo(e)
 	fr.MaxSectorAccessPrice.EncodeTo(e)
+	fr.MinMaxCollateral.EncodeTo(e)
 }
 
 // renewRequest is used when the renter requests contract renewals.
@@ -147,6 +150,7 @@ type renewRequest struct {
 	MaxUploadPrice       types.Currency
 	MaxStoragePrice      types.Currency
 	MaxSectorAccessPrice types.Currency
+	MinMaxCollateral     types.Currency
 
 	Signature types.Signature
 }
@@ -172,6 +176,7 @@ func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
 	rr.MaxUploadPrice.DecodeFrom(d)
 	rr.MaxStoragePrice.DecodeFrom(d)
 	rr.MaxSectorAccessPrice.DecodeFrom(d)
+	rr.MinMaxCollateral.DecodeFrom(d)
 	rr.Signature.DecodeFrom(d)
 }
 
@@ -195,6 +200,7 @@ func (rr *renewRequest) EncodeTo(e *types.Encoder) {
 	rr.MaxUploadPrice.EncodeTo(e)
 	rr.MaxStoragePrice.EncodeTo(e)
 	rr.MaxSectorAccessPrice.EncodeTo(e)
+	rr.MinMaxCollateral.EncodeTo(e)
 }
 
 // updateRequest is used when the renter submits a new revision.

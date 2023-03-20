@@ -97,12 +97,12 @@ type PaymentDetails struct {
 }
 
 // Allowance returns the current allowance of the renter specified.
-func (c *Contractor) Allowance(rpk types.SiaPublicKey) smodules.Allowance {
+func (c *Contractor) Allowance(rpk types.SiaPublicKey) modules.Allowance {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	renter, exists := c.renters[rpk.String()]
 	if !exists {
-		return smodules.Allowance{}
+		return modules.Allowance{}
 	}
 	return renter.Allowance
 }

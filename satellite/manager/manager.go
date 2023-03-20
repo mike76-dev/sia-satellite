@@ -32,10 +32,10 @@ type hostContractor interface {
 	// spend on contracts over a given time period, divided among the number
 	// of hosts specified. Note that contractor can start forming contracts as
 	// soon as SetAllowance is called; that is, it may block.
-	SetAllowance(types.SiaPublicKey, smodules.Allowance) error
+	SetAllowance(types.SiaPublicKey, modules.Allowance) error
 
 	// Allowance returns the current allowance of the renter.
-	Allowance(types.SiaPublicKey) smodules.Allowance
+	Allowance(types.SiaPublicKey) modules.Allowance
 
 	// Close closes the hostContractor.
 	Close() error
@@ -293,13 +293,13 @@ func (m *Manager) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBrea
 }
 
 // EstimateHostScore returns the estimated host score.
-func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance) (smodules.HostScoreBreakdown, error) {
+func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a modules.Allowance) (smodules.HostScoreBreakdown, error) {
 	return m.hostDB.EstimateHostScore(e, a)
 }
 
 // RandomHosts picks up to the specified number of random hosts from the
 // hostdb sorted by weight.
-func (m *Manager) RandomHosts(n uint64, a smodules.Allowance) ([]smodules.HostDBEntry, error) {
+func (m *Manager) RandomHosts(n uint64, a modules.Allowance) ([]smodules.HostDBEntry, error) {
 	return m.hostDB.RandomHostsWithLimits(int(n), nil, nil, a)
 }
 
@@ -335,9 +335,9 @@ func (m *Manager) ProcessConsensusChange(cc smodules.ConsensusChange) {
 // PriceEstimation estimates the cost in siacoins of forming contracts with
 // the hosts. The estimation will be done using the provided allowance.
 // The final allowance used will be returned.
-func (m *Manager) PriceEstimation(allowance smodules.Allowance) (float64, smodules.Allowance, error) {
+func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules.Allowance, error) {
 	if err := m.threads.Add(); err != nil {
-		return 0, smodules.Allowance{}, err
+		return 0, modules.Allowance{}, err
 	}
 	defer m.threads.Done()
 
@@ -522,7 +522,7 @@ func (m *Manager) PriceEstimation(allowance smodules.Allowance) (float64, smodul
 }
 
 // SetAllowance calls hostContractor.SetAllowance.
-func (m *Manager) SetAllowance(rpk types.SiaPublicKey, a smodules.Allowance) error {
+func (m *Manager) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) error {
 	return m.hostContractor.SetAllowance(rpk, a)
 }
 

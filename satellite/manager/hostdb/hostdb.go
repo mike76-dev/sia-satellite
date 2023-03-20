@@ -168,7 +168,7 @@ type HostDB struct {
 	// The hostdb gets initialized with an allowance that can be modified. The
 	// allowance is used to build a weightFunc that the hosttree depends on to
 	// determine the weight of a host.
-	allowance  smodules.Allowance
+	allowance  modules.Allowance
 	weightFunc hosttree.WeightFunc
 
 	// txnFees are the most recent fees used in the score estimation. It is
@@ -366,7 +366,7 @@ func hostdbBlockingStartup(g smodules.Gateway, cs smodules.ConsensusSet, tpool s
 	}
 
 	// Set the allowance, txnFees and hostweight function.
-	hdb.allowance = smodules.DefaultAllowance
+	hdb.allowance = modules.DefaultAllowance
 	_, hdb.txnFees = hdb.staticTpool.FeeEstimation()
 	hdb.weightFunc = hdb.managedCalculateHostWeightFn(hdb.allowance)
 
@@ -741,7 +741,7 @@ func (hdb *HostDB) IPViolationsCheck() (bool, error) {
 // SetAllowance updates the allowance used by the hostdb for weighing hosts by
 // updating the host weight function. It will completely rebuild the hosttree so
 // it should be used with care.
-func (hdb *HostDB) SetAllowance(allowance smodules.Allowance) error {
+func (hdb *HostDB) SetAllowance(allowance modules.Allowance) error {
 	if err := hdb.tg.Add(); err != nil {
 		return errors.AddContext(err, "error adding hostdb threadgroup:")
 	}
@@ -749,8 +749,8 @@ func (hdb *HostDB) SetAllowance(allowance smodules.Allowance) error {
 
 	// If the allowance is empty, set it to the default allowance. This ensures
 	// that the estimates are at least moderately grounded.
-	if reflect.DeepEqual(allowance, smodules.Allowance{}) {
-		allowance = smodules.DefaultAllowance
+	if reflect.DeepEqual(allowance, modules.Allowance{}) {
+		allowance = modules.DefaultAllowance
 	}
 
 	// Update the allowance.

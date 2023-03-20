@@ -4,7 +4,8 @@ import (
 	"errors"
 	"reflect"
 
-	"go.sia.tech/siad/modules"
+	"github.com/mike76-dev/sia-satellite/modules"
+
 	"go.sia.tech/siad/types"
 )
 

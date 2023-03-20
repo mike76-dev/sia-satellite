@@ -48,7 +48,7 @@ type Satellite interface {
 
 	// EstimateHostScore will return the score for a host with the provided
 	// settings, assuming perfect age and uptime adjustments.
-	EstimateHostScore(smodules.HostDBEntry, smodules.Allowance) (smodules.HostScoreBreakdown, error)
+	EstimateHostScore(smodules.HostDBEntry, Allowance) (smodules.HostScoreBreakdown, error)
 
 	// Filter returns the hostdb's filterMode and filteredHosts.
 	Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error)
@@ -69,7 +69,7 @@ type Satellite interface {
 
 	// RandomHosts picks up to the specified number of random hosts from the
 	// hostdb sorted by weight.
-	RandomHosts(uint64, smodules.Allowance) ([]smodules.HostDBEntry, error)
+	RandomHosts(uint64, Allowance) ([]smodules.HostDBEntry, error)
 
 	// PublicKey returns the satellite's public key.
 	PublicKey() types.SiaPublicKey
@@ -117,7 +117,7 @@ type Manager interface {
 	// PriceEstimation estimates the cost in siacoins of performing various
 	// storage and data operations. The estimation will be done using the provided
 	// allowance. The final allowance used will be returned.
-	PriceEstimation(smodules.Allowance) (float64, smodules.Allowance, error)
+	PriceEstimation(Allowance) (float64, Allowance, error)
 }
 
 // Provider implements the methods necessary to communicate with the
@@ -159,7 +159,7 @@ type HostDB interface {
 
 	// EstimateHostScore returns the estimated score breakdown of a host with the
 	// provided settings.
-	EstimateHostScore(smodules.HostDBEntry, smodules.Allowance) (smodules.HostScoreBreakdown, error)
+	EstimateHostScore(smodules.HostDBEntry, Allowance) (smodules.HostScoreBreakdown, error)
 
 	// Filter returns the hostdb's filterMode and filteredHosts.
 	Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error)
@@ -194,11 +194,11 @@ type HostDB interface {
 	// RandomHostsWithAllowance is the same as RandomHosts but accepts an
 	// allowance as an argument to be used instead of the allowance set in the
 	// manager.
-	RandomHostsWithAllowance(int, []types.SiaPublicKey, []types.SiaPublicKey, smodules.Allowance) ([]smodules.HostDBEntry, error)
+	RandomHostsWithAllowance(int, []types.SiaPublicKey, []types.SiaPublicKey, Allowance) ([]smodules.HostDBEntry, error)
 
 	// RandomHostsWithLimits works as RandomHostsWithAllowance but uses the
 	// limits set in the allowance instead of calculating the weight function.
-	RandomHostsWithLimits(int, []types.SiaPublicKey, []types.SiaPublicKey, smodules.Allowance) ([]smodules.HostDBEntry, error)
+	RandomHostsWithLimits(int, []types.SiaPublicKey, []types.SiaPublicKey, Allowance) ([]smodules.HostDBEntry, error)
 
 	// ScoreBreakdown returns a detailed explanation of the various properties
 	// of the host.
@@ -207,7 +207,7 @@ type HostDB interface {
 	// SetAllowance updates the allowance used by the hostdb for weighing hosts by
 	// updating the host weight function. It will completely rebuild the hosttree so
 	// it should be used with care.
-	SetAllowance(smodules.Allowance) error
+	SetAllowance(Allowance) error
 
 	// SetIPViolationCheck enables/disables the IP violation check within the
 	// hostdb.
@@ -237,7 +237,7 @@ type ContractFormer interface {
 	PublicKey() types.SiaPublicKey
 	SecretKey() crypto.SecretKey
 	UserExists(rpk types.SiaPublicKey) (bool, error)
-	FormContracts(types.SiaPublicKey, smodules.Allowance) ([]RenterContract, error)
-	RenewContracts(types.SiaPublicKey, smodules.Allowance, []types.FileContractID) ([]RenterContract, error)
+	FormContracts(types.SiaPublicKey, Allowance) ([]RenterContract, error)
+	RenewContracts(types.SiaPublicKey, Allowance, []types.FileContractID) ([]RenterContract, error)
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 }

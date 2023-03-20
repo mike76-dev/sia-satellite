@@ -218,7 +218,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	// Create an allowance.
-	a := smodules.DefaultAllowance
+	a := modules.DefaultAllowance
 	a.Funds = types.SiacoinPrecision.MulFloat(data.Estimation / scRate)
 	a.Hosts = data.Hosts
 	a.Period = types.BlockHeight(data.Duration * float64(types.BlocksPerWeek))

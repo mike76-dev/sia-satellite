@@ -118,7 +118,8 @@ CREATE TABLE renters (
 	max_download_bandwidth_price VARCHAR(64) NOT NULL,
 	max_sector_access_price      VARCHAR(64) NOT NULL,
 	max_storage_price            VARCHAR(64) NOT NULL,
-	max_upload_bandwidth_price   VARCHAR(64) NOT NULL,	
+	max_upload_bandwidth_price   VARCHAR(64) NOT NULL,
+	min_max_collateral           VARCHAR(64) NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );

@@ -147,7 +147,7 @@ func (c *Contractor) managedCheckForDuplicates() {
 // contract is going to need in the next billing cycle by looking at how much
 // storage is in the contract and what the historic usage pattern of the
 // contract has been.
-func (c *Contractor) managedEstimateRenewFundingRequirements(contract modules.RenterContract, blockHeight types.BlockHeight, allowance smodules.Allowance) (types.Currency, error) {
+func (c *Contractor) managedEstimateRenewFundingRequirements(contract modules.RenterContract, blockHeight types.BlockHeight, allowance modules.Allowance) (types.Currency, error) {
 	// Fetch the host pricing to use in the estimate.
 	host, exists, err := c.hdb.Host(contract.HostPublicKey)
 	if err != nil {
@@ -369,7 +369,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 	}
 	// Determine if host settings align with allowance period.
 	c.mu.Lock()
-	if reflect.DeepEqual(renter.Allowance, smodules.Allowance{}) {
+	if reflect.DeepEqual(renter.Allowance, modules.Allowance{}) {
 		c.mu.Unlock()
 		return types.ZeroCurrency, modules.RenterContract{}, errors.New("called managedNewContract but allowance wasn't set")
 	}
@@ -415,7 +415,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 
 	// Create contract params.
 	c.mu.RLock()
-	params := smodules.ContractParams{
+	params := modules.ContractParams{
 		Allowance:     renter.Allowance,
 		Host:          host,
 		Funding:       contractFunding,
@@ -608,7 +608,7 @@ func (c *Contractor) managedLimitGFUHosts() {
 // staticCheckFormPaymentContractGouging will check whether the pricing from the
 // host for forming a payment contract is too high to justify forming a contract
 // with this host.
-func staticCheckFormPaymentContractGouging(allowance smodules.Allowance, hostSettings smodules.HostExternalSettings) error {
+func staticCheckFormPaymentContractGouging(allowance modules.Allowance, hostSettings smodules.HostExternalSettings) error {
 	// Check whether the RPC base price is too high.
 	if !allowance.MaxRPCPrice.IsZero() && allowance.MaxRPCPrice.Cmp(hostSettings.BaseRPCPrice) <= 0 {
 		return errors.New("rpc base price of host is too high - extortion protection enabled")
@@ -626,7 +626,7 @@ func staticCheckFormPaymentContractGouging(allowance smodules.Allowance, hostSet
 
 // checkFormContractGouging will check whether the pricing for forming
 // this contract triggers any price gouging warnings.
-func checkFormContractGouging(allowance smodules.Allowance, hostSettings smodules.HostExternalSettings) error {
+func checkFormContractGouging(allowance modules.Allowance, hostSettings smodules.HostExternalSettings) error {
 	// Check whether the RPC base price is too high.
 	if !allowance.MaxRPCPrice.IsZero() && allowance.MaxRPCPrice.Cmp(hostSettings.BaseRPCPrice) < 0 {
 		return errors.New("rpc base price of host is too high - price gouging protection enabled")
@@ -659,7 +659,7 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 	// Use the most recent hostSettings, along with the host db entry.
 	host.HostExternalSettings = hostSettings
 
-	if reflect.DeepEqual(renter.Allowance, smodules.Allowance{}) {
+	if reflect.DeepEqual(renter.Allowance, modules.Allowance{}) {
 		return modules.RenterContract{}, errors.New("called managedRenew but allowance isn't set")
 	}
 	period := renter.Allowance.Period
@@ -708,7 +708,7 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 
 	// Create contract params.
 	c.mu.RLock()
-	params := smodules.ContractParams{
+	params := modules.ContractParams{
 		Allowance:     renter.Allowance,
 		Host:          host,
 		Funding:       contractFunding,

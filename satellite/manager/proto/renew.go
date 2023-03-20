@@ -17,7 +17,7 @@ import (
 // Renew negotiates a new contract for data already stored with a host, and
 // submits the new contract transaction to tpool. The new contract is added to
 // the ContractSet and its metadata is returned.
-func (cs *ContractSet) Renew(oldContract *FileContract, params smodules.ContractParams, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB, cancel <-chan struct{}) (rc modules.RenterContract, formationTxnSet []types.Transaction, err error) {
+func (cs *ContractSet) Renew(oldContract *FileContract, params modules.ContractParams, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB, cancel <-chan struct{}) (rc modules.RenterContract, formationTxnSet []types.Transaction, err error) {
 	// Check that the host version is high enough as belt-and-suspenders. This
 	// should never happen, because hosts with old versions should be blacklisted
 	// by the contractor.
@@ -30,7 +30,7 @@ func (cs *ContractSet) Renew(oldContract *FileContract, params smodules.Contract
 // managedNewRenewAndClear uses the new RPC to renew a contract, creating a new
 // contract that is identical to the old one, and then clears the old one to be
 // empty.
-func (cs *ContractSet) managedNewRenewAndClear(oldContract *FileContract, params smodules.ContractParams, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB, cancel <-chan struct{}) (rc modules.RenterContract, formationTxnSet []types.Transaction, err error) {
+func (cs *ContractSet) managedNewRenewAndClear(oldContract *FileContract, params modules.ContractParams, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB, cancel <-chan struct{}) (rc modules.RenterContract, formationTxnSet []types.Transaction, err error) {
 	// For convenience.
 	contract := oldContract.header
 
@@ -332,7 +332,7 @@ func prepareTransactionSet(txnBuilder transactionBuilder) ([]types.Transaction, 
 
 // createRenewedContract creates a new contract from another contract's last
 // revision given some additional renewal parameters.
-func createRenewedContract(lastRev types.FileContractRevision, uh types.UnlockHash, params smodules.ContractParams, txnFee, basePrice, baseCollateral types.Currency, tpool transactionPool) (types.FileContract, error) {
+func createRenewedContract(lastRev types.FileContractRevision, uh types.UnlockHash, params modules.ContractParams, txnFee, basePrice, baseCollateral types.Currency, tpool transactionPool) (types.FileContract, error) {
 	allowance, startHeight, endHeight, host, funding := params.Allowance, params.StartHeight, params.EndHeight, params.Host, params.Funding
 
 	// Calculate the payouts for the renter, host, and whole contract.

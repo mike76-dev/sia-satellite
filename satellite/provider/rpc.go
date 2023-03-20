@@ -17,7 +17,6 @@ import (
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	core "go.sia.tech/core/types"
 	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
 
@@ -132,7 +131,7 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 	}
 
 	// Create an allowance.
-	a := smodules.Allowance{
+	a := modules.Allowance{
 		Hosts:       fr.Hosts,
 		Period:      types.BlockHeight(fr.Period),
 		RenewWindow: types.BlockHeight(fr.RenewWindow),
@@ -148,6 +147,7 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 		MaxSectorAccessPrice:      types.NewCurrency(fr.MaxSectorAccessPrice.Big()),
 		MaxStoragePrice:           types.NewCurrency(fr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
 		MaxUploadBandwidthPrice:   types.NewCurrency(fr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
+		MinMaxCollateral:          types.NewCurrency(fr.MinMaxCollateral.Big()),
 	}
 
 	// Form the contracts.
@@ -213,7 +213,7 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 	}
 
 	// Create an allowance.
-	a := smodules.Allowance{
+	a := modules.Allowance{
 		Hosts:       uint64(len(rr.Contracts)),
 		Period:      types.BlockHeight(rr.Period),
 		RenewWindow: types.BlockHeight(rr.RenewWindow),
@@ -229,6 +229,7 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 		MaxSectorAccessPrice:      types.NewCurrency(rr.MaxSectorAccessPrice.Big()),
 		MaxStoragePrice:           types.NewCurrency(rr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
 		MaxUploadBandwidthPrice:   types.NewCurrency(rr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
+		MinMaxCollateral:          types.NewCurrency(rr.MinMaxCollateral.Big()),
 	}
 
 	// Renew the contracts.

@@ -88,7 +88,7 @@ func (rc *RenterContract) Size() uint64 {
 
 // Renter holds the data related to the specific renter.
 type Renter struct {
-	Allowance     smodules.Allowance `json:"allowance"`
+	Allowance     Allowance  `json:"allowance"`
 	CurrentPeriod types.BlockHeight  `json:"currentperiod"`
 	PublicKey     types.SiaPublicKey `json:"publickey"`
 	Email         string             `json:"email"` // Link to the user account.
@@ -110,4 +110,70 @@ func DeriveRenterSeed(walletSeed smodules.Seed, email string) smodules.RenterSee
 	defer fastrand.Read(rs[:])
 	copy(renterSeed[:], rs[:])
 	return renterSeed
+}
+
+// An Allowance dictates how much the renter is allowed to spend in a given
+// period. Note that funds are spent on both storage and bandwidth.
+type Allowance struct {
+	Funds       types.Currency    `json:"funds"`
+	Hosts       uint64            `json:"hosts"`
+	Period      types.BlockHeight `json:"period"`
+	RenewWindow types.BlockHeight `json:"renewwindow"`
+
+	// ExpectedStorage is the amount of data that we expect to have in a contract.
+	ExpectedStorage uint64 `json:"expectedstorage"`
+
+	// ExpectedUpload is the expected amount of data uploaded through the API,
+	// before redundancy, per block.
+	ExpectedUpload uint64 `json:"expectedupload"`
+
+	// ExpectedDownload is the expected amount of data downloaded through the
+	// API per block.
+	ExpectedDownload uint64 `json:"expecteddownload"`
+
+	// ExpectedRedundancy is the average redundancy of files being uploaded.
+	ExpectedRedundancy float64 `json:"expectedredundancy"`
+
+	// The following fields provide price gouging protection for the user. By
+	// setting a particular maximum price for each mechanism that a host can use
+	// to charge users, the workers know to avoid hosts that go outside of the
+	// safety range.
+	MaxRPCPrice               types.Currency `json:"maxrpcprice"`
+	MaxContractPrice          types.Currency `json:"maxcontractprice"`
+	MaxDownloadBandwidthPrice types.Currency `json:"maxdownloadbandwidthprice"`
+	MaxSectorAccessPrice      types.Currency `json:"maxsectoraccessprice"`
+	MaxStoragePrice           types.Currency `json:"maxstorageprice"`
+	MaxUploadBandwidthPrice   types.Currency `json:"maxuploadbandwidthprice"`
+	MinMaxCollateral          types.Currency `json:"minmaxcollateral"`
+}
+
+// DefaultAllowance is the set of default allowance settings that will be
+// used when allowances are not set or not fully set.
+var DefaultAllowance = Allowance{
+	Funds:       types.SiacoinPrecision.Mul64(2500),
+	Hosts:       50,
+	Period:      2 * types.BlocksPerMonth,
+	RenewWindow: types.BlocksPerMonth,
+
+	ExpectedStorage:    1e12,                                         // 1 TB
+	ExpectedUpload:     uint64(200e9) / uint64(types.BlocksPerMonth), // 200 GB per month
+	ExpectedDownload:   uint64(100e9) / uint64(types.BlocksPerMonth), // 100 GB per month
+	ExpectedRedundancy: 3.0,                                          // default is 10/30 erasure coding
+}
+
+// Active returns true if and only if this allowance has been set in the
+// contractor.
+func (a Allowance) Active() bool {
+	return a.Period != 0
+}
+
+// ContractParams are supplied as an argument to FormContracts.
+type ContractParams struct {
+	Allowance     Allowance
+	Host          smodules.HostDBEntry
+	Funding       types.Currency
+	StartHeight   types.BlockHeight
+	EndHeight     types.BlockHeight
+	RefundAddress types.UnlockHash
+	RenterSeed    smodules.EphemeralRenterSeed
 }

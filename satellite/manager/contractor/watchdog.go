@@ -140,7 +140,7 @@ func (c *Contractor) ContractStatus(fcID types.FileContractID) (smodules.Contrac
 }
 
 // callAllowanceUpdated informs the watchdog of an allowance change.
-func (w *watchdog) callAllowanceUpdated(rpk types.SiaPublicKey, a smodules.Allowance) {
+func (w *watchdog) callAllowanceUpdated(rpk types.SiaPublicKey, a modules.Allowance) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

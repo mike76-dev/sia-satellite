@@ -221,10 +221,10 @@ func (s *Satellite) InitialScanComplete() (bool, types.BlockHeight, error) { ret
 func (s *Satellite) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) { return s.m.ScoreBreakdown(e) }
 
 // EstimateHostScore calls Manager.EstimateHostScore.
-func (s *Satellite) EstimateHostScore(e smodules.HostDBEntry, a smodules.Allowance) (smodules.HostScoreBreakdown, error) { return s.m.EstimateHostScore(e, a) }
+func (s *Satellite) EstimateHostScore(e smodules.HostDBEntry, a modules.Allowance) (smodules.HostScoreBreakdown, error) { return s.m.EstimateHostScore(e, a) }
 
 // RandomHosts calls Manager.RandomHosts.
-func (s *Satellite) RandomHosts(n uint64, a smodules.Allowance) ([]smodules.HostDBEntry, error) { return s.m.RandomHosts(n, a) }
+func (s *Satellite) RandomHosts(n uint64, a modules.Allowance) ([]smodules.HostDBEntry, error) { return s.m.RandomHosts(n, a) }
 
 // GetAverages calls Manager.GetAverages.
 func (s *Satellite) GetAverages() modules.HostAverages { return s.m.GetAverages() }
@@ -268,7 +268,7 @@ func (s *Satellite) Renters() []modules.Renter {
 
 // FormContracts forms the specified number of contracts with the hosts
 // and returns them.
-func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a smodules.Allowance) ([]modules.RenterContract, error) {
+func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a modules.Allowance) ([]modules.RenterContract, error) {
 	// Get the estimated costs and update the allowance with them.
 	estimation, a, err := s.m.PriceEstimation(a)
 	if err != nil {
@@ -323,7 +323,7 @@ func (s *Satellite) BlockHeight() types.BlockHeight {
 // RenewContracts tries to renew the given set of contracts and returns them.
 // If the contracts are not up to being renewed yet, existing contracts are
 // returned.
-func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, a smodules.Allowance, contracts []types.FileContractID) ([]modules.RenterContract, error) {
+func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, a modules.Allowance, contracts []types.FileContractID) ([]modules.RenterContract, error) {
 	// Get the estimated costs and update the allowance with them.
 	estimation, a, err := s.m.PriceEstimation(a)
 	if err != nil {
