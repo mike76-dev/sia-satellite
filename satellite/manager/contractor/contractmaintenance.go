@@ -1116,7 +1116,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := c.tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize)
+	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).MulFloat(1.5)
 
 	// Form contracts with the hosts one at a time, until we have enough
 	// contracts.

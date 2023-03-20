@@ -28,7 +28,7 @@ func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder tr
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize)
+	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).MulFloat(1.5)
 
 	// Calculate the payouts for the renter, host, and whole contract.
 	period := endHeight - startHeight
