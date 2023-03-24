@@ -449,7 +449,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	// Add the cost of paying the transaction fees and then double the contract
 	// costs to account for renewing a full set of contracts.
 	_, feePerByte := m.tpool.FeeEstimation()
-	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(uint64(allowance.Hosts))
+	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(uint64(allowance.Hosts)).Mul64(10)
 	totalContractCost = totalContractCost.Add(txnsFees)
 	totalContractCost = totalContractCost.Mul64(2)
 
@@ -458,7 +458,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	totalCost := totalContractCost.Add(totalDownloadCost)
 	totalCost = totalCost.Add(totalUploadCost)
 	totalCost = totalCost.Add(totalStorageCost)
-	totalCost = totalCost.Mul64(3) // Quite generous.
+	totalCost = totalCost.Mul64(10) // Quite generous.
 
 	// Determine host collateral to be added to Siafund fee.
 	var hostCollateral types.Currency

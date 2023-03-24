@@ -8,6 +8,9 @@ import (
 // using the service. This should include any payment processing fees.
 const SatelliteOverhead = 1.1
 
+// BytesPerTerabyte is how many bytes are there in one TiB.
+const BytesPerTerabyte = 1024 * 1024 * 1024 * 1024
+
 var (
 	// MaxRPCPrice is how much the Satellite is willing to pay
 	// for a single RPC call.

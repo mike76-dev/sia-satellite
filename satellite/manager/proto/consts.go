@@ -6,7 +6,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 )
 
-var (
+const (
 	// connTimeout determines the number of seconds before a dial-up or
 	// revision negotiation times out.
 	connTimeout = 2 * time.Minute
@@ -20,6 +20,10 @@ var (
 	// most recent block yet, the host will be expecting a slightly larger
 	// payment.
 	hostPriceLeeway = 0.003
+
+	// contractHostFormTimeout is the amount of time we wait to form a
+	// contract with the host
+	contractHostFormTimeout = 5 * time.Minute
 )
 
 var (

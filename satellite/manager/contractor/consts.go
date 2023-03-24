@@ -1,6 +1,8 @@
 package contractor
 
 import (
+	"time"
+
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
@@ -80,6 +82,10 @@ var (
 	// oosRetryInterval is the time we wait for a host that ran out of storage to
 	// add more storage before trying to upload to it again.
 	oosRetryInterval = types.BlockHeight(types.BlocksPerWeek) // 7 days
+
+	// contractHostPriceTableTimeout is the amount of time we wait to receive a
+	// price table from the host
+	contractHostPriceTableTimeout = 30 * time.Second
 )
 
 // Constants related to the safety values for when the contractor is forming

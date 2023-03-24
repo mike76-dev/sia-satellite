@@ -5,8 +5,10 @@ package contractor
 // contracts need to be renewed, and if contracts need to be blacklisted.
 
 import (
+	"context"
 	"fmt"
 	"math/big"
+	"net"
 	"reflect"
 	"sort"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 
+	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/siad/build"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
@@ -363,33 +366,9 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 		return types.ZeroCurrency, modules.RenterContract{}, ErrRenterNotFound
 	}
 
-	// Reject hosts that are too expensive.
-	if host.StoragePrice.Cmp(maxStoragePrice) > 0 {
-		return types.ZeroCurrency, modules.RenterContract{}, errTooExpensive
-	}
-	// Determine if host settings align with allowance period.
-	c.mu.Lock()
+	// Check if the allowance is set.
 	if reflect.DeepEqual(renter.Allowance, modules.Allowance{}) {
-		c.mu.Unlock()
 		return types.ZeroCurrency, modules.RenterContract{}, errors.New("called managedNewContract but allowance wasn't set")
-	}
-	hostSettings := host.HostExternalSettings
-	period := renter.Allowance.Period
-	c.mu.Unlock()
-
-	if host.MaxDuration < period {
-		err := errors.New("unable to form contract with host due to insufficient MaxDuration of host")
-		return types.ZeroCurrency, modules.RenterContract{}, err
-	}
-	// Cap host.MaxCollateral.
-	if host.MaxCollateral.Cmp(maxCollateral) > 0 {
-		host.MaxCollateral = maxCollateral
-	}
-
-	// Check for price gouging.
-	err = checkFormContractGouging(renter.Allowance, hostSettings)
-	if err != nil {
-		return types.ZeroCurrency, modules.RenterContract{}, errors.AddContext(err, "unable to form a contract due to price gouging detection")
 	}
 
 	// Get an address to use for negotiation.
@@ -416,18 +395,19 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 	// Create contract params.
 	c.mu.RLock()
 	params := modules.ContractParams{
-		Allowance:     renter.Allowance,
-		Host:          host,
-		Funding:       contractFunding,
-		StartHeight:   c.blockHeight,
-		EndHeight:     endHeight,
-		RefundAddress: uc.UnlockHash(),
-		RenterSeed:    smodules.EphemeralRenterSeed(renterSeed), // The seed should not be mutated.
+		Allowance:      renter.Allowance,
+		Host:           host,
+		Funding:        contractFunding,
+		StartHeight:    c.blockHeight,
+		EndHeight:      endHeight,
+		RefundAddress:  uc.UnlockHash(),
+		RenterSeed:     renterSeed, // The seed should not be mutated.
 	}
 	c.mu.RUnlock()
 
 	// Wipe the renter seed once we are done using it.
 	defer fastrand.Read(params.RenterSeed[:])
+
 
 	// Create transaction builder and trigger contract formation.
 	txnBuilder, err := c.wallet.StartTransaction()
@@ -435,7 +415,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
 
-	contract, formationTxnSet, sweepTxn, sweepParents, err := c.staticContracts.FormContract(params, txnBuilder, c.tpool, c.hdb, c.tg.StopChan())
+	contract, formationTxnSet, sweepTxn, sweepParents, err := c.staticContracts.FormContract(params, txnBuilder, c.tpool, c.hdb)
 	if err != nil {
 		txnBuilder.Drop()
 		return types.ZeroCurrency, modules.RenterContract{}, err
@@ -715,7 +695,7 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 		StartHeight:   c.blockHeight,
 		EndHeight:     newEndHeight,
 		RefundAddress: uc.UnlockHash(),
-		RenterSeed:    smodules.EphemeralRenterSeed(renterSeed), // The seed should not be mutated.
+		RenterSeed:    renterSeed, // The seed should not be mutated.
 	}
 	c.mu.RUnlock()
 
@@ -1116,10 +1096,9 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := c.tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).MulFloat(1.5)
+	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(10)
 
-	// Form contracts with the hosts one at a time, until we have enough
-	// contracts.
+	// Form contracts with the hosts one at a time, until we have enough contracts.
 	for _, host := range hosts {
 		// Return here if an interrupt or kill signal has been sent.
 		select {
@@ -1131,6 +1110,20 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 		// If no more contracts are needed, break.
 		if neededContracts <= 0 {
 			break
+		}
+
+		// Fetch the price table.
+		pt, err := managedPriceTable(host)
+		if err != nil {
+			c.log.Printf("WARN: unable to fetch price table from %s: %v", host.NetAddress, err)
+			continue
+		}
+
+		// Check if the host is gouging.
+		err = modules.CheckGouging(renter.Allowance, blockHeight, nil, &pt, txnFee)
+		if err != nil {
+			c.log.Printf("WARN: gouging detected at %s: %v\n", host.NetAddress, err)
+			continue
 		}
 
 		// Calculate the contract funding with the host.
@@ -1517,4 +1510,26 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 	c.mu.Unlock()
 
 	return contractSet, nil
+}
+
+// managedPriceTable fetched the host's price table.
+func managedPriceTable(he smodules.HostDBEntry) (rhpv3.HostPriceTable, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), contractHostPriceTableTimeout)
+	defer cancel()
+
+	host, _, err := net.SplitHostPort(string(he.NetAddress))
+	if err != nil {
+		return rhpv3.HostPriceTable{}, err
+	}
+	siamuxAddr := net.JoinHostPort(host, he.SiaMuxPort)
+
+	var pt rhpv3.HostPriceTable
+	err = proto.WithTransportV3(ctx, siamuxAddr, he.PublicKey, func(t *rhpv3.Transport) (err error) {
+		pt, err = proto.RPCPriceTable(t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
+			return nil, nil
+		})
+		return
+	})
+
+	return pt, err
 }

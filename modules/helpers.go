@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"math/bits"
 	"strings"
 
 	core "go.sia.tech/core/types"
@@ -72,4 +73,32 @@ func CurrencyUnits(c types.Currency) string {
 	res, _ := new(big.Rat).Mul(num, denom.Inv(denom)).Float64()
 
 	return fmt.Sprintf("%.4g %s", res, unit)
+}
+
+// ConvertPublicKey converts a siad public key to a core public key.
+func ConvertPublicKey(spk types.SiaPublicKey) (pk core.PublicKey) {
+	copy(pk[:], spk.Key)
+	return
+}
+
+// TaxAdjustedPayout calculates the tax-adjusted payout.
+func TaxAdjustedPayout(target types.Currency) types.Currency {
+	guess := target.Mul64(1000).Div64(961)
+	mod64 := func(c core.Currency, v uint64) types.Currency {
+		var r uint64
+		if c.Hi < v {
+			_, r = bits.Div64(c.Hi, c.Lo, v)
+		} else {
+			_, r = bits.Div64(0, c.Hi, v)
+			_, r = bits.Div64(r, c.Lo, v)
+		}
+		return types.NewCurrency64(r)
+	}
+	sfc := uint64(10000) // Siafund count.
+	tm := mod64(ConvertCurrency(target), sfc)
+	gm := mod64(ConvertCurrency(guess), sfc)
+	if gm.Cmp(tm) < 0 {
+		guess = guess.Sub(types.NewCurrency64(sfc))
+	}
+	return guess.Add(tm).Sub(gm)
 }

@@ -169,11 +169,11 @@ func (a Allowance) Active() bool {
 
 // ContractParams are supplied as an argument to FormContracts.
 type ContractParams struct {
-	Allowance     Allowance
-	Host          smodules.HostDBEntry
-	Funding       types.Currency
-	StartHeight   types.BlockHeight
-	EndHeight     types.BlockHeight
-	RefundAddress types.UnlockHash
-	RenterSeed    smodules.EphemeralRenterSeed
+	Allowance      Allowance
+	Host           smodules.HostDBEntry
+	Funding        types.Currency
+	StartHeight    types.BlockHeight
+	EndHeight      types.BlockHeight
+	RefundAddress  types.UnlockHash
+	RenterSeed     smodules.RenterSeed
 }

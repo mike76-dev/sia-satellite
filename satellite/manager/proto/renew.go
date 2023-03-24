@@ -59,7 +59,7 @@ func (cs *ContractSet) managedNewRenewAndClear(oldContract *FileContract, params
 	txnBuilder.AddMinerFee(txnFee)
 
 	// Add FileContract identifier.
-	si, hk := smodules.PrefixedSignedIdentifier(params.RenterSeed, fcTxn, host.PublicKey)
+	si, hk := smodules.PrefixedSignedIdentifier(smodules.EphemeralRenterSeed(params.RenterSeed), fcTxn, host.PublicKey)
 	_ = txnBuilder.AddArbitraryData(append(si[:], hk[:]...))
 
 	// Create initial transaction set.
