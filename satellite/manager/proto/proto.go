@@ -1,8 +1,10 @@
 package proto
 
 import (
+	"context"
 	"fmt"
 
+	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
@@ -52,4 +54,18 @@ func (e *revisionNumberMismatchError) Error() string {
 func IsRevisionMismatch(err error) bool {
 	_, ok := err.(*revisionNumberMismatchError)
 	return ok
+}
+
+// HostSettings uses the Settings RPC to retrieve the host's settings.
+func HostSettings(address string, hpk types.SiaPublicKey) (modules.HostExternalSettings, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), settingsHostTimeout)
+	defer cancel()
+
+	var hes modules.HostExternalSettings
+	err := WithTransportV2(ctx, address, hpk, func(t *rhpv2.Transport) (err error) {
+		hes, err = RPCSettings(ctx, t)
+		return
+	})
+
+	return hes, err
 }

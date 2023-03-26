@@ -31,6 +31,29 @@ type (
 		ContractSignatures []types.TransactionSignature
 		RevisionSignature  types.TransactionSignature
 	}
+
+	// rpcRenewContractRequest is the request object for the renew contract RPC.
+	rpcRenewContractRequest struct {
+		TransactionSet         []types.Transaction
+		RenterKey              types.SiaPublicKey
+		FinalRevisionSignature types.TransactionSignature
+	}
+
+	// rpcRenewContractHostAdditions is a response object containing the host's
+	// additions for the renew contract RPC.
+	rpcRenewContractHostAdditions struct {
+		Parents                []types.Transaction
+		SiacoinInputs          []types.SiacoinInput
+		SiacoinOutputs         []types.SiacoinOutput
+		FinalRevisionSignature types.TransactionSignature
+	}
+
+	// rpcRenewSignatures is a response object for transferring signatures in
+	// the renew contract RPC.
+	rpcRenewSignatures struct {
+		TransactionSignatures []types.TransactionSignature
+		RevisionSignature     types.TransactionSignature
+	}
 )
 
 // EncodeTo implements ProtocolObject.
@@ -44,12 +67,27 @@ func (r *rpcFormContractRequest) EncodeTo(e *core.Encoder) {
 
 // DecodeFrom implements ProtocolObject.
 func (r *rpcFormContractRequest) DecodeFrom(d *core.Decoder) {
-	// Nothing to do here.
+	r.Transactions = make([]types.Transaction, d.ReadPrefix())
+	for i := range r.Transactions {
+		r.Transactions[i] = decodeTransaction(d)
+	}
+	r.RenterKey = decodeSiaPublicKey(d)
 }
 
 // EncodeTo implements ProtocolObject.
 func (r *rpcFormContractAdditions) EncodeTo(e *core.Encoder) {
-	// Nothing to do here.
+	e.WritePrefix(len(r.Parents))
+	for i := range r.Parents {
+		encodeTransaction(r.Parents[i], e)
+	}
+	e.WritePrefix(len(r.Inputs))
+	for i := range r.Inputs {
+		encodeSiacoinInput(r.Inputs[i], e)
+	}
+	e.WritePrefix(len(r.Outputs))
+	for i := range r.Outputs {
+		encodeSiacoinOutput(r.Outputs[i], e)
+	}
 }
 
 // DecodeFrom implements ProtocolObject.
@@ -82,6 +120,78 @@ func (r *rpcFormContractSignatures) DecodeFrom(d *core.Decoder) {
 	r.ContractSignatures = make([]types.TransactionSignature, d.ReadPrefix())
 	for i := range r.ContractSignatures {
 		r.ContractSignatures[i] = decodeSignature(d)
+	}
+	r.RevisionSignature = decodeSignature(d)
+}
+
+// EncodeTo implements ProtocolObject.
+func (r *rpcRenewContractRequest) EncodeTo(e *core.Encoder) {
+	e.WritePrefix(len(r.TransactionSet))
+	for i := range r.TransactionSet {
+		encodeTransaction(r.TransactionSet[i], e)
+	}
+	encodeSiaPublicKey(r.RenterKey, e)
+	encodeSignature(r.FinalRevisionSignature, e)
+}
+
+// DecodeFrom implements ProtocolObject.
+func (r *rpcRenewContractRequest) DecodeFrom(d *core.Decoder) {
+	r.TransactionSet = make([]types.Transaction, d.ReadPrefix())
+	for i := range r.TransactionSet {
+		r.TransactionSet[i] = decodeTransaction(d)
+	}
+	r.RenterKey = decodeSiaPublicKey(d)
+	r.FinalRevisionSignature = decodeSignature(d)
+}
+
+// EncodeTo implements ProtocolObject.
+func (r *rpcRenewContractHostAdditions) EncodeTo(e *core.Encoder) {
+	e.WritePrefix(len(r.Parents))
+	for i := range r.Parents {
+		encodeTransaction(r.Parents[i], e)
+	}
+	e.WritePrefix(len(r.SiacoinInputs))
+	for i := range r.SiacoinInputs {
+		encodeSiacoinInput(r.SiacoinInputs[i], e)
+	}
+	e.WritePrefix(len(r.SiacoinOutputs))
+	for i := range r.SiacoinOutputs {
+		encodeSiacoinOutput(r.SiacoinOutputs[i], e)
+	}
+	encodeSignature(r.FinalRevisionSignature, e)
+}
+
+// DecodeFrom implements ProtocolObject.
+func (r *rpcRenewContractHostAdditions) DecodeFrom(d *core.Decoder) {
+	r.Parents = make([]types.Transaction, d.ReadPrefix())
+	for i := range r.Parents {
+		r.Parents[i] = decodeTransaction(d)
+	}
+	r.SiacoinInputs = make([]types.SiacoinInput, d.ReadPrefix())
+	for i := range r.SiacoinInputs {
+		r.SiacoinInputs[i] = decodeSiacoinInput(d)
+	}
+	r.SiacoinOutputs = make([]types.SiacoinOutput, d.ReadPrefix())
+	for i := range r.SiacoinOutputs {
+		r.SiacoinOutputs[i] = decodeSiacoinOutput(d)
+	}
+	r.FinalRevisionSignature = decodeSignature(d)
+}
+
+// EncodeTo implements ProtocolObject.
+func (r *rpcRenewSignatures) EncodeTo(e *core.Encoder) {
+	e.WritePrefix(len(r.TransactionSignatures))
+	for i := range r.TransactionSignatures {
+		encodeSignature(r.TransactionSignatures[i], e)
+	}
+	encodeSignature(r.RevisionSignature, e)
+}
+
+// DecodeFrom implements ProtocolObject.
+func (r *rpcRenewSignatures) DecodeFrom(d *core.Decoder) {
+	r.TransactionSignatures = make([]types.TransactionSignature, d.ReadPrefix())
+	for i := range r.TransactionSignatures {
+		r.TransactionSignatures[i] = decodeSignature(d)
 	}
 	r.RevisionSignature = decodeSignature(d)
 }

@@ -5,10 +5,8 @@ package contractor
 // contracts need to be renewed, and if contracts need to be blacklisted.
 
 import (
-	"context"
 	"fmt"
 	"math/big"
-	"net"
 	"reflect"
 	"sort"
 	"time"
@@ -19,7 +17,6 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 
-	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/siad/build"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
@@ -415,7 +412,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
 
-	contract, formationTxnSet, sweepTxn, sweepParents, err := c.staticContracts.FormContract(params, txnBuilder, c.tpool, c.hdb)
+	contract, formationTxnSet, sweepTxn, sweepParents, err := c.staticContracts.FormContract(params, txnBuilder, c.tpool, c.hdb, c.tg.StopChan())
 	if err != nil {
 		txnBuilder.Drop()
 		return types.ZeroCurrency, modules.RenterContract{}, err
@@ -622,7 +619,7 @@ func checkFormContractGouging(allowance modules.Allowance, hostSettings smodules
 // managedRenew negotiates a new contract for data already stored with a host.
 // It returns the new contract. This is a blocking call that performs network
 // I/O.
-func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKey, hpk types.SiaPublicKey, contractFunding types.Currency, newEndHeight types.BlockHeight, hostSettings smodules.HostExternalSettings) (_ modules.RenterContract, err error) {
+func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKey, hpk types.SiaPublicKey, contractFunding types.Currency, startHeight, newEndHeight types.BlockHeight) (_ modules.RenterContract, err error) {
 	// Check if we know this renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk.String()]
@@ -636,31 +633,38 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 	if err != nil {
 		return modules.RenterContract{}, errors.AddContext(err, "error getting host from hostdb:")
 	}
-	// Use the most recent hostSettings, along with the host db entry.
-	host.HostExternalSettings = hostSettings
-
-	if reflect.DeepEqual(renter.Allowance, modules.Allowance{}) {
-		return modules.RenterContract{}, errors.New("called managedRenew but allowance isn't set")
-	}
-	period := renter.Allowance.Period
 
 	if !ok {
 		return modules.RenterContract{}, errHostNotFound
 	} else if host.Filtered {
 		return modules.RenterContract{}, errHostBlocked
-	} else if host.StoragePrice.Cmp(maxStoragePrice) > 0 {
-		return modules.RenterContract{}, errTooExpensive
-	} else if host.MaxDuration < period {
-		return modules.RenterContract{}, errors.New("insufficient MaxDuration of host")
 	}
+
+	// Get the host settings.
+	hostSettings, err := proto.HostSettings(string(host.NetAddress), hpk)
+	if err != nil {
+		err = errors.AddContext(err, "Unable to fetch host settings")
+		return
+	}
+
+	// Use the most recent hostSettings, along with the host db entry.
+	host.HostExternalSettings = hostSettings
 
 	// Cap host.MaxCollateral.
 	if host.MaxCollateral.Cmp(maxCollateral) > 0 {
 		host.MaxCollateral = maxCollateral
 	}
 
-	// Check for price gouging on the renewal.
-	err = checkFormContractGouging(renter.Allowance, host.HostExternalSettings)
+	if reflect.DeepEqual(renter.Allowance, modules.Allowance{}) {
+		return modules.RenterContract{}, errors.New("called managedRenew but allowance isn't set")
+	}
+
+	// Calculate the anticipated transaction fee.
+	_, maxFee := c.tpool.FeeEstimation()
+	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(10)
+
+	// Check if the host is gouging.
+	err = modules.CheckGouging(renter.Allowance, startHeight, &hostSettings, nil, txnFee)
 	if err != nil {
 		return modules.RenterContract{}, errors.AddContext(err, "unable to renew - price gouging protection enabled")
 	}
@@ -787,14 +791,6 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 	hostPubKey := renewInstructions.hostPubKey
 	allowance := renter.Allowance
 
-	// Get a session with the host, before marking it as being renewed.
-	hs, err := c.Session(renterPubKey, hostPubKey, c.tg.StopChan())
-	if err != nil {
-		err = errors.AddContext(err, "Unable to establish session with host")
-		return
-	}
-	s := hs.(*hostSession)
-
 	// Mark the contract as being renewed, and defer logic to unmark it
 	// once renewing is complete.
 	c.log.Println("Marking a contract for renew:", id)
@@ -808,21 +804,13 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 		c.mu.Unlock()
 	}()
 
-	// Use the Settings RPC with the host and then invalidate the session.
-	hostSettings, err := s.Settings()
-	if err != nil {
-		err = errors.AddContext(err, "Unable to get host settings")
-		return
-	}
-	s.invalidate()
-
 	// Perform the actual renewal. If the renewal succeeds, return the
 	// contract. If the renewal fails we check how often it has failed
 	// before. Once it has failed for a certain number of blocks in a
 	// row and reached its second half of the renew window, we give up
 	// on renewing it and set goodForRenew to false.
 	c.log.Println("calling managedRenew on contract", id)
-	newContract, errRenew := c.managedRenew(id, renterPubKey, hostPubKey, amount, endHeight, hostSettings)
+	newContract, errRenew := c.managedRenew(id, renterPubKey, hostPubKey, amount, blockHeight, endHeight)
 	c.log.Println("managedRenew has returned with error:", errRenew)
 	oldContract, exists := c.staticContracts.Acquire(id)
 	if !exists {
@@ -863,8 +851,8 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 
 		// Seems like it doesn't have to be replaced yet. Log the
 		// failure and number of renews that have failed so far.
-		c.log.Printf("WARN: failed to renew contract %v [%v]: '%v', current height: %v, proposed end height: %v, max duration: %v",
-			oldContract.Metadata().HostPublicKey, numRenews, errRenew, blockHeight, endHeight, hostSettings.MaxDuration)
+		c.log.Printf("WARN: failed to renew contract %v [%v]: '%v', current height: %v, proposed end height: %v",
+			oldContract.Metadata().HostPublicKey, numRenews, errRenew, blockHeight, endHeight)
 		c.staticContracts.Return(oldContract)
 		return types.ZeroCurrency, newContract, errors.AddContext(errRenew, "contract renewal with host was unsuccessful")
 	}
@@ -1104,7 +1092,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 		select {
 		case <-c.tg.StopChan():
 			return nil, errors.New("the manager was stopped")
-			default:
+		default:
 		}
 
 		// If no more contracts are needed, break.
@@ -1113,7 +1101,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 		}
 
 		// Fetch the price table.
-		pt, err := managedPriceTable(host)
+		pt, err := proto.FetchPriceTable(host)
 		if err != nil {
 			c.log.Printf("WARN: unable to fetch price table from %s: %v", host.NetAddress, err)
 			continue
@@ -1224,6 +1212,10 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 		}
 	}()
 
+	// Calculate the anticipated transaction fee.
+	_, maxFee := c.tpool.FeeEstimation()
+	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(10)
+
 	var renewSet []fileContractRenewal
 	var refreshSet []fileContractRenewal
 	var fundsRemaining types.Currency
@@ -1295,6 +1287,20 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 		// renewal.
 		if !ok || !cu.GoodForRenew {
 			c.log.Println("Contract skipped because it is not good for renew (utility.GoodForRenew, exists)", cu.GoodForRenew, ok)
+			continue
+		}
+
+		// Fetch the price table.
+		pt, err := proto.FetchPriceTable(host)
+		if err != nil {
+			c.log.Printf("WARN: unable to fetch price table from %s: %v", host.NetAddress, err)
+			continue
+		}
+
+		// Check if the host is gouging.
+		err = modules.CheckGouging(renter.Allowance, blockHeight, nil, &pt, txnFee)
+		if err != nil {
+			c.log.Printf("WARN: gouging detected at %s: %v\n", host.NetAddress, err)
 			continue
 		}
 
@@ -1510,26 +1516,4 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 	c.mu.Unlock()
 
 	return contractSet, nil
-}
-
-// managedPriceTable fetched the host's price table.
-func managedPriceTable(he smodules.HostDBEntry) (rhpv3.HostPriceTable, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), contractHostPriceTableTimeout)
-	defer cancel()
-
-	host, _, err := net.SplitHostPort(string(he.NetAddress))
-	if err != nil {
-		return rhpv3.HostPriceTable{}, err
-	}
-	siamuxAddr := net.JoinHostPort(host, he.SiaMuxPort)
-
-	var pt rhpv3.HostPriceTable
-	err = proto.WithTransportV3(ctx, siamuxAddr, he.PublicKey, func(t *rhpv3.Transport) (err error) {
-		pt, err = proto.RPCPriceTable(t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
-			return nil, nil
-		})
-		return
-	})
-
-	return pt, err
 }

@@ -19,7 +19,7 @@ import (
 // FormContract forms a contract with a host and submits the contract
 // transaction to tpool. The contract is added to the ContractSet and its
 // metadata is returned.
-func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB) (rc modules.RenterContract, formationTxnSet []types.Transaction, sweepTxn types.Transaction, sweepParents []types.Transaction, err error) {
+func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB, cancel <-chan struct{}) (rc modules.RenterContract, formationTxnSet []types.Transaction, sweepTxn types.Transaction, sweepParents []types.Transaction, err error) {
 	// Check that the host version is high enough. This should never happen
 	// because hosts with old versions should be filtered / blocked by the
 	// contractor anyway.
@@ -30,8 +30,15 @@ func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder tr
 	// Extract vars from params, for convenience.
 	allowance, host, funding, startHeight, endHeight, refundAddress := params.Allowance, params.Host, params.Funding, params.StartHeight, params.EndHeight, params.RefundAddress
 
-	ctx, cancel := context.WithTimeout(context.Background(), contractHostFormTimeout)
-	defer cancel()
+	// Create a context and set up its cancelling.
+	ctx, cancelFunc := context.WithTimeout(context.Background(), contractHostFormTimeout)
+	go func() {
+		select {
+		case <-cancel:
+			cancelFunc()
+		case <-ctx.Done():
+		}
+	}()
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := tpool.FeeEstimation()

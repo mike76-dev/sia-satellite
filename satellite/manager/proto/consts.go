@@ -22,8 +22,20 @@ const (
 	hostPriceLeeway = 0.003
 
 	// contractHostFormTimeout is the amount of time we wait to form a
-	// contract with the host
+	// contract with the host.
 	contractHostFormTimeout = 5 * time.Minute
+
+	// contractHostRenewTimeout is the amount of time we wait to renew a
+	// contract.
+	contractHostRenewTimeout = 5 * time.Minute
+
+	// settingsHostTimeout is the amount of time we wait to retrieve the
+	// settings from the host.
+	settingsHostTimeout = 30 * time.Second
+
+	// contractHostPriceTableTimeout is the amount of time we wait to receive a
+	// price table from the host
+	contractHostPriceTableTimeout = 30 * time.Second
 )
 
 var (

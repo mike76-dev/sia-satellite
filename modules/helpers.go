@@ -8,8 +8,10 @@ import (
 	"math/bits"
 	"strings"
 
+	rhpv3 "go.sia.tech/core/rhp/v3"
 	core "go.sia.tech/core/types"
 	"go.sia.tech/siad/crypto"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
 
@@ -101,4 +103,43 @@ func TaxAdjustedPayout(target types.Currency) types.Currency {
 		guess = guess.Sub(types.NewCurrency64(sfc))
 	}
 	return guess.Add(tm).Sub(gm)
+}
+
+// ConvertPriceTable converts a core price table to siad.
+func ConvertPriceTable(pt rhpv3.HostPriceTable) smodules.RPCPriceTable {
+	return smodules.RPCPriceTable{
+		UID:                          smodules.UniqueID(pt.UID),
+		Validity:                     pt.Validity,
+		HostBlockHeight:              types.BlockHeight(pt.HostBlockHeight),
+		UpdatePriceTableCost:         types.NewCurrency(pt.UpdatePriceTableCost.Big()),
+		AccountBalanceCost:           types.NewCurrency(pt.AccountBalanceCost.Big()),
+		FundAccountCost:              types.NewCurrency(pt.FundAccountCost.Big()),
+		LatestRevisionCost:           types.NewCurrency(pt.LatestRevisionCost.Big()),
+		SubscriptionMemoryCost:       types.NewCurrency(pt.SubscriptionMemoryCost.Big()),
+		SubscriptionNotificationCost: types.NewCurrency(pt.SubscriptionNotificationCost.Big()),
+		InitBaseCost:                 types.NewCurrency(pt.InitBaseCost.Big()),
+		MemoryTimeCost:               types.NewCurrency(pt.MemoryTimeCost.Big()),
+		DownloadBandwidthCost:        types.NewCurrency(pt.DownloadBandwidthCost.Big()),
+		UploadBandwidthCost:          types.NewCurrency(pt.UploadBandwidthCost.Big()),
+		DropSectorsBaseCost:          types.NewCurrency(pt.DropSectorsBaseCost.Big()),
+		DropSectorsUnitCost:          types.NewCurrency(pt.DropSectorsUnitCost.Big()),
+		HasSectorBaseCost:            types.NewCurrency(pt.HasSectorBaseCost.Big()),
+		ReadBaseCost:                 types.NewCurrency(pt.ReadBaseCost.Big()),
+		ReadLengthCost:               types.NewCurrency(pt.ReadLengthCost.Big()),
+		RenewContractCost:            types.NewCurrency(pt.RenewContractCost.Big()),
+		RevisionBaseCost:             types.NewCurrency(pt.RevisionBaseCost.Big()),
+		SwapSectorCost:               types.NewCurrency(pt.SwapSectorBaseCost.Big()),
+		WriteBaseCost:                types.NewCurrency(pt.WriteBaseCost.Big()),
+		WriteLengthCost:              types.NewCurrency(pt.WriteLengthCost.Big()),
+		WriteStoreCost:               types.NewCurrency(pt.WriteLengthCost.Big()),
+		TxnFeeMinRecommended:         types.NewCurrency(pt.TxnFeeMinRecommended.Big()),
+		TxnFeeMaxRecommended:         types.NewCurrency(pt.TxnFeeMaxRecommended.Big()),
+		ContractPrice:                types.NewCurrency(pt.ContractPrice.Big()),
+		CollateralCost:               types.NewCurrency(pt.CollateralCost.Big()),
+		MaxCollateral:                types.NewCurrency(pt.MaxCollateral.Big()),
+		MaxDuration:                  types.BlockHeight(pt.MaxDuration),
+		WindowSize:                   types.BlockHeight(pt.WindowSize),
+		RegistryEntriesLeft:          pt.RegistryEntriesLeft,
+		RegistryEntriesTotal:         pt.RegistryEntriesTotal,
+	}
 }
