@@ -1,9 +1,7 @@
 package contractor
 
 import (
-	"bytes"
 	"database/sql"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +11,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/satellite/manager/proto"
 
 	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/fastrand"
 	"gitlab.com/NebulousLabs/threadgroup"
 
 	"go.sia.tech/siad/crypto"
@@ -79,23 +78,6 @@ type Contractor struct {
 	staticWatchdog *watchdog
 }
 
-// PaymentDetails is a helper struct that contains extra information on a
-// payment. Most notably it includes a breakdown of the spending details for a
-// payment, the contractor uses this information to update its spending details
-// accordingly.
-type PaymentDetails struct {
-	// Source and destination details.
-	Renter types.SiaPublicKey
-	Host   types.SiaPublicKey
-
-	// Payment details.
-	Amount        types.Currency
-	RefundAccount smodules.AccountID
-
-	// Spending details.
-	SpendingDetails smodules.SpendingDetails
-}
-
 // Allowance returns the current allowance of the renter specified.
 func (c *Contractor) Allowance(rpk types.SiaPublicKey) modules.Allowance {
 	c.mu.RLock()
@@ -131,7 +113,14 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 		return smodules.ContractorSpending{}, ErrRenterNotFound
 	}
 
-	allContracts := c.staticContracts.ByRenter(rpk)
+	seed, _, err := c.wallet.PrimarySeed()
+	if err != nil {
+		return smodules.ContractorSpending{}, err
+	}
+	rs := modules.DeriveRenterSeed(seed, renter.Email)
+	defer fastrand.Read(rs[:])
+
+	allContracts := c.staticContracts.ByRenter(rs)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -160,7 +149,8 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 	// Calculate needed spending to be reported from old contracts.
 	for _, contract := range c.OldContracts() {
 		// Filter out by renter.
-		if contract.RenterPublicKey.String() != key {
+		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, contract.HostPublicKey))
+		if contract.RenterPublicKey.String() != epk.String() {
 			continue
 		}
 		// Don't count double-spent contracts.
@@ -222,93 +212,6 @@ func (c *Contractor) CurrentPeriod(rpk types.SiaPublicKey) types.BlockHeight {
 		return types.BlockHeight(0)
 	}
 	return renter.CurrentPeriod
-}
-
-// ProvidePayment takes a stream and a set of payment details and handles
-// the payment for an RPC by sending and processing payment request and
-// response objects to the host. It returns an error in case of failure.
-func (c *Contractor) ProvidePayment(stream io.ReadWriter, pt *smodules.RPCPriceTable, details PaymentDetails) error {
-	// Convenience variables.
-	host := details.Host
-	renter := details.Renter
-	refundAccount := details.RefundAccount
-	amount := details.Amount
-	bh := pt.HostBlockHeight
-
-	// Find a contract for the given host and renter.
-	contract, exists := c.ContractByPublicKeys(renter, host)
-	if !exists {
-		return errContractNotFound
-	}
-
-	// Acquire a file contract.
-	fc, exists := c.staticContracts.Acquire(contract.ID)
-	if !exists {
-		return errContractNotFound
-	}
-	defer c.staticContracts.Return(fc)
-
-	// Create a new revision.
-	current := fc.LastRevision()
-	rev, err := current.EAFundRevision(amount)
-	if err != nil {
-		return errors.AddContext(err, "Failed to create a payment revision")
-	}
-
-	// Create transaction containing the revision.
-	signedTxn := rev.ToTransaction()
-	sig := fc.Sign(signedTxn.SigHash(0, bh))
-	signedTxn.TransactionSignatures[0].Signature = sig[:]
-
-	// Prepare a buffer so we can optimize our writes.
-	buffer := bytes.NewBuffer(nil)
-
-	// Send PaymentRequest.
-	err = smodules.RPCWrite(buffer, smodules.PaymentRequest{Type: smodules.PayByContract})
-	if err != nil {
-		return errors.AddContext(err, "unable to write payment request to host")
-	}
-
-	// Send PayByContractRequest.
-	err = smodules.RPCWrite(buffer, newPayByContractRequest(rev, sig, refundAccount))
-	if err != nil {
-		return errors.AddContext(err, "unable to write the pay by contract request")
-	}
-
-	// Write contents of the buffer to the stream.
-	_, err = stream.Write(buffer.Bytes())
-	if err != nil {
-		return errors.AddContext(err, "could not write the buffer contents")
-	}
-
-	// Receive PayByContractResponse.
-	var payByResponse smodules.PayByContractResponse
-	if err := smodules.RPCRead(stream, &payByResponse); err != nil {
-		if strings.Contains(err.Error(), "storage obligation not found") {
-			c.log.Printf("Marking contract %v as bad because host %v did not recognize it: %v\n", contract.ID, host, err)
-			mbcErr := c.managedMarkContractBad(fc)
-			if mbcErr != nil {
-				c.log.Printf("Unable to mark contract %v on host %v as bad: %v\n", contract.ID, host, mbcErr)
-			}
-		}
-		return errors.AddContext(err, "unable to read the pay by contract response")
-	}
-
-	// Verify the host's signature.
-	hash := crypto.HashAll(rev)
-	hpk := fc.Metadata().HostPublicKey
-	err = crypto.VerifyHash(hash, hpk.ToPublicKey(), payByResponse.Signature)
-	if err != nil {
-		return errors.New("could not verify host's signature")
-	}
-
-	// Commit payment intent.
-	err = fc.CommitPaymentIntent(signedTxn, amount, details.SpendingDetails)
-	if err != nil {
-		return errors.AddContext(err, "Failed to commit unknown spending intent")
-	}
-
-	return nil
 }
 
 // RefreshedContract returns a bool indicating if the contract was a refreshed
@@ -530,26 +433,6 @@ func (c *Contractor) managedSynced() bool {
 	return false
 }
 
-// newPayByContractRequest is a helper function that takes a revision,
-// signature and refund account and creates a PayByContractRequest object.
-func newPayByContractRequest(rev types.FileContractRevision, sig crypto.Signature, refundAccount smodules.AccountID) smodules.PayByContractRequest {
-	req := smodules.PayByContractRequest{
-		ContractID:           rev.ID(),
-		NewRevisionNumber:    rev.NewRevisionNumber,
-		NewValidProofValues:  make([]types.Currency, len(rev.NewValidProofOutputs)),
-		NewMissedProofValues: make([]types.Currency, len(rev.NewMissedProofOutputs)),
-		RefundAccount:        refundAccount,
-		Signature:            sig[:],
-	}
-	for i, o := range rev.NewValidProofOutputs {
-		req.NewValidProofValues[i] = o.Value
-	}
-	for i, o := range rev.NewMissedProofOutputs {
-		req.NewMissedProofValues[i] = o.Value
-	}
-	return req
-}
-
 // GetRenter returns the renter with the specified public key.
 func (c *Contractor) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
 	c.mu.RLock()
@@ -598,7 +481,9 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 		}
 	}
 
-	renter, err := c.GetRenter(contract.RenterPublicKey)
+	c.mu.RLock()
+	renter, err := c.managedFindRenter(contract.RenterPublicKey, contract.HostPublicKey)
+	c.mu.RUnlock()
 	if err != nil {
 		c.log.Println("ERROR: trying to unlock funds of a non-existing renter:", contract.RenterPublicKey.String())
 		return
@@ -625,4 +510,26 @@ func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types
 	}
 
 	return err
+}
+
+// managedFindRenter tries to find a renter by the ephemeral public key.
+func (c *Contractor) managedFindRenter(epk, hpk types.SiaPublicKey) (renter modules.Renter, err error) {
+	seed, _, err := c.wallet.PrimarySeed()
+	if err != nil {
+		return
+	}
+
+	var rs smodules.RenterSeed
+	defer fastrand.Read(rs[:])
+
+	renters := c.renters
+	for _, renter = range renters {
+		rs = modules.DeriveRenterSeed(seed, renter.Email)
+		key := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, hpk))
+		if key.String() == epk.String() {
+			return
+		}
+	}
+
+	return modules.Renter{}, ErrRenterNotFound
 }

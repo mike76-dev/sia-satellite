@@ -6,6 +6,8 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
+	"gitlab.com/NebulousLabs/fastrand"
+
 	"go.sia.tech/siad/types"
 )
 
@@ -127,7 +129,14 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 	// Cycle through all contracts and unlock them again since they might have
 	// been locked by managedCancelAllowance previously.
 	if unlockContracts {
-		ids := c.staticContracts.IDs(rpk)
+		seed, _, err := c.wallet.PrimarySeed()
+		if err != nil {
+			return err
+		}
+		rs := modules.DeriveRenterSeed(seed, renter.Email)
+		defer fastrand.Read(rs[:])
+
+		ids := c.staticContracts.IDs(rs)
 		for _, id := range ids {
 			contract, exists := c.staticContracts.Acquire(id)
 			if !exists {
@@ -169,7 +178,14 @@ func (c *Contractor) managedCancelAllowance(rpk types.SiaPublicKey) error {
 
 	// First need to invalidate any active sessions.
 	// NOTE: this code is the same as in managedRenewContracts.
-	ids := c.staticContracts.IDs(rpk)
+	seed, _, err := c.wallet.PrimarySeed()
+	if err != nil {
+		return err
+	}
+	rs := modules.DeriveRenterSeed(seed, renter.Email)
+	defer fastrand.Read(rs[:])
+
+	ids := c.staticContracts.IDs(rs)
 	c.mu.Lock()
 	for _, id := range ids {
 		// We aren't renewing, but we don't want new sessions to be created.
@@ -198,13 +214,13 @@ func (c *Contractor) managedCancelAllowance(rpk types.SiaPublicKey) error {
 	renter.CurrentPeriod = 0
 	c.renters[rpk.String()] = renter
 	c.mu.Unlock()
-	err := c.UpdateRenter(renter)
+	err = c.UpdateRenter(renter)
 	if err != nil {
 		return err
 	}
 
 	// Cycle through all contracts and mark them as !goodForRenew and !goodForUpload
-	ids = c.staticContracts.IDs(rpk)
+	ids = c.staticContracts.IDs(rs)
 	for _, id := range ids {
 		contract, exists := c.staticContracts.Acquire(id)
 		if !exists {

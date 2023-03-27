@@ -136,15 +136,17 @@ func (c *Contractor) managedCriticalUtilityChecks(fc *proto.FileContract, host s
 	contract := fc.Metadata()
 
 	c.mu.RLock()
-	blockHeight := c.blockHeight
-	renter, exists := c.renters[fc.Metadata().RenterPublicKey.String()]
-	_, renewed := c.renewedTo[contract.ID]
+	renter, err := c.managedFindRenter(fc.Metadata().RenterPublicKey, fc.Metadata().HostPublicKey)
 	c.mu.RUnlock()
-
-	if !exists {
+	if err != nil {
 		c.log.Println("ERROR: Renter not found")
 		return smodules.ContractUtility{}, false
 	}
+
+	c.mu.RLock()
+	blockHeight := c.blockHeight
+	_, renewed := c.renewedTo[contract.ID]
+	c.mu.RUnlock()
 
 	renewWindow := renter.Allowance.RenewWindow
 	period := renter.Allowance.Period

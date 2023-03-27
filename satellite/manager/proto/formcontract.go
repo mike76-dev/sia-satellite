@@ -42,7 +42,7 @@ func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder tr
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).MulFloat(10)
+	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).MulFloat(3)
 
 	// Calculate the payouts.
 	period := endHeight - startHeight
@@ -78,11 +78,11 @@ func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder tr
 
 	// Add FileContract identifier.
 	fcTxn, _ := txnBuilder.View()
-	si, hk := smodules.PrefixedSignedIdentifier(smodules.EphemeralRenterSeed(params.RenterSeed), fcTxn, host.PublicKey)
+	si, hk := smodules.PrefixedSignedIdentifier(params.RenterSeed, fcTxn, host.PublicKey)
 	_ = txnBuilder.AddArbitraryData(append(si[:], hk[:]...))
 
 	// Create our key.
-	renterSK, renterPK := crypto.GenerateKeyPairDeterministic([crypto.EntropySize]byte(params.RenterSeed))
+	renterSK, renterPK := modules.GenerateKeyPair(smodules.RenterSeed(params.RenterSeed))
 
 	// Create unlock conditions.
 	uc := types.UnlockConditions{

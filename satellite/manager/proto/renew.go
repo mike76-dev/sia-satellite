@@ -29,7 +29,7 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	fcTxn, _ := txnBuilder.View()
 	host, funding, startHeight, endHeight := params.Host, params.Funding, params.StartHeight, params.EndHeight
 	renterSKOld := oldContract.SecretKey
-	renterSKNew, renterPKNew := crypto.GenerateKeyPairDeterministic([crypto.EntropySize]byte(params.RenterSeed))
+	renterSKNew, renterPKNew := modules.GenerateKeyPair(smodules.RenterSeed(params.RenterSeed))
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), contractHostRenewTimeout)
@@ -79,7 +79,7 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	txnBuilder.AddMinerFee(txnFee)
 
 	// Add FileContract identifier.
-	si, hk := smodules.PrefixedSignedIdentifier(smodules.EphemeralRenterSeed(params.RenterSeed), fcTxn, host.PublicKey)
+	si, hk := smodules.PrefixedSignedIdentifier(params.RenterSeed, fcTxn, host.PublicKey)
 	_ = txnBuilder.AddArbitraryData(append(si[:], hk[:]...))
 
 	// Create transaction set.

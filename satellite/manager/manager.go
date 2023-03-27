@@ -4,7 +4,6 @@ package manager
 import (
 	"database/sql"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -46,10 +45,6 @@ type hostContractor interface {
 	// Contracts returns the staticContracts of the manager's hostContractor.
 	Contracts() []modules.RenterContract
 
-	// ContractByPublicKeys returns the contract associated with the renter
-	// and the host keys.
-	ContractByPublicKeys(types.SiaPublicKey, types.SiaPublicKey) (modules.RenterContract, bool)
-
 	// ContractPublicKey returns the public key capable of verifying the renter's
 	// signature on a contract.
 	ContractPublicKey(types.SiaPublicKey, types.SiaPublicKey) (crypto.PublicKey, bool)
@@ -79,11 +74,6 @@ type hostContractor interface {
 	// PeriodSpending returns the amount spent on contracts during the current
 	// billing period of the renter.
 	PeriodSpending(types.SiaPublicKey) (smodules.ContractorSpending, error)
-
-	// ProvidePayment takes a stream and a set of payment details and handles
-	// the payment for an RPC by sending and processing payment request and
-	// response objects to the host. It returns an error in case of failure.
-	ProvidePayment(stream io.ReadWriter, pt *smodules.RPCPriceTable, details contractor.PaymentDetails) error
 
 	// OldContracts returns the oldContracts of the manager's hostContractor.
 	OldContracts() []modules.RenterContract
@@ -449,7 +439,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	// Add the cost of paying the transaction fees and then double the contract
 	// costs to account for renewing a full set of contracts.
 	_, feePerByte := m.tpool.FeeEstimation()
-	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(uint64(allowance.Hosts)).Mul64(10)
+	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(uint64(allowance.Hosts)).Mul64(3)
 	totalContractCost = totalContractCost.Add(txnsFees)
 	totalContractCost = totalContractCost.Mul64(2)
 

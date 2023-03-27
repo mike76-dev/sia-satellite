@@ -3,6 +3,7 @@ package modules
 import (
 	"gitlab.com/NebulousLabs/fastrand"
 
+	core "go.sia.tech/core/types"
 	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
@@ -106,10 +107,41 @@ func (r *Renter) ContractEndHeight() types.BlockHeight {
 // in use.
 func DeriveRenterSeed(walletSeed smodules.Seed, email string) smodules.RenterSeed {
 	var renterSeed smodules.RenterSeed
-	rs := crypto.HashAll(walletSeed, []byte(email))
+	rs := crypto.HashBytes(append(walletSeed[:], []byte(email)...))
 	defer fastrand.Read(rs[:])
 	copy(renterSeed[:], rs[:])
 	return renterSeed
+}
+
+// DeriveEphemeralRenterSeed derives a seed to be used by the renter for the
+// exchange with the hosts.
+// NOTE: The seed returned by this function should be wiped once it's no longer
+// in use.
+func DeriveEphemeralRenterSeed(renterSeed smodules.RenterSeed, hpk types.SiaPublicKey) smodules.EphemeralRenterSeed {
+	var ers smodules.EphemeralRenterSeed
+	sk, _ := GenerateKeyPair(renterSeed)
+	defer fastrand.Read(renterSeed[:])
+	rs := crypto.HashBytes(append(sk[:], hpk.Key...))
+	defer fastrand.Read(rs[:])
+	copy(ers[:], rs[:])
+	return ers
+}
+
+// EphemeralPublicKey derives a public key from an ephemeral seed.
+func EphemeralPublicKey(ers smodules.EphemeralRenterSeed) types.SiaPublicKey {
+	_, epk := GenerateKeyPair(smodules.RenterSeed(ers))
+	defer fastrand.Read(ers[:])
+	return types.Ed25519PublicKey(epk)
+}
+
+// GenerateKeyPair generates a private/public keypair from a seed.
+func GenerateKeyPair(seed smodules.RenterSeed) (sk crypto.SecretKey, pk crypto.PublicKey) {
+	xsk := core.NewPrivateKeyFromSeed(seed[:])
+	defer fastrand.Read(seed[:])
+	copy(sk[:], xsk[:])
+	xpk := sk.PublicKey()
+	copy(pk[:], xpk[:])
+	return
 }
 
 // An Allowance dictates how much the renter is allowed to spend in a given
@@ -175,5 +207,5 @@ type ContractParams struct {
 	StartHeight    types.BlockHeight
 	EndHeight      types.BlockHeight
 	RefundAddress  types.UnlockHash
-	RenterSeed     smodules.RenterSeed
+	RenterSeed     smodules.EphemeralRenterSeed
 }

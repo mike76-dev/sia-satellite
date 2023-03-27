@@ -680,7 +680,12 @@ func (w *watchdog) callCheckContracts() {
 			w.archiveContract(fcID, 0)
 			continue
 		}
-		rw, exists := w.renewWindows[contract.RenterPublicKey.String()]
+		renter, err := w.contractor.managedFindRenter(contract.RenterPublicKey, contract.HostPublicKey)
+		if err != nil {
+			w.contractor.log.Println("ERROR: Renter not found by the watchdog")
+			continue
+		}
+		rw, exists := w.renewWindows[renter.PublicKey.String()]
 		if !exists {
 			w.contractor.log.Println("ERROR: Renter not found by the watchdog")
 			continue

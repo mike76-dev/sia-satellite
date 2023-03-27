@@ -162,10 +162,10 @@ func (c *Contractor) managedEstimateRenewFundingRequirements(contract modules.Re
 
 	// Fetch the renter.
 	c.mu.RLock()
-	renter, exists := c.renters[contract.RenterPublicKey.String()]
+	renter, err := c.managedFindRenter(contract.RenterPublicKey, contract.HostPublicKey)
 	c.mu.RUnlock()
-	if !exists {
-		return types.ZeroCurrency, ErrRenterNotFound
+	if err != nil {
+		return types.ZeroCurrency, err
 	}
 
 	// Estimate the amount of money that's going to be needed for existing
@@ -398,7 +398,7 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 		StartHeight:    c.blockHeight,
 		EndHeight:      endHeight,
 		RefundAddress:  uc.UnlockHash(),
-		RenterSeed:     renterSeed, // The seed should not be mutated.
+		RenterSeed:     modules.DeriveEphemeralRenterSeed(renterSeed, host.PublicKey),
 	}
 	c.mu.RUnlock()
 
@@ -561,7 +561,14 @@ func (c *Contractor) managedLimitGFUHosts() {
 	}
 	for _, contract := range gfuContracts {
 		// Check if this renter has enough hosts already.
-		key = contract.c.RenterPublicKey.String()
+		c.mu.RLock()
+		renter, err := c.managedFindRenter(contract.c.RenterPublicKey, contract.c.HostPublicKey)
+		c.mu.RUnlock()
+		if err != nil {
+			c.log.Println("managedLimitGFUHosts: failed to find the renter")
+			continue
+		}
+		key = renter.PublicKey.String()
 		if numHosts[key] > 0 {
 			numHosts[key] = numHosts[key] - 1
 			continue
@@ -573,7 +580,7 @@ func (c *Contractor) managedLimitGFUHosts() {
 		}
 		u := sc.Utility()
 		u.GoodForUpload = false
-		err := c.managedUpdateContractUtility(sc, u)
+		err = c.managedUpdateContractUtility(sc, u)
 		c.staticContracts.Return(sc)
 		if err != nil {
 			c.log.Println("managedLimitGFUHosts: failed to update GFU contract utility")
@@ -699,7 +706,7 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 		StartHeight:   c.blockHeight,
 		EndHeight:     newEndHeight,
 		RefundAddress: uc.UnlockHash(),
-		RenterSeed:    renterSeed, // The seed should not be mutated.
+		RenterSeed:    modules.DeriveEphemeralRenterSeed(renterSeed, host.PublicKey),
 	}
 	c.mu.RUnlock()
 
@@ -1003,6 +1010,13 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 		return nil, ErrRenterNotFound
 	}
 
+	seed, _, err := c.wallet.PrimarySeed()
+	if err != nil {
+		return nil, err
+	}
+	rs := modules.DeriveRenterSeed(seed, renter.Email)
+	defer fastrand.Read(rs[:])
+
 	// Register or unregister and alerts related to contract formation.
 	var registerLowFundsAlert bool
 	defer func() {
@@ -1041,7 +1055,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 	// more as needed to fill the gap.
 	contractSet := make([]modules.RenterContract, 0, renter.Allowance.Hosts)
 	uploadContracts := 0
-	for _, contract := range c.staticContracts.ByRenter(renter.PublicKey) {
+	for _, contract := range c.staticContracts.ByRenter(rs) {
 		if cu, ok := c.managedContractUtility(contract.ID); ok && cu.GoodForUpload {
 			contractSet = append(contractSet, contract)
 			uploadContracts++
@@ -1061,7 +1075,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 	// already have contracts with and the second one includes all hosts we
 	// have active contracts with. Then select a new batch of hosts to attempt
 	// contract formation with.
-	allContracts := c.staticContracts.ByRenter(renter.PublicKey)
+	allContracts := c.staticContracts.ByRenter(rs)
 	var blacklist []types.SiaPublicKey
 	var addressBlacklist []types.SiaPublicKey
 	for _, contract := range allContracts {
@@ -1084,7 +1098,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := c.tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(10)
+	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(3)
 
 	// Form contracts with the hosts one at a time, until we have enough contracts.
 	for _, host := range hosts {
@@ -1198,6 +1212,13 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 		return nil, ErrRenterNotFound
 	}
 
+	seed, _, err := c.wallet.PrimarySeed()
+	if err != nil {
+		return nil, err
+	}
+	rs := modules.DeriveRenterSeed(seed, renter.Email)
+	defer fastrand.Read(rs[:])
+
 	// The total number of renews that failed for any reason.
 	var numRenewFails int
 	var renewErr error
@@ -1214,7 +1235,7 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := c.tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(10)
+	txnFee := maxFee.Mul64(2 * smodules.EstimatedFileContractTransactionSetSize)
 
 	var renewSet []fileContractRenewal
 	var refreshSet []fileContractRenewal
@@ -1225,7 +1246,8 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 	contractSet := make([]modules.RenterContract, 0, len(contracts))
 	for _, id := range contracts {
 		rc, ok := c.staticContracts.View(id)
-		if !ok || rc.RenterPublicKey.String() != renter.PublicKey.String() {
+		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, rc.HostPublicKey))
+		if !ok || rc.RenterPublicKey.String() != epk.String() {
 			c.log.Println("WARN: contract ID submitted that doesn't belong to this renter:", id, renter.PublicKey.String())
 			continue
 		}

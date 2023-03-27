@@ -17,7 +17,7 @@ import (
 )
 
 type (
-	// sensibleHostAverages contains the human-readable host network
+	// sensibleHostAverages contains the human-readable host network.
 	// averages.
 	sensibleHostAverages struct {
 		NumHosts               uint64  `json:"numhosts"`
@@ -396,7 +396,6 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 
 	// Generate the seed and wipe it after use.
 	walletSeed, err := api.portal.satellite.GetWalletSeed()
-	defer fastrand.Read(walletSeed[:])
 	if err != nil {
 		api.portal.log.Printf("ERROR: error retrieving wallet seed: %v\n", err)
 		writeError(w,
@@ -492,10 +491,17 @@ func (api *portalAPI) contractsHandlerGET(w http.ResponseWriter, req *http.Reque
 func (api *portalAPI) getContracts(renter modules.Renter, ac, ps, rf, ds, ex, er bool) []renterContract {
 	var rc []renterContract
 	currentBlockHeight := api.portal.satellite.BlockHeight()
+	seed, err := api.portal.satellite.GetWalletSeed()
+	if err != nil {
+		return nil
+	}
+	rs := modules.DeriveRenterSeed(seed, renter.Email)
+	defer fastrand.Read(rs[:])
 
 	for _, c := range api.portal.satellite.Contracts() {
 		// Skip contracts that don't belong to the renter.
-		if renter.PublicKey.String() != c.RenterPublicKey.String() {
+		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, c.HostPublicKey))
+		if epk.String() != c.RenterPublicKey.String() {
 			continue
 		}
 
@@ -559,7 +565,8 @@ func (api *portalAPI) getContracts(renter modules.Renter, ac, ps, rf, ds, ex, er
 	// Process old contracts.
 	for _, c := range api.portal.satellite.OldContracts() {
 		// Skip contracts that don't belong to the renter.
-		if renter.PublicKey.String() != c.RenterPublicKey.String() {
+		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, c.HostPublicKey))
+		if epk.String() != c.RenterPublicKey.String() {
 			continue
 		}
 		var size uint64

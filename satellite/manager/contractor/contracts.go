@@ -21,19 +21,6 @@ func (c *Contractor) managedCancelContract(cid types.FileContractID) error {
 	})
 }
 
-// managedContractByPublicKey returns the contract with the key specified, if
-// it exists. The contract will be resolved if possible to the most recent
-// child contract.
-func (c *Contractor) managedContractByPublicKeys(rpk, hpk types.SiaPublicKey) (modules.RenterContract, bool) {
-	c.mu.RLock()
-	id, ok := c.pubKeysToContractID[rpk.String() + hpk.String()]
-	c.mu.RUnlock()
-	if !ok {
-		return modules.RenterContract{}, false
-	}
-	return c.staticContracts.View(id)
-}
-
 // managedContractUtility returns the ContractUtility for a contract with a given id.
 func (c *Contractor) managedContractUtility(id types.FileContractID) (smodules.ContractUtility, bool) {
 	rc, exists := c.staticContracts.View(id)
@@ -105,13 +92,6 @@ func (c *Contractor) tryAddContractToPubKeysMap(newContract modules.RenterContra
 		c.log.Critical("Contractor has multiple contracts that don't form a renewedTo line for the same host and the same renter")
 	}
 	c.pubKeysToContractID[pk] = newContract.ID
-}
-
-// ContractByPublicKeys returns the contract with the keys specified, if it
-// exists. The contract will be resolved if possible to the most recent child
-// contract.
-func (c *Contractor) ContractByPublicKeys(rpk, hpk types.SiaPublicKey) (modules.RenterContract, bool) {
-	return c.managedContractByPublicKeys(rpk, hpk)
 }
 
 // CancelContract cancels the Contractor's contract by marking it !GoodForRenew

@@ -7,6 +7,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"go.sia.tech/siad/crypto"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	"go.sia.tech/siad/types"
 )
@@ -81,12 +82,14 @@ func (cs *ContractSet) ReplaceOldContract(fcid types.FileContractID, c *FileCont
 
 // IDs returns the fcid of each contract with in the set. The contracts are not
 // locked.
-func (cs *ContractSet) IDs(rpk types.SiaPublicKey) []types.FileContractID {
+func (cs *ContractSet) IDs(rs smodules.RenterSeed) []types.FileContractID {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	pks := make([]types.FileContractID, 0, len(cs.contracts))
 	for fcid, fc := range cs.contracts {
-		if fc.header.RenterPublicKey().String() == rpk.String() {
+		hpk := fc.header.HostPublicKey()
+		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, hpk))
+		if fc.header.RenterPublicKey().String() == epk.String() {
 			pks = append(pks, fcid)
 		}
 	}
@@ -171,13 +174,15 @@ func (cs *ContractSet) ViewAll() []modules.RenterContract {
 }
 
 // ByRenter works the same as ViewAll but filters the contracts by the renter.
-func (cs *ContractSet) ByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+func (cs *ContractSet) ByRenter(rs smodules.RenterSeed) []modules.RenterContract {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	contracts := make([]modules.RenterContract, 0, len(cs.contracts))
-	for _, fileContract := range cs.contracts {
-		if fileContract.header.RenterPublicKey().String() == rpk.String() {
-			contracts = append(contracts, fileContract.Metadata())
+	for _, fc := range cs.contracts {
+		hpk := fc.header.HostPublicKey()
+		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, hpk))
+		if fc.header.RenterPublicKey().String() == epk.String() {
+			contracts = append(contracts, fc.Metadata())
 		}
 	}
 	return contracts
