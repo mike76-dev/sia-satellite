@@ -747,7 +747,11 @@ function getContracts() {
 	fetch(apiBaseURL + '/dashboard/contracts?&active=' + active + '&passive=' + passive + '&refreshed=' + refreshed + '&disabled=' + disabled + '&expired=' + expired + '&expired-refreshed=' + exref, options)
 		.then(response => response.json())
 		.then(data => {
-			if (!data) return;
+			if (!data) {
+				contracts = [];
+				renderContracts();
+				return;
+			}
 			if (data.code) {
 				console.log(data);
 			} else {
