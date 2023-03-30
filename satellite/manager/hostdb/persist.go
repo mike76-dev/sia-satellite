@@ -71,7 +71,7 @@ type hdbPersist struct {
 	BlockHeight              types.BlockHeight
 	InitialScanComplete      bool
 	DisableIPViolationsCheck bool
-	KnownContracts           map[string]contractInfo
+	KnownContracts           map[string][]contractInfo
 	LastChange               smodules.ConsensusChangeID
 	FilteredHosts            map[string]types.SiaPublicKey
 	FilterMode               smodules.FilterMode

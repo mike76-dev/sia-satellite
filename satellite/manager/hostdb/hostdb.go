@@ -138,8 +138,9 @@ func (bd *filteredDomains) managedIsFiltered(addr smodules.NetAddress) bool {
 
 // contractInfo contains information about a contract relevant to the HostDB.
 type contractInfo struct {
-	HostPublicKey types.SiaPublicKey `json:"hostpublickey"`
-	StoredData    uint64             `json:"storeddata"`
+	RenterPublicKey types.SiaPublicKey `json:"renterpublickey"`
+	HostPublicKey   types.SiaPublicKey `json:"hostpublickey"`
+	StoredData      uint64             `json:"storeddata"`
 }
 
 // The HostDB is a database of potential hosts. It assigns a weight to each
@@ -163,7 +164,7 @@ type HostDB struct {
 	// knownContracts are contracts which the HostDB was informed about by the
 	// Contractor. It contains infos about active contracts we have formed with
 	// hosts. The mapkey is a serialized SiaPublicKey.
-	knownContracts map[string]contractInfo
+	knownContracts map[string][]contractInfo
 
 	// The hostdb gets initialized with an allowance that can be modified. The
 	// allowance is used to build a weightFunc that the hosttree depends on to
@@ -297,7 +298,7 @@ func (hdb *HostDB) managedSynced() bool {
 // contracts.
 func (hdb *HostDB) updateContracts(contracts []modules.RenterContract) {
 	// Build a new set of known contracts.
-	knownContracts := make(map[string]contractInfo)
+	knownContracts := make(map[string][]contractInfo)
 	for _, contract := range contracts {
 		if n := len(contract.Transaction.FileContractRevisions); n != 1 {
 			hdb.staticLog.Println("CRITICAL: contract's transaction should contain 1 revision but had ", n)
@@ -305,13 +306,30 @@ func (hdb *HostDB) updateContracts(contracts []modules.RenterContract) {
 		}
 		kc, exists := knownContracts[contract.HostPublicKey.String()]
 		if exists {
-			kc.StoredData += contract.Transaction.FileContractRevisions[0].NewFileSize
+			found := false
+			var i int
+			for i = 0; i < len(kc); i++ {
+				if kc[i].RenterPublicKey.String() == contract.RenterPublicKey.String() {
+					found = true
+					break
+				}
+			}
+			if found {
+				kc[i].StoredData += contract.Transaction.FileContractRevisions[0].NewFileSize
+			} else {
+				kc = append(kc, contractInfo{
+					RenterPublicKey: contract.RenterPublicKey,
+					HostPublicKey:   contract.HostPublicKey,
+		  		StoredData:      contract.Transaction.FileContractRevisions[0].NewFileSize,
+				})
+			}
 			knownContracts[contract.HostPublicKey.String()] = kc
 		} else {
-			knownContracts[contract.HostPublicKey.String()] = contractInfo{
-				HostPublicKey: contract.HostPublicKey,
-				StoredData:    contract.Transaction.FileContractRevisions[0].NewFileSize,
-			}
+			knownContracts[contract.HostPublicKey.String()] = append(knownContracts[contract.HostPublicKey.String()], contractInfo{
+				RenterPublicKey: contract.RenterPublicKey,
+				HostPublicKey:   contract.HostPublicKey,
+				StoredData:      contract.Transaction.FileContractRevisions[0].NewFileSize,
+			})
 		}
 	}
 
@@ -360,7 +378,7 @@ func hostdbBlockingStartup(g smodules.Gateway, cs smodules.ConsensusSet, tpool s
 
 		filteredDomains: newFilteredDomains(nil),
 		filteredHosts:   make(map[string]types.SiaPublicKey),
-		knownContracts:  make(map[string]contractInfo),
+		knownContracts:  make(map[string][]contractInfo),
 		scanMap:         make(map[string]struct{}),
 		staticAlerter:   smodules.NewAlerter("hostdb"),
 	}
