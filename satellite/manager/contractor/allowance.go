@@ -176,8 +176,7 @@ func (c *Contractor) managedCancelAllowance(rpk types.SiaPublicKey) error {
 
 	c.log.Println("INFO: canceling allowance of", rpk.String())
 
-	// First need to invalidate any active sessions.
-	// NOTE: this code is the same as in managedRenewContracts.
+	// First need to mark all active contracts.
 	seed, _, err := c.wallet.PrimarySeed()
 	if err != nil {
 		return err
@@ -199,14 +198,6 @@ func (c *Contractor) managedCancelAllowance(rpk types.SiaPublicKey) error {
 		}
 		c.mu.Unlock()
 	}()
-	for _, id := range ids {
-		c.mu.RLock()
-		s, sok := c.sessions[id]
-		c.mu.RUnlock()
-		if sok {
-			s.invalidate()
-		}
-	}
 
 	// Clear out the allowance and save.
 	c.mu.Lock()

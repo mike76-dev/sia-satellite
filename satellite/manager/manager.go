@@ -81,9 +81,6 @@ type hostContractor interface {
 	// IsOffline reports whether the specified host is considered offline.
 	IsOffline(types.SiaPublicKey) bool
 
-	// Session creates a Session from the specified contract ID.
-	Session(types.SiaPublicKey, types.SiaPublicKey, <-chan struct{}) (contractor.Session, error)
-
 	// RefreshedContract checks if the contract was previously refreshed.
 	RefreshedContract(fcid types.FileContractID) bool
 

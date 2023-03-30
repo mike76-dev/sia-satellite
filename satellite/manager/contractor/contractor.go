@@ -57,7 +57,6 @@ type Contractor struct {
 
 	renters       map[string]modules.Renter
 
-	sessions        map[types.FileContractID]*hostSession
 	numFailedRenews map[types.FileContractID]types.BlockHeight
 	renewing        map[types.FileContractID]bool // Prevent revising during renewal.
 
@@ -352,7 +351,6 @@ func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp s
 		renters:              make(map[string]modules.Renter),
 
 		staticContracts:      contractSet,
-		sessions:             make(map[types.FileContractID]*hostSession),
 		doubleSpentContracts: make(map[types.FileContractID]types.BlockHeight),
 		renewing:             make(map[types.FileContractID]bool),
 		renewedFrom:          make(map[types.FileContractID]types.FileContractID),
