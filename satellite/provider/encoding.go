@@ -63,6 +63,24 @@ type requestBody interface {
 	EncodeTo(e *types.Encoder)
 }
 
+// requestRequest is used when the renter requests the list of their
+// active contracts.
+type requestRequest struct {
+	PubKey    crypto.PublicKey
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (rr *requestRequest) DecodeFrom(d *types.Decoder) {
+	copy(rr.PubKey[:], d.ReadBytes())
+	rr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (rr *requestRequest) EncodeTo(e *types.Encoder) {
+	e.WriteBytes(rr.PubKey[:])
+}
+
 // formRequest is used when the renter requests forming contracts with
 // the hosts.
 type formRequest struct {

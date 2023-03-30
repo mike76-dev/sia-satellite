@@ -24,8 +24,12 @@ const defaultConnectionDeadline = 5 * time.Minute
 // causing it to spin up enough goroutines to crash.
 const rpcRatelimit = time.Millisecond * 50
 
+// requestContractsSpecifier is used when a renter requests the list of their
+// active contracts.
+var requestContractsSpecifier = types.NewSpecifier("RequestContracts")
+
 // formContractsSpecifier is used when a renter requests to form a number of
-// contracts om their behalf.
+// contracts on their behalf.
 var formContractsSpecifier = types.NewSpecifier("FormContracts")
 
 // renewContractsSpecifier is used when a renter requests to renew a set of
@@ -275,6 +279,11 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	}
 
 	switch id {
+	case requestContractsSpecifier:
+		err = p.managedRequestContracts(s)
+		if err != nil {
+			err = errors.Extend(errors.New("incoming RPCRequestContracts failed: "), err)
+		}
 	case formContractsSpecifier:
 		err = p.managedFormContracts(s)
 		if err != nil {

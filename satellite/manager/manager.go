@@ -45,6 +45,10 @@ type hostContractor interface {
 	// Contracts returns the staticContracts of the manager's hostContractor.
 	Contracts() []modules.RenterContract
 
+	// ContractsByRenter returns the list of the active contracts belonging
+	// to a specific renter.
+	ContractsByRenter(smodules.RenterSeed) []modules.RenterContract
+
 	// ContractPublicKey returns the public key capable of verifying the renter's
 	// signature on a contract.
 	ContractPublicKey(types.SiaPublicKey, types.SiaPublicKey) (crypto.PublicKey, bool)
@@ -300,6 +304,11 @@ func (m *Manager) GetAverages() modules.HostAverages {
 // Contracts returns the hostContractor's contracts.
 func (m *Manager) Contracts() []modules.RenterContract {
 	return m.hostContractor.Contracts()
+}
+
+// ContractsByRenter returns the contracts belonging to a specific renter.
+func (m *Manager) ContractsByRenter(rs smodules.RenterSeed) []modules.RenterContract {
+	return m.hostContractor.ContractsByRenter(rs)
 }
 
 // RefreshedContract calls hostContractor.RefreshedContract

@@ -305,6 +305,11 @@ func (s *Satellite) Contracts() []modules.RenterContract {
 	return s.m.Contracts()
 }
 
+// ContractsByRenter calls Manager.ContractsByRenter.
+func (s *Satellite) ContractsByRenter(rs smodules.RenterSeed) []modules.RenterContract {
+	return s.m.ContractsByRenter(rs)
+}
+
 // RefreshedContract calls Manager.RefreshedContract
 func (s *Satellite) RefreshedContract(fcid types.FileContractID) bool {
 	return s.m.RefreshedContract(fcid)
@@ -358,6 +363,12 @@ func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, a modules.Allowance, 
 // UpdateContract updates the contract with the new revision.
 func (s *Satellite) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	return s.m.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
+}
+
+// WalletSeed returns the primary wallet seed.
+func (s *Satellite) WalletSeed() (seed smodules.Seed, err error) {
+	seed, _, err = s.wallet.PrimarySeed()
+	return
 }
 
 // enforce that Satellite satisfies the modules.Satellite interface

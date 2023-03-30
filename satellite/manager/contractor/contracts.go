@@ -111,6 +111,11 @@ func (c *Contractor) Contracts() []modules.RenterContract {
 	return c.staticContracts.ViewAll()
 }
 
+// ContractsByRenter returns the contracts belonging to a specific renter.
+func (c *Contractor) ContractsByRenter(rs smodules.RenterSeed) []modules.RenterContract {
+	return c.staticContracts.ByRenter(rs)
+}
+
 // ContractUtility returns the utility fields for the given contract.
 func (c *Contractor) ContractUtility(rpk, hpk types.SiaPublicKey) (smodules.ContractUtility, bool) {
 	c.mu.RLock()

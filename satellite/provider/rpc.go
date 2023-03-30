@@ -83,6 +83,55 @@ func (s *rpcSession) writeResponse(resp requestBody) error {
 	return err
 }
 
+// managedRequestContracts returns a slice containing the list of the
+// renter's active contracts.
+func (p *Provider) managedRequestContracts(s *rpcSession) error {
+	// Extend the deadline to meet the formation of multiple contracts.
+	s.conn.SetDeadline(time.Now().Add(requestContractsTime))
+
+	// Read the request.
+	var rr requestRequest
+	hash, err := s.readRequest(&rr, 65536)
+	if err != nil {
+		return fmt.Errorf("could not read renter request: %v", err)
+	}
+
+	// Verify the signature.
+	err = crypto.VerifyHash(crypto.Hash(hash), rr.PubKey, crypto.Signature(rr.Signature))
+	if err != nil {
+		return fmt.Errorf("could not verify renter signature: %v", err)
+	}
+
+	// Check if we know this renter.
+	rpk := types.Ed25519PublicKey(crypto.PublicKey(rr.PubKey))
+	renter, err := p.satellite.GetRenter(rpk)
+	if err != nil {
+		return fmt.Errorf("could not find renter in the database: %v", err)
+	}
+
+	seed, err := p.satellite.WalletSeed()
+	if err != nil {
+		return err
+	}
+	rs := modules.DeriveRenterSeed(seed, renter.Email)
+	defer fastrand.Read(rs[:])
+
+	// Get the contracts.
+	contracts := p.satellite.ContractsByRenter(rs)
+	cs := contractSet{
+		contracts: make([]rhpv2.ContractRevision, 0, len(contracts)),
+	}
+
+	for _, contract := range contracts {
+		cr := convertContract(contract)
+		cs.contracts = append(cs.contracts, cr)
+	}
+
+	err = s.writeResponse(&cs)
+
+	return err
+}
+
 // managedFormContracts forms the specified number of contracts with the hosts
 // on behalf of the renter.
 func (p *Provider) managedFormContracts(s *rpcSession) error {

@@ -236,8 +236,11 @@ type FundLocker interface {
 type ContractFormer interface {
 	PublicKey() types.SiaPublicKey
 	SecretKey() crypto.SecretKey
-	UserExists(rpk types.SiaPublicKey) (bool, error)
+	UserExists(types.SiaPublicKey) (bool, error)
 	FormContracts(types.SiaPublicKey, Allowance) ([]RenterContract, error)
 	RenewContracts(types.SiaPublicKey, Allowance, []types.FileContractID) ([]RenterContract, error)
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
+	GetRenter(types.SiaPublicKey) (Renter, error)
+	ContractsByRenter(smodules.RenterSeed) []RenterContract
+	WalletSeed() (smodules.Seed, error)
 }

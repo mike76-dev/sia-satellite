@@ -4,6 +4,10 @@ import (
 	"time"
 )
 
+// reauestContractsTime defines the amount of time that the provider
+// has to send the list of the active contracts.
+const requestContractsTime = 1 * time.Minute
+
 // formContractsTime defines the amount of time that the provider
 // has to form contracts with the hosts.
 const formContractsTime = 10 * time.Minute
