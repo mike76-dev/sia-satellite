@@ -275,6 +275,34 @@ func (cs contractSet) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
 }
 
+// extendedContract contains additionally the block height it was
+// created at.
+type extendedContract struct {
+	contract    rhpv2.ContractRevision
+	startHeight uint64
+}
+
+// extendedContractSet is a collection of extendedContracts.
+type extendedContractSet struct {
+	contracts []extendedContract
+}
+
+// EncodeTo implements requestBody.
+func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
+	e.WriteUint64(uint64(len(ecs.contracts)))
+	for _, ec := range ecs.contracts {
+		ec.contract.Revision.EncodeTo(e)
+		ec.contract.Signatures[0].EncodeTo(e)
+		ec.contract.Signatures[1].EncodeTo(e)
+		e.WriteUint64(ec.startHeight)
+	}
+}
+
+// DecodeFrom implements requestBody.
+func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
 // rpcMessage represents an RPC response.
 type rpcMessage struct {
 	Error string

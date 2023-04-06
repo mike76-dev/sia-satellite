@@ -118,16 +118,19 @@ func (p *Provider) managedRequestContracts(s *rpcSession) error {
 
 	// Get the contracts.
 	contracts := p.satellite.ContractsByRenter(rs)
-	cs := contractSet{
-		contracts: make([]rhpv2.ContractRevision, 0, len(contracts)),
+	ecs := extendedContractSet{
+		contracts: make([]extendedContract, 0, len(contracts)),
 	}
 
 	for _, contract := range contracts {
 		cr := convertContract(contract)
-		cs.contracts = append(cs.contracts, cr)
+		ecs.contracts = append(ecs.contracts, extendedContract{
+			contract:    cr,
+			startHeight: uint64(contract.StartHeight),
+		})
 	}
 
-	err = s.writeResponse(&cs)
+	err = s.writeResponse(&ecs)
 
 	return err
 }
