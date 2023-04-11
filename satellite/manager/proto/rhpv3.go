@@ -73,6 +73,7 @@ func processPayment(s *rhpv3.Stream, payment rhpv3.PaymentMethod) error {
 func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet []types.Transaction, renterKey crypto.SecretKey, hostPK types.SiaPublicKey, finalRevTxn types.Transaction, height types.BlockHeight) (types.Transaction, error) {
 	s := t.DialStream()
 	defer s.Close()
+	s.SetDeadline(time.Now().Add(5 * time.Minute))
 
 	// Create request.
 	renterPK := renterKey.PublicKey()
@@ -81,8 +82,27 @@ func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet 
 		RenterKey:              types.Ed25519PublicKey(renterPK),
 		FinalRevisionSignature: finalRevTxn.TransactionSignatures[0],
 	}
-	s.SetDeadline(time.Now().Add(5 * time.Minute))
-	if err := s.WriteRequest(rhpv3.RPCRenewContractID, req); err != nil {
+
+	// Send an empty price table uid.
+	var pt rhpv3.HostPriceTable
+	if err := s.WriteRequest(rhpv3.RPCRenewContractID, &pt.UID); err != nil {
+		return types.Transaction{}, fmt.Errorf("failed to write price table uid: %s", err)
+	}
+
+	// If the price table we sent contained a zero uid, we receive a temporary
+	// one.
+	var ptr rhpv3.RPCUpdatePriceTableResponse
+	err := s.ReadResponse(&ptr, 8192)
+	if err != nil {
+		return types.Transaction{}, fmt.Errorf("failed to fetch temporary price table: %s", err)
+	}
+	err = json.Unmarshal(ptr.PriceTableJSON, &pt)
+	if err != nil {
+		return types.Transaction{}, fmt.Errorf("failed to unmarshal temporary price table: %s", err)
+	}
+
+	// Send request.
+	if err := s.WriteResponse(req); err != nil {
 		return types.Transaction{}, fmt.Errorf("failed to write RPCRenewContractRequest: %s", err)
 	}
 
@@ -162,14 +182,18 @@ func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet 
 		RevisionSignature:     revisionTxn.TransactionSignatures[0],
 	}
 	if err := s.WriteResponse(renterSigs); err != nil {
+		fmt.Printf("Write renew response: %v\n", err) //TODO
 		return types.Transaction{}, fmt.Errorf("failed to send RPCRenewSignatures to host: %s", err)
 	}
+	fmt.Println("Write renew response: success") //TODO
 
 	// Read the host's signatures and add them to the transactions.
 	var hostSigs rpcRenewSignatures
 	if err := s.ReadResponse(&hostSigs, 65536); err != nil {
+		fmt.Printf("Host signatures: %v\n", err) //TODO
 		return types.Transaction{}, fmt.Errorf("failed to read RPCRenewSignatures from host: %s", err)
 	}
+	fmt.Printf("Host signatures: %+v\n", hostSigs) //TODO
 	for _, sig := range hostSigs.TransactionSignatures {
 		_ = txnBuilder.AddTransactionSignature(sig)
 	}
