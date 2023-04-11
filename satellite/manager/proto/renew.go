@@ -124,6 +124,9 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 		noOpRevTxn, err = RPCRenewContract(t, txnBuilder, txnSet, renterSKNew, host.PublicKey, finalRevTxn, startHeight)
 		return err
 	})
+	if err != nil {
+		return modules.RenterContract{}, nil, fmt.Errorf("failed to renew contract: %s", err)
+	}
 
 	// Construct the final transaction.
 	txnSet, err = prepareTransactionSet(txnBuilder)

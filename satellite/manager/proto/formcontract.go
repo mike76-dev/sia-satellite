@@ -2,6 +2,7 @@ package proto
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -164,6 +165,9 @@ func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder tr
 		revisionTxn, err = RPCFormContract(ctx, t, txnBuilder, renterSK, txnSet, startHeight)
 		return
 	})
+	if err != nil {
+		return modules.RenterContract{}, nil, types.Transaction{}, nil, fmt.Errorf("couldn't form contract: %s", err)
+	}
 
 	// Construct the final transaction, and then grab the minimum necessary
 	// final set to submit to the transaction pool. Minimizing the set will
