@@ -255,31 +255,14 @@ func (ur *updateRequest) EncodeTo(e *types.Encoder) {
 	ur.FundAccount.EncodeTo(e)
 }
 
-// contractSet is a collection of rhpv2.ContractRevision objects.
-type contractSet struct {
-	contracts []rhpv2.ContractRevision
-}
-
-// EncodeTo implements requestBody.
-func (cs contractSet) EncodeTo(e *types.Encoder) {
-	e.WriteUint64(uint64(len(cs.contracts)))
-	for _, cr := range cs.contracts {
-		cr.Revision.EncodeTo(e)
-		cr.Signatures[0].EncodeTo(e)
-		cr.Signatures[1].EncodeTo(e)
-	}
-}
-
-// DecodeFrom implements requestBody.
-func (cs contractSet) DecodeFrom(d *types.Decoder) {
-	// Nothing to do here.
-}
-
-// extendedContract contains additionally the block height it was
-// created at.
+// extendedContract contains the contract and its metadata.
 type extendedContract struct {
-	contract    rhpv2.ContractRevision
-	startHeight uint64
+	contract            rhpv2.ContractRevision
+	startHeight         uint64
+	totalCost           types.Currency
+	uploadSpending      types.Currency
+	downloadSpending    types.Currency
+	fundAccountSpending types.Currency
 }
 
 // extendedContractSet is a collection of extendedContracts.
@@ -295,6 +278,10 @@ func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
 		ec.contract.Signatures[0].EncodeTo(e)
 		ec.contract.Signatures[1].EncodeTo(e)
 		e.WriteUint64(ec.startHeight)
+		ec.totalCost.EncodeTo(e)
+		ec.uploadSpending.EncodeTo(e)
+		ec.downloadSpending.EncodeTo(e)
+		ec.fundAccountSpending.EncodeTo(e)
 	}
 }
 

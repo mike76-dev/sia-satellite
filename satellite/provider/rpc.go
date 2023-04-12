@@ -134,8 +134,12 @@ func (p *Provider) managedRequestContracts(s *rpcSession) error {
 	for _, contract := range contracts {
 		cr := convertContract(contract)
 		ecs.contracts = append(ecs.contracts, extendedContract{
-			contract:    cr,
-			startHeight: uint64(contract.StartHeight),
+			contract:            cr,
+			startHeight:         uint64(contract.StartHeight),
+			totalCost:           modules.ConvertCurrency(contract.TotalCost),
+			uploadSpending:      modules.ConvertCurrency(contract.UploadSpending),
+			downloadSpending:    modules.ConvertCurrency(contract.DownloadSpending),
+			fundAccountSpending: modules.ConvertCurrency(contract.FundAccountSpending),
 		})
 	}
 
@@ -204,8 +208,8 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 		return errors.New("can't form contracts with such redundancy params")
 	}
 
-	cs := contractSet{
-		contracts: make([]rhpv2.ContractRevision, 0, fr.Hosts),
+	ecs := extendedContractSet{
+		contracts: make([]extendedContract, 0, fr.Hosts),
 	}
 
 	// Create an allowance.
@@ -238,10 +242,14 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 
 	for _, contract := range contracts {
 		cr := convertContract(contract)
-		cs.contracts = append(cs.contracts, cr)
+		ecs.contracts = append(ecs.contracts, extendedContract{
+			contract:    cr,
+			startHeight: uint64(contract.StartHeight),
+			totalCost:   modules.ConvertCurrency(contract.TotalCost),
+		})
 	}
 
-	err = s.writeResponse(&cs)
+	err = s.writeResponse(&ecs)
 
 	return err
 }
@@ -305,8 +313,8 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 		return errors.New("can't renew contracts with such redundancy params")
 	}
 
-	cs := contractSet{
-		contracts: make([]rhpv2.ContractRevision, 0, len(rr.Contracts)),
+	ecs := extendedContractSet{
+		contracts: make([]extendedContract, 0, len(rr.Contracts)),
 	}
 
 	// Create an allowance.
@@ -343,10 +351,14 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 
 	for _, contract := range contracts {
 		cr := convertContract(contract)
-		cs.contracts = append(cs.contracts, cr)
+		ecs.contracts = append(ecs.contracts, extendedContract{
+			contract:    cr,
+			startHeight: uint64(contract.StartHeight),
+			totalCost:   modules.ConvertCurrency(contract.TotalCost),
+		})
 	}
 
-	err = s.writeResponse(&cs)
+	err = s.writeResponse(&ecs)
 
 	return err
 }
