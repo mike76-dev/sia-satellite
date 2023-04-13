@@ -140,6 +140,7 @@ func (p *Provider) managedRequestContracts(s *rpcSession) error {
 			uploadSpending:      modules.ConvertCurrency(contract.UploadSpending),
 			downloadSpending:    modules.ConvertCurrency(contract.DownloadSpending),
 			fundAccountSpending: modules.ConvertCurrency(contract.FundAccountSpending),
+			renewedFrom:         core.FileContractID(p.satellite.RenewedFrom(contract.ID)),
 		})
 	}
 

@@ -531,3 +531,15 @@ func (c *Contractor) managedFindRenter(epk, hpk types.SiaPublicKey) (renter modu
 
 	return modules.Renter{}, ErrRenterNotFound
 }
+
+// RenewedFrom returns the ID of the contract the given contract was renewed
+// from, if any.
+func (c *Contractor) RenewedFrom(fcid types.FileContractID) types.FileContractID {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	from, ok := c.renewedFrom[fcid]
+	if !ok {
+		return types.FileContractID{}
+	}
+	return from
+}

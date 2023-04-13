@@ -263,6 +263,7 @@ type extendedContract struct {
 	uploadSpending      types.Currency
 	downloadSpending    types.Currency
 	fundAccountSpending types.Currency
+	renewedFrom         types.FileContractID
 }
 
 // extendedContractSet is a collection of extendedContracts.
@@ -282,6 +283,7 @@ func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
 		ec.uploadSpending.EncodeTo(e)
 		ec.downloadSpending.EncodeTo(e)
 		ec.fundAccountSpending.EncodeTo(e)
+		ec.renewedFrom.EncodeTo(e)
 	}
 }
 

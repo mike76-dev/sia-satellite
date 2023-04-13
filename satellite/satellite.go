@@ -371,5 +371,11 @@ func (s *Satellite) WalletSeed() (seed smodules.Seed, err error) {
 	return
 }
 
+// RenewedFrom returns the ID of the contract the given contract was renewed
+// from, if any.
+func (s *Satellite) RenewedFrom(fcid types.FileContractID) types.FileContractID {
+	return s.m.RenewedFrom(fcid)
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

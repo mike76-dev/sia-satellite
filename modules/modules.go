@@ -243,4 +243,5 @@ type ContractFormer interface {
 	GetRenter(types.SiaPublicKey) (Renter, error)
 	ContractsByRenter(smodules.RenterSeed) []RenterContract
 	WalletSeed() (smodules.Seed, error)
+	RenewedFrom(types.FileContractID) types.FileContractID
 }

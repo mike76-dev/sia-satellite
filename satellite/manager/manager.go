@@ -103,6 +103,10 @@ type hostContractor interface {
 
 	// UpdateContract updates the contract with the new revision.
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
+
+	// RenewedFrom returns the ID of the contract the given contract was
+	// renewed from, if any.
+	RenewedFrom(types.FileContractID) types.FileContractID
 }
 
 // A Manager contains the information necessary to communicate with the
@@ -555,4 +559,10 @@ func (m *Manager) SetSatellite(fl modules.FundLocker) {
 // UpdateContract updates the contract with the new revision.
 func (m *Manager) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	return m.hostContractor.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
+}
+
+// RenewedFrom returns the ID of the contract the given contract was renewed
+// from, if any.
+func (m *Manager) RenewedFrom(fcid types.FileContractID) types.FileContractID {
+	return m.hostContractor.RenewedFrom(fcid)
 }
