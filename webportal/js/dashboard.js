@@ -325,7 +325,10 @@ function retrieveBalance() {
 				let b = document.getElementById('balance');
 				let c = data.currency == '' ? 'USD' : data.currency;
 				b.innerHTML = data.balance.toFixed(2) + ' ' + c;
-				averages.currency = c;
+				if (averages.currency != c) {
+					averages.currency = c;
+					retrieveAverages();
+				}
 				if (data.isuser) {
 					message = 'Your payment plan: ' + (data.subscribed ? 'Subscription' : 'Pre-payment');
 					message += '<br>Remaining balance: ' + data.balance.toFixed(2) + ' ' + c;
