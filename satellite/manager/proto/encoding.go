@@ -36,7 +36,7 @@ type (
 	rpcRenewContractRequest struct {
 		TransactionSet         []types.Transaction
 		RenterKey              types.SiaPublicKey
-		FinalRevisionSignature types.TransactionSignature
+		FinalRevisionSignature crypto.Signature
 	}
 
 	// rpcRenewContractHostAdditions is a response object containing the host's
@@ -45,7 +45,7 @@ type (
 		Parents                []types.Transaction
 		SiacoinInputs          []types.SiacoinInput
 		SiacoinOutputs         []types.SiacoinOutput
-		FinalRevisionSignature types.TransactionSignature
+		FinalRevisionSignature crypto.Signature
 	}
 
 	// rpcRenewSignatures is a response object for transferring signatures in
@@ -131,7 +131,7 @@ func (r *rpcRenewContractRequest) EncodeTo(e *core.Encoder) {
 		encodeTransaction(r.TransactionSet[i], e)
 	}
 	encodeSiaPublicKey(r.RenterKey, e)
-	encodeSignature(r.FinalRevisionSignature, e)
+	e.Write(r.FinalRevisionSignature[:])
 }
 
 // DecodeFrom implements ProtocolObject.
@@ -141,7 +141,7 @@ func (r *rpcRenewContractRequest) DecodeFrom(d *core.Decoder) {
 		r.TransactionSet[i] = decodeTransaction(d)
 	}
 	r.RenterKey = decodeSiaPublicKey(d)
-	r.FinalRevisionSignature = decodeSignature(d)
+	d.Read(r.FinalRevisionSignature[:])
 }
 
 // EncodeTo implements ProtocolObject.
@@ -158,7 +158,7 @@ func (r *rpcRenewContractHostAdditions) EncodeTo(e *core.Encoder) {
 	for i := range r.SiacoinOutputs {
 		encodeSiacoinOutput(r.SiacoinOutputs[i], e)
 	}
-	encodeSignature(r.FinalRevisionSignature, e)
+	e.Write(r.FinalRevisionSignature[:])
 }
 
 // DecodeFrom implements ProtocolObject.
@@ -175,7 +175,7 @@ func (r *rpcRenewContractHostAdditions) DecodeFrom(d *core.Decoder) {
 	for i := range r.SiacoinOutputs {
 		r.SiacoinOutputs[i] = decodeSiacoinOutput(d)
 	}
-	r.FinalRevisionSignature = decodeSignature(d)
+	d.Read(r.FinalRevisionSignature[:])
 }
 
 // EncodeTo implements ProtocolObject.

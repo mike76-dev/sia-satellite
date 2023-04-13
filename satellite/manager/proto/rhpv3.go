@@ -75,14 +75,6 @@ func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet 
 	defer s.Close()
 	s.SetDeadline(time.Now().Add(5 * time.Minute))
 
-	// Create request.
-	renterPK := renterKey.PublicKey()
-	req := &rpcRenewContractRequest{
-		TransactionSet:         txnSet,
-		RenterKey:              types.Ed25519PublicKey(renterPK),
-		FinalRevisionSignature: finalRevTxn.TransactionSignatures[0],
-	}
-
 	// Send an empty price table uid.
 	var pt rhpv3.HostPriceTable
 	if err := s.WriteRequest(rhpv3.RPCRenewContractID, &pt.UID); err != nil {
@@ -100,6 +92,14 @@ func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet 
 	if err != nil {
 		return types.Transaction{}, fmt.Errorf("failed to unmarshal temporary price table: %s", err)
 	}
+
+	// Create request.
+	renterPK := renterKey.PublicKey()
+	req := &rpcRenewContractRequest{
+		TransactionSet:         txnSet,
+		RenterKey:              types.Ed25519PublicKey(renterPK),
+	}
+	copy(req.FinalRevisionSignature[:], finalRevTxn.TransactionSignatures[0].Signature)
 
 	// Send request.
 	if err := s.WriteResponse(req); err != nil {
@@ -123,7 +123,16 @@ func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet 
 	}
 
 	// Get the host sig for the final revision.
-	finalRevHostSig := resp.FinalRevisionSignature
+	finalRevHostSigRaw := resp.FinalRevisionSignature
+	finalRevHostSig := types.TransactionSignature{
+		ParentID:       crypto.Hash(finalRevTxn.FileContractRevisions[0].ParentID),
+		PublicKeyIndex: 1,
+		CoveredFields:  types.CoveredFields{
+			FileContracts:         []uint64{0},
+			FileContractRevisions: []uint64{0},
+		},
+		Signature: finalRevHostSigRaw[:],
+	}
 
 	// Add the revision signatures to the transaction set and sign it.
 	_ = txnBuilder.AddTransactionSignature(finalRevTxn.TransactionSignatures[0])
@@ -182,18 +191,14 @@ func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet 
 		RevisionSignature:     revisionTxn.TransactionSignatures[0],
 	}
 	if err := s.WriteResponse(renterSigs); err != nil {
-		fmt.Printf("Write renew response: %v\n", err) //TODO
 		return types.Transaction{}, fmt.Errorf("failed to send RPCRenewSignatures to host: %s", err)
 	}
-	fmt.Println("Write renew response: success") //TODO
 
 	// Read the host's signatures and add them to the transactions.
 	var hostSigs rpcRenewSignatures
 	if err := s.ReadResponse(&hostSigs, 65536); err != nil {
-		fmt.Printf("Host signatures: %v\n", err) //TODO
 		return types.Transaction{}, fmt.Errorf("failed to read RPCRenewSignatures from host: %s", err)
 	}
-	fmt.Printf("Host signatures: %+v\n", hostSigs) //TODO
 	for _, sig := range hostSigs.TransactionSignatures {
 		_ = txnBuilder.AddTransactionSignature(sig)
 	}
