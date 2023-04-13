@@ -6,7 +6,6 @@ package contractor
 
 import (
 	"fmt"
-	"math/big"
 	"reflect"
 	"sort"
 	"time"
@@ -738,11 +737,12 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 	if !ok {
 		return modules.RenterContract{}, errContractNotFound
 	}
+	defer c.staticContracts.Return(oldContract)
+
 	if !oldContract.Utility().GoodForRenew {
 		return modules.RenterContract{}, errContractNotGFR
 	}
 	newContract, formationTxnSet, err = c.staticContracts.Renew(oldContract, params, txnBuilder, c.tpool, c.hdb, c.tg.StopChan())
-	c.staticContracts.Return(oldContract)
 	if err != nil {
 		txnBuilder.Drop() // Return unused outputs to wallet.
 		return modules.RenterContract{}, err
@@ -1222,11 +1222,9 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 	txnFee := maxFee.Mul64(2 * smodules.EstimatedFileContractTransactionSetSize)
 
 	var renewSet []fileContractRenewal
-	var refreshSet []fileContractRenewal
 	var fundsRemaining types.Currency
 
-	// Iterate through the contracts. If the end height is not passed yet, and
-	// if the contract is still GFU, add it to the resulting set.
+	// Iterate through the contracts.
 	contractSet := make([]modules.RenterContract, 0, len(contracts))
 	for _, id := range contracts {
 		rc, ok := c.staticContracts.View(id)
@@ -1237,27 +1235,11 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 		}
 
 		cu, ok := c.managedContractUtility(id)
-		if blockHeight + renter.Allowance.RenewWindow < rc.EndHeight && ok && cu.GoodForUpload {
-			c.log.Println("INFO: contract is still GFU and hasn't expired yet:", id)
-			contractSet = append(contractSet, rc)
-			continue
-		}
 
-		// Create the renewSet and refreshSet. Each is a list of contracts that need
-		// to be renewed, paired with the amount of money to use in each renewal.
-		//
-		// The renewSet is specifically contracts which are being renewed because
-		// they are about to expire. And the refreshSet is contracts that are being
-		// renewed because they are out of money.
-		//
-		// The contractor will prioritize contracts in the renewSet over contracts
-		// in the refreshSet. If the wallet does not have enough money, or if the
-		// allowance does not have enough money, the contractor will prefer to save
-		// data in the long term rather than renew a contract.
-
-		// Depend on the PeriodSpending function to get a breakdown of spending in
-		// the contractor. Then use that to determine how many funds remain
-		// available in the allowance for renewals.
+		// Create the renewSet. Depend on the PeriodSpending function to get
+		// a breakdown of spending in the contractor. Then use that to
+		// determine how many funds remain available in the allowance for
+		// renewals.
 		spending, err := c.PeriodSpending(renter.PublicKey)
 		if err != nil {
 			// This should only error if the contractor is shutting down.
@@ -1313,62 +1295,21 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 		// Calculate a spending for the contract that is proportional to how
 		// much money was spend on the contract throughout this billing cycle
 		// (which is now ending).
-		if blockHeight + renter.Allowance.RenewWindow >= rc.EndHeight {
-			renewAmount, err := c.managedEstimateRenewFundingRequirements(rc, blockHeight, renter.Allowance)
-			if err != nil {
-				c.log.Println("Contract skipped because there was an error estimating renew funding requirements", renewAmount, err)
-				continue
-			}
-			renewSet = append(renewSet, fileContractRenewal{
-				id:           rc.ID,
-				amount:       renewAmount,
-				renterPubKey: renter.PublicKey,
-				hostPubKey:   rc.HostPublicKey,
-			})
-			c.log.Println("Contract has been added to the renew set for being past the renew height")
+		renewAmount, err := c.managedEstimateRenewFundingRequirements(rc, blockHeight, renter.Allowance)
+		if err != nil {
+			c.log.Println("Contract skipped because there was an error estimating renew funding requirements", renewAmount, err)
 			continue
 		}
-
-		// Check if the contract is empty. We define a contract as being empty
-		// if less than 'minContractFundRenewalThreshold' funds are remaining
-		// (3% at time of writing), or if there is less than 3 sectors worth of
-		// storage+upload+download remaining.
-		blockBytes := types.NewCurrency64(smodules.SectorSize * uint64(renter.Allowance.Period))
-		sectorStoragePrice := host.StoragePrice.Mul(blockBytes)
-		sectorUploadBandwidthPrice := host.UploadBandwidthPrice.Mul64(smodules.SectorSize)
-		sectorDownloadBandwidthPrice := host.DownloadBandwidthPrice.Mul64(smodules.SectorSize)
-		sectorBandwidthPrice := sectorUploadBandwidthPrice.Add(sectorDownloadBandwidthPrice)
-		sectorPrice := sectorStoragePrice.Add(sectorBandwidthPrice)
-		percentRemaining, _ := big.NewRat(0, 1).SetFrac(rc.RenterFunds.Big(), rc.TotalCost.Big()).Float64()
-		if rc.RenterFunds.Cmp(sectorPrice.Mul64(3)) < 0 || percentRemaining < MinContractFundRenewalThreshold {
-			// Renew the contract with double the amount of funds that the
-			// contract had previously. The reason that we double the funding
-			// instead of doing anything more clever is that we don't know what
-			// the usage pattern has been. The spending could have all occurred
-			// in one burst recently, and the user might need a contract that
-			// has substantially more money in it.
-			//
-			// We double so that heavily used contracts can grow in funding
-			// quickly without consuming too many transaction fees, however this
-			// does mean that a larger percentage of funds get locked away from
-			// the user in the event that the user stops uploading immediately
-			// after the renew.
-			refreshAmount := rc.TotalCost.Mul64(2)
-			minimum := renter.Allowance.Funds.MulFloat(fileContractMinimumFunding).Div64(renter.Allowance.Hosts)
-			if refreshAmount.Cmp(minimum) < 0 {
-				refreshAmount = minimum
-			}
-			refreshSet = append(refreshSet, fileContractRenewal{
-				id:           rc.ID,
-				amount:       refreshAmount,
-				renterPubKey: renter.PublicKey,
-				hostPubKey:   rc.HostPublicKey,
-			})
-			c.log.Println("Contract identified as needing to be refreshed:", rc.RenterFunds, sectorPrice.Mul64(3), percentRemaining, MinContractFundRenewalThreshold)
-		}
+		renewSet = append(renewSet, fileContractRenewal{
+			id:           rc.ID,
+			amount:       renewAmount,
+			renterPubKey: renter.PublicKey,
+			hostPubKey:   rc.HostPublicKey,
+		})
+		c.log.Println("Contract has been added to the renew set")
 	}
-	if len(renewSet) != 0 || len(refreshSet) != 0 {
-		c.log.Printf("renewing %v contracts and refreshing %v contracts\n", len(renewSet), len(refreshSet))
+	if len(renewSet) != 0 {
+		c.log.Printf("renewing %v contracts\n", len(renewSet))
 	}
 
 	// Go through the contracts we've assembled for renewal. Any contracts that
@@ -1440,80 +1381,14 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 			}
 		}
 	}
-	for _, renewal := range refreshSet {
-		// Return here if an interrupt or kill signal has been sent.
-		select {
-		case <-c.tg.StopChan():
-			c.log.Println("returning because the manager was stopped")
-			return nil, errors.New("the manager was stopped")
-		default:
-		}
-	
-		unlocked, err := c.wallet.Unlocked()
-		if !unlocked || err != nil {
-			c.log.Println("contractor is attempting to refresh contracts that have run out of funds, however the wallet is locked")
-			return nil, err
-		}
-
-		// Skip this renewal if we don't have enough funds remaining.
-		if renewal.amount.Cmp(fundsRemaining) > 0 {
-			c.log.Println("skipping refresh because there are not enough funds remaining in the allowance", renewal.id, renewal.amount.HumanString(), fundsRemaining.HumanString())
-			registerLowFundsAlert = true
-			continue
-		}
-
-		// Renew one contract. The error is ignored because the renew function
-		// already will have logged the error, and in the event of an error,
-		// 'fundsSpent' will return '0'.
-		fundsSpent, newContract, err := c.managedRenewContract(renewal, blockHeight, renter.ContractEndHeight())
-		if err != nil {
-			c.log.Println("Error refreshing a contract", renewal.id, err)
-			renewErr = errors.Compose(renewErr, err)
-			numRenewFails++
-		}
-		fundsRemaining = fundsRemaining.Sub(fundsSpent)
-
-		if err == nil {
-			// Lock the funds in the database.
-			funds, _ := fundsSpent.Float64()
-			hastings, _ := types.SiacoinPrecision.Float64()
-			amount := funds / hastings
-			err = c.satellite.LockSiacoins(renter.Email, amount)
-			if err != nil {
-				c.log.Println("ERROR: couldn't lock funds")
-			}
-
-			// Add this contract to the contractor and save.
-			contractSet = append(contractSet, newContract)
-			err = c.managedAcquireAndUpdateContractUtility(newContract.ID, smodules.ContractUtility{
-				GoodForUpload: true,
-				GoodForRenew:  true,
-			})
-			if err != nil {
-				c.log.Println("Failed to update the contract utilities", err)
-				continue
-			}
-			c.mu.Lock()
-			err = c.save()
-			c.mu.Unlock()
-			if err != nil {
-				c.log.Println("Unable to save the contractor:", err)
-			}
-		}
-	}
 
 	// Update the failed renew map so that it only contains contracts which we
-	// are currently trying to renew or refresh. The failed renew map is a map
-	// that we use to track how many times consecutively we failed to renew a
-	// contract with a host, so that we know if we need to abandon that host.
+	// are currently trying to renew. The failed renew map is a map that we
+	// use to track how many times consecutively we failed to renew a contract
+	// with a host, so that we know if we need to abandon that host.
 	c.mu.Lock()
 	newFirstFailedRenew := make(map[types.FileContractID]types.BlockHeight)
 	for _, r := range renewSet {
-		if _, exists := c.numFailedRenews[r.id]; exists {
-			newFirstFailedRenew[r.id] = c.numFailedRenews[r.id]
-		}
-	}
-	for _, r := range refreshSet {
 		if _, exists := c.numFailedRenews[r.id]; exists {
 			newFirstFailedRenew[r.id] = c.numFailedRenews[r.id]
 		}
