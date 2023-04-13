@@ -307,12 +307,13 @@ func (p *Portal) getPayments(email string) ([]userPayment, error) {
 func (p *Portal) createNewRenter(email string, pk types.SiaPublicKey) error {
 	_, err := p.db.Exec(`
 		INSERT INTO renters (email, public_key, current_period, funds, hosts,
-			renew_window, expected_storage, expected_upload, expected_download,
-			expected_redundancy, max_rpc_price, max_contract_price,
-			max_download_bandwidth_price, max_sector_access_price,
-			max_storage_price, max_upload_bandwidth_price)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, email, pk.String(), 0, "", 0, 0, 0, 0, 0, 0, "", "", "", "", "", "")
+			period, renew_window, expected_storage, expected_upload,
+			expected_download, min_shards, total_shards, max_rpc_price,
+			max_contract_price, max_download_bandwidth_price,
+			max_sector_access_price, max_storage_price,
+			max_upload_bandwidth_price, min_max_collateral, blockheight_leeway)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, pk.String(), 0, "", 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", 0)
 	if err != nil {
 		return err
 	}

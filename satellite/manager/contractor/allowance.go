@@ -35,9 +35,9 @@ var (
 	// ErrAllowanceZeroExpectedDownload is returned if the allowance's expected
 	// download is being set to zero when not cancelling the allowance.
 	ErrAllowanceZeroExpectedDownload = errors.New("expected download  must be non-zero")
-	// ErrAllowanceZeroExpectedRedundancy is returned if the allowance's expected
-	// redundancy is being set to zero when not cancelling the allowance.
-	ErrAllowanceZeroExpectedRedundancy = errors.New("expected redundancy must be non-zero")
+	// ErrAllowanceWrongRedundancy is returned if the allowance's redundancy
+	// parameters are being set to zero.
+	ErrAllowanceWrongRedundancy = errors.New("wrong redundancy params")
 	// ErrRenterNotFound is returned when no renter matches the provided public
 	// key.
 	ErrRenterNotFound = errors.New("no renter found with this public key")
@@ -72,8 +72,8 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 		return ErrAllowanceZeroExpectedUpload
 	} else if a.ExpectedDownload == 0 {
 		return ErrAllowanceZeroExpectedDownload
-	} else if a.ExpectedRedundancy == 0 {
-		return ErrAllowanceZeroExpectedRedundancy
+	} else if a.MinShards == 0 || a.TotalShards == 0 {
+		return ErrAllowanceWrongRedundancy
 	} else if !c.cs.Synced() {
 		return errAllowanceNotSynced
 	}

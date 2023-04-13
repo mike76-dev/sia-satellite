@@ -225,7 +225,8 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	a.ExpectedStorage = uint64(data.Storage * (1 << 30))
 	a.ExpectedUpload = uint64(data.Upload * (1 << 30))
 	a.ExpectedDownload = uint64(data.Download * (1 << 30))
-	a.ExpectedRedundancy = data.Redundancy
+	a.MinShards = uint64(10)
+	a.TotalShards = uint64(10 * data.Redundancy)
 	a.MaxRPCPrice = modules.MaxRPCPrice
 	a.MaxSectorAccessPrice = modules.MaxSectorAccessPrice
 	a.MaxContractPrice = types.SiacoinPrecision.MulFloat(data.MaxContractPrice / scRate)
@@ -273,9 +274,9 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	totalCollateral = totalCollateral.Mul64(a.ExpectedStorage * uint64(a.Period))
 
 	// Factor in redundancy.
-	totalStorageCost = totalStorageCost.MulFloat(a.ExpectedRedundancy)
-	totalUploadCost = totalUploadCost.MulFloat(a.ExpectedRedundancy)
-	totalCollateral = totalCollateral.MulFloat(a.ExpectedRedundancy)
+	totalStorageCost = totalStorageCost.Mul64(a.TotalShards).Div64(a.MinShards)
+	totalUploadCost = totalUploadCost.Mul64(a.TotalShards).Div64(a.MinShards)
+	totalCollateral = totalCollateral.Mul64(a.TotalShards).Div64(a.MinShards)
 
 	// Perform averages.
 	totalContractCost = totalContractCost.Div64(uint64(len(hosts)))

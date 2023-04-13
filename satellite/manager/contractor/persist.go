@@ -47,9 +47,10 @@ type renterData struct {
 	RenewWindow   uint64
 
 	ExpectedStorage    uint64
-	ExpectedUpload    uint64
+	ExpectedUpload     uint64
 	ExpectedDownload   uint64
-	ExpectedRedundancy float64
+	MinShards          uint64
+	TotalShards        uint64
 
 	MaxRPCPrice               string
 	MaxContractPrice          string
@@ -58,6 +59,7 @@ type renterData struct {
 	MaxStoragePrice           string
 	MaxUploadBandwidthPrice   string
 	MinMaxCollateral          string
+	BlockHeightLeeway         uint64
 }
 
 // persistData returns the data in the Contractor that will be saved to disk.
@@ -110,10 +112,10 @@ func (c *Contractor) load() error {
 	// Load the renters from the database.
 	rows, err := c.db.Query(`
 		SELECT email, public_key, current_period, funds, hosts, period, renew_window,
-			expected_storage, expected_upload, expected_download, expected_redundancy,
-			max_rpc_price, max_contract_price, max_download_bandwidth_price,
-			max_sector_access_price, max_storage_price, max_upload_bandwidth_price,
-			min_max_collateral
+			expected_storage, expected_upload, expected_download, min_shards,
+			total_shards, max_rpc_price, max_contract_price,
+			max_download_bandwidth_price, max_sector_access_price, max_storage_price,
+			max_upload_bandwidth_price, min_max_collateral, blockheight_leeway
 		FROM renters`)
 	if err != nil {
 		c.log.Println("ERROR: could not load the renters:", err)
@@ -123,7 +125,7 @@ func (c *Contractor) load() error {
 
 	var entry renterData
 	for rows.Next() {
-		if err := rows.Scan(&entry.Email, &entry.PublicKey, &entry.CurrentPeriod, &entry.Funds, &entry.Hosts, &entry.Period, &entry.RenewWindow, &entry.ExpectedStorage, &entry.ExpectedUpload, &entry.ExpectedDownload, &entry.ExpectedRedundancy, &entry.MaxRPCPrice, &entry.MaxContractPrice, &entry.MaxDownloadBandwidthPrice, &entry.MaxSectorAccessPrice, &entry.MaxStoragePrice, &entry.MaxUploadBandwidthPrice, &entry.MinMaxCollateral); err != nil {
+		if err := rows.Scan(&entry.Email, &entry.PublicKey, &entry.CurrentPeriod, &entry.Funds, &entry.Hosts, &entry.Period, &entry.RenewWindow, &entry.ExpectedStorage, &entry.ExpectedUpload, &entry.ExpectedDownload, &entry.MinShards, &entry.TotalShards, &entry.MaxRPCPrice, &entry.MaxContractPrice, &entry.MaxDownloadBandwidthPrice, &entry.MaxSectorAccessPrice, &entry.MaxStoragePrice, &entry.MaxUploadBandwidthPrice, &entry.MinMaxCollateral, &entry.BlockHeightLeeway); err != nil {
 			c.log.Println("ERROR: could not load the renter:", err)
 			continue
 		}
@@ -138,7 +140,8 @@ func (c *Contractor) load() error {
 				ExpectedStorage:    entry.ExpectedStorage,
 				ExpectedUpload:     entry.ExpectedUpload,
 				ExpectedDownload:   entry.ExpectedDownload,
-				ExpectedRedundancy: entry.ExpectedRedundancy,
+				MinShards:          entry.MinShards,
+				TotalShards:        entry.TotalShards,
 
 				MaxRPCPrice:               modules.ReadCurrency(entry.MaxRPCPrice),
 				MaxContractPrice:          modules.ReadCurrency(entry.MaxContractPrice),
@@ -147,6 +150,7 @@ func (c *Contractor) load() error {
 				MaxStoragePrice:           modules.ReadCurrency(entry.MaxStoragePrice),
 				MaxUploadBandwidthPrice:   modules.ReadCurrency(entry.MaxUploadBandwidthPrice),
 				MinMaxCollateral:          modules.ReadCurrency(entry.MinMaxCollateral),
+				BlockHeightLeeway:         types.BlockHeight(entry.BlockHeightLeeway),
 			},
 			CurrentPeriod: types.BlockHeight(entry.CurrentPeriod),
 			PublicKey:     modules.ReadPublicKey(entry.PublicKey),

@@ -199,8 +199,8 @@ func checkPriceGougingPT(a Allowance, height types.BlockHeight, txnFee types.Cur
 	if pt.HostBlockHeight < uint64(height) {
 		return fmt.Errorf("consensus not synced and host block height is lower, %v < %v", pt.HostBlockHeight, height)
 	} else {
-		min := height - types.BlockHeight(3) //TODO
-		max := height + types.BlockHeight(3) //TODO
+		min := height - a.BlockHeightLeeway
+		max := height + a.BlockHeightLeeway
 		if !(min <= types.BlockHeight(pt.HostBlockHeight) && types.BlockHeight(pt.HostBlockHeight) <= max) {
 			return fmt.Errorf("host block height is not within range, %v-%v %v", min, max, pt.HostBlockHeight)
 		}
@@ -243,12 +243,11 @@ func checkDownloadGouging(a Allowance, sectorDownloadPrice core.Currency) error 
 	if overflow {
 		return fmt.Errorf("overflow detected when computing download price per TiB")
 	}
-	totalShards := uint64(10 * a.ExpectedRedundancy) //TODO
-	downloadPriceTotalShards, overflow := dpptb.Mul64WithOverflow(totalShards)
+	downloadPriceTotalShards, overflow := dpptb.Mul64WithOverflow(a.TotalShards)
 	if overflow {
-		return fmt.Errorf("overflow detected when multiplying %v * %v in download gouging", dpptb, totalShards)
+		return fmt.Errorf("overflow detected when multiplying %v * %v in download gouging", dpptb, a.TotalShards)
 	}
-	downloadPrice := downloadPriceTotalShards.Div64(10) //TODO
+	downloadPrice := downloadPriceTotalShards.Div64(a.MinShards)
 	max, overflow := ConvertCurrency(a.MaxDownloadBandwidthPrice).Mul64WithOverflow(BytesPerTerabyte)
 	if overflow {
 		return fmt.Errorf("overflow detected when computing download price per TiB")
@@ -283,12 +282,11 @@ func checkUploadGouging(a Allowance, sectorUploadPricePerMonth core.Currency) er
 	if overflow {
 		return fmt.Errorf("overflow detected when computing upload price per TiB")
 	}
-	totalShards := uint64(10 * a.ExpectedRedundancy) //TODO
-	uploadPriceTotalShards, overflow := upptb.Mul64WithOverflow(totalShards)
+	uploadPriceTotalShards, overflow := upptb.Mul64WithOverflow(a.TotalShards)
 	if overflow {
-		return fmt.Errorf("overflow detected when multiplying %v * %v in upload gouging", upptb, totalShards)
+		return fmt.Errorf("overflow detected when multiplying %v * %v in upload gouging", upptb, a.TotalShards)
 	}
-	uploadPrice := uploadPriceTotalShards.Div64(10) //TODO
+	uploadPrice := uploadPriceTotalShards.Div64(a.MinShards)
 	max, overflow := ConvertCurrency(a.MaxUploadBandwidthPrice).Mul64WithOverflow(BytesPerTerabyte)
 	if overflow {
 		return fmt.Errorf("overflow detected when computing download price per TiB")

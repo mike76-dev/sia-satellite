@@ -77,7 +77,8 @@ Hosts:          %v
 Expected Storage:    %v
 Expected Upload:     %v
 Expected Download:   %v
-Expected Redundancy: %.1f
+Min Shards:          %v
+Total Shards:        %v
 
 Max RPC Price:           %v
 Max Contract Price:      %v
@@ -86,9 +87,10 @@ Max Sector Access Price: %v
 Max Storage Price:       %v
 Max Upload Price:        %v
 Min Max Collateral:      %v
+Block Height Leeway:     %v
 `, renter.PublicKey.String(), renter.Email, renter.CurrentPeriod, renter.Allowance.Period, renter.Allowance.RenewWindow, renter.Allowance.Hosts, smodules.FilesizeUnits(renter.Allowance.ExpectedStorage), smodules.FilesizeUnits(renter.Allowance.ExpectedUpload), smodules.FilesizeUnits(renter.Allowance.ExpectedDownload),
-renter.Allowance.ExpectedRedundancy, modules.CurrencyUnits(renter.Allowance.MaxRPCPrice), modules.CurrencyUnits(renter.Allowance.MaxContractPrice), modules.CurrencyUnits(renter.Allowance.MaxDownloadBandwidthPrice), modules.CurrencyUnits(renter.Allowance.MaxSectorAccessPrice), modules.CurrencyUnits(renter.Allowance.MaxStoragePrice), modules.CurrencyUnits(renter.Allowance.MaxUploadBandwidthPrice),
-modules.CurrencyUnits(renter.Allowance.MinMaxCollateral))
+renter.Allowance.MinShards, renter.Allowance.TotalShards, modules.CurrencyUnits(renter.Allowance.MaxRPCPrice), modules.CurrencyUnits(renter.Allowance.MaxContractPrice), modules.CurrencyUnits(renter.Allowance.MaxDownloadBandwidthPrice), modules.CurrencyUnits(renter.Allowance.MaxSectorAccessPrice), modules.CurrencyUnits(renter.Allowance.MaxStoragePrice), modules.CurrencyUnits(renter.Allowance.MaxUploadBandwidthPrice),
+modules.CurrencyUnits(renter.Allowance.MinMaxCollateral), renter.Allowance.BlockHeightLeeway)
 }
 
 // satellitebalancecmd is the handler for the command `satc satellite balance [public_key]`.

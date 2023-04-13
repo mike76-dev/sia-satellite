@@ -89,7 +89,7 @@ func (rc *RenterContract) Size() uint64 {
 
 // Renter holds the data related to the specific renter.
 type Renter struct {
-	Allowance     Allowance  `json:"allowance"`
+	Allowance     Allowance          `json:"allowance"`
 	CurrentPeriod types.BlockHeight  `json:"currentperiod"`
 	PublicKey     types.SiaPublicKey `json:"publickey"`
 	Email         string             `json:"email"` // Link to the user account.
@@ -163,20 +163,22 @@ type Allowance struct {
 	// API per block.
 	ExpectedDownload uint64 `json:"expecteddownload"`
 
-	// ExpectedRedundancy is the average redundancy of files being uploaded.
-	ExpectedRedundancy float64 `json:"expectedredundancy"`
+	// Erasure coding parameters.
+	MinShards   uint64 `json:"minshards"`
+	TotalShards uint64 `json:"totalshards"`
 
 	// The following fields provide price gouging protection for the user. By
 	// setting a particular maximum price for each mechanism that a host can use
 	// to charge users, the workers know to avoid hosts that go outside of the
 	// safety range.
-	MaxRPCPrice               types.Currency `json:"maxrpcprice"`
-	MaxContractPrice          types.Currency `json:"maxcontractprice"`
-	MaxDownloadBandwidthPrice types.Currency `json:"maxdownloadbandwidthprice"`
-	MaxSectorAccessPrice      types.Currency `json:"maxsectoraccessprice"`
-	MaxStoragePrice           types.Currency `json:"maxstorageprice"`
-	MaxUploadBandwidthPrice   types.Currency `json:"maxuploadbandwidthprice"`
-	MinMaxCollateral          types.Currency `json:"minmaxcollateral"`
+	MaxRPCPrice               types.Currency    `json:"maxrpcprice"`
+	MaxContractPrice          types.Currency    `json:"maxcontractprice"`
+	MaxDownloadBandwidthPrice types.Currency    `json:"maxdownloadbandwidthprice"`
+	MaxSectorAccessPrice      types.Currency    `json:"maxsectoraccessprice"`
+	MaxStoragePrice           types.Currency    `json:"maxstorageprice"`
+	MaxUploadBandwidthPrice   types.Currency    `json:"maxuploadbandwidthprice"`
+	MinMaxCollateral          types.Currency    `json:"minmaxcollateral"`
+	BlockHeightLeeway         types.BlockHeight `json:"blockheightleeway"`
 }
 
 // DefaultAllowance is the set of default allowance settings that will be
@@ -190,7 +192,9 @@ var DefaultAllowance = Allowance{
 	ExpectedStorage:    1e12,                                         // 1 TB
 	ExpectedUpload:     uint64(200e9) / uint64(types.BlocksPerMonth), // 200 GB per month
 	ExpectedDownload:   uint64(100e9) / uint64(types.BlocksPerMonth), // 100 GB per month
-	ExpectedRedundancy: 3.0,                                          // default is 10/30 erasure coding
+	MinShards:          10,
+	TotalShards:        30,
+	BlockHeightLeeway:  types.BlockHeight(3),
 }
 
 // Active returns true if and only if this allowance has been set in the

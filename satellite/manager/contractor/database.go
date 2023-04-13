@@ -13,11 +13,12 @@ func (c *Contractor) UpdateRenter(renter modules.Renter) error {
 		UPDATE renters
 		SET current_period = ?, funds = ?, hosts = ?, period = ?, renew_window = ?,
 			expected_storage = ?, expected_upload = ?, expected_download = ?,
-			expected_redundancy = ?, max_rpc_price = ?, max_contract_price = ?,
+			min_shards = ?, total_shards = ?, max_rpc_price = ?, max_contract_price = ?,
 			max_download_bandwidth_price = ?, max_sector_access_price = ?,
-			max_storage_price = ?, max_upload_bandwidth_price = ?, min_max_collateral = ?
+			max_storage_price = ?, max_upload_bandwidth_price = ?, min_max_collateral = ?,
+			blockheight_leeway = ?
 		WHERE email = ?
-	`, uint64(renter.CurrentPeriod), renter.Allowance.Funds.String(), renter.Allowance.Hosts, uint64(renter.Allowance.Period), uint64(renter.Allowance.RenewWindow), renter.Allowance.ExpectedStorage, renter.Allowance.ExpectedUpload, renter.Allowance.ExpectedDownload, renter.Allowance.ExpectedRedundancy, renter.Allowance.MaxRPCPrice.String(), renter.Allowance.MaxContractPrice.String(), renter.Allowance.MaxDownloadBandwidthPrice.String(), renter.Allowance.MaxSectorAccessPrice.String(), renter.Allowance.MaxStoragePrice.String(), renter.Allowance.MaxUploadBandwidthPrice.String(), renter.Allowance.MinMaxCollateral.String(), renter.Email)
+	`, uint64(renter.CurrentPeriod), renter.Allowance.Funds.String(), renter.Allowance.Hosts, uint64(renter.Allowance.Period), uint64(renter.Allowance.RenewWindow), renter.Allowance.ExpectedStorage, renter.Allowance.ExpectedUpload, renter.Allowance.ExpectedDownload, renter.Allowance.MinShards, renter.Allowance.TotalShards, renter.Allowance.MaxRPCPrice.String(), renter.Allowance.MaxContractPrice.String(), renter.Allowance.MaxDownloadBandwidthPrice.String(), renter.Allowance.MaxSectorAccessPrice.String(), renter.Allowance.MaxStoragePrice.String(), renter.Allowance.MaxUploadBandwidthPrice.String(), renter.Allowance.MinMaxCollateral.String(), uint64(renter.Allowance.BlockHeightLeeway), renter.Email)
 	return err
 }
 

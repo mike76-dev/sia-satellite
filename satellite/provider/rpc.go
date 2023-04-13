@@ -222,7 +222,8 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 		ExpectedStorage:    fr.Storage,
 		ExpectedUpload:     fr.Upload,
 		ExpectedDownload:   fr.Download,
-		ExpectedRedundancy: float64(fr.TotalShards / fr.MinShards),
+		MinShards:          fr.MinShards,
+		TotalShards:        fr.TotalShards,
 
 		MaxRPCPrice:               types.NewCurrency(fr.MaxRPCPrice.Big()),
 		MaxContractPrice:          types.NewCurrency(fr.MaxContractPrice.Big()),
@@ -231,6 +232,7 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 		MaxStoragePrice:           types.NewCurrency(fr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
 		MaxUploadBandwidthPrice:   types.NewCurrency(fr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
 		MinMaxCollateral:          types.NewCurrency(fr.MinMaxCollateral.Big()),
+		BlockHeightLeeway:         types.BlockHeight(fr.BlockHeightLeeway),
 	}
 
 	// Form the contracts.
@@ -327,7 +329,8 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 		ExpectedStorage:    rr.Storage,
 		ExpectedUpload:     rr.Upload,
 		ExpectedDownload:   rr.Download,
-		ExpectedRedundancy: float64(rr.TotalShards / rr.MinShards),
+		MinShards:          rr.MinShards,
+		TotalShards:        rr.TotalShards,
 
 		MaxRPCPrice:               types.NewCurrency(rr.MaxRPCPrice.Big()),
 		MaxContractPrice:          types.NewCurrency(rr.MaxContractPrice.Big()),
@@ -336,6 +339,7 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 		MaxStoragePrice:           types.NewCurrency(rr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
 		MaxUploadBandwidthPrice:   types.NewCurrency(rr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
 		MinMaxCollateral:          types.NewCurrency(rr.MinMaxCollateral.Big()),
+		BlockHeightLeeway:         types.BlockHeight(rr.BlockHeightLeeway),
 	}
 
 	// Renew the contracts.

@@ -432,8 +432,8 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	totalUploadCost = totalUploadCost.Mul64(allowance.ExpectedUpload).Div64(uint64(allowance.Period))
 
 	// Factor in redundancy.
-	totalStorageCost = totalStorageCost.MulFloat(allowance.ExpectedRedundancy)
-	totalUploadCost = totalUploadCost.MulFloat(allowance.ExpectedRedundancy)
+	totalStorageCost = totalStorageCost.Mul64(allowance.TotalShards).Div64(allowance.MinShards)
+	totalUploadCost = totalUploadCost.Mul64(allowance.TotalShards).Div64(allowance.MinShards)
 
 	// Perform averages.
 	totalContractCost = totalContractCost.Div64(uint64(len(hosts)))

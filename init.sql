@@ -112,7 +112,8 @@ CREATE TABLE renters (
 	expected_storage             BIGINT UNSIGNED NOT NULL,
 	expected_upload              BIGINT UNSIGNED NOT NULL,
 	expected_download            BIGINT UNSIGNED NOT NULL,
-	expected_redundancy          DOUBLE NOT NULL,
+	min_shards                   BIGINT UNSIGNED NOT NULL,
+	total_shards                 BIGINT UNSIGNED NOT NULL,
 	max_rpc_price                VARCHAR(64) NOT NULL,
 	max_contract_price           VARCHAR(64) NOT NULL,
 	max_download_bandwidth_price VARCHAR(64) NOT NULL,
@@ -120,6 +121,7 @@ CREATE TABLE renters (
 	max_storage_price            VARCHAR(64) NOT NULL,
 	max_upload_bandwidth_price   VARCHAR(64) NOT NULL,
 	min_max_collateral           VARCHAR(64) NOT NULL,
+	blockheight_leeway           BIGINT UNSIGNED NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );

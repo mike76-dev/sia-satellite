@@ -126,14 +126,17 @@ func (hdb *HostDB) collateralAdjustments(entry smodules.HostDBEntry, allowance m
 	if allowance.ExpectedDownload == 0 {
 		allowance.ExpectedDownload = 1
 	}
-	if allowance.ExpectedRedundancy == 0 {
-		allowance.ExpectedRedundancy = 1
+	if allowance.MinShards == 0 {
+		allowance.MinShards = 1
+	}
+	if allowance.TotalShards == 0 {
+		allowance.TotalShards = 1
 	}
 
 	// Convert each element of the allowance into a number of resources that we
 	// expect to use in this contract.
 	contractExpectedFunds := allowance.Funds.Div64(allowance.Hosts)
-	contractExpectedStorage := uint64(float64(allowance.ExpectedStorage) * allowance.ExpectedRedundancy / float64(allowance.Hosts))
+	contractExpectedStorage := uint64(float64(allowance.ExpectedStorage) / float64(allowance.Hosts)) * allowance.TotalShards / allowance.MinShards
 	contractExpectedStorageTime := types.NewCurrency64(contractExpectedStorage).Mul64(uint64(allowance.Period))
 
 	// Ensure that the allowance and expected storage will not brush up against
@@ -259,17 +262,20 @@ func (hdb *HostDB) priceAdjustments(entry smodules.HostDBEntry, allowance module
 	if allowance.ExpectedDownload == 0 {
 		allowance.ExpectedDownload = 1
 	}
-	if allowance.ExpectedRedundancy == 0 {
-		allowance.ExpectedRedundancy = 1
+	if allowance.MinShards == 0 {
+		allowance.MinShards = 1
+	}
+	if allowance.TotalShards == 0 {
+		allowance.TotalShards = 1
 	}
 
 	// Convert each element of the allowance into a number of resources that we
 	// expect to use in this contract.
 	contractExpectedDownload := types.NewCurrency64(allowance.ExpectedDownload).Mul64(uint64(allowance.Period)).Div64(allowance.Hosts)
 	contractExpectedFunds := allowance.Funds.Div64(allowance.Hosts)
-	contractExpectedStorage := uint64(float64(allowance.ExpectedStorage) * allowance.ExpectedRedundancy / float64(allowance.Hosts))
+	contractExpectedStorage := uint64(float64(allowance.ExpectedStorage) / float64(allowance.Hosts)) * allowance.TotalShards / allowance.MinShards
 	contractExpectedStorageTime := types.NewCurrency64(contractExpectedStorage).Mul64(uint64(allowance.Period))
-	contractExpectedUpload := types.NewCurrency64(allowance.ExpectedUpload).Mul64(uint64(allowance.Period)).MulFloat(allowance.ExpectedRedundancy).Div64(allowance.Hosts)
+	contractExpectedUpload := types.NewCurrency64(allowance.ExpectedUpload).Mul64(uint64(allowance.Period)).Mul64(allowance.TotalShards).Div64(allowance.MinShards).Div64(allowance.Hosts)
 
 	// Get the extra costs expected for downloads and uploads from the sector access
 	// price and base price.
@@ -363,11 +369,17 @@ func (hdb *HostDB) storageRemainingAdjustments(entry smodules.HostDBEntry, allow
 	if allowance.Hosts == 0 {
 		allowance.Hosts = 1
 	}
+	if allowance.MinShards == 0 {
+		allowance.MinShards = 1
+	}
+	if allowance.TotalShards == 0 {
+		allowance.TotalShards = 1
+	}
 
 	// idealDataPerHost is the amount of data that we would have to put on each
 	// host assuming that our storage requirements were spread evenly across
 	// every single host.
-	idealDataPerHost := float64(allowance.ExpectedStorage) * allowance.ExpectedRedundancy / float64(allowance.Hosts)
+	idealDataPerHost := float64(allowance.ExpectedStorage) * float64(allowance.TotalShards / allowance.MinShards) / float64(allowance.Hosts)
 	// allocationPerHost is the amount of data that we would like to be able to
 	// put on each host, because data is not always spread evenly across the
 	// hosts during upload. Slower hosts may get very little data, more
