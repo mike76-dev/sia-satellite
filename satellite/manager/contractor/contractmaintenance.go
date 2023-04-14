@@ -1028,28 +1028,12 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 	}()
 
 	// Check if the renter has enough contracts according to their allowance.
-	var fundsRemaining types.Currency
+	fundsRemaining := renter.Allowance.Funds
 	numHosts := renter.Allowance.Hosts
 	if numHosts == 0 {
 		return nil, errors.New("zero number of hosts specified")
 	}
 	endHeight := blockHeight + renter.Allowance.Period + renter.Allowance.RenewWindow
-
-	// Depend on the PeriodSpending function to get a breakdown of spending in
-	// the contractor. Then use that to determine how many funds remain
-	// available in the allowance.
-	spending, err := c.PeriodSpending(renter.PublicKey)
-	if err != nil {
-		// This should only error if the contractor is shutting down.
-		return nil, err
-	}
-
-	// Check for an underflow. This can happen if the user reduced their
-	// allowance at some point to less than what we've already spent.
-	fundsRemaining = renter.Allowance.Funds
-	if spending.TotalAllocated.Cmp(fundsRemaining) < 0 {
-		fundsRemaining = fundsRemaining.Sub(spending.TotalAllocated)
-	}
 
 	// Create the contract set.
 	neededContracts := int(renter.Allowance.Hosts)
@@ -1156,7 +1140,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 		amount := funds / hastings
 		err = c.satellite.LockSiacoins(renter.Email, amount)
 		if err != nil {
-			c.log.Println("ERROR: couldn't lock funds")
+			c.log.Println("ERROR: couldn't lock funds:", err)
 		}
 
 		// Add this contract to the contractor and save.
