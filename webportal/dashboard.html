@@ -78,29 +78,13 @@
 					<section>
 						<div class="contracts-checkbox-container">
 							<div>
-								<input id="contracts-active" type="checkbox" checked
+								<input id="contracts-current" type="checkbox" checked
 									onchange="contractsChanged()">
-								<label for="contracts-active">Active</label>
+								<label for="contracts-current">Current</label>
 							</div>
 							<div>
-								<input id="contracts-passive" type="checkbox" onchange="contractsChanged()">
-								<label for="contracts-passive">Passive</label>
-							</div>
-							<div>
-								<input id="contracts-refreshed" type="checkbox" onchange="contractsChanged()">
-								<label for="contracts-refreshed">Refreshed</label>
-							</div>
-							<div>
-								<input id="contracts-disabled" type="checkbox" onchange="contractsChanged()">
-								<label for="contracts-disabled">Disabled</label>
-							</div>
-							<div>
-								<input id="contracts-expired" type="checkbox" onchange="contractsChanged()">
-								<label for="contracts-expired">Expired</label>
-							</div>
-							<div>
-								<input id="contracts-exref" type="checkbox" onchange="contractsChanged()">
-								<label for="contracts-exref">Expired/Refreshed</label>
+								<input id="contracts-old" type="checkbox" onchange="contractsChanged()">
+								<label for="contracts-old">Old</label>
 							</div>
 						</div>
 						<p id="contracts-empty">No contracts found.</p>

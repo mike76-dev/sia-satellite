@@ -742,19 +742,15 @@ function expandContract(e) {
 }
 
 function getContracts() {
-	let active = document.getElementById('contracts-active').checked;
-	let passive = document.getElementById('contracts-passive').checked;
-	let refreshed = document.getElementById('contracts-refreshed').checked;
-	let disabled = document.getElementById('contracts-disabled').checked;
-	let expired = document.getElementById('contracts-expired').checked;
-	let exref = document.getElementById('contracts-exref').checked;
+	let current = document.getElementById('contracts-current').checked;
+	let old = document.getElementById('contracts-old').checked;
 	let options = {
 		method: 'GET',
 		headers: {
 			'Content-Type': 'application/json;charset=utf-8'
 		}
 	}
-	fetch(apiBaseURL + '/dashboard/contracts?&active=' + active + '&passive=' + passive + '&refreshed=' + refreshed + '&disabled=' + disabled + '&expired=' + expired + '&expired-refreshed=' + exref, options)
+	fetch(apiBaseURL + '/dashboard/contracts?&current=' + current + '&old=' + old, options)
 		.then(response => response.json())
 		.then(data => {
 			if (!data) {
