@@ -638,3 +638,31 @@ func (api *portalAPI) getContracts(renter modules.Renter, ac, ps, rf, ds, ex, er
 func (api *portalAPI) blockHeightHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	writeJSON(w, struct{Height uint64 `json:"height"`}{Height: uint64(api.portal.satellite.BlockHeight())})
 }
+
+// spendingsHandlerGET handles the GET /dashboard/spendings requests.
+func (api *portalAPI) spendingsHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Retrieve the spendings from the database.
+	currency := req.FormValue("currency")
+	if currency == "" {
+		currency = "USD"
+	}
+	var us *modules.UserSpendings
+	if us, err = api.portal.satellite.RetrieveSpendings(email, currency); err != nil {
+		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+		writeError(w,
+			Error{
+				Code: httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, us)
+}

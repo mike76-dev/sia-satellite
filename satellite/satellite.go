@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/mike76-dev/sia-satellite/satellite/manager"
 	"github.com/mike76-dev/sia-satellite/satellite/provider"
@@ -33,6 +34,12 @@ var (
 	errNilGateway = errors.New("satellite cannot use nil gateway")
 )
 
+// blockHeightTimestamp combines the block height and the time.
+type blockHeightTimestamp struct {
+	BlockHeight types.BlockHeight `json:"blockheight"`
+	Timestamp   uint64            `json:"timestamp"`
+}
+
 // A Satellite contains the information necessary to communicate both with
 // the renters and with the hosts.
 type Satellite struct {
@@ -48,6 +55,10 @@ type Satellite struct {
 	secretKey crypto.SecretKey
 	exchRates map[string]float64
 	scusdRate float64
+
+	// Block heights at the start of the current and the previous months.
+	currentMonth blockHeightTimestamp
+	prevMonth    blockHeightTimestamp
 
 	// Submodules.
 	m *manager.Manager
@@ -77,43 +88,55 @@ func (s *Satellite) SecretKey() crypto.SecretKey {
 }
 
 // New returns an initialized Satellite.
-func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, db *sql.DB, mux *siamux.SiaMux, satelliteAddr string, persistDir string) (*Satellite, error) {
+func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, db *sql.DB, mux *siamux.SiaMux, satelliteAddr string, persistDir string) (*Satellite, <-chan error) {
+	errChan := make(chan error, 1)
+	defer close(errChan)
+
 	// Check that all the dependencies were provided.
 	if db == nil {
-		return nil, errNilDB
+		errChan <- errNilDB
+		return nil, errChan
 	}
 	if mux == nil {
-		return nil, errNilSMux
+		errChan <- errNilSMux
+		return nil, errChan
 	}
 	if cs == nil {
-		return nil, errNilCS
+		errChan <- errNilCS
+		return nil, errChan
 	}
 	if g == nil {
-		return nil, errNilGateway
+		errChan <- errNilGateway
+		return nil, errChan
 	}
 	if tpool == nil {
-		return nil, errNilTpool
+		errChan <- errNilTpool
+		return nil, errChan
 	}
 	if wallet == nil {
-		return nil, errNilWallet
+		errChan <- errNilWallet
+		return nil, errChan
 	}
 
 	// Create the perist directory if it does not yet exist.
 	err := os.MkdirAll(persistDir, 0700)
 	if err != nil {
-		return nil, err
+		errChan <- err
+		return nil, errChan
 	}
 
 	// Create the manager.
 	m, errChanM := manager.New(cs, g, tpool, wallet, db, mux, persistDir)
 	if err = smodules.PeekErr(errChanM); err != nil {
-		return nil, errors.AddContext(err, "unable to create manager")
+		errChan <- errors.AddContext(err, "unable to create manager")
+		return nil, errChan
 	}
 
 	// Create the provider.
 	p, errChanP := provider.New(g, satelliteAddr, persistDir)
 	if err = smodules.PeekErr(errChanP); err != nil {
-		return nil, errors.AddContext(err, "unable to create provider")
+		errChan <- errors.AddContext(err, "unable to create provider")
+		return nil, errChan 
 	}
 
 	// Create the satellite object.
@@ -137,15 +160,16 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 
 	// Call stop in the event of a partial startup.
 	defer func() {
-		if err != nil {
-			err = errors.Compose(s.threads.Stop(), err)
+		if err = smodules.PeekErr(errChan); err != nil {
+			errChan <- errors.Compose(s.threads.Stop(), err)
 		}
 	}()
 
 	// Create the logger.
 	s.log, err = persist.NewFileLogger(filepath.Join(s.persistDir, logFile))
 	if err != nil {
-		return nil, err
+		errChan <- err
+		return nil, errChan
 	}
 	// Establish the closing of the logger.
 	s.threads.AfterStop(func() {
@@ -160,8 +184,8 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 
 	// Load the satellite persistence.
 	if loadErr := s.load(); loadErr != nil && !os.IsNotExist(loadErr) {
-		err = errors.AddContext(loadErr, "unable to load satellite")
-		return nil, err
+		errChan <- errors.AddContext(loadErr, "unable to load satellite")
+		return nil, errChan
 	}
 
 	// Make sure that the satellite saves on shutdown.
@@ -178,7 +202,25 @@ func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.Transactio
 	go s.threadedFetchExchangeRates()
 	go s.threadedFetchSCUSDRate()
 
-	return s, nil
+	// Unsubscribe from the consensus set upon shutdown.
+	s.threads.AfterStop(func() {
+		cs.Unsubscribe(s)
+	})
+
+	// Subscribe to the consensus set in a separate goroutine.
+	go func() {
+		if err := s.threads.Add(); err != nil {
+			errChan <- err
+			return
+		}
+		defer s.threads.Done()
+		err := cs.ConsensusSetSubscribe(s, smodules.ConsensusChangeRecent, s.threads.StopChan())
+		if err != nil {
+			errChan <- err
+		}
+	}()
+
+	return s, errChan
 }
 
 // ActiveHosts calls Manager.ActiveHosts.
@@ -375,6 +417,49 @@ func (s *Satellite) WalletSeed() (seed smodules.Seed, err error) {
 // from, if any.
 func (s *Satellite) RenewedFrom(fcid types.FileContractID) types.FileContractID {
 	return s.m.RenewedFrom(fcid)
+}
+
+// ProcessConsensusChange updates the blockheight timestamps.
+func (s *Satellite) ProcessConsensusChange(cc smodules.ConsensusChange) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Process the applied blocks till the first found in the following month.
+	currentMonth := time.Unix(int64(s.currentMonth.Timestamp), 0).Month()
+	for _, block := range cc.AppliedBlocks {
+		newMonth := time.Unix(int64(block.Timestamp), 0).Month()
+		if newMonth != currentMonth {
+			s.prevMonth = s.currentMonth
+			s.currentMonth = blockHeightTimestamp{
+				BlockHeight: cc.BlockHeight,
+				Timestamp:   uint64(block.Timestamp),
+			}
+			err := s.saveSync()
+			if err != nil {
+				s.log.Println("ERROR: couldn't save satellite")
+			}
+
+			// Move the current spendings of each renter to the previous ones.
+			renters := s.Renters()
+			for _, renter := range renters {
+				us, err := s.getSpendings(renter.Email)
+				if err == nil {
+					us.PrevLocked = us.CurrentLocked
+					us.PrevUsed = us.CurrentUsed
+					us.PrevOverhead = us.CurrentOverhead
+					us.CurrentLocked = 0
+					us.CurrentUsed = 0
+					us.CurrentOverhead = 0
+					err = s.updateSpendings(renter.Email, *us)
+					if err != nil {
+						s.log.Println("ERROR: couldn't update spendings")
+					}
+				}
+			}
+
+			break
+		}
+	}
 }
 
 // enforce that Satellite satisfies the modules.Satellite interface

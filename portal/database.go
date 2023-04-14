@@ -122,9 +122,10 @@ func (p *Portal) threadedPruneUnverifiedAccounts() {
 // deleteAccount deletes the user account from the database.
 func (p *Portal) deleteAccount(email string) error {
 	_, err0 := p.db.Exec("DELETE FROM renters WHERE email = ?", email)
-	_, err1 := p.db.Exec("DELETE FROM payments WHERE email = ?", email)
-	_, err2 := p.db.Exec("DELETE FROM balances WHERE email = ?", email)
-	_, err3 := p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
+	_, err1 := p.db.Exec("DELETE FROM spendings WHERE email = ?", email)
+	_, err2 := p.db.Exec("DELETE FROM payments WHERE email = ?", email)
+	_, err3 := p.db.Exec("DELETE FROM balances WHERE email = ?", email)
+	_, err4 := p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
 	if err0 != nil {
 		return err0
 	}
@@ -134,7 +135,10 @@ func (p *Portal) deleteAccount(email string) error {
 	if err2 != nil {
 		return err2
 	}
-	return err3
+	if err3 != nil {
+		return err3
+	}
+	return err4
 }
 
 // flushPendingPayments removes any pending payments for the given

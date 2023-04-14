@@ -494,7 +494,7 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 	amount := payout / hastings
 	total := cost / hastings
 
-	err = c.satellite.UnlockSiacoins(renter.Email, amount, total)
+	err = c.satellite.UnlockSiacoins(renter.Email, amount, total, contract.StartHeight)
 	if err != nil {
 		c.log.Println("ERROR: unable to unlock funds:", err)
 	}

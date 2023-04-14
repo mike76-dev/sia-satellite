@@ -173,8 +173,8 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	if err := os.MkdirAll(satDir, 0700); err != nil {
 		return nil, errChan
 	}
-	s, err := satellite.New(cs, g, tp, w, db, mux, config.SatelliteAddr, satDir)
-	if err != nil {
+	s, errChanS := satellite.New(cs, g, tp, w, db, mux, config.SatelliteAddr, satDir)
+	if err := smodules.PeekErr(errChanS); err != nil {
 		errChan <- errors.Extend(err, errors.New("unable to create satellite"))
 		return nil, errChan
 	}

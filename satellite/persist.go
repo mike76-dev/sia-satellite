@@ -36,6 +36,10 @@ type (
 		// Satellite identity.
 		PublicKey   types.SiaPublicKey `json:"publickey"`
 		SecretKey   crypto.SecretKey   `json:"secretkey"`
+
+		// Block height timestamps.
+		CurrentMonth blockHeightTimestamp `json:"currentmonth"`
+		PrevMonth    blockHeightTimestamp `json:"prevmonth"`
 	}
 )
 
@@ -72,9 +76,11 @@ func (s *Satellite) load() error {
 		s.establishDefaults()
 		return errors.AddContext(err, "failed to load satellite persistence")
 	}
-	// Copy over the identity.
+	// Copy over the data.
 	s.publicKey = s.persist.PublicKey
 	s.secretKey = s.persist.SecretKey
+	s.currentMonth = s.persist.CurrentMonth
+	s.prevMonth = s.persist.PrevMonth
 
 	return nil
 }
@@ -83,8 +89,10 @@ func (s *Satellite) load() error {
 // disk to minimize the possibility of data loss.
 func (s *Satellite) saveSync() error {
 	p := persistence{
-		PublicKey: s.publicKey,
-		SecretKey: s.secretKey,
+		PublicKey:    s.publicKey,
+		SecretKey:    s.secretKey,
+		CurrentMonth: s.currentMonth,
+		PrevMonth:    s.prevMonth,
 	}
 	return persist.SaveJSON(persistMetadata, p, filepath.Join(s.persistDir, persistFilename))
 }

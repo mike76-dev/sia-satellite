@@ -8,6 +8,8 @@ const specialChars = [
 	'\\', '|', ',', '.', '<', '>', '/', '?'
 ];
 
+const month = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 if (!navigator.cookieEnabled || getCookie('satellite') == '') {
 	let i = window.location.href.lastIndexOf('/');
 	window.location.replace(window.location.href.slice(0, i) + '/rent.html');
@@ -97,6 +99,9 @@ function setActiveMenuIndex(ind) {
 	clearErrors();
 	if (ind == 1) {
 		getContracts();
+	}
+	if (ind == 2) {
+		getSpendings();
 	}
 	if (ind == 4) {
 		getPayments();
@@ -323,8 +328,10 @@ function retrieveBalance() {
 			if (data.code) console.log(data)
 			else {
 				let b = document.getElementById('balance');
+				let l = document.getElementById('locked');
 				let c = data.currency == '' ? 'USD' : data.currency;
 				b.innerHTML = data.balance.toFixed(2) + ' ' + c;
+				l.innerHTML = data.locked.toFixed(2) + ' ' + c;
 				if (averages.currency != c) {
 					averages.currency = c;
 					retrieveAverages();
@@ -850,4 +857,43 @@ function sortByContractEnd() {
 	}
 	expandedContract = -1;
 	renderContracts();
+}
+
+function getSpendings() {
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/spendings?currency=' + averages.currency, options)
+		.then(response => response.json())
+		.then(data => {
+			if (data.code) {
+				console.log(data);
+			} else {
+				const date = new Date();
+				let cm = date.getMonth();
+				let cy = date.getFullYear();
+				let pm = cm > 0 ? cm - 1 : 11;
+				let py = cm > 0 ? cy : cy - 1;
+				let c = document.getElementById('spendings-current');
+				let p = document.getElementById('spendings-prev');
+				let cl = document.getElementById('spendings-current-locked');
+				let cu = document.getElementById('spendings-current-used');
+				let co = document.getElementById('spendings-current-overhead');
+				let pl = document.getElementById('spendings-prev-locked');
+				let pu = document.getElementById('spendings-prev-used');
+				let po = document.getElementById('spendings-prev-overhead');
+				c.innerHTML = month[cm] + ' ' + cy;
+				p.innerHTML = month[pm] + ' ' + py;
+				cl.innerHTML = data.currentlocked.toFixed(2) + ' ' + averages.currency;
+				cu.innerHTML = data.currentused.toFixed(2) + ' ' + averages.currency;
+				co.innerHTML = data.currentoverhead.toFixed(2) + ' ' + averages.currency;
+				pl.innerHTML = data.prevlocked.toFixed(2) + ' ' + averages.currency;
+				pu.innerHTML = data.prevused.toFixed(2) + ' ' + averages.currency;
+				po.innerHTML = data.prevoverhead.toFixed(2) + ' ' + averages.currency;
+			}
+		})
+		.catch(error => console.log(error));
 }

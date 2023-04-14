@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+
+	"go.sia.tech/siad/types"
 )
 
 // GetBalance retrieves the balance information on the account.
@@ -98,11 +100,27 @@ func (s *Satellite) LockSiacoins(email string, amount float64) error {
 	ub.Balance -= locked
 
 	// Save the new balance.
-	return s.UpdateBalance(email, ub)
+	err = s.UpdateBalance(email, ub)
+	if err != nil {
+		return err
+	}
+
+	// Update the spendings.
+	s.mu.Lock()
+	rate := s.scusdRate
+	s.mu.Unlock()
+	us, err := s.getSpendings(email)
+	if err != nil {
+		return err
+	}
+	us.CurrentLocked += amount * rate
+	us.CurrentOverhead += (modules.SatelliteOverhead - 1) * amount * rate
+
+	return s.updateSpendings(email, *us)
 }
 
 // UnlockSiacoins implements FundLocker interface.
-func (s *Satellite) UnlockSiacoins(email string, amount, total float64) error {
+func (s *Satellite) UnlockSiacoins(email string, amount, total float64, height types.BlockHeight) error {
 	// Sanity check.
 	if amount <= 0 || total <= 0 || amount > total {
 		return errors.New("wrong amount")
@@ -137,5 +155,137 @@ func (s *Satellite) UnlockSiacoins(email string, amount, total float64) error {
 	ub.Balance += unlocked
 
 	// Save the new balance.
-	return s.UpdateBalance(email, ub)
+	err = s.UpdateBalance(email, ub)
+	if err != nil {
+		return err
+	}
+
+	// Update the spendings.
+	s.mu.Lock()
+	rate := s.scusdRate
+	prevMonth := s.prevMonth.BlockHeight
+	currentMonth := s.currentMonth.BlockHeight
+	s.mu.Unlock()
+	if height < prevMonth {
+		// Spending outside the reporting period.
+		return nil
+	}
+	unlockedUSD := amount * rate
+	burnedUSD := (totalWithFee - amount) * rate
+	us, err := s.getSpendings(email)
+	if err != nil {
+		return err
+	}
+	if height < currentMonth {
+		if unlockedUSD + burnedUSD > us.PrevLocked {
+			s.log.Println("WARN: trying to unlock more than the locked balance")
+			if burnedUSD < us.PrevLocked {
+				unlockedUSD = us.PrevLocked - burnedUSD
+			} else {
+				burnedUSD = us.PrevLocked
+				unlockedUSD = 0
+			}
+		}
+		us.PrevLocked -= (unlockedUSD + burnedUSD)
+		us.PrevUsed += burnedUSD
+	} else {
+		if unlockedUSD + burnedUSD > us.CurrentLocked {
+			s.log.Println("WARN: trying to unlock more than the locked balance")
+			if burnedUSD < us.CurrentLocked {
+				unlockedUSD = us.CurrentLocked - burnedUSD
+			} else {
+				burnedUSD = us.CurrentLocked
+				unlockedUSD = 0
+			}
+		}
+		us.CurrentLocked -= (unlockedUSD + burnedUSD)
+		us.CurrentUsed += burnedUSD
+	}
+
+	return s.updateSpendings(email, *us)
+}
+
+// getSpendings retrieves the user's spendings.
+func (s *Satellite) getSpendings(email string) (*modules.UserSpendings, error) {
+	var currLocked, currUsed, currOverhead float64
+	var prevLocked, prevUsed, prevOverhead float64
+
+	err := s.db.QueryRow(`
+		SELECT current_locked, current_used, current_overhead,
+		prev_locked, prev_used, prev_overhead
+		FROM spendings
+		WHERE email = ?`, email).Scan(&currLocked, &currUsed, &currOverhead, &prevLocked, &prevUsed, &prevOverhead)
+
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	us := &modules.UserSpendings{
+		CurrentLocked:   currLocked,
+		CurrentUsed:     currUsed,
+		CurrentOverhead: currOverhead,
+		PrevLocked:      prevLocked,
+		PrevUsed:        prevUsed,
+		PrevOverhead:    prevOverhead,
+	}
+
+	return us, nil
+}
+
+// updateSpendings updates the user's spendings.
+func (s *Satellite) updateSpendings(email string, us modules.UserSpendings) error {
+	// Check if there is a record already.
+	var c int
+	err := s.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM spendings
+		WHERE email = ?
+	`, email).Scan(&c)
+	if err != nil {
+		return err
+	}
+
+	if c > 0 {
+		_, err = s.db.Exec(`
+			UPDATE spendings
+			SET current_locked = ?, current_used = ?, current_overhead = ?,
+			prev_locked = ?, prev_used = ?, prev_overhead = ?
+			WHERE email = ?
+		`, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead, email)
+	} else {
+		_, err = s.db.Exec(`
+			INSERT INTO spendings
+			 (email, current_locked, current_used, current_overhead,
+			 prev_locked, prev_used, prev_overhead)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, email, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead)
+	}
+
+	return err
+}
+
+// RetrieveSpendings retrieves the user's spendings in the given currency.
+func (s *Satellite) RetrieveSpendings(email string, currency string) (*modules.UserSpendings, error) {
+	// Get exchange rate.
+	rate, err := s.GetExchangeRate(currency)
+	if err != nil {
+		return nil, err
+	}
+	if rate == 0 {
+		return nil, errors.New("couldn't get exchange rate")
+	}
+
+	// Get user spendings.
+	us, err := s.getSpendings(email)
+	if err != nil {
+		return nil, err
+	}
+	us.CurrentLocked /= rate
+	us.CurrentUsed /= rate
+	us.CurrentOverhead /= rate
+	us.PrevLocked /= rate
+	us.PrevUsed /= rate
+	us.PrevOverhead /= rate
+
+	return us, nil
 }

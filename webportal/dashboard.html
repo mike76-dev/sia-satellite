@@ -31,40 +31,43 @@
 				<div class="page disabled">
 					<h1>Overview</h1>
 					<section>
-						<p>Your balance:</p>
-						<h2 id="balance" class="balance"></h2>
-					</section>
-					<section>
-						<p>Block height:</p>
-						<h2 id="block-height" class="balance"><h2>
+						<div class="content">
+							<div class="content-item">
+								<p>Available balance:</p>
+								<h2 id="balance" class="balance"></h2>
+							</div>
+							<div class="content-item">
+								<p>Locked balance:</p>
+								<h2 id="locked" class="balance"></h2>
+							</div>
+						</div>
 					</section>
 					<section>
 						<p>Network statistics:</p>
 						<div class="content">
 							<div class="content-item">
-								<p>Number of hosts:<br>
-									<strong id="numhosts"></strong>
-								</p>
+								<p>Block height:</p>
+								<h2 id="block-height" class="balance"></h2>
 							</div>
 							<div class="content-item">
-								<p>Average storage price:<br>
-									<strong id="storage"></strong>
-								</p>
+								<p>Number of hosts:</p>
+								<h2 id="numhosts" class="balance"></h2>
 							</div>
 							<div class="content-item">
-								<p>Average upload price:<br>
-									<strong id="upload"></strong>
-								</p>
+								<p>Average storage price:</p>
+								<h2 id="storage" class="balance"></h2>
 							</div>
 							<div class="content-item">
-								<p>Average download price:<br>
-									<strong id="download"></strong>
-								</p>
+								<p>Average upload price:</p>
+								<h2 id="upload" class="balance"></h2>
 							</div>
 							<div class="content-item">
-								<p>Average contract duration:<br>
-									<strong id="duration"></strong>
-								</p>
+								<p>Average download price:</p>
+								<h2 id="download" class="balance"></h2>
+							</div>
+							<div class="content-item">
+								<p>Average contract duration:</p>
+								<h2 id="duration" class="balance"></h2>
 							</div>
 						</div>
 					</section>
@@ -153,6 +156,40 @@
 				</div>
 				<div class="page disabled">
 					<h1>Current Spendings</h1>
+					<section>
+						<h2>Spendings in <span id="spendings-current"></span>:</h2>
+						<table>
+							<tr>
+								<td>Locked in contracts:</td>
+								<td id="spendings-current-locked"></td>
+							</tr>
+							<tr>
+								<td>Used:</td>
+								<td id="spendings-current-used"></td>
+							</tr>
+							<tr>
+								<td>Satellite overhead:</td>
+								<td id="spendings-current-overhead"></td>
+							</tr>
+						</table>
+					</section>
+					<section>
+						<h2>Spendings in <span id="spendings-prev"></span>:</h2>
+						<table>
+							<tr>
+								<td>Locked in contracts:</td>
+								<td id="spendings-prev-locked"></td>
+							</tr>
+							<tr>
+								<td>Used:</td>
+								<td id="spendings-prev-used"></td>
+							</tr>
+							<tr>
+								<td>Satellite overhead:</td>
+								<td id="spendings-prev-overhead"></td>
+							</tr>
+						</table>
+					</section>
 				</div>
 				<div class="page disabled">
 					<h1>Payment Plan</h1>
@@ -306,11 +343,8 @@
 						</div>
 					</section>
 					<section id="payment" class="disabled">
-						<p>WARNING: You are going to make a payment of
+						<p>You are going to make a payment of
 							<span id="to-pay"></span>.
-							There will be a real charge on your credit card.
-							The service is not fully implemented yet, so any payment
-							at this point will be considered a donation.
 						</p>
 			      <div id="payment-element">
       			  <!--Stripe.js injects the Payment Element-->

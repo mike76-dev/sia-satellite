@@ -31,6 +31,17 @@ type UserBalance struct {
 	StripeID   string  `json:"stripeid"`
 }
 
+// UserSpendings contains the spendings in the current and the
+// previous months.
+type UserSpendings struct {
+	CurrentLocked   float64 `json:"currentlocked"`
+	CurrentUsed     float64 `json:"currentused"`
+	CurrentOverhead float64 `json:"currentoverhead"`
+	PrevLocked      float64 `json:"prevlocked"`
+	PrevUsed        float64 `json:"prevused"`
+	PrevOverhead    float64 `json:"prevoverhead"`
+}
+
 // Satellite implements the methods necessary to communicate both with the
 // renters and the hosts.
 type Satellite interface {
@@ -104,6 +115,9 @@ type Satellite interface {
 
 	// OldContracts returns the contracts that have expired.
 	OldContracts() []RenterContract
+
+	// RetrieveSpendings retrieves the user's spendings.
+	RetrieveSpendings(string, string) (*UserSpendings, error)
 }
 
 // Manager implements the methods necessary to communicate with the
@@ -229,7 +243,7 @@ type FundLocker interface {
 
 	// UnlockSiacoins moves a part of the amount from "locked" to "available",
 	// while the other part (fees and other spent funds) is "burned".
-	UnlockSiacoins(string, float64, float64) error
+	UnlockSiacoins(string, float64, float64, types.BlockHeight) error
 }
 
 // ContractFormer is the minimal interface to be used by Provider.

@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS spendings;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS balances;
 DROP TABLE IF EXISTS accounts;
@@ -16,8 +17,8 @@ CREATE TABLE balances (
 	id         INT NOT NULL AUTO_INCREMENT,
 	email      VARCHAR(64) NOT NULL UNIQUE,
 	subscribed BOOL NOT NULL,
-	balance    FLOAT NOT NULL,
-	locked     FLOAT NOT NULL,
+	balance    DOUBLE NOT NULL,
+	locked     DOUBLE NOT NULL,
 	currency   VARCHAR(8) NOT NULL,
 	stripe_id  VARCHAR(32) NOT NULL,
 	PRIMARY KEY (id),
@@ -27,11 +28,24 @@ CREATE TABLE balances (
 CREATE TABLE payments (
 	id         INT NOT NULL AUTO_INCREMENT,
 	email      VARCHAR(64) NOT NULL,
-	amount     FLOAT NOT NULL,
+	amount     DOUBLE NOT NULL,
 	currency   VARCHAR(8) NOT NULL,
-	amount_usd FLOAT NOT NULL,
+	amount_usd DOUBLE NOT NULL,
 	made       INT NOT NULL,
 	pending    BOOL NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (email) REFERENCES accounts(email)
+);
+
+CREATE TABLE spendings (
+	id               INT NOT NULL AUTO_INCREMENT,
+	email            VARCHAR(64) NOT NULL UNIQUE,
+	current_locked   DOUBLE NOT NULL,
+	current_used     DOUBLE NOT NULL,
+	current_overhead DOUBLE NOT NULL,
+	prev_locked      DOUBLE NOT NULL,
+	prev_used        DOUBLE NOT NULL,
+	prev_overhead    DOUBLE NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );

@@ -116,6 +116,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.GET("/dashboard/blockheight", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.blockHeightHandlerGET(w, req, ps)
 	})
+	router.GET("/dashboard/spendings", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.spendingsHandlerGET(w, req, ps)
+	})
 
 	// /stripe requests.
 	router.POST("/stripe/create-payment-intent", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
