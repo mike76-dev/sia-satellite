@@ -75,6 +75,7 @@ type (
 		MaintenanceSpending string `json:"maintenancespending"`
 		NetAddress          string `json:"netaddress"`
 		RenterFunds         string `json:"renterfunds"`
+		RemainingCollateral string `json:"remainingcollateral"`
 		Size                string `json:"size"`
 		StartHeight         uint64 `json:"startheight"`
 		Status              string `json:"status"`
@@ -480,16 +481,19 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			}
 
 			// Fetch host address.
+			cp := types.ZeroCurrency
 			var netAddress smodules.NetAddress
 			hdbe, exists, _ := api.portal.satellite.Host(c.HostPublicKey)
 			if exists {
 				netAddress = hdbe.NetAddress
+				cp = hdbe.ContractPrice
 			}
 
 			// Build the contract.
 			maintenanceSpending := c.MaintenanceSpending.AccountBalanceCost
 			maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.FundAccountCost)
 			maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.UpdatePriceTableCost)
+			remainingCollateral := c.Transaction.FileContractRevisions[0].NewMissedProofOutputs[1].Value
 			contract := renterContract{
 				BadContract:         c.Utility.BadContract,
 				DownloadSpending:    modules.CurrencyUnits(c.DownloadSpending),
@@ -504,6 +508,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 				NetAddress:          string(netAddress),
 				MaintenanceSpending: modules.CurrencyUnits(maintenanceSpending),
 				RenterFunds:         modules.CurrencyUnits(c.RenterFunds),
+				RemainingCollateral: modules.CurrencyUnits(remainingCollateral.Sub(cp)),
 				Size:                smodules.FilesizeUnits(c.Size()),
 				StartHeight:         uint64(c.StartHeight),
 				StorageSpending:     modules.CurrencyUnits(c.StorageSpending),
@@ -551,16 +556,19 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			}
 
 			// Fetch host address.
+			cp := types.ZeroCurrency
 			var netAddress smodules.NetAddress
 			hdbe, exists, _ := api.portal.satellite.Host(c.HostPublicKey)
 			if exists {
 				netAddress = hdbe.NetAddress
+				cp = hdbe.ContractPrice
 			}
 
 			// Build the contract.
 			maintenanceSpending := c.MaintenanceSpending.AccountBalanceCost
 			maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.FundAccountCost)
 			maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.UpdatePriceTableCost)
+			remainingCollateral := c.Transaction.FileContractRevisions[0].NewMissedProofOutputs[1].Value
 			contract := renterContract{
 				BadContract:         c.Utility.BadContract,
 				DownloadSpending:    modules.CurrencyUnits(c.DownloadSpending),
@@ -575,6 +583,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 				NetAddress:          string(netAddress),
 				MaintenanceSpending: modules.CurrencyUnits(maintenanceSpending),
 				RenterFunds:         modules.CurrencyUnits(c.RenterFunds),
+				RemainingCollateral: modules.CurrencyUnits(remainingCollateral.Sub(cp)),
 				Size:                smodules.FilesizeUnits(size),
 				StartHeight:         uint64(c.StartHeight),
 				StorageSpending:     modules.CurrencyUnits(c.StorageSpending),

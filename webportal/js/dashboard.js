@@ -732,12 +732,13 @@ function expandContract(e) {
 	tr.innerHTML = '<td></td>';
 	tr.innerHTML += '<td>Contract ID:<br>Host:<br>Host Public Key:<br>Host Version:<br>' +
 		'Storage Spending:<br>Upload Spending:<br>Download Spending:<br>' +
-		'Fund Account Spending:<br>Fees:</td>';
+		'Fund Account Spending:<br>Fees:<br>Remaining Funds:<br>Remaining Collateral:</td>';
 	tr.innerHTML += '<td colspan="6">' + contracts[index].id + '<br>' +
 		contracts[index].netaddress + '<br>' + contracts[index].hostpublickey + '<br>' +
 		contracts[index].hostversion + '<br>' + contracts[index].storagespending + '<br>' +
 		contracts[index].uploadspending + '<br>' + contracts[index].downloadspending + '<br>' +
-		contracts[index].fundaccountspending + '<br>' + contracts[index].fees + '</td>';
+		contracts[index].fundaccountspending + '<br>' + contracts[index].fees + '<br>' +
+		contracts[index].renterfunds + '<br>' + contracts[index].remainingcollateral + '</td>';
 	tbody.children[index - contractsFrom + 1].insertAdjacentElement("afterend", tr);
 }
 
