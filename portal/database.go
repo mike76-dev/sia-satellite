@@ -226,9 +226,19 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 		return err
 	}
 
-	// No record found. This should not happen.
+	// No record found. Check for a special case when the account is being
+	// credited. In this case, id is the user's email.
+	credit := false
 	if err != nil && errors.Is(err, sql.ErrNoRows) {
-		return errors.New("no balance record found")
+		count, err := p.countEmails(id)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			return errors.New("trying to credit a non-existing account")
+		}
+		email = id
+		credit = true
 	}
 
 	// Update the payments table.
@@ -261,6 +271,9 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 			return err
 		}
 		ub.Currency = currency
+	}
+	if credit {
+		ub.StripeID = ""
 	}
 
 	if ub.Currency == currency {

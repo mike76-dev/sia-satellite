@@ -500,6 +500,12 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 			return
 		}
 
+		// Check if any promo action is running.
+		err = api.portal.creditAccount(email)
+		if err != nil {
+			api.portal.log.Printf("ERROR: unable to credit user account: %v\n", err)
+		}
+
 	case resetPrefix:
 		// A password reset token received. Check the validity.
 		if expires.Before(time.Now()) {
@@ -799,4 +805,25 @@ func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email s
 	}
 
 	return
+}
+
+// creditAccount checks if any promo action is running and credits
+// the user account if so.
+func (p *Portal) creditAccount(email string) error {
+	// Check first.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.credits.Remaining <= 0 {
+		return nil
+	}
+
+	// Credit the account.
+	err := p.addPayment(email, p.credits.Amount, "USD")
+	if err != nil {
+		return err
+	}
+
+	// Decrease the remaining credits and save.
+	p.credits.Remaining--
+	return p.saveSync()
 }

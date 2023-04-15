@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/modules"
+
 	"gitlab.com/NebulousLabs/errors"
 
 	"go.sia.tech/siad/persist"
@@ -29,21 +31,26 @@ var persistMetadata = persist.Metadata{
 	Version: "0.1.0",
 }
 
-// authStatsPersistData returns the authentication statistics that will be
-// saved to disk. The portal must be locked.
-func (p *Portal) authStatsPersistData() (stats []authenticationStats) {
+// persistData contains the portal persistence.
+type persistData struct {
+	Stats   []authenticationStats `json:"stats"`
+	Credits modules.CreditData    `json:"credits"`
+}
+
+// persistence returns the portal persistence that will be saved to disk.
+func (p *Portal) toPersistence() (persistence persistData) {
 	for _, entry := range p.authStats {
-		stats = append(stats, entry)
+		persistence.Stats = append(persistence.Stats, entry)
 	}
+	persistence.Credits = p.credits
 	return
 }
 
 // load loads the Portal's persistent data from disk.
 func (p *Portal) load() error {
-	// Load stats.
-	var stats []*authenticationStats
+	var persistence persistData
 	
-	err := persist.LoadJSON(persistMetadata, &stats, filepath.Join(p.persistDir, persistFilename))
+	err := persist.LoadJSON(persistMetadata, &persistence, filepath.Join(p.persistDir, persistFilename))
 	if os.IsNotExist(err) {
 		// There is no persist.json, nothing to load.
 		return nil
@@ -52,10 +59,11 @@ func (p *Portal) load() error {
 		return errors.AddContext(err, "failed to load portal persistence")
 	}
 
-	// Copy over the stats.
-	for i := range stats {
-		p.authStats[stats[i].RemoteHost] = *stats[i]
+	// Copy over the data.
+	for _, s := range persistence.Stats {
+		p.authStats[s.RemoteHost] = s
 	}
+	p.credits = persistence.Credits
 
 	return nil
 }
@@ -63,7 +71,7 @@ func (p *Portal) load() error {
 // saveSync stores the Portal's persistent data on disk, and then syncs to
 // disk to minimize the possibility of data loss.
 func (p *Portal) saveSync() error {
-	return persist.SaveJSON(persistMetadata, p.authStatsPersistData(), filepath.Join(p.persistDir, persistFilename))
+	return persist.SaveJSON(persistMetadata, p.toPersistence(), filepath.Join(p.persistDir, persistFilename))
 }
 
 // threadedSaveLoop periodically saves the Portal's persistent data.

@@ -32,6 +32,7 @@ type Portal struct {
 
 	// Atomic stats.
 	authStats     map[string]authenticationStats
+	credits       modules.CreditData
 
 	// Utilities.
 	listener      net.Listener
@@ -141,6 +142,20 @@ func (p *Portal) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.saveSync()
+}
+
+// GetCredits retrieves the credit data.
+func (p *Portal) GetCredits() modules.CreditData {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.credits
+}
+
+// SetCredits updates the credit data.
+func (p *Portal) SetCredits(c modules.CreditData) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.credits = c
 }
 
 // enforce that Portal satisfies the modules.Portal interface

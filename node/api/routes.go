@@ -70,6 +70,12 @@ func (api *API) buildHTTPRoutes() {
 		router.GET("/satellite/contracts/:publickey", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))
 	}
 
+	// Portal API Calls.
+	if api.portal != nil {
+		router.GET("/portal/credits", RequirePassword(api.portalCreditsHandlerGET, requiredPassword))
+		router.POST("/portal/credits", RequirePassword(api.portalCreditsHandlerPOST, requiredPassword))
+	}
+
 	// Apply UserAgent middleware and return the Router.
 	api.routerMu.Lock()
 	api.router = timeoutHandler(RequireUserAgent(router, requiredUserAgent), httpServerTimeout)

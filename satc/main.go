@@ -218,6 +218,9 @@ func initCmds() *cobra.Command {
 	root.AddCommand(satelliteCmd)
 	satelliteCmd.AddCommand(satelliteRentersCmd, satelliteRenterCmd, satelliteBalanceCmd, satelliteContractsCmd)
 
+	root.AddCommand(portalCmd)
+	portalCmd.AddCommand(portalSetCmd)
+
 	// Daemon Commands.
 	root.AddCommand(alertsCmd, stopCmd, versionCmd)
 

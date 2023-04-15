@@ -42,6 +42,12 @@ type UserSpendings struct {
 	PrevOverhead    float64 `json:"prevoverhead"`
 }
 
+// CreditData contains the information about any running promotion.
+type CreditData struct {
+	Amount    float64 `json:"amount"`
+	Remaining uint64  `json:"remaining"`
+}
+
 // Satellite implements the methods necessary to communicate both with the
 // renters and the hosts.
 type Satellite interface {
@@ -149,6 +155,12 @@ type Portal interface {
 
 	// Close safely shuts down the portal.
 	Close() error
+
+	// GetCredits retrieves the credits data.
+	GetCredits() CreditData
+
+	// SetCredits updates the credit data.
+	SetCredits(CreditData)
 }
 
 // A HostDB is a database of hosts that the manager can use for figuring out
