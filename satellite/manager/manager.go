@@ -107,6 +107,9 @@ type hostContractor interface {
 	// RenewedFrom returns the ID of the contract the given contract was
 	// renewed from, if any.
 	RenewedFrom(types.FileContractID) types.FileContractID
+
+	// DeleteRenter deletes the renter data from the memory.
+	DeleteRenter(string)
 }
 
 // A Manager contains the information necessary to communicate with the
@@ -565,4 +568,9 @@ func (m *Manager) UpdateContract(rev types.FileContractRevision, sigs []types.Tr
 // from, if any.
 func (m *Manager) RenewedFrom(fcid types.FileContractID) types.FileContractID {
 	return m.hostContractor.RenewedFrom(fcid)
+}
+
+// DeleteRenter deletes the renter data from the memory.
+func (m *Manager) DeleteRenter(email string) {
+	m.hostContractor.DeleteRenter(email)
 }

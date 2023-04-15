@@ -121,24 +121,59 @@ func (p *Portal) threadedPruneUnverifiedAccounts() {
 
 // deleteAccount deletes the user account from the database.
 func (p *Portal) deleteAccount(email string) error {
-	_, err0 := p.db.Exec("DELETE FROM renters WHERE email = ?", email)
-	_, err1 := p.db.Exec("DELETE FROM spendings WHERE email = ?", email)
-	_, err2 := p.db.Exec("DELETE FROM payments WHERE email = ?", email)
-	_, err3 := p.db.Exec("DELETE FROM balances WHERE email = ?", email)
-	_, err4 := p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
-	if err0 != nil {
-		return err0
+	var errs []error
+	var err error
+
+	// Search for the renter public key.
+	var pk string
+	err = p.db.QueryRow("SELECT public_key FROM renters WHERE email = ?", email).Scan(&pk)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
 	}
-	if err1 != nil {
-		return err1
+
+	// Delete contracts and transactions.
+	if err == nil {
+		var fcid string
+		rows, err := p.db.Query(`
+			SELECT contract_id
+			FROM transactions
+			WHERE uc_renter_pk = ?
+		`, pk)
+		errs = append(errs, err)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				err = rows.Scan(&fcid)
+				if err == nil {
+					_, err = p.db.Exec("DELETE FROM transactions WHERE contract_id = ?", fcid)
+					errs = append(errs, err)
+					_, err = p.db.Exec("DELETE FROM contracts WHERE contract_id = ?", fcid)
+					errs = append(errs, err)
+				}
+			}
+		}
 	}
-	if err2 != nil {
-		return err2
+
+	// Delete from other tables.
+	_, err = p.db.Exec("DELETE FROM renters WHERE email = ?", email)
+	errs = append(errs, err)
+	_, err = p.db.Exec("DELETE FROM spendings WHERE email = ?", email)
+	errs = append(errs, err)
+	_, err = p.db.Exec("DELETE FROM payments WHERE email = ?", email)
+	errs = append(errs, err)
+	_, err = p.db.Exec("DELETE FROM balances WHERE email = ?", email)
+	errs = append(errs, err)
+	_, err = p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
+	errs = append(errs, err)
+
+	// Iterate through the errors and return the first non-nil one.
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
 	}
-	if err3 != nil {
-		return err3
-	}
-	return err4
+
+	return nil
 }
 
 // flushPendingPayments removes any pending payments for the given

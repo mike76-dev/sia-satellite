@@ -63,6 +63,9 @@ type Satellite interface {
 	// Close safely shuts down the satellite.
 	Close() error
 
+	// DeleteRenter deletes the renter data from the memory.
+	DeleteRenter(string)
+
 	// EstimateHostScore will return the score for a host with the provided
 	// settings, assuming perfect age and uptime adjustments.
 	EstimateHostScore(smodules.HostDBEntry, Allowance) (smodules.HostScoreBreakdown, error)

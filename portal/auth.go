@@ -754,6 +754,9 @@ func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
+	// Remove renter from the memory.
+	api.portal.satellite.DeleteRenter(email)
+
 	writeSuccess(w)
 }
 

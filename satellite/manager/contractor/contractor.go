@@ -543,3 +543,15 @@ func (c *Contractor) RenewedFrom(fcid types.FileContractID) types.FileContractID
 	}
 	return from
 }
+
+// DeleteRenter deletes the renter data from the memory.
+func (c *Contractor) DeleteRenter(email string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for rpk, renter := range c.renters {
+		if renter.Email == email {
+			delete(c.renters, rpk)
+			break
+		}
+	}
+}

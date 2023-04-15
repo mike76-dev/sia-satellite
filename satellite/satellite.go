@@ -462,5 +462,10 @@ func (s *Satellite) ProcessConsensusChange(cc smodules.ConsensusChange) {
 	}
 }
 
+// DeleteRenter deletes the renter data from the memory.
+func (s *Satellite) DeleteRenter(email string) {
+	s.m.DeleteRenter(email)
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)
