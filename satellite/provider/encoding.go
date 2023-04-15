@@ -15,7 +15,7 @@ var (
 	cipherNoOverlap        = types.NewSpecifier("NoOverlap")
 )
 
-// Handshake objects
+// Handshake objects.
 type (
 	loopKeyExchangeRequest struct {
 		Specifier types.Specifier
@@ -54,6 +54,49 @@ func (r *loopKeyExchangeResponse) EncodeTo(e *types.Encoder) {
 
 // DecodeFrom implements types.ProtocolObject.
 func (r *loopKeyExchangeResponse) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
+// rpcError is the generic error transferred in an RPC.
+type rpcError struct {
+	Type        types.Specifier
+	Data        []byte
+	Description string
+}
+
+// EncodeTo implements types.ProtocolObject.
+func (re *rpcError) EncodeTo(e *types.Encoder) {
+	e.Write(re.Type[:])
+	e.WriteBytes(re.Data)
+	e.WriteString(re.Description)
+}
+
+// DecodeFrom implements types.ProtocolObject.
+func (re *rpcError) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
+// rpcResponse if a helper type for encoding and decoding RPC response
+// messages, which can represent either valid data or an error.
+type rpcResponse struct {
+	err  *rpcError
+	data requestBody
+}
+
+// EncodeTo implements types.ProtocolObject.
+func (resp *rpcResponse) EncodeTo(e *types.Encoder) {
+	e.WriteBool(resp.err != nil)
+	if resp.err != nil {
+		resp.err.EncodeTo(e)
+		return
+	}
+	if resp.data != nil {
+		resp.data.EncodeTo(e)
+	}
+}
+
+// DecodeFrom implements types.ProtocolObject.
+func (resp *rpcResponse) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
 }
 
@@ -295,20 +338,5 @@ func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
 
 // DecodeFrom implements requestBody.
 func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
-	// Nothing to do here.
-}
-
-// rpcMessage represents an RPC response.
-type rpcMessage struct {
-	Error string
-}
-
-// EncodeTo implements requestBody.
-func (m rpcMessage) EncodeTo(e *types.Encoder) {
-	e.WriteString(m.Error)
-}
-
-// DecodeFrom implements requestBody.
-func (m rpcMessage) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
 }

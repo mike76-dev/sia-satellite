@@ -50,8 +50,8 @@ func (s *rpcSession) readRequest(req requestBody, maxLen uint64) (core.Hash256, 
 	return h.Sum(), err
 }
 
-// writeResponse sends an encrypted RPC response to the renter.
-func (s *rpcSession) writeResponse(resp requestBody) error {
+// writeMessage sends an encrypted message to the renter.
+func (s *rpcSession) writeMessage(message requestBody) error {
 	nonce := make([]byte, 32)[:s.aead.NonceSize()]
 	fastrand.Read(nonce)
 
@@ -60,8 +60,7 @@ func (s *rpcSession) writeResponse(resp requestBody) error {
 	e := core.NewEncoder(&buf)
 	e.WritePrefix(0) // Placeholder.
 	e.Write(nonce)
-	e.WriteBool(false) // Error.
-	resp.EncodeTo(e)
+	message.EncodeTo(e)
 	e.Flush()
 
 	// Overwrite message length.
@@ -83,6 +82,20 @@ func (s *rpcSession) writeResponse(resp requestBody) error {
 	return err
 }
 
+// writeResponse sends an encrypted RPC responce to the renter.
+func (s *rpcSession) writeResponse(resp requestBody) error {
+	return s.writeMessage(&rpcResponse{nil, resp})
+}
+
+// writeError sends an error message to the renter.
+func (s *rpcSession) writeError(err error) error {
+	var re *rpcError
+	if err != nil {
+		re = &rpcError{Description: err.Error()}
+	}
+	return s.writeMessage(&rpcResponse{re, nil})
+}
+
 // managedRequestContracts returns a slice containing the list of the
 // renter's active contracts.
 func (p *Provider) managedRequestContracts(s *rpcSession) error {
@@ -91,36 +104,35 @@ func (p *Provider) managedRequestContracts(s *rpcSession) error {
 
 	// Read the request.
 	var rr requestRequest
-	var message rpcMessage
 	hash, err := s.readRequest(&rr, 65536)
 	if err != nil {
-		message.Error = fmt.Sprintf("could not read renter request: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Verify the signature.
 	err = crypto.VerifyHash(crypto.Hash(hash), rr.PubKey, crypto.Signature(rr.Signature))
 	if err != nil {
-		message.Error = fmt.Sprintf("could not verify renter signature: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not verify renter signature: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Check if we know this renter.
 	rpk := types.Ed25519PublicKey(crypto.PublicKey(rr.PubKey))
 	renter, err := p.satellite.GetRenter(rpk)
 	if err != nil {
-		message.Error = fmt.Sprintf("could not find renter in the database: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	seed, err := p.satellite.WalletSeed()
 	if err != nil {
-		message.Error = fmt.Sprintf("couldn't retrieve contracts: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("couldn't retrieve contracts: %v", err)
+		s.writeError(err)
+		return err
 	}
 	rs := modules.DeriveRenterSeed(seed, renter.Email)
 	defer fastrand.Read(rs[:])
@@ -144,9 +156,7 @@ func (p *Provider) managedRequestContracts(s *rpcSession) error {
 		})
 	}
 
-	err = s.writeResponse(&ecs)
-
-	return err
+	return s.writeResponse(&ecs)
 }
 
 // managedFormContracts forms the specified number of contracts with the hosts
@@ -157,56 +167,55 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 
 	// Read the request.
 	var fr formRequest
-	var message rpcMessage
 	hash, err := s.readRequest(&fr, 65536)
 	if err != nil {
-		message.Error = fmt.Sprintf("could not read renter request: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Verify the signature.
 	err = crypto.VerifyHash(crypto.Hash(hash), fr.PubKey, crypto.Signature(fr.Signature))
 	if err != nil {
-		message.Error = fmt.Sprintf("could not verify renter signature: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not verify renter signature: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Check if we know this renter.
 	rpk := types.Ed25519PublicKey(crypto.PublicKey(fr.PubKey))
 	exists, err := p.satellite.UserExists(rpk)
 	if !exists || err != nil {
-		message.Error = fmt.Sprintf("could not find renter in the database: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Sanity checks.
 	if fr.Hosts == 0 {
-		message.Error = "can't form contracts with zero hosts"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't form contracts with zero hosts")
+		s.writeError(err)
+		return err
 	}
 	if fr.Period == 0 {
-		message.Error = "can't form contracts with zero period"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't form contracts with zero period")
+		s.writeError(err)
+		return err
 	}
 	if fr.RenewWindow == 0 {
-		message.Error = "can't form contracts with zero renew window"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't form contracts with zero renew window")
+		s.writeError(err)
+		return err
 	}
 	if fr.Storage == 0 {
-		message.Error = "can't form contracts with zero expected storage"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't form contracts with zero expected storage")
+		s.writeError(err)
+		return err
 	}
 	if fr.MinShards == 0 || fr.TotalShards == 0 {
-		message.Error = "can't form contracts with such redundancy params"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't form contracts with such redundancy params")
+		s.writeError(err)
+		return err
 	}
 
 	ecs := extendedContractSet{
@@ -238,9 +247,9 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 	// Form the contracts.
 	contracts, err := p.satellite.FormContracts(rpk, a)
 	if err != nil {
-		message.Error = fmt.Sprintf("could not form contracts: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not form contracts: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	for _, contract := range contracts {
@@ -252,9 +261,7 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 		})
 	}
 
-	err = s.writeResponse(&ecs)
-
-	return err
+	return s.writeResponse(&ecs)
 }
 
 // managedRenewContracts tries to renew the given set of contracts.
@@ -264,56 +271,55 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 
 	// Read the request.
 	var rr renewRequest
-	var message rpcMessage
 	hash, err := s.readRequest(&rr, 65536)
 	if err != nil {
-		message.Error = fmt.Sprintf("could not read renter request: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Verify the signature.
 	err = crypto.VerifyHash(crypto.Hash(hash), rr.PubKey, crypto.Signature(rr.Signature))
 	if err != nil {
-		message.Error = fmt.Sprintf("could not verify renter signature: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not verify renter signature: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Check if we know this renter.
 	rpk := types.Ed25519PublicKey(crypto.PublicKey(rr.PubKey))
 	exists, err := p.satellite.UserExists(rpk)
 	if !exists || err != nil {
-		message.Error = fmt.Sprintf("could not find renter in the database: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Sanity checks.
 	if len(rr.Contracts) == 0 {
-		message.Error = "can't renew an empty set of contracts"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't renew an empty set of contracts")
+		s.writeError(err)
+		return err
 	}
 	if rr.Period == 0 {
-		message.Error = "can't renew contracts with zero period"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't renew contracts with zero period")
+		s.writeError(err)
+		return err
 	}
 	if rr.RenewWindow == 0 {
-		message.Error = "can't renew contracts with zero renew window"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't renew contracts with zero renew window")
+		s.writeError(err)
+		return err
 	}
 	if rr.Storage == 0 {
-		message.Error = "can't renew contracts with zero expected storage"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't renew contracts with zero expected storage")
+		s.writeError(err)
+		return err
 	}
 	if rr.MinShards == 0 || rr.TotalShards == 0 {
-		message.Error = "can't renew contracts with such redundancy params"
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err := errors.New("can't renew contracts with such redundancy params")
+		s.writeError(err)
+		return err
 	}
 
 	ecs := extendedContractSet{
@@ -349,9 +355,9 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 	}
 	contracts, err := p.satellite.RenewContracts(rpk, a, fcids)
 	if err != nil {
-		message.Error = fmt.Sprintf("could not renew contracts: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not renew contracts: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	for _, contract := range contracts {
@@ -363,9 +369,7 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 		})
 	}
 
-	err = s.writeResponse(&ecs)
-
-	return err
+	return s.writeResponse(&ecs)
 }
 
 // convertContract converts the contract metadata from `siad`-style
@@ -443,29 +447,28 @@ func (p *Provider) managedUpdateRevision(s *rpcSession) error {
 
 	// Read the request.
 	var ur updateRequest
-	var message rpcMessage
 	hash, err := s.readRequest(&ur, 65536)
 	if err != nil {
-		message.Error = fmt.Sprintf("could not read renter request: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Verify the signature.
 	err = crypto.VerifyHash(crypto.Hash(hash), ur.PubKey, crypto.Signature(ur.Signature))
 	if err != nil {
-		message.Error = fmt.Sprintf("could not verify renter signature: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not verify renter signature: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	// Check if we know this renter.
 	rpk := types.Ed25519PublicKey(crypto.PublicKey(ur.PubKey))
 	exists, err := p.satellite.UserExists(rpk)
 	if !exists || err != nil {
-		message.Error = fmt.Sprintf("could not find renter in the database: %v", err)
-		s.writeResponse(&message)
-		return errors.New(message.Error)
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.writeError(err)
+		return err
 	}
 
 	uploads := types.NewCurrency(ur.Uploads.Big())
@@ -478,11 +481,12 @@ func (p *Provider) managedUpdateRevision(s *rpcSession) error {
 	
 	// Send a response.
 	if err != nil {
-		message.Error = fmt.Sprintf("couldn't update contract: %v", err)
+		err = fmt.Errorf("couldn't update contract: %v", err)
+		s.writeError(err)
+		return err
 	}
-	err = s.writeResponse(&message)
 
-	return errors.New(message.Error)
+	return s.writeResponse(nil)
 }
 
 // convertRevision converts a `core`-style revision into the `siad`-style.
