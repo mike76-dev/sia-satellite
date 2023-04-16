@@ -7,9 +7,10 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/node/api/server"
 	"github.com/mike76-dev/sia-satellite/persist"
+
+	"go.sia.tech/siad/build"
 )
 
 // tryAutoUnlock will try to automatically unlock the wallet if the
@@ -30,7 +31,12 @@ func tryAutoUnlock(srv *server.Server) {
 func startDaemon(config *persist.SatdConfig, apiPassword string, dbPassword string) error {
 	loadStart := time.Now()
 
-	fmt.Printf("satd v%v\n", api.DaemonVersion)
+	fmt.Printf("satd v%v\n", build.NodeVersion)
+	if build.GitRevision == "" {
+		fmt.Println("WARN: compiled without build commit or version. To compile correctly, please use the makefile")
+	} else {
+		fmt.Println("Git Revision " + build.GitRevision)
+	}
 	fmt.Println("Loading...")
 
 	// Start and run the server.

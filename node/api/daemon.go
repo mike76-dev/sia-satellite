@@ -6,11 +6,9 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 
+	"go.sia.tech/siad/build"
 	"go.sia.tech/siad/modules"
 )
-
-// The current version of the daemon software.
-const DaemonVersion = "0.1.0"
 
 type (
 	// DaemonAlertsGet contains information about currently registered alerts
@@ -25,7 +23,16 @@ type (
 
 	// DaemonVersionGet contains information about the running daemon's version.
 	DaemonVersionGet struct {
-		Version string
+		Version     string
+		GitRevision string
+		BuildTime   string
+	}
+
+	// DaemonVersion holds the version information for satd.
+	DaemonVersion struct {
+		Version     string `json:"version"`
+		GitRevision string `json:"gitrevision"`
+		BuildTime   string `json:"buildtime"`
 	}
 )
 
@@ -57,7 +64,7 @@ func (api *API) daemonAlertsHandlerGET(w http.ResponseWriter, _ *http.Request, _
 
 // daemonVersionHandler handles the API call that requests the daemon's version.
 func (api *API) daemonVersionHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	WriteJSON(w, DaemonVersionGet{Version: DaemonVersion})
+	WriteJSON(w, DaemonVersion{Version: build.NodeVersion, GitRevision: build.GitRevision, BuildTime: build.BuildTime})
 }
 
 // daemonStopHandler handles the API call to stop the daemon cleanly.

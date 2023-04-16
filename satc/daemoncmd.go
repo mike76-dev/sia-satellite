@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"go.sia.tech/siad/build"
 	"go.sia.tech/siad/modules"
 )
 
@@ -83,7 +84,11 @@ func alertscmd() {
 // version prints the version of satc and satd.
 func versioncmd() {
 	fmt.Println("Satellite Client")
-	fmt.Println("\tVersion " + "0.1.0") // TODO: Fetch.
+	fmt.Println("\tVersion " + build.NodeVersion)
+	if build.GitRevision != "" {
+		fmt.Println("\tGit Revision " + build.GitRevision)
+		fmt.Println("\tBuild Time   " + build.BuildTime)
+	}
 	dvg, err := httpClient.DaemonVersionGet()
 	if err != nil {
 		fmt.Println("Could not get daemon version:", err)
@@ -91,6 +96,10 @@ func versioncmd() {
 	}
 	fmt.Println("Satellite Daemon")
 	fmt.Println("\tVersion " + dvg.Version)
+	if dvg.GitRevision != "" {
+		fmt.Println("\tGit Revision " + dvg.GitRevision)
+		fmt.Println("\tBuild Time   " + dvg.BuildTime)
+	}
 }
 
 // stopcmd is the handler for the command `satc stop`.

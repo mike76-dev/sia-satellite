@@ -13,6 +13,7 @@ import (
 
 	"gitlab.com/NebulousLabs/errors"
 
+	"go.sia.tech/siad/build"
 	smodules "go.sia.tech/siad/modules"
 )
 
@@ -199,8 +200,8 @@ func main() {
 func initCmds() *cobra.Command {
 	root := &cobra.Command{
 		Use:   os.Args[0],
-		Short: "satc v" + "0.1.0", // TODO: Implement a function to fetch the version.
-		Long:  "satc v" + "0.1.0",
+		Short: "satc v" + build.NodeVersion,
+		Long:  "satc v" + build.NodeVersion,
 		Run:   wrap(statuscmd),
 	}
 
