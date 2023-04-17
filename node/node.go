@@ -97,11 +97,12 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	// Connect to the database.
 	fmt.Println("Connecting to the SQL database...")
 	cfg := mysql.Config {
-		User:		config.DBUser,
-		Passwd:	dbPassword,
-		Net:		"tcp",
-		Addr:		"127.0.0.1:3306",
-		DBName: config.DBName,
+		User:                 config.DBUser,
+		Passwd:               dbPassword,
+		Net:                  "tcp",
+		Addr:                 "127.0.0.1:3306",
+		DBName:               config.DBName,
+		AllowNativePasswords: true,
 	}
 	db, err := sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
