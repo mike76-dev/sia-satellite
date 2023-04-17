@@ -1,0 +1,15 @@
+"Satd Configuration"
+"0.1.0"
+{
+	"UserAgent": "Sat-Agent",
+	"GatewayAddr": ":0",
+	"APIAddr": "localhost:9990",
+	"SatelliteAddr": ":9992",
+	"SiamuxAddr": "",
+	"SiamuxWSAddr": "",
+	"Dir": "",
+	"Bootstrap": true,
+	"DBUser": "",
+	"DBName": "",
+	"PortalPort": ":8080"
+}
