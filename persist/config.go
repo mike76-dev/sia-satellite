@@ -15,17 +15,17 @@ const configFilename = "satdconfig.json"
 
 // SatdConfig contains the fields that are passed on to the new node.
 type SatdConfig struct {
-	UserAgent     string `json: "agent"`
-	GatewayAddr   string `json: "gateway"`
-	APIAddr       string `json: "api"`
-	SatelliteAddr string `json: "satellite"`
-	SiamuxAddr    string `json: "siamux"`
-	SiamuxWSAddr  string `json: "siamuxws"`
-	Dir           string `json: "dir"`
-	Bootstrap     bool   `json: "bootstrap"`
-	DBUser        string `json: "dbuser"`
-	DBName        string `json: "dbname"`
-	PortalPort    string `json: "portalport"`
+	UserAgent     string `json:"agent"`
+	GatewayAddr   string `json:"gateway"`
+	APIAddr       string `json:"api"`
+	SatelliteAddr string `json:"satellite"`
+	SiamuxAddr    string `json:"siamux"`
+	SiamuxWSAddr  string `json:"siamuxws"`
+	Dir           string `json:"dir"`
+	Bootstrap     bool   `json:"bootstrap"`
+	DBUser        string `json:"dbuser"`
+	DBName        string `json:"dbname"`
+	PortalPort    string `json:"portalport"`
 }
 
 // satdMetadata contains the header and version strings that identify the
