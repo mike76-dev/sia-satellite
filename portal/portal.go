@@ -92,7 +92,7 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, db *sql.DB, persist
 	p.log.Println("INFO: portal created, started logging")
 
 	// Create the mail client.
-	ms, err := mail.New(persistDir)
+	ms, err := mail.New(config.Dir)
 	if err != nil {
 		p.log.Println("ERROR: could not create mail client", err)
 	}
