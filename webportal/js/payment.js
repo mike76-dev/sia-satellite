@@ -1,6 +1,3 @@
-// This is your publishable API key.
-const stripe = Stripe('pk_live_51MB3TeCVw2rpdJXxUHIBPaLJdqBjVCUFKCPLukldKsIiElXqkCBEwhnapR9YC7K5RzCCMiJ6xUsgIyuexy4ZMupJ00bT79EkUF');
-
 let elements;
 
 // Fetches a payment intent and captures the client secret
