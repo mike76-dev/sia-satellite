@@ -2,4 +2,4 @@
 const apiBaseURL = '';
 
 // This is your publishable Stripe API key.
-const stripe = Stripe('');
+const stripePublicKey = '';
