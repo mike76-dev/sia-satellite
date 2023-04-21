@@ -317,24 +317,12 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	// Apply exchange rate and round up to the whole number.
 	precision, _ := types.SiacoinPrecision.Float64()
 	estimation, _ := totalPayout.MulFloat(scRate).Float64()
-	payment := math.Ceil(estimation / precision)
-
-	// Update the payment amount.
-	err = api.portal.putPayment(email, payment, data.Currency, true)
-	if err != nil {
-		api.portal.log.Printf("ERROR: error recording the payment: %v\n", err)
-		writeError(w,
-			Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
-		return
-	}
+	toPay := math.Ceil(estimation / precision)
 
 	// Send the response.
 	resp := hostsResponse{
 		Hosts:      uint64(len(hosts)),
-		Estimation: payment,
+		Estimation: toPay,
 		Currency:   data.Currency,
 	}
 

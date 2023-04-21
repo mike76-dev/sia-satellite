@@ -176,15 +176,8 @@ func (p *Portal) deleteAccount(email string) error {
 	return nil
 }
 
-// flushPendingPayments removes any pending payments for the given
-// user account.
-func (p *Portal) flushPendingPayments(email string) error {
-	_, err := p.db.Exec("DELETE FROM payments WHERE email = ? AND pending = ?", email, true)
-	return err
-}
-
 // putPayment inserts a payment into the database.
-func (p *Portal) putPayment(email string, amount float64, currency string, pending bool) error {
+func (p *Portal) putPayment(email string, amount float64, currency string) error {
 	// Convert the amount to USD.
 	rate, err := p.satellite.GetExchangeRate(currency)
 	if err != nil {
@@ -194,44 +187,14 @@ func (p *Portal) putPayment(email string, amount float64, currency string, pendi
 		return errors.New("unable to get exchange rate")
 	}
 
-	// Flush any existing pending payments first.
-	if err := p.flushPendingPayments(email); err != nil {
-		return err
-	}
-
 	// Insert the payment.
 	amountUSD := amount / rate
 	timestamp := time.Now().Unix()
 	_, err = p.db.Exec(`
-		INSERT INTO payments (email, amount, currency, amount_usd, made, pending)
-		VALUES (?, ?, ?, ?, ?, ?)`, email, amount, currency, amountUSD, timestamp, pending)
+		INSERT INTO payments (email, amount, currency, amount_usd, made)
+		VALUES (?, ?, ?, ?, ?)`, email, amount, currency, amountUSD, timestamp)
 
 	return err
-}
-
-// getPendingPayment retrieves a pending payment from the database.
-func (p *Portal) getPendingPayment(email string) (*userPayment, error) {
-	var amount, amountUSD float64
-	var currency string
-	var timestamp uint64
-
-	err := p.db.QueryRow(`
-		SELECT amount, currency, amount_usd, made FROM payments
-		WHERE email = ? AND pending = ?`, email, true).Scan(&amount, &currency, &amountUSD, &timestamp)
-
-	// If there are no rows, return an error anyway.
-	if err != nil {
-		return nil, err
-	}
-
-	up := &userPayment{
-		Amount:    amount,
-		Currency:  currency,
-		AmountUSD: amountUSD,
-		Timestamp: timestamp,
-	}
-
-	return up, nil
 }
 
 // addPayment updates the payments and balances tables with a new payment.
@@ -277,7 +240,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	}
 
 	// Update the payments table.
-	if err = p.putPayment(email, amount, currency, false); err != nil {
+	if err = p.putPayment(email, amount, currency); err != nil {
 		return err
 	}
 
@@ -334,8 +297,8 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 func (p *Portal) getPayments(email string) ([]userPayment, error) {
 	rows, err := p.db.Query(`
 		SELECT amount, currency, amount_usd, made FROM payments
-		WHERE email = ? AND pending = ?
-	`, email, false)
+		WHERE email = ?
+	`, email)
 	if err != nil {
 		return nil, err
 	}

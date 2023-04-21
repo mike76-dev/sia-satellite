@@ -32,7 +32,6 @@ CREATE TABLE payments (
 	currency   VARCHAR(8) NOT NULL,
 	amount_usd DOUBLE NOT NULL,
 	made       INT NOT NULL,
-	pending    BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );
