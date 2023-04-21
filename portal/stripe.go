@@ -2,9 +2,11 @@ package portal
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
@@ -22,14 +24,18 @@ type item struct {
 }
 
 // calculateOrderAmount returns the amount to charge the user from.
-func (p *Portal) calculateOrderAmount(email string) (int64, string, error) {
-	// Retrieve the pending payment amount.
-	up, err := p.getPendingPayment(email)
+func (p *Portal) calculateOrderAmount(id string) (int64, string, error) {
+	if len(id) < 4 {
+		return 0, "", errors.New("wrong item length")
+	}
+	amt := id[:len(id) - 3]
+	amount, err := strconv.ParseFloat(amt, 64)
 	if err != nil {
 		return 0, "", err
 	}
+	currency := strings.ToLower(id[len(id) - 3:])
 
-	return int64(up.Amount * 100), strings.ToLower(up.Currency), nil
+	return int64(amount * 100), currency, nil
 }
 
 // paymentHandlerPOST handles the POST /stripe/create-payment-intent requests.
@@ -112,7 +118,8 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Create a PaymentIntent with amount and currency.
-	amount, currency, pErr := api.portal.calculateOrderAmount(email)
+	id := data.Items[0].ID
+	amount, currency, pErr := api.portal.calculateOrderAmount(id)
 	if pErr != nil {
 		api.portal.log.Println("ERROR: couldn't read pending payment:", pErr)
 		writeError(w,
