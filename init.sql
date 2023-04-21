@@ -142,6 +142,7 @@ CREATE TABLE renters (
 CREATE TABLE contracts (
 	id                      INT NOT NULL AUTO_INCREMENT,
 	contract_id             VARCHAR(64) NOT NULL UNIQUE,
+	renter_pk               VARCHAR(128) NOT NULL,
 	start_height            BIGINT UNSIGNED NOT NULL,
 	secret_key              VARCHAR(128) NOT NULL,
 	download_spending       VARCHAR(64) NOT NULL,

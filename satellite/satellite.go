@@ -310,7 +310,7 @@ func (s *Satellite) Renters() []modules.Renter {
 
 // FormContracts forms the specified number of contracts with the hosts
 // and returns them.
-func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a modules.Allowance) ([]modules.RenterContract, error) {
+func (s *Satellite) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, a modules.Allowance) ([]modules.RenterContract, error) {
 	// Get the estimated costs and update the allowance with them.
 	estimation, a, err := s.m.PriceEstimation(a)
 	if err != nil {
@@ -337,7 +337,7 @@ func (s *Satellite) FormContracts(rpk types.SiaPublicKey, a modules.Allowance) (
 	}
 
 	// Form the contracts.
-	contractSet, err := s.m.FormContracts(rpk)
+	contractSet, err := s.m.FormContracts(rpk, rsk)
 
 	return contractSet, err
 }
@@ -348,18 +348,23 @@ func (s *Satellite) Contracts() []modules.RenterContract {
 }
 
 // ContractsByRenter calls Manager.ContractsByRenter.
-func (s *Satellite) ContractsByRenter(rs smodules.RenterSeed) []modules.RenterContract {
-	return s.m.ContractsByRenter(rs)
+func (s *Satellite) ContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	return s.m.ContractsByRenter(rpk)
 }
 
-// RefreshedContract calls Manager.RefreshedContract
+// RefreshedContract calls Manager.RefreshedContract.
 func (s *Satellite) RefreshedContract(fcid types.FileContractID) bool {
 	return s.m.RefreshedContract(fcid)
 }
 
-// OldContracts calls Manager.OldContracts expired.
+// OldContracts calls Manager.OldContracts.
 func (s *Satellite) OldContracts() []modules.RenterContract {
 	return s.m.OldContracts()
+}
+
+// OldsContractsByRenter calls Manager.OldContractsByRenter.
+func (s *Satellite) OldContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	return s.m.OldContractsByRenter(rpk)
 }
 
 // BlockHeight returns the current block height.
@@ -370,7 +375,7 @@ func (s *Satellite) BlockHeight() types.BlockHeight {
 // RenewContracts tries to renew the given set of contracts and returns them.
 // If the contracts are not up to being renewed yet, existing contracts are
 // returned.
-func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, a modules.Allowance, contracts []types.FileContractID) ([]modules.RenterContract, error) {
+func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, a modules.Allowance, contracts []types.FileContractID) ([]modules.RenterContract, error) {
 	// Get the estimated costs and update the allowance with them.
 	estimation, a, err := s.m.PriceEstimation(a)
 	if err != nil {
@@ -397,7 +402,7 @@ func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, a modules.Allowance, 
 	}
 
 	// Renew the contracts.
-	contractSet, err := s.m.RenewContracts(rpk, contracts)
+	contractSet, err := s.m.RenewContracts(rpk, rsk, contracts)
 
 	return contractSet, err
 }

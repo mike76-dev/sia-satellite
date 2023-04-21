@@ -91,7 +91,7 @@ func (c *Contractor) managedCheckHostScore(contract modules.RenterContract, sb s
 		if deadScore {
 			return u, necessaryUtilityUpdate
 		}
-		// TODO Think about implementing ChurnLimiter.
+
 		return u, suggestedUtilityUpdate
 	}
 
@@ -136,7 +136,7 @@ func (c *Contractor) managedCriticalUtilityChecks(fc *proto.FileContract, host s
 	contract := fc.Metadata()
 
 	c.mu.RLock()
-	renter, err := c.managedFindRenter(fc.Metadata().RenterPublicKey, fc.Metadata().HostPublicKey)
+	renter, err := c.managedFindRenter(contract.ID)
 	c.mu.RUnlock()
 	if err != nil {
 		c.log.Println("ERROR: Renter not found")

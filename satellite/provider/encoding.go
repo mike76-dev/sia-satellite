@@ -128,6 +128,7 @@ func (rr *requestRequest) EncodeTo(e *types.Encoder) {
 // the hosts.
 type formRequest struct {
 	PubKey      crypto.PublicKey
+	SecretKey   crypto.SecretKey
 	Hosts       uint64
 	Period      uint64
 	RenewWindow uint64
@@ -154,6 +155,7 @@ type formRequest struct {
 // DecodeFrom implements requestBody.
 func (fr *formRequest) DecodeFrom(d *types.Decoder) {
 	copy(fr.PubKey[:], d.ReadBytes())
+	copy(fr.SecretKey[:], d.ReadBytes())
 	fr.Hosts = d.ReadUint64()
 	fr.Period = d.ReadUint64()
 	fr.RenewWindow = d.ReadUint64()
@@ -176,6 +178,7 @@ func (fr *formRequest) DecodeFrom(d *types.Decoder) {
 // EncodeTo implements requestBody.
 func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(fr.PubKey[:])
+	e.WriteBytes(fr.SecretKey[:])
 	e.WriteUint64(fr.Hosts)
 	e.WriteUint64(fr.Period)
 	e.WriteUint64(fr.RenewWindow)
@@ -197,6 +200,7 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 // renewRequest is used when the renter requests contract renewals.
 type renewRequest struct {
 	PubKey      crypto.PublicKey
+	SecretKey   crypto.SecretKey
 	Contracts   []types.FileContractID
 	Period      uint64
 	RenewWindow uint64
@@ -223,6 +227,7 @@ type renewRequest struct {
 // DecodeFrom implements requestBody.
 func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
 	copy(rr.PubKey[:], d.ReadBytes())
+	copy(rr.SecretKey[:], d.ReadBytes())
 	numContracts := int(d.ReadUint64())
 	rr.Contracts = make([]types.FileContractID, numContracts)
 	for i := 0; i < numContracts; i++ {
@@ -249,6 +254,7 @@ func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
 // EncodeTo implements requestBody.
 func (rr *renewRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(rr.PubKey[:])
+	e.WriteBytes(rr.SecretKey[:])
 	e.WriteUint64(uint64(len(rr.Contracts)))
 	for _, id := range rr.Contracts {
 		e.WriteBytes(id[:])

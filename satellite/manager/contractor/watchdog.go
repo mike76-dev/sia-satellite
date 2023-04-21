@@ -670,17 +670,17 @@ func (w *watchdog) callCheckContracts() {
 		}
 
 		// Fetch the contract metadata.
-		contract, exists := w.contractor.staticContracts.View(fcID)
+		_, exists := w.contractor.staticContracts.View(fcID)
 		if !exists {
 			// Check if the contract was moved to oldContracts.
-			contract, exists = w.contractor.staticContracts.OldContract(fcID)
+			_, exists = w.contractor.staticContracts.OldContract(fcID)
 			if !exists {
 				w.contractor.log.Printf("ERROR: Contract %v not found by the watchdog\n", fcID.String())
 			}
 			w.archiveContract(fcID, 0)
 			continue
 		}
-		renter, err := w.contractor.managedFindRenter(contract.RenterPublicKey, contract.HostPublicKey)
+		renter, err := w.contractor.managedFindRenter(fcID)
 		if err != nil {
 			w.contractor.log.Println("ERROR: Renter not found by the watchdog")
 			continue

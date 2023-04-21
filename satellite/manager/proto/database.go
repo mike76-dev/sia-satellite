@@ -3,10 +3,9 @@ package proto
 import (
 	"database/sql"
 	"encoding/hex"
+	"errors"
 
 	"github.com/mike76-dev/sia-satellite/modules"
-
-	"gitlab.com/NebulousLabs/errors"
 
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
@@ -15,6 +14,7 @@ import (
 type (
 	// contractPersist holds the contract data in the database.
 	contractPersist struct {
+		RenterPublicKey      string
 		StartHeight          uint64
 		SecretKey            string
 		DownloadSpending     string
@@ -71,7 +71,7 @@ type (
 
 // saveContract saves the FileContract in the database. A lock must be acquired
 // on the contract.
-func (fc *FileContract) saveContract() error {
+func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
 	// Prepare the necessary variables.
 	h := fc.header
 	rev := h.LastRevision()
@@ -93,25 +93,26 @@ func (fc *FileContract) saveContract() error {
 		copy(ts1.Signature, h.Transaction.TransactionSignatures[1].Signature)
 	}
 
-	// Check if the contract is already in the database.
-	var count int
-	err := fc.db.QueryRow("SELECT COUNT(*) FROM contracts WHERE contract_id = ?", id).Scan(&count)
-	if err != nil {
+	// Check if the contract is already in the database. In this case, renter
+	// public key must be non-empty.
+	var renterKey string
+	err := fc.db.QueryRow("SELECT renter_pk FROM contracts WHERE contract_id = ?", id).Scan(&renterKey)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
-	if count > 0 {
+	if renterKey != "" {
 		// Update contract.
 		_, err := fc.db.Exec(`
 			UPDATE contracts
-			SET start_height = ?, secret_key = ?, download_spending = ?,
+			SET renter_pk = ?, start_height = ?, secret_key = ?, download_spending = ?,
 				fund_account_spending = ?, storage_spending = ?, upload_spending = ?,
 				total_cost = ?, contract_fee = ?, txn_fee = ?, siafund_fee = ?,
 				account_balance_cost = ?, fund_account_cost = ?,
 				update_price_table_cost = ?, good_for_upload = ?, good_for_renew = ?,
 				bad_contract = ?, last_oos_err = ?, locked = ?
 			WHERE contract_id = ?
-		`, h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, id)
+		`, renterKey, h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, id)
 		if err != nil {
 			return err
 		}
@@ -146,13 +147,13 @@ func (fc *FileContract) saveContract() error {
 	// Insert new contract.
 	_, err = fc.db.Exec(`
 		INSERT INTO contracts
-			(contract_id, start_height, secret_key, download_spending,
+			(contract_id, renter_pk, start_height, secret_key, download_spending,
 			fund_account_spending, storage_spending, upload_spending, total_cost,
 			contract_fee, txn_fee, siafund_fee, account_balance_cost,
 			fund_account_cost, update_price_table_cost, good_for_upload,
 			good_for_renew, bad_contract, last_oos_err, locked, renewed_from, renewed_to)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, "", "")
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, rpk.String(), h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, "", "")
 	if err != nil {
 		return err
 	}
@@ -180,9 +181,12 @@ func (fc *FileContract) saveContract() error {
 // deleteContract deletes the contract from the database.
 func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 	id := hex.EncodeToString(fcid[:])
-	_, err1 := db.Exec("DELETE FROM transactions WHERE contract_id = ?", id)
-	_, err2 := db.Exec("DELETE FROM contracts WHERE contract_id = ?", id)
-	return errors.Compose(err1, err2)
+	_, err := db.Exec("DELETE FROM transactions WHERE contract_id = ?", id)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("DELETE FROM contracts WHERE contract_id = ?", id)
+	return err
 }
 
 // loadContracts loads the entire contracts table into the contract set.
@@ -345,4 +349,34 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 	}
 
 	return nil
+}
+
+// managedFindIDs returns a list of contract IDs belonging to the given renter.
+// NOTE: this function also returns the old contracts.
+func (cs *ContractSet) managedFindIDs(rpk types.SiaPublicKey) []types.FileContractID {
+	rows, err := cs.db.Query(`
+		SELECT contract_id
+		FROM contracts
+		WHERE renter_pk = ?
+	`, rpk.String())
+	if err != nil {
+		cs.log.Println("ERROR: couldn't query database:", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var ids []types.FileContractID
+	var id string
+	for rows.Next() {
+		if err := rows.Scan(&id); err != nil {
+			cs.log.Println("ERROR: unable to get contract ID:", err)
+			continue
+		}
+		var fcid types.FileContractID
+		b, _ := hex.DecodeString(id)
+		copy(fcid[:], b)
+		ids = append(ids, fcid)
+	}
+
+	return ids
 }

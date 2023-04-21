@@ -113,29 +113,17 @@ func DeriveRenterSeed(walletSeed smodules.Seed, email string) smodules.RenterSee
 	return renterSeed
 }
 
-// DeriveEphemeralRenterSeed derives a seed to be used by the renter for the
+// DeriveEphemeralKey derives a secret key to be used by the renter for the
 // exchange with the hosts.
-// NOTE: The seed returned by this function should be wiped once it's no longer
-// in use.
-func DeriveEphemeralRenterSeed(renterSeed smodules.RenterSeed, hpk types.SiaPublicKey) smodules.EphemeralRenterSeed {
-	var ers smodules.EphemeralRenterSeed
-	sk, _ := GenerateKeyPair(renterSeed)
-	defer fastrand.Read(renterSeed[:])
-	rs := crypto.HashBytes(append(sk[:], hpk.Key...))
-	defer fastrand.Read(rs[:])
-	copy(ers[:], rs[:])
-	return ers
-}
-
-// EphemeralPublicKey derives a public key from an ephemeral seed.
-func EphemeralPublicKey(ers smodules.EphemeralRenterSeed) types.SiaPublicKey {
-	_, epk := GenerateKeyPair(smodules.RenterSeed(ers))
+func DeriveEphemeralKey(rsk crypto.SecretKey, hpk types.SiaPublicKey) crypto.SecretKey {
+	ers := crypto.HashBytes(append(rsk[:], hpk.Key...))
 	defer fastrand.Read(ers[:])
-	return types.Ed25519PublicKey(epk)
+	esk, _ := GenerateKeyPair(ers)
+	return esk
 }
 
 // GenerateKeyPair generates a private/public keypair from a seed.
-func GenerateKeyPair(seed smodules.RenterSeed) (sk crypto.SecretKey, pk crypto.PublicKey) {
+func GenerateKeyPair(seed crypto.Hash) (sk crypto.SecretKey, pk crypto.PublicKey) {
 	xsk := core.NewPrivateKeyFromSeed(seed[:])
 	defer fastrand.Read(seed[:])
 	copy(sk[:], xsk[:])
@@ -211,5 +199,6 @@ type ContractParams struct {
 	StartHeight    types.BlockHeight
 	EndHeight      types.BlockHeight
 	RefundAddress  types.UnlockHash
-	RenterSeed     smodules.EphemeralRenterSeed
+	PublicKey      types.SiaPublicKey
+	SecretKey      crypto.SecretKey
 }

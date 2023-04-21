@@ -120,25 +120,16 @@ func (p *Provider) managedRequestContracts(s *rpcSession) error {
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(crypto.PublicKey(rr.PubKey))
-	renter, err := p.satellite.GetRenter(rpk)
+	rpk := types.Ed25519PublicKey(rr.PubKey)
+	_, err = p.satellite.GetRenter(rpk)
 	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.writeError(err)
 		return err
 	}
 
-	seed, err := p.satellite.WalletSeed()
-	if err != nil {
-		err = fmt.Errorf("couldn't retrieve contracts: %v", err)
-		s.writeError(err)
-		return err
-	}
-	rs := modules.DeriveRenterSeed(seed, renter.Email)
-	defer fastrand.Read(rs[:])
-
 	// Get the contracts.
-	contracts := p.satellite.ContractsByRenter(rs)
+	contracts := p.satellite.ContractsByRenter(rpk)
 	ecs := extendedContractSet{
 		contracts: make([]extendedContract, 0, len(contracts)),
 	}
@@ -183,7 +174,7 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(crypto.PublicKey(fr.PubKey))
+	rpk := types.Ed25519PublicKey(fr.PubKey)
 	exists, err := p.satellite.UserExists(rpk)
 	if !exists || err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
@@ -245,7 +236,7 @@ func (p *Provider) managedFormContracts(s *rpcSession) error {
 	}
 
 	// Form the contracts.
-	contracts, err := p.satellite.FormContracts(rpk, a)
+	contracts, err := p.satellite.FormContracts(rpk, fr.SecretKey, a)
 	if err != nil {
 		err = fmt.Errorf("could not form contracts: %v", err)
 		s.writeError(err)
@@ -287,7 +278,7 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(crypto.PublicKey(rr.PubKey))
+	rpk := types.Ed25519PublicKey(rr.PubKey)
 	exists, err := p.satellite.UserExists(rpk)
 	if !exists || err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
@@ -353,7 +344,7 @@ func (p *Provider) managedRenewContracts(s *rpcSession) error {
 	for i, fcid := range rr.Contracts {
 		copy(fcids[i][:], fcid[:])
 	}
-	contracts, err := p.satellite.RenewContracts(rpk, a, fcids)
+	contracts, err := p.satellite.RenewContracts(rpk, rr.SecretKey, a, fcids)
 	if err != nil {
 		err = fmt.Errorf("could not renew contracts: %v", err)
 		s.writeError(err)
@@ -463,7 +454,7 @@ func (p *Provider) managedUpdateRevision(s *rpcSession) error {
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(crypto.PublicKey(ur.PubKey))
+	rpk := types.Ed25519PublicKey(ur.PubKey)
 	exists, err := p.satellite.UserExists(rpk)
 	if !exists || err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)

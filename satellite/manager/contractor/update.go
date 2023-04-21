@@ -1,33 +1,9 @@
 package contractor
 
 import (
-	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
-
-// hasFCIdentifier checks the transaction for a ContractSignedIdentifier and
-// returns the first one it finds with a bool indicating if an identifier was
-// found.
-func hasFCIdentifier(txn types.Transaction) (modules.ContractSignedIdentifier, crypto.Ciphertext, bool) {
-	// We don't verify the host key here so we only need to make sure the
-	// identifier fits into the arbitrary data.
-	if len(txn.ArbitraryData) != 1 || len(txn.ArbitraryData[0]) < modules.FCSignedIdentiferSize {
-		return modules.ContractSignedIdentifier{}, nil, false
-	}
-	// Verify the prefix.
-	var prefix types.Specifier
-	copy(prefix[:], txn.ArbitraryData[0])
-	if prefix != modules.PrefixFileContractIdentifier &&
-		prefix != modules.PrefixNonSia {
-		return modules.ContractSignedIdentifier{}, nil, false
-	}
-	// We found an identifier.
-	var csi modules.ContractSignedIdentifier
-	n := copy(csi[:], txn.ArbitraryData[0])
-	hostKey := txn.ArbitraryData[0][n:]
-	return csi, hostKey, true
-}
 
 // managedArchiveContracts will figure out which contracts are no longer needed
 // and move them to the historic set of contracts.

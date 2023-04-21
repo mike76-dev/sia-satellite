@@ -26,10 +26,10 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	oldRev := oldContract.LastRevision()
 
 	// Extract vars from params, for convenience.
-	fcTxn, _ := txnBuilder.View()
 	host, funding, startHeight, endHeight := params.Host, params.Funding, params.StartHeight, params.EndHeight
 	renterSKOld := oldContract.SecretKey
-	renterSKNew, renterPKNew := modules.GenerateKeyPair(smodules.RenterSeed(params.RenterSeed))
+	renterSKNew := params.SecretKey
+	renterPKNew := renterSKNew.PublicKey()
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), contractHostRenewTimeout)
@@ -77,10 +77,6 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 
 	// Add the fee to the transaction.
 	txnBuilder.AddMinerFee(txnFee)
-
-	// Add FileContract identifier.
-	si, hk := smodules.PrefixedSignedIdentifier(params.RenterSeed, fcTxn, host.PublicKey)
-	_ = txnBuilder.AddArbitraryData(append(si[:], hk[:]...))
 
 	// Create transaction set.
 	txnSet, err := prepareTransactionSet(txnBuilder)
@@ -161,7 +157,7 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	}
 
 	// Add contract to the set.
-	meta, err := cs.managedInsertContract(header)
+	meta, err := cs.managedInsertContract(header, params.PublicKey)
 	if err != nil {
 		return modules.RenterContract{}, nil, err
 	}

@@ -112,8 +112,13 @@ func (c *Contractor) Contracts() []modules.RenterContract {
 }
 
 // ContractsByRenter returns the contracts belonging to a specific renter.
-func (c *Contractor) ContractsByRenter(rs smodules.RenterSeed) []modules.RenterContract {
-	return c.staticContracts.ByRenter(rs)
+func (c *Contractor) ContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	return c.staticContracts.ByRenter(rpk)
+}
+
+// OldContractsByRenter returns the old contracts of a specific renter.
+func (c *Contractor) OldContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	return c.staticContracts.OldByRenter(rpk)
 }
 
 // ContractUtility returns the utility fields for the given contract.

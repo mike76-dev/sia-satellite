@@ -119,11 +119,17 @@ type Satellite interface {
 	// Contracts returns storage contracts.
 	Contracts() []RenterContract
 
+	// ContractsByRenter returns storage contracts filtered by the renter.
+	ContractsByRenter(types.SiaPublicKey) []RenterContract
+
 	// RefreshedContract returns a bool indicating if the contract was refreshed.
 	RefreshedContract(types.FileContractID) bool
 
 	// OldContracts returns the contracts that have expired.
 	OldContracts() []RenterContract
+
+	// OldContractsByRenter returns expired contracts filtered by the renter.
+	OldContractsByRenter(types.SiaPublicKey) []RenterContract
 
 	// RetrieveSpendings retrieves the user's spendings.
 	RetrieveSpendings(string, string) (*UserSpendings, error)
@@ -266,11 +272,12 @@ type ContractFormer interface {
 	PublicKey() types.SiaPublicKey
 	SecretKey() crypto.SecretKey
 	UserExists(types.SiaPublicKey) (bool, error)
-	FormContracts(types.SiaPublicKey, Allowance) ([]RenterContract, error)
-	RenewContracts(types.SiaPublicKey, Allowance, []types.FileContractID) ([]RenterContract, error)
+	FormContracts(types.SiaPublicKey, crypto.SecretKey, Allowance) ([]RenterContract, error)
+	RenewContracts(types.SiaPublicKey, crypto.SecretKey, Allowance, []types.FileContractID) ([]RenterContract, error)
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 	GetRenter(types.SiaPublicKey) (Renter, error)
-	ContractsByRenter(smodules.RenterSeed) []RenterContract
+	ContractsByRenter(types.SiaPublicKey) []RenterContract
+	OldContractsByRenter(types.SiaPublicKey) []RenterContract
 	WalletSeed() (smodules.Seed, error)
 	RenewedFrom(types.FileContractID) types.FileContractID
 }

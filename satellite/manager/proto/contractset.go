@@ -7,7 +7,6 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	"go.sia.tech/siad/types"
 )
@@ -82,22 +81,12 @@ func (cs *ContractSet) ReplaceOldContract(fcid types.FileContractID, c *FileCont
 
 // IDs returns the fcid of each contract with in the set. The contracts are not
 // locked.
-func (cs *ContractSet) IDs(rs smodules.RenterSeed) []types.FileContractID {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-	pks := make([]types.FileContractID, 0, len(cs.contracts))
-	for fcid, fc := range cs.contracts {
-		hpk := fc.header.HostPublicKey()
-		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, hpk))
-		if fc.header.RenterPublicKey().String() == epk.String() {
-			pks = append(pks, fcid)
-		}
-	}
-	return pks
+func (cs *ContractSet) IDs(rpk types.SiaPublicKey) []types.FileContractID {
+	return cs.managedFindIDs(rpk)
 }
 
 // InsertContract inserts an existing contract into the set.
-func (cs *ContractSet) InsertContract(rc modules.RecoverableContract, revTxn types.Transaction, roots []crypto.Hash, sk crypto.SecretKey) (modules.RenterContract, error) {
+func (cs *ContractSet) InsertContract(rc modules.RecoverableContract, rpk types.SiaPublicKey, revTxn types.Transaction, roots []crypto.Hash, sk crypto.SecretKey) (modules.RenterContract, error) {
 	// Estimate the totalCost.
 	// NOTE: The actual totalCost is the funding amount. Which means
 	// renterPayout + txnFee + basePrice + contractPrice.
@@ -112,7 +101,7 @@ func (cs *ContractSet) InsertContract(rc modules.RecoverableContract, revTxn typ
 		TotalCost:   totalCost,
 		TxnFee:      rc.TxnFee,
 		SiafundFee:  types.Tax(rc.StartHeight, rc.Payout),
-	},)
+	}, rpk)
 }
 
 // Len returns the number of contracts in the set.
@@ -174,14 +163,14 @@ func (cs *ContractSet) ViewAll() []modules.RenterContract {
 }
 
 // ByRenter works the same as ViewAll but filters the contracts by the renter.
-func (cs *ContractSet) ByRenter(rs smodules.RenterSeed) []modules.RenterContract {
+func (cs *ContractSet) ByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	ids := cs.managedFindIDs(rpk)
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
-	contracts := make([]modules.RenterContract, 0, len(cs.contracts))
-	for _, fc := range cs.contracts {
-		hpk := fc.header.HostPublicKey()
-		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, hpk))
-		if fc.header.RenterPublicKey().String() == epk.String() {
+	contracts := make([]modules.RenterContract, 0, len(ids))
+	for _, id := range ids {
+		fc, exists := cs.contracts[id]
+		if exists {
 			contracts = append(contracts, fc.Metadata())
 		}
 	}
@@ -197,6 +186,21 @@ func (cs *ContractSet) OldContracts() []modules.RenterContract {
 		oldContracts = append(oldContracts, oldContract.Metadata())
 	}
 	return oldContracts
+}
+
+// ByRenter works the same as OldContracts but filters the contracts by the renter.
+func (cs *ContractSet) OldByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	ids := cs.managedFindIDs(rpk)
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	contracts := make([]modules.RenterContract, 0, len(ids))
+	for _, id := range ids {
+		fc, exists := cs.oldContracts[id]
+		if exists {
+			contracts = append(contracts, fc.Metadata())
+		}
+	}
+	return contracts
 }
 
 // OldContract returns the metadata of the specified old contract.

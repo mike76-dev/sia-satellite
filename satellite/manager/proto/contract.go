@@ -119,7 +119,7 @@ func (c *FileContract) CommitPaymentIntent(signedTxn types.Transaction, amount t
 	c.header = newHeader
 
 	// Update the database.
-	return c.saveContract()
+	return c.saveContract(types.SiaPublicKey{})
 }
 
 // LastRevision returns the most recent revision.
@@ -179,7 +179,7 @@ func (c *FileContract) RecordPaymentIntent(rev types.FileContractRevision, amoun
 	c.header = newHeader
 
 	// Update the database.
-	return c.saveContract()
+	return c.saveContract(types.SiaPublicKey{})
 }
 
 // Sign will sign the given hash using the FileContract's secret key.
@@ -200,7 +200,7 @@ func (c *FileContract) UpdateUtility(utility smodules.ContractUtility) error {
 	c.mu.Unlock()
 
 	// Update the database.
-	return c.saveContract()
+	return c.saveContract(types.SiaPublicKey{})
 }
 
 // Utility returns the contract utility for the contract.
@@ -213,7 +213,7 @@ func (c *FileContract) Utility() smodules.ContractUtility {
 // applySetHeader directly makes changes to the contract header.
 func (c *FileContract) applySetHeader(h contractHeader) error {
 	c.header = h
-	return c.saveContract()
+	return c.saveContract(types.SiaPublicKey{})
 }
 
 // managedCommitAppend applies the contract update based on the provided
@@ -310,7 +310,7 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 	c.header.Transaction.FileContractRevisions[0] = rev
 	c.header.Transaction.TransactionSignatures = sigs
 
-	return c.saveContract()
+	return c.saveContract(types.SiaPublicKey{})
 }
 
 // UpdateContract updates the contract with the new revision.
@@ -330,7 +330,7 @@ func (cs *ContractSet) UpdateContract(rev types.FileContractRevision, sigs []typ
 
 // managedInsertContract inserts a contract into a set. This will overwrite
 // existing contracts of the same name to make sure the update is idempotent.
-func (cs *ContractSet) managedInsertContract(h contractHeader) (modules.RenterContract, error) {
+func (cs *ContractSet) managedInsertContract(h contractHeader, rpk types.SiaPublicKey) (modules.RenterContract, error) {
 	// Validate header.
 	if err := h.validate(); err != nil {
 		return modules.RenterContract{}, err
@@ -351,5 +351,5 @@ func (cs *ContractSet) managedInsertContract(h contractHeader) (modules.RenterCo
 	cs.pubKeys[h.RenterPublicKey().String() + h.HostPublicKey().String()] = fc.header.ID()
 	cs.mu.Unlock()
 	
-	return fc.Metadata(), fc.saveContract()
+	return fc.Metadata(), fc.saveContract(rpk)
 }

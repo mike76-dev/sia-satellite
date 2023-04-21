@@ -77,13 +77,9 @@ func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder tr
 	sweepBuilder.AddSiacoinOutput(output)
 	sweepTxn, sweepParents = sweepBuilder.View()
 
-	// Add FileContract identifier.
-	fcTxn, _ := txnBuilder.View()
-	si, hk := smodules.PrefixedSignedIdentifier(params.RenterSeed, fcTxn, host.PublicKey)
-	_ = txnBuilder.AddArbitraryData(append(si[:], hk[:]...))
-
-	// Create our key.
-	renterSK, renterPK := modules.GenerateKeyPair(smodules.RenterSeed(params.RenterSeed))
+	// Create our keys.
+	renterSK := params.SecretKey
+	renterPK := renterSK.PublicKey()
 
 	// Create unlock conditions.
 	uc := types.UnlockConditions{
@@ -202,7 +198,7 @@ func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder tr
 	}
 
 	// Add contract to set.
-	meta, err := cs.managedInsertContract(header) // No Merkle roots.
+	meta, err := cs.managedInsertContract(header, params.PublicKey) // No Merkle roots.
 	if err != nil {
 		return modules.RenterContract{}, nil, types.Transaction{}, nil, err
 	}

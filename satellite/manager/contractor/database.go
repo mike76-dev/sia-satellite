@@ -1,6 +1,8 @@
 package contractor
 
 import (
+	"encoding/hex"
+
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"go.sia.tech/siad/types"
@@ -31,4 +33,25 @@ func (c *Contractor) updateRenewedContract(oldID, newID types.FileContractID) er
 	}
 	_, err = c.db.Exec("UPDATE contracts SET renewed_to = ? WHERE contract_id = ?", newID.String(), oldID.String())
 	return err
+}
+
+// managedFindRenter tries to find a renter by the contract ID.
+func (c *Contractor) managedFindRenter(fcid types.FileContractID) (modules.Renter, error) {
+	var key string
+	id := hex.EncodeToString(fcid[:])
+	err := c.db.QueryRow(`
+		SELECT renter_pk
+		FROM contracts
+		WHERE contract_id = ?
+	`, id).Scan(&key)
+	if err != nil {
+		return modules.Renter{}, ErrRenterNotFound
+	}
+
+	renter, exists := c.renters[key]
+	if exists {
+		return renter, nil
+	}
+
+	return modules.Renter{}, ErrRenterNotFound
 }

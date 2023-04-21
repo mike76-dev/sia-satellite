@@ -178,7 +178,7 @@ func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAver
 func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
-	email, err := api.verifyCookie(w, token)
+	_, err := api.verifyCookie(w, token)
 	if err != nil {
 		return
 	}
@@ -453,21 +453,10 @@ func (api *portalAPI) contractsHandlerGET(w http.ResponseWriter, req *http.Reque
 func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []renterContract {
 	var rc []renterContract
 	currentBlockHeight := api.portal.satellite.BlockHeight()
-	seed, err := api.portal.satellite.GetWalletSeed()
-	if err != nil {
-		return nil
-	}
-	rs := modules.DeriveRenterSeed(seed, renter.Email)
-	defer fastrand.Read(rs[:])
 
 	if current {
-		for _, c := range api.portal.satellite.Contracts() {
-			// Skip contracts that don't belong to the renter.
-			epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, c.HostPublicKey))
-			if epk.String() != c.RenterPublicKey.String() {
-				continue
-			}
-
+		contracts := api.portal.satellite.ContractsByRenter(renter.PublicKey)
+		for _, c := range contracts {
 			// Fetch host address.
 			cp := types.ZeroCurrency
 			var netAddress smodules.NetAddress
@@ -532,12 +521,8 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 
 	// Process old contracts.
 	if old {
-		for _, c := range api.portal.satellite.OldContracts() {
-			// Skip contracts that don't belong to the renter.
-			epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, c.HostPublicKey))
-			if epk.String() != c.RenterPublicKey.String() {
-				continue
-			}
+		contracts := api.portal.satellite.OldContractsByRenter(renter.PublicKey)
+		for _, c := range contracts {
 			var size uint64
 			if len(c.Transaction.FileContractRevisions) != 0 {
 				size = c.Transaction.FileContractRevisions[0].NewFileSize

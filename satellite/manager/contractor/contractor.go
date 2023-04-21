@@ -11,7 +11,6 @@ import (
 	"github.com/mike76-dev/sia-satellite/satellite/manager/proto"
 
 	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/fastrand"
 	"gitlab.com/NebulousLabs/threadgroup"
 
 	"go.sia.tech/siad/crypto"
@@ -112,14 +111,7 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 		return smodules.ContractorSpending{}, ErrRenterNotFound
 	}
 
-	seed, _, err := c.wallet.PrimarySeed()
-	if err != nil {
-		return smodules.ContractorSpending{}, err
-	}
-	rs := modules.DeriveRenterSeed(seed, renter.Email)
-	defer fastrand.Read(rs[:])
-
-	allContracts := c.staticContracts.ByRenter(rs)
+	allContracts := c.staticContracts.ByRenter(rpk)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -148,8 +140,12 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 	// Calculate needed spending to be reported from old contracts.
 	for _, contract := range c.OldContracts() {
 		// Filter out by renter.
-		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, contract.HostPublicKey))
-		if contract.RenterPublicKey.String() != epk.String() {
+		r, err := c.managedFindRenter(contract.ID)
+		if err != nil {
+			c.log.Println("ERROR: contract has no known renter associated with it:", contract.ID)
+			continue
+		}
+		if r.PublicKey.String() != rpk.String() {
 			continue
 		}
 		// Don't count double-spent contracts.
@@ -479,11 +475,11 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 		}
 	}
 
-	c.mu.RLock()
-	renter, err := c.managedFindRenter(contract.RenterPublicKey, contract.HostPublicKey)
-	c.mu.RUnlock()
+	c.mu.Lock()
+	renter, err := c.managedFindRenter(fcid)
+	c.mu.Unlock()
 	if err != nil {
-		c.log.Println("ERROR: trying to unlock funds of a non-existing renter:", contract.RenterPublicKey.String())
+		c.log.Println("ERROR: trying to unlock funds of a non-existing renter:", fcid)
 		return
 	}
 
@@ -508,28 +504,6 @@ func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types
 	}
 
 	return err
-}
-
-// managedFindRenter tries to find a renter by the ephemeral public key.
-func (c *Contractor) managedFindRenter(epk, hpk types.SiaPublicKey) (renter modules.Renter, err error) {
-	seed, _, err := c.wallet.PrimarySeed()
-	if err != nil {
-		return
-	}
-
-	var rs smodules.RenterSeed
-	defer fastrand.Read(rs[:])
-
-	renters := c.renters
-	for _, renter = range renters {
-		rs = modules.DeriveRenterSeed(seed, renter.Email)
-		key := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, hpk))
-		if key.String() == epk.String() {
-			return
-		}
-	}
-
-	return modules.Renter{}, ErrRenterNotFound
 }
 
 // RenewedFrom returns the ID of the contract the given contract was renewed

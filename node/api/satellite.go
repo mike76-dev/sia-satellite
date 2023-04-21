@@ -7,8 +7,6 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/julienschmidt/httprouter"
 
-	"gitlab.com/NebulousLabs/fastrand"
-
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
@@ -172,33 +170,20 @@ func (api *API) satelliteContractsHandlerGET(w http.ResponseWriter, _ *http.Requ
 	// Fetch the renter, if provided.
 	var renter modules.Renter
 	var err error
-	var seed smodules.Seed
-	var rs smodules.RenterSeed
+	var contracts, oldContracts []modules.RenterContract
 	if pk != "" {
 		key := modules.ReadPublicKey(pk)
 		renter, err = api.satellite.GetRenter(key)
-		if err != nil {
-			pk = ""
+		if err == nil {
+			contracts = api.satellite.ContractsByRenter(renter.PublicKey)
+			oldContracts = api.satellite.OldContractsByRenter(renter.PublicKey)
 		} else {
-			seed, err = api.satellite.GetWalletSeed()
-			if err != nil {
-				WriteError(w, Error{"couldn't get wallet seed"}, http.StatusInternalServerError)
-				return
-			}
-			rs = modules.DeriveRenterSeed(seed, renter.Email)
-			defer fastrand.Read(rs[:])
+			contracts = api.satellite.Contracts()
+			oldContracts = api.satellite.OldContracts()
 		}
 	}
 
-	for _, c := range api.satellite.Contracts() {
-		// Skip contracts that don't belong to the renter.
-		if pk != "" {
-			epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, c.HostPublicKey))
-			if epk.String() != pk {
-				continue
-			}
-		}
-
+	for _, c := range contracts {
 		// Fetch host address.
 		var netAddress smodules.NetAddress
 		hdbe, exists, _ := api.satellite.Host(c.HostPublicKey)
@@ -252,14 +237,7 @@ func (api *API) satelliteContractsHandlerGET(w http.ResponseWriter, _ *http.Requ
 	}
 
 	// Process old contracts.
-	for _, c := range api.satellite.OldContracts() {
-		// Skip contracts that don't belong to the renter.
-		if pk != "" {
-			epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, c.HostPublicKey))
-			if epk.String() != pk {
-				continue
-			}
-		}
+	for _, c := range oldContracts {
 		var size uint64
 		if len(c.Transaction.FileContractRevisions) != 0 {
 			size = c.Transaction.FileContractRevisions[0].NewFileSize

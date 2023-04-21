@@ -47,7 +47,7 @@ type hostContractor interface {
 
 	// ContractsByRenter returns the list of the active contracts belonging
 	// to a specific renter.
-	ContractsByRenter(smodules.RenterSeed) []modules.RenterContract
+	ContractsByRenter(types.SiaPublicKey) []modules.RenterContract
 
 	// ContractPublicKey returns the public key capable of verifying the renter's
 	// signature on a contract.
@@ -73,7 +73,7 @@ type hostContractor interface {
 
 	// FormContracts forms up to the specified number of contracts, puts them
 	// in the contract set, and returns them.
-	FormContracts(types.SiaPublicKey) ([]modules.RenterContract, error)
+	FormContracts(types.SiaPublicKey, crypto.SecretKey) ([]modules.RenterContract, error)
 
 	// PeriodSpending returns the amount spent on contracts during the current
 	// billing period of the renter.
@@ -82,6 +82,10 @@ type hostContractor interface {
 	// OldContracts returns the oldContracts of the manager's hostContractor.
 	OldContracts() []modules.RenterContract
 
+	// OldContractsByRenter returns the list of the old contracts of
+	// a specific renter.
+	OldContractsByRenter(types.SiaPublicKey) []modules.RenterContract
+
 	// IsOffline reports whether the specified host is considered offline.
 	IsOffline(types.SiaPublicKey) bool
 
@@ -89,7 +93,7 @@ type hostContractor interface {
 	RefreshedContract(fcid types.FileContractID) bool
 
 	// RenewContracts tries to renew the given set of contracts.
-	RenewContracts(types.SiaPublicKey, []types.FileContractID) ([]modules.RenterContract, error)
+	RenewContracts(types.SiaPublicKey, crypto.SecretKey, []types.FileContractID) ([]modules.RenterContract, error)
 
 	// Renters return the list of renters.
 	Renters() []modules.Renter
@@ -314,8 +318,8 @@ func (m *Manager) Contracts() []modules.RenterContract {
 }
 
 // ContractsByRenter returns the contracts belonging to a specific renter.
-func (m *Manager) ContractsByRenter(rs smodules.RenterSeed) []modules.RenterContract {
-	return m.hostContractor.ContractsByRenter(rs)
+func (m *Manager) ContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	return m.hostContractor.ContractsByRenter(rpk)
 }
 
 // RefreshedContract calls hostContractor.RefreshedContract
@@ -326,6 +330,11 @@ func (m *Manager) RefreshedContract(fcid types.FileContractID) bool {
 // OldContracts calls hostContractor.OldContracts expired.
 func (m *Manager) OldContracts() []modules.RenterContract {
 	return m.hostContractor.OldContracts()
+}
+
+// OldContractsByRenter returns the old contracts of a specific renter.
+func (m *Manager) OldContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+	return m.hostContractor.OldContractsByRenter(rpk)
 }
 
 // ProcessConsensusChange processes the consensus change.
@@ -540,13 +549,13 @@ func (m *Manager) CreateNewRenter(email string, pk types.SiaPublicKey) {
 }
 
 // FormContracts calls hostContractor.FormContracts.
-func (m *Manager) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
-	return m.hostContractor.FormContracts(rpk)
+func (m *Manager) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey) ([]modules.RenterContract, error) {
+	return m.hostContractor.FormContracts(rpk, rsk)
 }
 
 // RenewContracts calls hostContractor.RenewContracts.
-func (m *Manager) RenewContracts(rpk types.SiaPublicKey, contracts []types.FileContractID) ([]modules.RenterContract, error) {
-	return m.hostContractor.RenewContracts(rpk, contracts)
+func (m *Manager) RenewContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, contracts []types.FileContractID) ([]modules.RenterContract, error) {
+	return m.hostContractor.RenewContracts(rpk, rsk, contracts)
 }
 
 // Renters calls hostContractor.Renters.

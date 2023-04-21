@@ -14,9 +14,9 @@ import (
 	"github.com/mike76-dev/sia-satellite/satellite/manager/proto"
 
 	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/fastrand"
 
 	"go.sia.tech/siad/build"
+	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
@@ -46,10 +46,11 @@ var (
 type (
 	// fileContractRenewal is an instruction to renew a file contract.
 	fileContractRenewal struct {
-		id              types.FileContractID
-		amount          types.Currency
-		hostPubKey      types.SiaPublicKey
-		renterPubKey    types.SiaPublicKey
+		id           types.FileContractID
+		amount       types.Currency
+		hostPubKey   types.SiaPublicKey
+		renterPubKey types.SiaPublicKey
+		secretKey    crypto.SecretKey 
 	}
 )
 
@@ -161,7 +162,7 @@ func (c *Contractor) managedEstimateRenewFundingRequirements(contract modules.Re
 
 	// Fetch the renter.
 	c.mu.RLock()
-	renter, err := c.managedFindRenter(contract.RenterPublicKey, contract.HostPublicKey)
+	renter, err := c.managedFindRenter(contract.ID)
 	c.mu.RUnlock()
 	if err != nil {
 		return types.ZeroCurrency, err
@@ -353,7 +354,7 @@ func (c *Contractor) managedFindMinAllowedHostScores(rpk types.SiaPublicKey) (ty
 
 // managedNewContract negotiates an initial file contract with the specified
 // host, saves it, and returns it.
-func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.HostDBEntry, contractFunding types.Currency, endHeight types.BlockHeight) (_ types.Currency, _ modules.RenterContract, err error) {
+func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, rsk crypto.SecretKey, host smodules.HostDBEntry, contractFunding types.Currency, endHeight types.BlockHeight) (_ types.Currency, _ modules.RenterContract, err error) {
 	// Check if we know this renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk.String()]
@@ -378,32 +379,22 @@ func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, host smodules.Ho
 		}
 	}()
 
-	// Get the wallet seed.
-	seed, _, err := c.wallet.PrimarySeed()
-	if err != nil {
-		return types.ZeroCurrency, modules.RenterContract{}, err
-	}
-
-	// Derive the renter seed and wipe it once we are done with it.
-	renterSeed := modules.DeriveRenterSeed(seed, renter.Email)
-	defer fastrand.Read(renterSeed[:])
+	// Derive ephemeral key.
+	esk := modules.DeriveEphemeralKey(rsk, host.PublicKey)
 
 	// Create contract params.
 	c.mu.RLock()
 	params := modules.ContractParams{
-		Allowance:      renter.Allowance,
-		Host:           host,
-		Funding:        contractFunding,
-		StartHeight:    c.blockHeight,
-		EndHeight:      endHeight,
-		RefundAddress:  uc.UnlockHash(),
-		RenterSeed:     modules.DeriveEphemeralRenterSeed(renterSeed, host.PublicKey),
+		Allowance:     renter.Allowance,
+		Host:          host,
+		Funding:       contractFunding,
+		StartHeight:   c.blockHeight,
+		EndHeight:     endHeight,
+		RefundAddress: uc.UnlockHash(),
+		PublicKey:     rpk,
+		SecretKey:     esk,
 	}
 	c.mu.RUnlock()
-
-	// Wipe the renter seed once we are done using it.
-	defer fastrand.Read(params.RenterSeed[:])
-
 
 	// Create transaction builder and trigger contract formation.
 	txnBuilder, err := c.wallet.StartTransaction()
@@ -561,7 +552,7 @@ func (c *Contractor) managedLimitGFUHosts() {
 	for _, contract := range gfuContracts {
 		// Check if this renter has enough hosts already.
 		c.mu.RLock()
-		renter, err := c.managedFindRenter(contract.c.RenterPublicKey, contract.c.HostPublicKey)
+		renter, err := c.managedFindRenter(contract.c.ID)
 		c.mu.RUnlock()
 		if err != nil {
 			c.log.Println("managedLimitGFUHosts: failed to find the renter")
@@ -625,7 +616,7 @@ func checkFormContractGouging(allowance modules.Allowance, hostSettings smodules
 // managedRenew negotiates a new contract for data already stored with a host.
 // It returns the new contract. This is a blocking call that performs network
 // I/O.
-func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKey, hpk types.SiaPublicKey, contractFunding types.Currency, startHeight, newEndHeight types.BlockHeight) (_ modules.RenterContract, err error) {
+func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKey, rsk crypto.SecretKey, hpk types.SiaPublicKey, contractFunding types.Currency, startHeight, newEndHeight types.BlockHeight) (_ modules.RenterContract, err error) {
 	// Check if we know this renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk.String()]
@@ -686,15 +677,8 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 		}
 	}()
 
-	// Get the wallet seed.
-	seed, _, err := c.wallet.PrimarySeed()
-	if err != nil {
-		return modules.RenterContract{}, err
-	}
-
-	// Derive the renter seed and wipe it after we are done with it.
-	renterSeed := modules.DeriveRenterSeed(seed, renter.Email)
-	defer fastrand.Read(renterSeed[:])
+	// Derive ephemeral key.
+	esk := modules.DeriveEphemeralKey(rsk, host.PublicKey)
 
 	// Create contract params.
 	c.mu.RLock()
@@ -705,12 +689,10 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 		StartHeight:   c.blockHeight,
 		EndHeight:     newEndHeight,
 		RefundAddress: uc.UnlockHash(),
-		RenterSeed:    modules.DeriveEphemeralRenterSeed(renterSeed, host.PublicKey),
+		PublicKey:     rpk,
+		SecretKey:     esk,
 	}
 	c.mu.RUnlock()
-
-	// Wipe the renter seed once we are done using it.
-	defer fastrand.Read(params.RenterSeed[:])
 
 	// Create a transaction builder with the correct amount of funding for the renewal.
 	txnBuilder, err := c.wallet.StartTransaction()
@@ -796,6 +778,7 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 	amount := renewInstructions.amount
 	renterPubKey := renewInstructions.renterPubKey
 	hostPubKey := renewInstructions.hostPubKey
+	secretKey := renewInstructions.secretKey
 	allowance := renter.Allowance
 
 	// Mark the contract as being renewed, and defer logic to unmark it
@@ -817,7 +800,7 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 	// row and reached its second half of the renew window, we give up
 	// on renewing it and set goodForRenew to false.
 	c.log.Println("calling managedRenew on contract", id)
-	newContract, errRenew := c.managedRenew(id, renterPubKey, hostPubKey, amount, blockHeight, endHeight)
+	newContract, errRenew := c.managedRenew(id, renterPubKey, secretKey, hostPubKey, amount, blockHeight, endHeight)
 	c.log.Println("managedRenew has returned with error:", errRenew)
 	oldContract, exists := c.staticContracts.Acquire(id)
 	if !exists {
@@ -910,8 +893,8 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 	return amount, newContract, nil
 }
 
-// managedAcquireAndUpdateContractUtility is a helper function that acquires a contract, updates
-// its ContractUtility and returns the contract again.
+// managedAcquireAndUpdateContractUtility is a helper function that acquires
+// a contract, updates its ContractUtility and returns the contract again.
 func (c *Contractor) managedAcquireAndUpdateContractUtility(id types.FileContractID, utility smodules.ContractUtility) error {
 	fileContract, ok := c.staticContracts.Acquire(id)
 	if !ok {
@@ -942,8 +925,6 @@ func (c *Contractor) managedUpdateContractUtility(fileContract *proto.FileContra
 // contract from the contractor. Pass in renewed as true if the contract
 // has been renewed.
 func (c *Contractor) callUpdateUtility(fileContract *proto.FileContract, newUtility smodules.ContractUtility, renewed bool) error {
-	// TODO Think about implementing ChurnLimiter.
-
 	return fileContract.UpdateUtility(newUtility)
 }
 
@@ -995,7 +976,7 @@ func (c *Contractor) threadedContractMaintenance() {
 
 // FormContracts forms up to the specified number of contracts, puts them
 // in the contract set, and returns them.
-func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterContract, error) {
+func (c *Contractor) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey) ([]modules.RenterContract, error) {
 	// No contract formation until the contractor is synced.
 	if !c.managedSynced() {
 		return nil, errors.New("contractor isn't synced yet")
@@ -1009,13 +990,6 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 	if !exists {
 		return nil, ErrRenterNotFound
 	}
-
-	seed, _, err := c.wallet.PrimarySeed()
-	if err != nil {
-		return nil, err
-	}
-	rs := modules.DeriveRenterSeed(seed, renter.Email)
-	defer fastrand.Read(rs[:])
 
 	// Register or unregister and alerts related to contract formation.
 	var registerLowFundsAlert bool
@@ -1043,7 +1017,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 	// already have contracts with and the second one includes all hosts we
 	// have active contracts with. Then select a new batch of hosts to attempt
 	// contract formation with.
-	allContracts := c.staticContracts.ByRenter(rs)
+	allContracts := c.staticContracts.ByRenter(rpk)
 	var blacklist []types.SiaPublicKey
 	var addressBlacklist []types.SiaPublicKey
 	for _, contract := range allContracts {
@@ -1126,7 +1100,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 
 		// Attempt forming a contract with this host.
 		start := time.Now()
-		fundsSpent, newContract, err := c.managedNewContract(renter.PublicKey, host, contractFunds, endHeight)
+		fundsSpent, newContract, err := c.managedNewContract(rpk, rsk, host, contractFunds, endHeight)
 		if err != nil {
 			c.log.Printf("Attempted to form a contract with %v, time spent %v, but negotiation failed: %v\n", host.NetAddress, time.Since(start).Round(time.Millisecond), err)
 			continue
@@ -1165,7 +1139,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey) ([]modules.RenterCont
 }
 
 // RenewContracts tries to renew a given set of contracts.
-func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.FileContractID) ([]modules.RenterContract, error) {
+func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, contracts []types.FileContractID) ([]modules.RenterContract, error) {
 	// No contract renewal until the contractor is synced.
 	if !c.managedSynced() {
 		return nil, errors.New("contractor isn't synced yet")
@@ -1179,13 +1153,6 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 	if !exists {
 		return nil, ErrRenterNotFound
 	}
-
-	seed, _, err := c.wallet.PrimarySeed()
-	if err != nil {
-		return nil, err
-	}
-	rs := modules.DeriveRenterSeed(seed, renter.Email)
-	defer fastrand.Read(rs[:])
 
 	// The total number of renews that failed for any reason.
 	var numRenewFails int
@@ -1212,8 +1179,12 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 	contractSet := make([]modules.RenterContract, 0, len(contracts))
 	for _, id := range contracts {
 		rc, ok := c.staticContracts.View(id)
-		epk := modules.EphemeralPublicKey(modules.DeriveEphemeralRenterSeed(rs, rc.HostPublicKey))
-		if !ok || rc.RenterPublicKey.String() != epk.String() {
+		r, err := c.managedFindRenter(id)
+		if err != nil {
+			c.log.Println("WARN: contract ID submitted that has no known renter associated with it:", id)
+			continue
+		}
+		if !ok || r.PublicKey.String() != rpk.String() {
 			c.log.Println("WARN: contract ID submitted that doesn't belong to this renter:", id, renter.PublicKey.String())
 			continue
 		}
@@ -1287,8 +1258,9 @@ func (c *Contractor) RenewContracts(rpk types.SiaPublicKey, contracts []types.Fi
 		renewSet = append(renewSet, fileContractRenewal{
 			id:           rc.ID,
 			amount:       renewAmount,
-			renterPubKey: renter.PublicKey,
+			renterPubKey: rpk,
 			hostPubKey:   rc.HostPublicKey,
+			secretKey:    rsk,
 		})
 		c.log.Println("Contract has been added to the renew set")
 	}
