@@ -13,6 +13,7 @@ When using **Sia Satellite**, a renter does not need to own SC to use Sia storag
 ## Guides
 
 A guide on how to set up a Satellite node can be found [here](SETUP.md).
+
 A guide on how to rent storage using a Satellite can be found [here](RENT.md).
 
 ## Acknowledgement
