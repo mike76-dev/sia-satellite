@@ -6,7 +6,7 @@ It's also very easy to switch the Satellite mode on and off, and also change the
 
 ## Download the Renting Software
 
-Download and install the latest version from [https://github.com/mike76-dev/renterd/releases](https://github.com/mike76-dev/renterd/releases).
+Download and install the latest version from [https://github.com/mike76-dev/renterd/releases](https://github.com/mike76-dev/renterd/releases). If you prefer to build from source, make sure you're building the `satellite` branch and not `master`.
 
 You don't need any Siacoins to rent storage using a Satellite, but your `renterd` still needs a wallet seed to form the storage contracts. If you haven't done so yet, generate a new wallet seed with the following command:
 ```
