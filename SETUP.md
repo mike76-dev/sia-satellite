@@ -5,9 +5,13 @@ This guide will walk you through the process of setting up a Satellite node.
 ## What You Will Need
 
 You will need a server with the root access (directly or over SSH). The blockchain is quite large (over 40GB at the moment of writing), so you need to account for that. It is recommended to use an SSD, because it will affect the syncing speed.
+
 This guide will assume that you use Ubuntu Server 22.04 LTS. If you run any other OS, the setup process may differ.
+
 You will need a fully registered domain name. This guide will use `your_domain` as the domain name. DNS A records with both `your_domain` and `www.your_domain` need to be pointing to your server's public IP address.
+
 You will need a Stripe account to accept payments.
+
 You will also need an email account, from which the users will be receiving emails with the verification and password reset links.
 
 ## To Start With
@@ -24,6 +28,7 @@ rm satellite_linux_amd64.zip
 ## Installing HTTP Server
 
 This guide will use Apache2 as the HTTP server. You may choose another server, then the process will differ.
+
 Begin by updating the local package index to reflect the latest upstream changes:
 ```
 $ sudo apt update
@@ -33,8 +38,10 @@ Then, install the `apache2` package:
 $ sudo apt install apache2
 ```
 After confirming the installation, apt will install Apache and all required dependencies.
+
 Now, you need to configure the firewall to allow outside access to the default web ports.
 During installation, Apache registers itself with UFW to provide a few application profiles that can be used to enable or disable access to Apache through the firewall.
+
 List the `ufw` application profiles by running the following:
 ```
 $ sudo ufw app list
@@ -96,6 +103,7 @@ Output:
              └─15434 /usr/sbin/apache2 -k start
 ```
 Apache on Ubuntu 22.04 has one server block enabled by default that is configured to serve documents from the /var/www/html directory. While this works well for a single site, it is recommended to create a directory structure within /var/www for a your_domain site, leaving /var/www/html in place as the default directory to be served if a client request doesn’t match any other sites.
+
 Create the directory for `your_domain` as follows:
 ```
 $ sudo mkdir /var/www/your_domain
@@ -112,6 +120,7 @@ $ sudo chmod -R 755 /var/www/your_domain
 ## Enabling TLS/SSL
 
 Now let's enable HTTPS on your server by installing a TLS/SSL certificate from Let's Encrypt.
+
 First, run the following to install the Certbot software:
 ```
 $ sudo apt install certbot python3-certbot-apache
@@ -132,6 +141,7 @@ Add in the following configuration block, which is similar to the default, but u
 </VirtualHost>
 ```
 Save and close the file when you are finished.
+
 Now enable the file with the `a2ensite` tool:
 ```
 $ sudo a2ensite your_domain.conf
@@ -149,6 +159,7 @@ You should receive `Syntax OK` as a response. If you get an error, reopen the vi
 $ sudo systemctl restart apache2
 ```
 With these changes, Certbot will be able to find the correct VirtualHost block and update it.
+
 Next, you’ll update the firewall to allow HTTPS traffic. For this, allow the “Apache Full” profile:
 ```
 $ sudo ufw allow 'Apache Full'
@@ -173,6 +184,7 @@ OpenSSH (v6)               ALLOW       Anywhere (v6)
 Apache Full (v6)           ALLOW       Anywhere (v6)
 ```
 You are now ready to run Certbot and obtain your certificates.
+
 Certbot provides a variety of ways to obtain SSL certificates through plugins. The Apache plugin will take care of reconfiguring Apache and reloading the configuration whenever necessary. To use this plugin, run the following:
 ```
 $ sudo certbot --apache
@@ -253,6 +265,7 @@ ProxyPass /api http://127.0.0.1:8080
 ProxyPassReverse /api http://127.0.0.1:8080/api
 ```
 Here, `8080` will be the port that the portal API will listen on. You can choose any other port, but remember to put it in the config file later on.
+
 To put these changes into effect, restart Apache:
 ```
 $ sudo systemctl restart apache2
@@ -285,6 +298,7 @@ Run the security script with `sudo`:
 $ sudo mysql_secure_installation
 ```
 This will take you through a series of prompts where you can make some changes to your MySQL installation’s security options. The first prompt will ask whether you’d like to set up the Validate Password Plugin, which can be used to test the password strength of new MySQL users before deeming them valid.
+
 If you elect to set up the Validate Password Plugin, any MySQL user you create that authenticates with a password will be required to have a password that satisfies the policy you select:
 ```
 Output:
@@ -317,6 +331,7 @@ Estimated strength of the password: 100
 Do you wish to continue with the password provided?(Press y|Y for Yes, any other key for No) : Y
 ```
 From there, you can press `Y` and then `ENTER` to accept the defaults for all the subsequent questions. This will remove some anonymous users and the test database, disable remote root logins, and load these new rules so that MySQL immediately respects the changes you have made.
+
 Once the security script completes, you can then reopen MySQL and change the root user’s authentication method back to the default, `auth_socket`. To authenticate as the root MySQL user using a password, run this command:
 ```
 $ mysql -u root -p
@@ -366,7 +381,9 @@ mysql> exit;
 ## Setting Up a Stripe Account
 
 Unfortunately, this is the least straightforward part of the setup process, because a lot depends on how Stripe looks at your business, and they may even suspend or close your account if they find that you are violating certain policies.
+
 In general, it is recommended to respond to any requests as soon as possible. If you receive a closure notice, that may be because you are suspected in conducting forbidden activities, e.g. mining or trading crypto currencies. Object that the Satellite is used solely for selling cloud storage for fiat money, so the customers don't buy crypto with their credit cards.
+
 Once you have an account with Stripe, go to the "Developers" section of the Dashboard. You need to do three things there:
 1. Switch off the "Test mode" (the slider on the right-hand side).
 2. Go to the "API keys" tab and request the Publishable key and the Secret key. Take a note of both.
@@ -486,6 +503,7 @@ WantedBy=multi-user.target
 Alias=satd.service
 ```
 Save and exit.
+
 One last thing before you start the server, open the Provider port:
 ```
 $ sudo ufw allow 9992
