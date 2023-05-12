@@ -529,3 +529,8 @@ func (c *Contractor) DeleteRenter(email string) {
 		}
 	}
 }
+
+// Contract returns the contract with the given ID.
+func (c *Contractor) Contract(fcid types.FileContractID) (modules.RenterContract, bool) {
+	return c.staticContracts.View(fcid)
+}

@@ -57,55 +57,6 @@ func (r *loopKeyExchangeResponse) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
 }
 
-// rpcError is the generic error transferred in an RPC.
-type rpcError struct {
-	Type        types.Specifier
-	Data        []byte
-	Description string
-}
-
-// EncodeTo implements types.ProtocolObject.
-func (re *rpcError) EncodeTo(e *types.Encoder) {
-	e.Write(re.Type[:])
-	e.WriteBytes(re.Data)
-	e.WriteString(re.Description)
-}
-
-// DecodeFrom implements types.ProtocolObject.
-func (re *rpcError) DecodeFrom(d *types.Decoder) {
-	// Nothing to do here.
-}
-
-// rpcResponse if a helper type for encoding and decoding RPC response
-// messages, which can represent either valid data or an error.
-type rpcResponse struct {
-	err  *rpcError
-	data requestBody
-}
-
-// EncodeTo implements types.ProtocolObject.
-func (resp *rpcResponse) EncodeTo(e *types.Encoder) {
-	e.WriteBool(resp.err != nil)
-	if resp.err != nil {
-		resp.err.EncodeTo(e)
-		return
-	}
-	if resp.data != nil {
-		resp.data.EncodeTo(e)
-	}
-}
-
-// DecodeFrom implements types.ProtocolObject.
-func (resp *rpcResponse) DecodeFrom(d *types.Decoder) {
-	// Nothing to do here.
-}
-
-// requestBody is the common interface type for the renter requests.
-type requestBody interface {
-	DecodeFrom(d *types.Decoder)
-	EncodeTo(e *types.Encoder)
-}
-
 // requestRequest is used when the renter requests the list of their
 // active contracts.
 type requestRequest struct {
@@ -321,6 +272,24 @@ type extendedContract struct {
 	renewedFrom         types.FileContractID
 }
 
+// EncodeTo implements requestBody.
+func (ec extendedContract) EncodeTo(e *types.Encoder) {
+	ec.contract.Revision.EncodeTo(e)
+	ec.contract.Signatures[0].EncodeTo(e)
+	ec.contract.Signatures[1].EncodeTo(e)
+	e.WriteUint64(ec.startHeight)
+	ec.totalCost.EncodeTo(e)
+	ec.uploadSpending.EncodeTo(e)
+	ec.downloadSpending.EncodeTo(e)
+	ec.fundAccountSpending.EncodeTo(e)
+	ec.renewedFrom.EncodeTo(e)
+}
+
+// DecodeFrom implements requestBody.
+func (ec extendedContract) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
 // extendedContractSet is a collection of extendedContracts.
 type extendedContractSet struct {
 	contracts []extendedContract
@@ -330,19 +299,97 @@ type extendedContractSet struct {
 func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
 	e.WriteUint64(uint64(len(ecs.contracts)))
 	for _, ec := range ecs.contracts {
-		ec.contract.Revision.EncodeTo(e)
-		ec.contract.Signatures[0].EncodeTo(e)
-		ec.contract.Signatures[1].EncodeTo(e)
-		e.WriteUint64(ec.startHeight)
-		ec.totalCost.EncodeTo(e)
-		ec.uploadSpending.EncodeTo(e)
-		ec.downloadSpending.EncodeTo(e)
-		ec.fundAccountSpending.EncodeTo(e)
-		ec.renewedFrom.EncodeTo(e)
+		ec.EncodeTo(e)
 	}
 }
 
 // DecodeFrom implements requestBody.
 func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
+}
+
+// formContractRequest is used when forming a contract with a single
+// host using the new Renter-Satellite protocol.
+type formContractRequest struct {
+	PubKey          crypto.PublicKey
+	RenterPublicKey crypto.PublicKey
+	HostPublicKey   crypto.PublicKey
+
+	EndHeight   uint64
+	Storage     uint64
+	Upload      uint64
+	Download    uint64
+	MinShards   uint64
+	TotalShards uint64
+
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (fcr *formContractRequest) DecodeFrom(d *types.Decoder) {
+	copy(fcr.PubKey[:], d.ReadBytes())
+	copy(fcr.RenterPublicKey[:], d.ReadBytes())
+	copy(fcr.HostPublicKey[:], d.ReadBytes())
+	fcr.EndHeight = d.ReadUint64()
+	fcr.Storage = d.ReadUint64()
+	fcr.Upload = d.ReadUint64()
+	fcr.Download = d.ReadUint64()
+	fcr.MinShards = d.ReadUint64()
+	fcr.TotalShards = d.ReadUint64()
+	fcr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
+	e.WriteBytes(fcr.PubKey[:])
+	e.WriteBytes(fcr.RenterPublicKey[:])
+	e.WriteBytes(fcr.HostPublicKey[:])
+	e.WriteUint64(fcr.EndHeight)
+	e.WriteUint64(fcr.Storage)
+	e.WriteUint64(fcr.Upload)
+	e.WriteUint64(fcr.Download)
+	e.WriteUint64(fcr.MinShards)
+	e.WriteUint64(fcr.TotalShards)
+}
+
+// renewContractRequest is used when renewing a contract using
+// the new Renter-Satellite protocol.
+type renewContractRequest struct {
+	PubKey          crypto.PublicKey
+	Contract        types.FileContractID
+	EndHeight       uint64
+
+	Storage  uint64
+	Upload   uint64
+	Download uint64
+
+	MinShards   uint64
+	TotalShards uint64
+
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (rcr *renewContractRequest) DecodeFrom(d *types.Decoder) {
+	copy(rcr.PubKey[:], d.ReadBytes())
+	copy(rcr.Contract[:], d.ReadBytes())
+	rcr.EndHeight = d.ReadUint64()
+	rcr.Storage = d.ReadUint64()
+	rcr.Upload = d.ReadUint64()
+	rcr.Download = d.ReadUint64()
+	rcr.MinShards = d.ReadUint64()
+	rcr.TotalShards = d.ReadUint64()
+	rcr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (rcr *renewContractRequest) EncodeTo(e *types.Encoder) {
+	e.WriteBytes(rcr.PubKey[:])
+	e.WriteBytes(rcr.Contract[:])
+	e.WriteUint64(rcr.EndHeight)
+	e.WriteUint64(rcr.Storage)
+	e.WriteUint64(rcr.Upload)
+	e.WriteUint64(rcr.Download)
+	e.WriteUint64(rcr.MinShards)
+	e.WriteUint64(rcr.TotalShards)
 }

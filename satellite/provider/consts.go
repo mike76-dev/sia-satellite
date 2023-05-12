@@ -19,3 +19,11 @@ const renewContractsTime = 10 * time.Minute
 // updateRevisionTime defines the amount of time that the provider
 // has to update a contract and send back a response.
 const updateRevisionTime = 1 * time.Minute
+
+// formContractTime defines the amount of time that the provider
+// has to form a single contract with a host.
+const formContractTime = 1 * time.Minute
+
+// renewContractTime defines the amount of time that the provider
+// has to renew a contract with a host.
+const renewContractTime = 1 * time.Minute

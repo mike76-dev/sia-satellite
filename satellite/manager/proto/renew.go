@@ -27,9 +27,8 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 
 	// Extract vars from params, for convenience.
 	host, funding, startHeight, endHeight := params.Host, params.Funding, params.StartHeight, params.EndHeight
-	renterSKOld := oldContract.SecretKey
-	renterSKNew := params.SecretKey
-	renterPKNew := renterSKNew.PublicKey()
+	renterSK := params.SecretKey
+	renterPK := renterSK.PublicKey()
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), contractHostRenewTimeout)
@@ -63,7 +62,7 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	}
 
 	// Create the new file contract.
-	uc := createFileContractUnlockConds(host.PublicKey, renterPKNew)
+	uc := createFileContractUnlockConds(host.PublicKey, renterPK)
 	uh := uc.UnlockHash()
 	fc, err := createRenewedContract(oldRev, uh, params, txnFee, basePrice, baseCollateral, tpool)
 	if err != nil {
@@ -105,7 +104,7 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	}
 	finalRevTxn, _ := txnBuilder.View()
 	finalRevTxn.TransactionSignatures = append(finalRevTxn.TransactionSignatures, finalRevRenterSig)
-	finalRevRenterSigRaw := crypto.SignHash(finalRevTxn.SigHash(0, pt.HostBlockHeight), renterSKOld)
+	finalRevRenterSigRaw := crypto.SignHash(finalRevTxn.SigHash(0, pt.HostBlockHeight), renterSK)
 	finalRevTxn.TransactionSignatures[0].Signature = finalRevRenterSigRaw[:]
 
 	// Initiate protocol.
@@ -117,7 +116,7 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 
 	var noOpRevTxn types.Transaction
 	err = WithTransportV3(ctx, siamuxAddr, host.PublicKey, func(t *rhpv3.Transport) (err error) {
-		noOpRevTxn, err = RPCRenewContract(t, txnBuilder, txnSet, renterSKNew, host.PublicKey, finalRevTxn, startHeight)
+		noOpRevTxn, err = RPCRenewContract(t, txnBuilder, txnSet, renterSK, host.PublicKey, finalRevTxn, startHeight)
 		return err
 	})
 	if err != nil {
@@ -143,7 +142,7 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	// Construct contract header.
 	header := contractHeader{
 		Transaction:     noOpRevTxn,
-		SecretKey:       renterSKNew,
+		SecretKey:       renterSK,
 		StartHeight:     startHeight,
 		TotalCost:       funding,
 		ContractFee:     host.ContractPrice,

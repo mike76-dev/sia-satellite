@@ -280,4 +280,7 @@ type ContractFormer interface {
 	OldContractsByRenter(types.SiaPublicKey) []RenterContract
 	WalletSeed() (smodules.Seed, error)
 	RenewedFrom(types.FileContractID) types.FileContractID
+	BlockHeight() types.BlockHeight
+	FormContract(*RPCSession, types.SiaPublicKey, types.SiaPublicKey, types.SiaPublicKey, types.BlockHeight, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
+	RenewContract(*RPCSession, types.SiaPublicKey, types.FileContractID, types.BlockHeight, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
 }

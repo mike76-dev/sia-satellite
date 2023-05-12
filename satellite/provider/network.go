@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/modules"
+
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/fastrand"
 
@@ -12,7 +14,7 @@ import (
 
 	core "go.sia.tech/core/types"
 	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
+	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
 
@@ -38,6 +40,14 @@ var renewContractsSpecifier = types.NewSpecifier("RenewContracts")
 
 // updateRevisionSpecifier is used when a renter submits a new revision.
 var updateRevisionSpecifier = types.NewSpecifier("UpdateRevision")
+
+// formContractSpecifier is used to form a single contract using the new
+// Renter-Satellite protocol.
+var formContractSpecifier = types.NewSpecifier("FormContract")
+
+// renewContractSpecifier is used to renew a contract using the new
+// Renter-Satellite protocol.
+var renewContractSpecifier = types.NewSpecifier("RenewContract")
 
 // threadedUpdateHostname periodically runs 'managedLearnHostname', which
 // checks if the Satellite's hostname has changed.
@@ -71,7 +81,7 @@ func (p *Provider) managedLearnHostname() {
 		return
 	}
 
-	autoAddress := modules.NetAddress(net.JoinHostPort(hostname.String(), satPort))
+	autoAddress := smodules.NetAddress(net.JoinHostPort(hostname.String(), satPort))
 	if err := autoAddress.IsValid(); err != nil {
 		p.log.Printf("WARN: discovered hostname %q is invalid: %v", autoAddress, err)
 		return
@@ -256,23 +266,23 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	}
 
 	// Create the session object.
-	s := &rpcSession{
-		conn: conn,
-		aead: aead,
+	s := &modules.RPCSession{
+		Conn: conn,
+		Aead: aead,
 	}
-	fastrand.Read(s.challenge[:])
+	fastrand.Read(s.Challenge[:])
 
 	// Send encrypted challenge.
-	challengeReq := modules.LoopChallengeRequest{
-		Challenge: s.challenge,
+	challengeReq := smodules.LoopChallengeRequest{
+		Challenge: s.Challenge,
 	}
-	if err := modules.WriteRPCMessage(conn, aead, challengeReq); err != nil {
+	if err := smodules.WriteRPCMessage(conn, aead, challengeReq); err != nil {
 		p.log.Println("ERROR: could not send challenge:", err)
 		return
 	}
 
 	// Read the request specifier.
-	id, err := modules.ReadRPCID(conn, aead)
+	id, err := smodules.ReadRPCID(conn, aead)
 	if err != nil {
 		p.log.Println("ERROR: could not read request specifier:", err)
 		return
@@ -297,7 +307,17 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	case updateRevisionSpecifier:
 		err = p.managedUpdateRevision(s)
 		if err != nil {
-			err = errors.Extend(errors.New("incoming RPCRenewContracts failed: "), err)
+			err = errors.Extend(errors.New("incoming RPCUpdateRevision failed: "), err)
+		}
+	case formContractSpecifier:
+		err = p.managedFormContract(s)
+		if err != nil {
+			err = errors.Extend(errors.New("incoming RPCFormContract failed: "), err)
+		}
+	case renewContractSpecifier:
+		err = p.managedRenewContract(s)
+		if err != nil {
+			err = errors.Extend(errors.New("incoming RPCRenewContract failed: "), err)
 		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
@@ -306,4 +326,3 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		p.log.Printf("ERROR: error with %v: %v\n", conn.RemoteAddr(), err)
 	}
 }
-
