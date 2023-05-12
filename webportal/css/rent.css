@@ -12,10 +12,10 @@ h1 a {
 	max-width: calc(100% - 1rem);
 	margin-bottom: 2rem;
 	padding: 1rem;
-	border: 1px solid #cfcfcf;
+	border: 1px solid var(--textSecondary);
 	border-radius: 1rem;
 	justify-content: center;
-	background-color: #001f7f;
+	background-color: var(--backgroundForm);
 }
 
 .contents {
@@ -27,7 +27,7 @@ h1 a {
 
 label {
 	font-size: 1rem;
-	color: #afafaf;
+	color: var(--textSecondary);
 	margin-top: 1rem;
 	margin-bottom: 0.5rem;
 }
@@ -39,7 +39,7 @@ label {
 }
 
 .error {
-	color: #df3f1f;
+	color: var(--error);
 	align-self: center;
 }
 
@@ -48,19 +48,19 @@ button {
 	height: 2.5rem;
 	margin: 1rem 0;
 	font-size: 1.2rem;
-	background-color: #7f7f7f;
-	color: #cfcfcf;
+	background-color: var(--button);
+	color: var(--textPrimary);
 	border: none;
 	border-radius: 0.5rem;
 	cursor: pointer;
 }
 
 button:hover {
-	background-color: #5f5f5f;
+	background-color: var(--buttonHovered);
 }
 
 .link {
-	color: #cfaf7f;
+	color: var(--link);
 	font-weight: bold;
 	cursor: pointer;
 	text-decoration: none;
@@ -85,7 +85,7 @@ button:hover {
 .message {
 	width: 100%;
 	font-size: 1.5rem;
-	color: #cfcfcf;
+	color: var(--textPrimary);
 	text-align: center;
 	margin: auto;
 }
@@ -120,10 +120,10 @@ button:hover {
 	font-size: 0.8rem;
 	width: 1rem;
 	height: 1rem;
-	color: #001f8f;
-	background-color: #afafaf;
+	color: var(--hint);
+	background-color: var(--textSecondary);
 	position: relative;
-	border: 1px solid #afafaf;
+	border: 1px solid var(--textSecondary);
 	border-radius: 50%;
 	cursor: pointer;
 	display: inline-block;
@@ -134,11 +134,11 @@ button:hover {
 	position: absolute;
 	left: 1.5rem;
 	top: 0;
-	color: #001f8f;
-	background-color: #afafaf;
+	color: var(--hint);
+	background-color: var(--textSecondary);
 	font-size: 0.8rem;
 	text-align: left;
-	border: 1px solid #afafaf;
+	border: 1px solid var(--textSecondary);
 	border-radius: 0.25rem;
 	padding: 0.25rem;
 	min-width: 10rem;
@@ -200,7 +200,7 @@ button:hover {
 	cursor: pointer;
 	font-size: 0.8rem;
 	font-weight: bold;
-	color: #cfcfcf;
+	color: var(--textPrimary);
 }
 
 .cookie-allow {
