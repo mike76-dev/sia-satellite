@@ -472,5 +472,71 @@ func (s *Satellite) DeleteRenter(email string) {
 	s.m.DeleteRenter(email)
 }
 
+// FormContract creates a contract with a single host using the new
+// Renter-Satellite protocol.
+func (s *Satellite) FormContract(ss *modules.RPCSession, pk types.SiaPublicKey, rpk types.SiaPublicKey, hpk types.SiaPublicKey, endHeight types.BlockHeight, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (modules.RenterContract, error) {
+	// Get the estimated costs.
+	funding, estimation, err := s.m.ContractPriceEstimation(hpk, endHeight, storage, upload, download, minShards, totalShards)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+
+	// Check if the user balance is sufficient to cover the costs.
+	renter, err := s.GetRenter(pk)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+	ub, err := s.GetBalance(renter.Email)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+	if ub.SCBalance < estimation {
+		return modules.RenterContract{}, errors.New("insufficient account balance")
+	}
+
+	// Form the contract.
+	contract, err := s.m.FormContract(ss, pk, rpk, hpk, endHeight, funding)
+
+	return contract, err
+}
+
+// RenewContract renews a contract using the new Renter-Satellite protocol.
+func (s *Satellite) RenewContract(ss *modules.RPCSession, pk types.SiaPublicKey, fcid types.FileContractID, endHeight types.BlockHeight, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (modules.RenterContract, error) {
+	// Get the contract to renew.
+	contract, exists := s.Contract(fcid)
+	if !exists {
+		return modules.RenterContract{}, errors.New("contract not found")
+	}
+
+	// Get the estimated costs.
+	funding, estimation, err := s.m.ContractPriceEstimation(contract.HostPublicKey, endHeight, storage, upload, download, minShards, totalShards)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+
+	// Check if the user balance is sufficient to cover the costs.
+	renter, err := s.GetRenter(pk)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+	ub, err := s.GetBalance(renter.Email)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+	if ub.SCBalance < estimation {
+		return modules.RenterContract{}, errors.New("insufficient account balance")
+	}
+
+	// Renew the contract.
+	newContract, err := s.m.RenewContract(ss, pk, contract, endHeight, funding)
+
+	return newContract, err
+}
+
+// Contract calls Manager.Contract.
+func (s *Satellite) Contract(fcid types.FileContractID) (modules.RenterContract, bool) {
+	return s.m.Contract(fcid)
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

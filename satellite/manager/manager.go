@@ -42,6 +42,9 @@ type hostContractor interface {
 	// CancelContract cancels the renter's contract.
 	CancelContract(types.FileContractID) error
 
+	// Contract returns the contract with the given ID.
+	Contract(types.FileContractID) (modules.RenterContract, bool)
+
 	// Contracts returns the staticContracts of the manager's hostContractor.
 	Contracts() []modules.RenterContract
 
@@ -71,6 +74,10 @@ type hostContractor interface {
 	// GetRenter returns the renter with the given public key.
 	GetRenter(types.SiaPublicKey) (modules.Renter, error)
 
+	// FormContract forms a contract with the specified host, puts it
+	// in the contract set, and returns it.
+	FormContract(*modules.RPCSession, types.SiaPublicKey, types.SiaPublicKey, types.SiaPublicKey, types.BlockHeight, types.Currency) (modules.RenterContract, error)
+
 	// FormContracts forms up to the specified number of contracts, puts them
 	// in the contract set, and returns them.
 	FormContracts(types.SiaPublicKey, crypto.SecretKey) ([]modules.RenterContract, error)
@@ -91,6 +98,9 @@ type hostContractor interface {
 
 	// RefreshedContract checks if the contract was previously refreshed.
 	RefreshedContract(fcid types.FileContractID) bool
+
+	// RenewContract tries to renew the given contract.
+	RenewContract(*modules.RPCSession, types.SiaPublicKey, modules.RenterContract, types.BlockHeight, types.Currency) (modules.RenterContract, error)
 
 	// RenewContracts tries to renew the given set of contracts.
 	RenewContracts(types.SiaPublicKey, crypto.SecretKey, []types.FileContractID) ([]modules.RenterContract, error)
@@ -533,6 +543,92 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	return cost / h, allowance, nil
 }
 
+// ContractPriceEstimation estimates the cost in siacoins of forming a contract
+// with the given hosts.
+func (m *Manager) ContractPriceEstimation(hpk types.SiaPublicKey, endHeight types.BlockHeight, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (types.Currency, float64, error) {
+	if err := m.threads.Add(); err != nil {
+		return types.ZeroCurrency, 0, err
+	}
+	defer m.threads.Done()
+
+	// Get the hosts.
+	host, ok, err := m.hostDB.Host(hpk)
+	if err != nil {
+		return types.ZeroCurrency, 0, err
+	}
+	if !ok {
+		return types.ZeroCurrency, 0, errors.New("host not found")
+	}
+	if host.Filtered {
+		return types.ZeroCurrency, 0, errors.New("host filtered")
+	}
+
+	height := m.cs.Height()
+	period := endHeight - height
+	contractCost := host.ContractPrice
+	downloadCost := host.DownloadBandwidthPrice
+	storageCost := host.StoragePrice
+	uploadCost := host.UploadBandwidthPrice
+
+	// Convert to match the provided values.
+	downloadCost = downloadCost.Mul64(download).Div64(uint64(period))
+	storageCost = storageCost.Mul64(storage)
+	uploadCost = uploadCost.Mul64(upload).Div64(uint64(period))
+
+	// Factor in redundancy.
+	storageCost = storageCost.Mul64(totalShards).Div64(minShards)
+	uploadCost = uploadCost.Mul64(totalShards).Div64(minShards)
+
+	// Add the cost of paying the transaction fees and then double the contract
+	// cost to account for renewing.
+	_, feePerByte := m.tpool.FeeEstimation()
+	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(3)
+	contractCost = contractCost.Add(txnsFees)
+	contractCost = contractCost.Mul64(2)
+
+	// Try to figure out what the total contract cost would be for the
+	// Siafund fee.
+	funding := contractCost.Add(downloadCost)
+	funding = funding.Add(uploadCost)
+	funding = funding.Add(storageCost)
+	funding = funding.Mul64(10) // Quite generous.
+
+	// Determine host collateral to be added to Siafund fee.
+	// Assume that the ContractPrice equals contractCost and that
+	// the txnFee was zero. It doesn't matter since RenterPayoutsPreTax
+	// simply subtracts both values from the funding.
+	host.ContractPrice = contractCost
+	_, _, collateral, err := smodules.RenterPayoutsPreTax(host, funding, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, period, storage)
+	if err != nil {
+		return types.ZeroCurrency, 0, err
+	}
+
+	// Add in siafund fee. which should be around 10%. The 10% siafund fee
+	// accounts for paying 3.9% siafund on transactions and host collateral. We
+	// estimate the renter to spend all of it's allowance so the siafund fee
+	// will be calculated on the sum of the allowance and the hosts collateral.
+	totalPayout := funding.Add(collateral)
+	siafundFee := types.Tax(height, totalPayout)
+	contractCost = contractCost.Add(siafundFee)
+
+	// Increase estimates by a factor of safety to account for host churn and
+	// any potential missed additions.
+	contractCost = contractCost.MulFloat(1.2)
+	downloadCost = downloadCost.MulFloat(1.2)
+	storageCost = storageCost.MulFloat(1.2)
+	uploadCost = uploadCost.MulFloat(1.2)
+
+	est := contractCost.Add(downloadCost)
+	est = est.Add(storageCost)
+	est = est.Add(uploadCost)
+	est.MulFloat(modules.SatelliteOverhead)
+
+	cost, _ := est.Float64()
+	h, _ := types.SiacoinPrecision.Float64()
+
+	return funding, cost / h, nil
+}
+
 // SetAllowance calls hostContractor.SetAllowance.
 func (m *Manager) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) error {
 	return m.hostContractor.SetAllowance(rpk, a)
@@ -582,4 +678,19 @@ func (m *Manager) RenewedFrom(fcid types.FileContractID) types.FileContractID {
 // DeleteRenter deletes the renter data from the memory.
 func (m *Manager) DeleteRenter(email string) {
 	m.hostContractor.DeleteRenter(email)
+}
+
+// Contract calls hostContractor.Contract.
+func (m *Manager) Contract(fcid types.FileContractID) (modules.RenterContract, bool) {
+	return m.hostContractor.Contract(fcid)
+}
+
+// FormContract calls hostContractor.FormContract.
+func (m *Manager) FormContract(s *modules.RPCSession, pk, rpk, hpk types.SiaPublicKey, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
+	return m.hostContractor.FormContract(s, pk, rpk, hpk, endHeight, funding)
+}
+
+// RenewContract calls hostContractor.RenewContract.
+func (m *Manager) RenewContract(s *modules.RPCSession, pk types.SiaPublicKey, contract modules.RenterContract, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
+	return m.hostContractor.RenewContract(s, pk, contract, endHeight, funding)
 }

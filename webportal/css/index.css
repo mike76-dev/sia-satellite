@@ -19,10 +19,15 @@
 	padding: 1rem;
 	width: 20rem;
 	height: 20rem;
-	border: 1px solid #cfcfcf;
+	border: 1px solid var(--textSecondary);
 	border-radius: 1rem;
 	justify-content: center;
-	background-color: #001f7f;
+	background-color: var(--backgroundForm);
+	box-shadow: 1px 1px 1px 1px var(--textSecondary), -1px -1px 1px 1px var(--textSecondary);
+}
+
+.thumbnail:hover {
+	box-shadow: none;
 }
 
 .thumbnail h2 {
