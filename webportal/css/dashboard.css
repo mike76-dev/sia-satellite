@@ -9,18 +9,18 @@
 	position: absolute;
 	z-index: 10;
 	width: 100%;
-	color: #001f3f;
+	color: var(--backgroundStart);
 	font-weight: bold;
 	padding: 1rem;
 	text-align: center;
-	background-color: #cfcfcf;
+	background-color: var(--textSecondary);
 	align-self: center;
 }
 
 .menu-button {
 	display: none;
 	font-size: 2.5rem;
-	color: #afafaf;
+	color: var(--textSecondary);
 	padding: 0.5rem;
 	cursor: pointer;
 	height: 3rem;
@@ -34,8 +34,8 @@
 	min-width: 9rem;
 	max-width: 9rem;
 	flex-grow: 1;
-	background-color: #0f1f6f;
-	box-shadow: 0 0 5px #0f1f6f;
+	background-color: transparent;
+	box-shadow: 0 0 10px var(--backgroundEnd);
 	padding: 1rem;
 }
 
@@ -46,7 +46,7 @@
 }
 
 .menu-list li {
-	color: #afafaf;
+	color: var(--textSecondary);
 	margin: 1rem 0;
 	cursor: pointer;
 }
@@ -83,7 +83,7 @@ section {
 	flex-direction: column;
 	width: 100%;
 	align-items: flex-start;
-	border: 1px solid #afafaf;
+	border: 1px solid var(--textSecondary);
 	border-radius: 0.5rem;
 	padding: 0.5rem;
 	margin-bottom: 0.5rem;
@@ -100,7 +100,7 @@ section h2 {
 
 label {
 	font-size: 1rem;
-	color: #afafaf;
+	color: var(--textSecondary);
 	margin-top: 0.5rem;
 	margin-bottom: 0.5rem;
 }
@@ -118,12 +118,12 @@ label {
 
 #payment-currency {
 	font-size: 1rem;
-	color: #afafaf;
+	color: var(--textSecondary);
 	margin-right: 0.5rem;
 }
 
 .error {
-	color: #df3f1f;
+	color: var(--error);
 }
 
 button {
@@ -132,15 +132,15 @@ button {
 	height: 2.5rem;
 	margin-top: 0.5rem;
 	font-size: 1rem;
-	background-color: #7f7f7f;
-	color: #cfcfcf;
+	background-color: var(--button);
+	color: var(--textPrimary);
 	border: none;
 	border-radius: 0.5rem;
 	cursor: pointer;
 }
 
 button:hover {
-	background-color: #5f5f5f;
+	background-color: var(--buttonHovered);
 }
 
 button:disabled {
@@ -196,9 +196,9 @@ button:disabled {
 	width: 1rem;
 	height: 1rem;
 	color: #001f8f;
-	background-color: #afafaf;
+	background-color: var(--textSecondary);
 	position: relative;
-	border: 1px solid #afafaf;
+	border: 1px solid var(--textSecondary);
 	border-radius: 50%;
 	cursor: pointer;
 	display: inline-block;
@@ -209,11 +209,11 @@ button:disabled {
 	position: absolute;
 	left: 1.5rem;
 	top: 0;
-	color: #001f8f;
-	background-color: #afafaf;
+	color: var(--hint);
+	background-color: var(--textSecondary);
 	font-size: 0.8rem;
 	text-align: left;
-	border: 1px solid #afafaf;
+	border: 1px solid var(--textSecondary);
 	border-radius: 0.25rem;
 	padding: 0.25rem;
 	min-width: 10rem;
@@ -246,7 +246,7 @@ button:disabled {
 	margin-right: 0.5rem;
 	margin-bottom: 0.5rem;
 	padding: 0.5rem;
-	border: 1px solid #afafaf;
+	border: 1px solid var(--textSecondary);
 	border-radius: 0.5rem;
 	min-width: 12rem;
 }
@@ -282,7 +282,7 @@ table {
 	margin-top: 1rem;
 	width: 100%;
 	max-width: 100%;
-	color: #afafaf;
+	color: var(--textSecondary);
 	border-collapse: collapse;
 	table-layout: fixed;
 	white-space: nowrap;
@@ -293,7 +293,7 @@ th {
 }
 
 tbody > tr:nth-child(odd) {
-	background-color: #000f9f;
+	background-color: var(--tableRow);
 }
 
 .cell-overflow {
@@ -309,8 +309,8 @@ tbody > tr:nth-child(odd) {
 
 .history-button {
 	width: 4rem;
-	background-color: #000f9f;
-	border: 1px solid #afafaf;
+	background-color: var(--backgroundForm);
+	border: 1px solid var(--textSecondary);
 }
 
 .contracts-checkbox-container {
@@ -370,7 +370,7 @@ tbody > tr:nth-child(odd) {
 }
 
 #payment-result {
-	color: #cfcfcf;
+	color: var(--textPrimary);
 	font-size: 1rem;
 	line-height: 1.25rem;
 	margin-top: 0.5rem;
@@ -386,7 +386,7 @@ tbody > tr:nth-child(odd) {
 	border-radius: 50%;
 }
 .spinner {
-	color: #cfcfcf;
+	color: var(--textSecondary);
 	font-size: 1.4rem;
 	text-indent: -99999px;
 	margin: 0 auto;
@@ -406,7 +406,7 @@ tbody > tr:nth-child(odd) {
 .spinner:before {
 	width: 0.7rem;
 	height: 1.3rem;
-	background: #7f7f7f;
+	background: var(--button);
 	border-radius: 1.3rem 0 0 1.3rem;
 	top: -0.2px;
 	left: -0.2px;
@@ -418,7 +418,7 @@ tbody > tr:nth-child(odd) {
 .spinner:after {
 	width: 0.7rem;
 	height: 0.6rem;
-	background: #7f7f7f;
+	background: var(--button);
 	border-radius: 0 0.6rem 0.6rem 0;
 	top: -0.1px;
 	left: 0.6rem;
@@ -429,7 +429,7 @@ tbody > tr:nth-child(odd) {
 }
 button:hover .spinner:before,
 button:hover .spinner:after {
-	background: #5f5f5f;
+	background: var(--buttonHovered);
 }
 
 @-webkit-keyframes loading {
