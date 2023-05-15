@@ -330,15 +330,17 @@ function retrieveBalance() {
 				let b = document.getElementById('balance');
 				let l = document.getElementById('locked');
 				let c = data.currency == '' ? 'USD' : data.currency;
-				b.innerHTML = data.balance.toFixed(2) + ' ' + c;
-				l.innerHTML = data.locked.toFixed(2) + ' ' + c;
+				b.innerHTML = (data.balance * data.scrate).toFixed(2) + ' ' + c;
+				l.innerHTML = (data.locked * data.scrate).toFixed(2) + ' ' + c;
 				if (averages.currency != c) {
 					averages.currency = c;
 					retrieveAverages();
 				}
 				if (data.isuser) {
-					message = 'Your payment plan: ' + (data.subscribed ? 'Subscription' : 'Pre-payment');
-					message += '<br>Remaining balance: ' + data.balance.toFixed(2) + ' ' + c;
+					message = 'Your payment plan: ' +
+						(data.subscribed ? 'Subscription' : 'Pre-payment');
+					message += '<br>Remaining balance: ' +
+						(data.balance * data.scrate).toFixed(2) + ' ' + c;
 					document.getElementById('select-info').innerHTML = message;
 					document.getElementById('select-currency').value = c;
 					document.getElementById('reveal').classList.remove('disabled');
@@ -559,9 +561,9 @@ function renderPayments() {
 		tr = document.createElement('tr');
 		tr.innerHTML = '<td>' + (i + 1) + '</td>';
 		tr.innerHTML += '<td>' + timestamp.toLocaleString() + '</td>';
-		tr.innerHTML += '<td>' + row.amount.toFixed(2) + '</td>';
+		tr.innerHTML += '<td>' + (row.amount * row.scrate).toFixed(2) + '</td>';
 		tr.innerHTML += '<td>' + row.currency + '</td>';
-		tr.innerHTML += '<td>' + row.amountusd.toFixed(2) + ' USD</td>';
+		tr.innerHTML += '<td>' + row.amount.toFixed(4) + ' SC</td>';
 		tbody.appendChild(tr);
 	});
 	document.getElementById('history-empty').classList.add('disabled');
@@ -884,12 +886,18 @@ function getSpendings() {
 				let po = document.getElementById('spendings-prev-overhead');
 				c.innerHTML = month[cm] + ' ' + cy;
 				p.innerHTML = month[pm] + ' ' + py;
-				cl.innerHTML = data.currentlocked.toFixed(2) + ' ' + averages.currency;
-				cu.innerHTML = data.currentused.toFixed(2) + ' ' + averages.currency;
-				co.innerHTML = data.currentoverhead.toFixed(2) + ' ' + averages.currency;
-				pl.innerHTML = data.prevlocked.toFixed(2) + ' ' + averages.currency;
-				pu.innerHTML = data.prevused.toFixed(2) + ' ' + averages.currency;
-				po.innerHTML = data.prevoverhead.toFixed(2) + ' ' + averages.currency;
+				cl.innerHTML = (data.currentlocked * data.scrate).toFixed(2) +
+					' ' + averages.currency;
+				cu.innerHTML = (data.currentused * data.scrate).toFixed(2) +
+					' ' + averages.currency;
+				co.innerHTML = (data.currentoverhead * data.scrate).toFixed(2) +
+					' ' + averages.currency;
+				pl.innerHTML = (data.prevlocked * data.scrate).toFixed(2) +
+					' ' + averages.currency;
+				pu.innerHTML = (data.prevused * data.scrate).toFixed(2) +
+					' ' + averages.currency;
+				po.innerHTML = (data.prevoverhead * data.scrate).toFixed(2) +
+					' ' + averages.currency;
 			}
 		})
 		.catch(error => console.log(error));
