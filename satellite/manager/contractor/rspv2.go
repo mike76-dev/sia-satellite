@@ -106,7 +106,10 @@ func (c *Contractor) managedFormNewContract(s *modules.RPCSession, pk, rpk types
 	}
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("%s; %s", err, c.wallet.MarkAddressUnused(uc))
+			wErr := c.wallet.MarkAddressUnused(uc)
+			if wErr != nil {
+				err = fmt.Errorf("%s; %s", err, wErr)
+			}
 		}
 	}()
 
@@ -284,7 +287,10 @@ func (c *Contractor) managedRenewOldContract(s *modules.RPCSession, pk types.Sia
 	}
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("%s; %s", err, c.wallet.MarkAddressUnused(uc))
+			wErr := c.wallet.MarkAddressUnused(uc)
+			if wErr != nil {
+				err = fmt.Errorf("%s; %s", err, wErr)
+			}
 		}
 	}()
 

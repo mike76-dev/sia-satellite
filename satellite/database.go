@@ -23,10 +23,9 @@ func (s *Satellite) GetBalance(email string) (*modules.UserBalance, error) {
 		return nil, err
 	}
 
-	var scBalance float64
-	scRate, _ := s.GetSiacoinRate(c)
-	if scRate > 0 {
-		scBalance = b / scRate
+	scRate, err := s.GetSiacoinRate(c)
+	if err != nil {
+		return nil, err
 	}
 
 	ub := &modules.UserBalance{
@@ -36,7 +35,7 @@ func (s *Satellite) GetBalance(email string) (*modules.UserBalance, error) {
 		Locked:     l,
 		Currency:   c,
 		StripeID:   id,
-		SCBalance:  scBalance,
+		SCRate:     scRate,
 	}
 
 	return ub, nil
@@ -85,19 +84,14 @@ func (s *Satellite) LockSiacoins(email string, amount float64) error {
 
 	// Include the Satellite fee.
 	amountWithFee := amount * modules.SatelliteOverhead
-	if amountWithFee > ub.SCBalance {
+	if amountWithFee > ub.Balance {
 		s.log.Println("WARN: trying to lock more than the available balance")
-		amountWithFee = ub.SCBalance
+		amountWithFee = ub.Balance
 	}
 
 	// Calculate the new balance.
-	scRate, _ := s.GetSiacoinRate(ub.Currency)
-	if scRate == 0 {
-		return errors.New("unable to fetch SC rate")
-	}
-	locked := amountWithFee * scRate
-	ub.Locked += locked
-	ub.Balance -= locked
+	ub.Locked += amount
+	ub.Balance -= amountWithFee
 
 	// Save the new balance.
 	err = s.UpdateBalance(email, ub)
@@ -106,15 +100,12 @@ func (s *Satellite) LockSiacoins(email string, amount float64) error {
 	}
 
 	// Update the spendings.
-	s.mu.Lock()
-	rate := s.scusdRate
-	s.mu.Unlock()
 	us, err := s.getSpendings(email)
 	if err != nil {
 		return err
 	}
-	us.CurrentLocked += amount * rate
-	us.CurrentOverhead += (modules.SatelliteOverhead - 1) * amount * rate
+	us.CurrentLocked += amount
+	us.CurrentOverhead += amountWithFee - amount
 
 	return s.updateSpendings(email, *us)
 }
@@ -136,13 +127,9 @@ func (s *Satellite) UnlockSiacoins(email string, amount, total float64, height t
 	totalWithFee := total * modules.SatelliteOverhead
 
 	// Calculate the new balance.
-	scRate, _ := s.GetSiacoinRate(ub.Currency)
-	if scRate == 0 {
-		return errors.New("unable to fetch SC rate")
-	}
-	unlocked := amount * scRate
-	burned := (totalWithFee - amount) * scRate
-	if unlocked + burned > ub.Locked {
+	unlocked := amount
+	burned := totalWithFee - amount
+	if totalWithFee > ub.Locked {
 		s.log.Println("WARN: trying to unlock more than the locked balance")
 		if burned < ub.Locked {
 			unlocked = ub.Locked - burned
@@ -162,7 +149,6 @@ func (s *Satellite) UnlockSiacoins(email string, amount, total float64, height t
 
 	// Update the spendings.
 	s.mu.Lock()
-	rate := s.scusdRate
 	prevMonth := s.prevMonth.BlockHeight
 	currentMonth := s.currentMonth.BlockHeight
 	s.mu.Unlock()
@@ -170,36 +156,16 @@ func (s *Satellite) UnlockSiacoins(email string, amount, total float64, height t
 		// Spending outside the reporting period.
 		return nil
 	}
-	unlockedUSD := amount * rate
-	burnedUSD := (totalWithFee - amount) * rate
 	us, err := s.getSpendings(email)
 	if err != nil {
 		return err
 	}
 	if height < currentMonth {
-		if unlockedUSD + burnedUSD > us.PrevLocked {
-			s.log.Println("WARN: trying to unlock more than the locked balance")
-			if burnedUSD < us.PrevLocked {
-				unlockedUSD = us.PrevLocked - burnedUSD
-			} else {
-				burnedUSD = us.PrevLocked
-				unlockedUSD = 0
-			}
-		}
-		us.PrevLocked -= (unlockedUSD + burnedUSD)
-		us.PrevUsed += burnedUSD
+		us.PrevLocked -= (unlocked + burned)
+		us.PrevUsed += burned
 	} else {
-		if unlockedUSD + burnedUSD > us.CurrentLocked {
-			s.log.Println("WARN: trying to unlock more than the locked balance")
-			if burnedUSD < us.CurrentLocked {
-				unlockedUSD = us.CurrentLocked - burnedUSD
-			} else {
-				burnedUSD = us.CurrentLocked
-				unlockedUSD = 0
-			}
-		}
-		us.CurrentLocked -= (unlockedUSD + burnedUSD)
-		us.CurrentUsed += burnedUSD
+		us.CurrentLocked -= (unlocked + burned)
+		us.CurrentUsed += burned
 	}
 
 	return s.updateSpendings(email, *us)
@@ -267,11 +233,11 @@ func (s *Satellite) updateSpendings(email string, us modules.UserSpendings) erro
 // RetrieveSpendings retrieves the user's spendings in the given currency.
 func (s *Satellite) RetrieveSpendings(email string, currency string) (*modules.UserSpendings, error) {
 	// Get exchange rate.
-	rate, err := s.GetExchangeRate(currency)
+	scRate, err := s.GetSiacoinRate(currency)
 	if err != nil {
 		return nil, err
 	}
-	if rate == 0 {
+	if scRate == 0 {
 		return nil, errors.New("couldn't get exchange rate")
 	}
 
@@ -280,12 +246,7 @@ func (s *Satellite) RetrieveSpendings(email string, currency string) (*modules.U
 	if err != nil {
 		return nil, err
 	}
-	us.CurrentLocked /= rate
-	us.CurrentUsed /= rate
-	us.CurrentOverhead /= rate
-	us.PrevLocked /= rate
-	us.PrevUsed /= rate
-	us.PrevOverhead /= rate
+	us.SCRate = scRate
 
 	return us, nil
 }
