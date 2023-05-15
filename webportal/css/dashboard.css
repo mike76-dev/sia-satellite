@@ -39,6 +39,12 @@
 	padding: 1rem;
 }
 
+.menu img {
+	width: 2rem;
+	height: 2rem;
+	margin-left: 1rem;
+}
+
 .menu-list {
 	list-style-type: none;
 	margin: 0;
@@ -58,6 +64,18 @@
 .menu-list li.active {
 	margin-left: 1rem;
 	font-weight: bold;
+}
+
+.menu-home {
+	display: none;
+	width: 100%;
+	padding-bottom: 0.5rem;
+	border-bottom: 1px solid var(--textSecondary);
+}
+
+.menu-home a {
+	color: var(--textSecondary);
+	text-decoration: none;
 }
 
 .pages {
@@ -459,14 +477,18 @@ button:hover .spinner:after {
 		display: initial;
 	}
 
-	.mobile-hidden {
-		display: none;
-	}
-
 	.menu {
 		position: absolute;
 		z-index: 1;
 		background-color: var(--backgroundStart);
+	}
+
+	.menu img {
+		display: none;
+	}
+
+	.menu-home {
+		display: initial;
 	}
 
 	.page h1 {
