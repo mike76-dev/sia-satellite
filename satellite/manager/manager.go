@@ -544,14 +544,14 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 }
 
 // ContractPriceEstimation estimates the cost in siacoins of forming a contract
-// with the given hosts.
+// with the given host.
 func (m *Manager) ContractPriceEstimation(hpk types.SiaPublicKey, endHeight types.BlockHeight, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (types.Currency, float64, error) {
 	if err := m.threads.Add(); err != nil {
 		return types.ZeroCurrency, 0, err
 	}
 	defer m.threads.Done()
 
-	// Get the hosts.
+	// Get the host.
 	host, ok, err := m.hostDB.Host(hpk)
 	if err != nil {
 		return types.ZeroCurrency, 0, err
