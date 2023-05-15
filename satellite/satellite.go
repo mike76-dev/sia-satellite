@@ -326,7 +326,7 @@ func (s *Satellite) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, 
 	if err != nil {
 		return nil, err
 	}
-	if ub.SCBalance < estimation {
+	if ub.Balance < estimation {
 		return nil, errors.New("insufficient account balance")
 	}
 
@@ -391,7 +391,7 @@ func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey,
 	if err != nil {
 		return nil, err
 	}
-	if ub.SCBalance < estimation {
+	if ub.Balance < estimation {
 		return nil, errors.New("insufficient account balance")
 	}
 
@@ -490,7 +490,7 @@ func (s *Satellite) FormContract(ss *modules.RPCSession, pk types.SiaPublicKey, 
 	if err != nil {
 		return modules.RenterContract{}, err
 	}
-	if ub.SCBalance < estimation {
+	if ub.Balance < estimation {
 		return modules.RenterContract{}, errors.New("insufficient account balance")
 	}
 
@@ -523,7 +523,7 @@ func (s *Satellite) RenewContract(ss *modules.RPCSession, pk types.SiaPublicKey,
 	if err != nil {
 		return modules.RenterContract{}, err
 	}
-	if ub.SCBalance < estimation {
+	if ub.Balance < estimation {
 		return modules.RenterContract{}, errors.New("insufficient account balance")
 	}
 

@@ -125,7 +125,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 	password := req.Header.Get("Satellite-Password")
 
 	// Check if the user account exists.
-	count, cErr := api.portal.countEmails(email)
+	exists, cErr := api.portal.userExists(email)
 	if cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
@@ -136,7 +136,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	if count == 0 {
+	if !exists {
 		// Wrong email address. Check and update stats.
 		if err := api.portal.checkAndUpdateFailedLogins(getRemoteHost(req)); err != nil {
 			writeError(w,
@@ -238,7 +238,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	// Check if the email address is already registered.
-	count, cErr := api.portal.countEmails(email)
+	exists, cErr := api.portal.userExists(email)
 	if cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
@@ -248,7 +248,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 			}, http.StatusInternalServerError)
 		return
 	}
-	if count > 0 {
+	if exists {
 		// Check if the account is verified already.
 		verified, passwordOK, cErr := api.portal.isVerified(email, password)
 		if cErr != nil {
@@ -518,7 +518,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 		}
 
 		// Check if the email address is already registered.
-		count, cErr := api.portal.countEmails(email)
+		exists, cErr := api.portal.userExists(email)
 		if cErr != nil {
 			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 			writeError(w,
@@ -529,7 +529,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 			return
 		}
 
-		if count == 0 {
+		if !exists {
 			// No such email address found. This can only happen if
 			// the account was deleted.
 			writeError(w,
@@ -599,7 +599,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	// Check if such account exists.
-	count, cErr := api.portal.countEmails(data.Email)
+	exists, cErr := api.portal.userExists(data.Email)
 	if cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
@@ -610,7 +610,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	if count == 0 {
+	if !exists {
 		// Do not return an error. Otherwise we would give a potential
 		// attacker a hint.
 		writeSuccess(w)
@@ -695,7 +695,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	}
 
 	// Check if the user account exists.
-	count, cErr := api.portal.countEmails(email)
+	exists, cErr := api.portal.userExists(email)
 	if cErr != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
@@ -707,7 +707,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	}
 
 	// No such account. Can only happen if it was deleted.
-	if count == 0 {
+	if !exists {
 		writeError(w,
 			Error{
 				Code: httpErrorNotFound,
@@ -785,7 +785,7 @@ func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email s
 	}
 
 	// Check if the user account exists.
-	count, err := api.portal.countEmails(email)
+	exists, err := api.portal.userExists(email)
 	if err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
@@ -797,7 +797,7 @@ func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email s
 	}
 
 	// No such account. Can only happen if it was deleted.
-	if count == 0 {
+	if !exists {
 		writeError(w,
 			Error{
 				Code: httpErrorNotFound,

@@ -26,12 +26,12 @@ CREATE TABLE balances (
 );
 
 CREATE TABLE payments (
-	id         INT NOT NULL AUTO_INCREMENT,
-	email      VARCHAR(64) NOT NULL,
-	amount     DOUBLE NOT NULL,
-	currency   VARCHAR(8) NOT NULL,
-	amount_usd DOUBLE NOT NULL,
-	made       INT NOT NULL,
+	id        INT NOT NULL AUTO_INCREMENT,
+	email     VARCHAR(64) NOT NULL,
+	amount    DOUBLE NOT NULL,
+	currency  VARCHAR(8) NOT NULL,
+	amount_sc DOUBLE NOT NULL,
+	made_at   INT NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );

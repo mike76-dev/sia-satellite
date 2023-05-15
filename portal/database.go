@@ -31,11 +31,12 @@ const (
 	pruneUnverifiedAccountsThreshold = 7 * 24 * time.Hour
 )
 
-// countEmails counts all accounts with the given email
-// address. There should be at most one per address.
-func (p *Portal) countEmails(email string) (count int, err error) {
-	err = p.db.QueryRow("SELECT COUNT(*) FROM accounts WHERE email = ?", email).Scan(&count)
-	return
+// userExists checks if there is an account with the given email
+// address.
+func (p *Portal) userExists(email string) (bool, error) {
+	var count int
+	err := p.db.QueryRow("SELECT COUNT(*) FROM accounts WHERE email = ?", email).Scan(&count)
+	return count > 0, err
 }
 
 // isVerified checks if the user account is verified. If password
@@ -55,13 +56,13 @@ func (p *Portal) isVerified(email, password string) (verified bool, ok bool, err
 // updateAccount updates the user account in the database.
 // If the account does not exist yet, it is created.
 func (p *Portal) updateAccount(email, password string, verified bool) error {
-	c, err := p.countEmails(email)
+	exists, err := p.userExists(email)
 	if err != nil {
 		return err
 	}
 
 	// No entries, create a new account.
-	if c == 0 {
+	if !exists {
 		if password == "" {
 			return errors.New("password may not be empty")
 		}
@@ -178,21 +179,21 @@ func (p *Portal) deleteAccount(email string) error {
 
 // putPayment inserts a payment into the database.
 func (p *Portal) putPayment(email string, amount float64, currency string) error {
-	// Convert the amount to USD.
-	rate, err := p.satellite.GetExchangeRate(currency)
+	// Convert the amount to SC.
+	rate, err := p.satellite.GetSiacoinRate(currency)
 	if err != nil {
 		return err
 	}
 	if rate == 0 {
-		return errors.New("unable to get exchange rate")
+		return errors.New("unable to get SC exchange rate")
 	}
 
 	// Insert the payment.
-	amountUSD := amount / rate
+	amountSC := amount / rate
 	timestamp := time.Now().Unix()
 	_, err = p.db.Exec(`
-		INSERT INTO payments (email, amount, currency, amount_usd, made)
-		VALUES (?, ?, ?, ?, ?)`, email, amount, currency, amountUSD, timestamp)
+		INSERT INTO payments (email, amount, currency, amount_sc, made_at)
+		VALUES (?, ?, ?, ?, ?)`, email, amount, currency, amountSC, timestamp)
 
 	return err
 }
@@ -203,12 +204,12 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	if id == "" || currency == "" || amount == 0 {
 		return errors.New("one or more empty parameters provided")
 	}
-	rate, err := p.satellite.GetExchangeRate(currency)
+	rate, err := p.satellite.GetSiacoinRate(currency)
 	if err != nil {
 		return err
 	}
 	if rate == 0 {
-		return errors.New("unable to get exchange rate")
+		return errors.New("unable to get SC exchange rate")
 	}
 
 	// Fetch the account.
@@ -228,11 +229,11 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	// credited. In this case, id is the user's email.
 	credit := false
 	if err != nil && errors.Is(err, sql.ErrNoRows) {
-		count, err := p.countEmails(id)
+		exists, err := p.userExists(id)
 		if err != nil {
 			return err
 		}
-		if count == 0 {
+		if !exists {
 			return errors.New("trying to credit a non-existing account")
 		}
 		email = id
@@ -273,18 +274,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	if credit {
 		ub.StripeID = ""
 	}
-
-	if ub.Currency == currency {
-		ub.Balance += amount
-	} else {
-		currRate, _ := p.satellite.GetExchangeRate(ub.Currency)
-		if currRate == 0 {
-			return errors.New("unable to get exchange rate")
-		}
-		balanceUSD := ub.Balance / currRate
-		balanceUSD += amount / rate
-		ub.Balance = ub.Balance * currRate
-	}
+	ub.Balance += amount / rate
 
 	// Update the balances table.
 	err = p.satellite.UpdateBalance(email, ub)
@@ -292,11 +282,11 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	return err
 }
 
-// getPayments retrieves up to the given number of payments from
-// the account payment history. The numbering starts from one.
+// getPayments retrieves the payments from the account payment
+// history.
 func (p *Portal) getPayments(email string) ([]userPayment, error) {
 	rows, err := p.db.Query(`
-		SELECT amount, currency, amount_usd, made FROM payments
+		SELECT amount, currency, amount_sc, made_at FROM payments
 		WHERE email = ?
 	`, email)
 	if err != nil {
@@ -308,7 +298,7 @@ func (p *Portal) getPayments(email string) ([]userPayment, error) {
 	var payment userPayment
 
 	for rows.Next() {
-		err := rows.Scan(&payment.Amount, &payment.Currency, &payment.AmountUSD, &payment.Timestamp)
+		err := rows.Scan(&payment.Amount, &payment.Currency, &payment.AmountSC, &payment.Timestamp)
 		if err != nil {
 			return nil, err
 		}

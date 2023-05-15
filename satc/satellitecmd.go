@@ -101,17 +101,12 @@ func satellitebalancecmd(key string) {
 		die(err)
 	}
 
-	var lockedSC float64
-	if ub.Balance > 0 {
-		lockedSC = ub.SCBalance * ub.Locked / ub.Balance
-	}
-
 	fmt.Printf(`Is User:    %v
 Subscribed: %v
 
-Available Balance: %.4f SC (%.2f %v)
-Locked Balance:    %.4f SC (%.2f %v)
-`, ub.IsUser, ub.Subscribed, ub.SCBalance, ub.Balance, ub.Currency, lockedSC, ub.Locked, ub.Currency)
+Available Balance: %.4f SC
+Locked Balance:    %.4f SC
+`, ub.IsUser, ub.Subscribed, ub.Balance, ub.Locked)
 }
 
 // satellitecontractscmd is the handler for the commands `satc satellite contracts all`

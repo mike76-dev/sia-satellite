@@ -59,7 +59,7 @@ type (
 	userPayment struct {
 		Amount    float64 `json:"amount"`
 		Currency  string  `json:"currency"`
-		AmountUSD float64 `json:"amountusd"`
+		AmountSC  float64 `json:"amountsc"`
 		Timestamp uint64  `json:"timestamp"`
 	}
 

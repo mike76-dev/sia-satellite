@@ -27,7 +27,7 @@ type UserBalance struct {
 	Balance    float64 `json:"balance"`
 	Locked     float64 `json:"locked"`
 	Currency   string  `json:"currency"`
-	SCBalance  float64 `json:"scbalance"`
+	SCRate     float64 `json:"scrate"`
 	StripeID   string  `json:"stripeid"`
 }
 
@@ -40,6 +40,7 @@ type UserSpendings struct {
 	PrevLocked      float64 `json:"prevlocked"`
 	PrevUsed        float64 `json:"prevused"`
 	PrevOverhead    float64 `json:"prevoverhead"`
+	SCRate          float64 `json:"scrate"`
 }
 
 // CreditData contains the information about any running promotion.
