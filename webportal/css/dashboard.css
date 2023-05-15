@@ -453,7 +453,7 @@ button:hover .spinner:after {
 	}
 }
 
-@media screen and (max-width: 800px) {
+@media screen and (max-width: 1000px) {
 
 	.menu-button {
 		display: initial;
@@ -466,6 +466,7 @@ button:hover .spinner:after {
 	.menu {
 		position: absolute;
 		z-index: 1;
+		background-color: var(--backgroundStart);
 	}
 
 	.page h1 {
