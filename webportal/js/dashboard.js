@@ -325,7 +325,15 @@ function retrieveBalance() {
 	fetch(apiBaseURL + '/dashboard/balance', options)
 		.then(response => response.json())
 		.then(data => {
-			if (data.code) console.log(data)
+			if (data.code) {
+				if (data.code == 40) {
+					deleteCookie('satellite');
+					let i = window.location.href.lastIndexOf('/');
+					window.location.replace(window.location.href.slice(0, i) + '/rent.html');
+				} else {
+					console.log(data);
+				}
+			}
 			else {
 				let b = document.getElementById('balance');
 				let l = document.getElementById('locked');
