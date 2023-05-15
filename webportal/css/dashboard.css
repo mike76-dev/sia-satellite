@@ -152,22 +152,6 @@ button {
 	font-size: 1rem;
 }
 
-.checkbox-container {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-}
-
-.checkbox {
-	width: 1.2rem;
-	height: 1.2rem;
-	margin-right: 0.5rem;
-}
-
-.checkbox-label {
-	margin: 0;
-}
-
 .password {
 	position: relative;
 	width: 100%;
@@ -323,17 +307,12 @@ tbody > tr:nth-child(odd) {
 	flex-wrap: wrap;
 }
 
-.contracts-checkbox-container div {
-	margin-right: 0.5rem;
+.contracts-checkbox-container .contracts-label {
+	margin-right: 1rem;
 }
 
-.contracts-checkbox-container div:last-child {
+.contracts-checkbox-container .contracts-label:last-child {
 	margin-right: 0;
-}
-
-.contracts-checkbox-container input {
-	margin-right: 0;
-	cursor: pointer;
 }
 
 .contracts-expand {

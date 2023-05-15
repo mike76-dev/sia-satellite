@@ -84,15 +84,18 @@
 					<h1>Contract Information</h1>
 					<section>
 						<div class="contracts-checkbox-container">
-							<div>
-								<input id="contracts-current" type="checkbox" checked
+							<label class="checkbox">
+								<input id="contracts-current" type="checkbox"
 									onchange="contractsChanged()">
-								<label for="contracts-current">Current</label>
-							</div>
-							<div>
-								<input id="contracts-old" type="checkbox" onchange="contractsChanged()">
-								<label for="contracts-old">Old</label>
-							</div>
+								<span class="checkmark"></span>
+							</label>
+							<label class="contracts-label" for="contracts-current">Current</label>
+							<label class="checkbox">
+								<input id="contracts-old" type="checkbox"
+									onchange="contractsChanged()">
+								<span class="checkmark"></span>
+							</label>
+							<label class="contracts-label" for="contracts-old">Old</label>
 						</div>
 						<p id="contracts-empty">No contracts found.</p>
 						<div id="contracts-non-empty" class="container disabled">
