@@ -48,15 +48,6 @@ button {
 	height: 2.5rem;
 	margin: 1rem 0;
 	font-size: 1.2rem;
-	background-color: var(--button);
-	color: var(--textPrimary);
-	border: none;
-	border-radius: 0.5rem;
-	cursor: pointer;
-}
-
-button:hover {
-	background-color: var(--buttonHovered);
 }
 
 .link {
