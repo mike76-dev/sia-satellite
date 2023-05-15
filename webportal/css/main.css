@@ -60,7 +60,11 @@ ul {
 	color: var(--textSecondary);
 }
 
-input[type='text'], input[type='password'], input[type='email'] {
+input[type='text'],
+input[type='password'],
+input[type='email'],
+input[type='number'],
+select {
 	color: var(--textPrimary);
 	background-color: var(--backgroundStart);
 }
