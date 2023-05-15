@@ -58,6 +58,16 @@ ul {
 	color: var(--textSecondary);
 }
 
+input[type='text'], input[type='password'], input[type='email'] {
+	color: var(--textPrimary);
+	background-color: var(--backgroundStart);
+}
+
+input:-webkit-autofill {
+	-webkit-text-fill-color: var(--textPrimary);
+	-webkit-box-shadow: 0 0 0 30px var(--backgroundStart) inset;
+}
+
 .container {
 	display: flex;
 	flex-direction: column;
