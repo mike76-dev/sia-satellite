@@ -36,45 +36,80 @@
 			<div id="pages" class="pages">
 				<div class="page disabled">
 					<h1>Overview</h1>
+					<div class="flex">
+						<section>
+							<h2>Your balance:</h2>
+							<div class="content">
+								<div class="content-item">
+									<p class="content-label">Available:</p>
+									<div class="content-subitem">
+										<p id="balance-primary" class="content-primary"></p>
+										<p id="balance-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Locked:</p>
+									<div class="content-subitem">
+										<p id="locked-primary" class="content-primary"></p>
+										<p id="locked-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+							</div>
+						</section>
+						<section>
+							<h2>Network statistics:</h2>
+							<div class="content">
+								<div class="content-item">
+									<p class="content-label">Block height:</p>
+									<div class="content-subitem">
+										<p id="block-height" class="content-primary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Number of hosts:</p>
+									<div class="content-subitem">
+										<p id="numhosts" class="content-primary"></p>
+									</div>
+								</div>
+							</div>
+						</section>
+					</div>
 					<section>
-						<p>Your balance:</p>
+						<h2>Network averages:</h2>
 						<div class="content">
 							<div class="content-item">
-								<p>Available:</p>
-								<h2 id="balance" class="balance"></h2>
+								<p class="content-label">
+									Average storage price:<br>&nbsp;(per TiB/month)
+								</p>
+								<div class="content-subitem">
+									<p id="storage-primary" class="content-primary"></p>
+									<p id="storage-secondary" class="content-secondary"></p>
+								</div>
 							</div>
 							<div class="content-item">
-								<p>Locked:</p>
-								<h2 id="locked" class="balance"></h2>
-							</div>
-						</div>
-					</section>
-					<section>
-						<p>Network statistics:</p>
-						<div class="content">
-							<div class="content-item">
-								<p>Block height:</p>
-								<h2 id="block-height" class="balance"></h2>
+								<p class="content-label">
+									Average upload price:<br>&nbsp;(per TiB)
+								</p>
+								<div class="content-subitem">
+									<p id="upload-primary" class="content-primary"></p>
+									<p id="upload-secondary" class="content-secondary"></p>
+								</div>
 							</div>
 							<div class="content-item">
-								<p>Number of hosts:</p>
-								<h2 id="numhosts" class="balance"></h2>
+								<p class="content-label">
+									Average download price:<br>&nbsp;(per TiB)
+								</p>
+								<div class="content-subitem">
+									<p id="download-primary" class="content-primary"></p>
+									<p id="download-secondary" class="content-secondary"></p>
+								</div>
 							</div>
 							<div class="content-item">
-								<p>Average storage price:</p>
-								<h2 id="storage" class="balance"></h2>
-							</div>
-							<div class="content-item">
-								<p>Average upload price:</p>
-								<h2 id="upload" class="balance"></h2>
-							</div>
-							<div class="content-item">
-								<p>Average download price:</p>
-								<h2 id="download" class="balance"></h2>
-							</div>
-							<div class="content-item">
-								<p>Average contract duration:</p>
-								<h2 id="duration" class="balance"></h2>
+								<p class="content-label">Average contract duration:</p>
+								<div class="content-subitem">
+									<p id="duration-primary" class="content-primary"></p>
+									<p id="duration-secondary" class="content-secondary"></p>
+								</div>
 							</div>
 						</div>
 					</section>
@@ -101,7 +136,8 @@
 						<div id="contracts-non-empty" class="container disabled">
 							<div>
 								<label for="contracts-rows">Rows to Display:</label>
-								<select id="contracts-rows" onchange="changeContractsStep(this)">
+								<select id="contracts-rows"
+									onchange="changeContractsStep(this)">
 									<option value="10">10</option>
 									<option value="20">20</option>
 									<option value="50">50</option>
@@ -150,205 +186,325 @@
 				</div>
 				<div class="page disabled">
 					<h1>Current Spendings</h1>
-					<section>
-						<h2>Spendings in <span id="spendings-current"></span>:</h2>
-						<table>
-							<tr>
-								<td>Locked in contracts:</td>
-								<td id="spendings-current-locked"></td>
-							</tr>
-							<tr>
-								<td>Used:</td>
-								<td id="spendings-current-used"></td>
-							</tr>
-							<tr>
-								<td>Satellite overhead:</td>
-								<td id="spendings-current-overhead"></td>
-							</tr>
-						</table>
-					</section>
-					<section>
-						<h2>Spendings in <span id="spendings-prev"></span>:</h2>
-						<table>
-							<tr>
-								<td>Locked in contracts:</td>
-								<td id="spendings-prev-locked"></td>
-							</tr>
-							<tr>
-								<td>Used:</td>
-								<td id="spendings-prev-used"></td>
-							</tr>
-							<tr>
-								<td>Satellite overhead:</td>
-								<td id="spendings-prev-overhead"></td>
-							</tr>
-						</table>
-					</section>
+					<div class="flex">
+						<section>
+							<h2>Spendings in <span id="spendings-current"></span>:</h2>
+							<div class="content">
+								<div class="content-item">
+									<p class="content-label">Locked in contracts:</p>
+									<div class="content-subitem">
+										<p id="spendings-current-locked-primary" class="content-primary"></p>
+										<p id="spendings-current-locked-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Used:</p>
+									<div class="content-subitem">
+										<p id="spendings-current-used-primary" class="content-primary"></p>
+										<p id="spendings-current-used-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Satellite overhead:</p>
+									<div class="content-subitem">
+										<p id="spendings-current-overhead-primary" class="content-primary"></p>
+										<p id="spendings-current-overhead-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+							</div>
+						</section>
+						<section>
+							<h2>Spendings in <span id="spendings-prev"></span>:</h2>
+							<div class="content">
+								<div class="content-item">
+									<p class="content-label">Locked in contracts:</p>
+									<div class="content-subitem">
+										<p id="spendings-prev-locked-primary" class="content-primary"></p>
+										<p id="spendings-prev-locked-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Used:</p>
+									<div class="content-subitem">
+										<p id="spendings-prev-used-primary" class="content-primary"></p>
+										<p id="spendings-prev-used-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Satellite overhead:</p>
+									<div class="content-subitem">
+										<p id="spendings-prev-overhead-primary" class="content-primary"></p>
+										<p id="spendings-prev-overhead-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+							</div>
+						</section>
+					</div>
 				</div>
 				<div class="page disabled">
 					<h1>Payment Plan</h1>
-					<section id="select">
-						<p id="select-info">You haven't created a payment plan yet.</p>
-						<div class="content">
-							<div class="content-item">
-								<label for="select-currency">Your Currency</label>
-								<select id="select-currency" onchange="changeCurrency(this)">
-									<option value="USD">USD</option>
-									<option value="EUR">EUR</option>
-									<option value="GBP">GBP</option>
-								</select>
-							</div>
-							<div class="content-item">
-								<label for="select-duration">Storage Duration
-									<span class="hint-button">?
-										<div class="hint">
-											How long you want to store your files in weeks.
-											You can renew the contracts before the end of this period.
+					<p id="select-none">You haven't created a payment plan yet.</p>
+					<section id="select" class="disabled">
+						<div class="flex">
+							<section>
+								<div class="content">
+									<div class="content-item">
+										<p class="content-label">Your payment plan:</p>
+										<div class="content-subitem">
+											<p id="select-plan" class="content-primary"></p>
 										</div>
-									</span>
-								</label>
-								<input id="select-duration" class="input" type="number" min="0"
-									onchange="changeInput(this)">
-							</div>
-							<div class="content-item">
-								<label for="select-storage">Storage Volume
-									<span class="hint-button">?
-										<div class="hint">
-											How much data you want to store over the selected period in gigabytes.
+									</div>
+									<div class="content-item">
+										<p class="content-label">Remaining balance:</p>
+										<div class="content-subitem">
+											<p id="select-balance-primary" class="content-primary"></p>
+											<p id="select-balance-secondary" class="content-secondary"></p>
 										</div>
-									</span>
-								</label>
-								<input id="select-storage" class="input" type="number" min="0"
-									onchange="changeInput(this)">
-							</div>
-							<div class="content-item">
-								<label for="select-upload">Upload Volume
-									<span class="hint-button">?
-										<div class="hint">
-											How much data you want to upload over the selected period in gigabytes.
+									</div>
+								</div>
+							</section>
+							<section>
+								<div class="content">
+									<div class="content-item">
+										<label for="payment-actual" class="content-label">Amount to pay:</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="payment-actual" class="input input-actual" type="number"
+													onkeyup="paymentChange(this)">
+												<span id="payment-currency" class="input-unit"></span>
+											</div>
 										</div>
-									</span>
-								</label>
-								<input id="select-upload" class="input" type="number" min="0"
-									onchange="changeInput(this)">
-							</div>
-							<div class="content-item">
-								<label for="select-download">Download Volume
-									<span class="hint-button">?
-										<div class="hint">
-											How much data you want to download over the selected period in gigabytes.
-										</div>
-									</span>
-								</label>
-								<input id="select-download" class="input" type="number" min="0"
-									onchange="changeInput(this)">
-							</div>
-							<div class="content-item">
-								<label for="select-hosts">Number of Hosts
-									<span class="hint-button">?
-										<div class="hint">
-											How many hosts you want to form contracts with.
-											The more hosts, the more reliable, but involves more overhead costs.
-										</div>
-									</span>
-								</label>
-								<input id="select-hosts" class="input" type="number" min="0" value="50"
-									onchange="changeInput(this)">
-							</div>
-							<div class="content-item">
-								<label for="select-redundancy">Redundancy Target
-									<span class="hint-button">?
-										<div class="hint">
-											What redundancy should the stored data have. The greater, the more reliable,
-											but the more you pay for the storage and the uploads.
-										</div>
-									</span>
-								</label>
-								<input id="select-redundancy" class="input" type="number" min="0" value="3.0"
-									onchange="changeInput(this)">
-							</div>
+									</div>
+									<button id="amount-proceed" disabled onclick="toPayment()">To Payment</button>
+								</div>
+							</section>
 						</div>
-						<br>
-						<p>You can set price limits if you like.</p>
-						<div class="content">
-							<div class="content-item">
-								<label for="limits-contract">Max. Contract Price
-									<span class="hint-button">?
-										<div class="hint">
-											How much you want to pay for forming a contract with a single host.
+						<div class="flex">
+							<section>
+								<h2>Calculate your payment:</h2>
+								<div class="content">
+									<div class="content-item">
+										<label for="select-currency"class="content-label" >Your Currency</label>
+										<select id="select-currency" onchange="changeCurrency(this)">
+											<option value="USD">USD</option>
+											<option value="EUR">EUR</option>
+											<option value="GBP">GBP</option>
+										</select>
+									</div>
+									<div class="content-item">
+										<label for="select-duration"class="content-label">Storage Duration
+											<span class="hint-button">?
+												<div class="hint">
+													How long you want to store your files.
+													You can renew the contracts before the end of this period.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="select-duration" class="input input-actual" type="number"
+													min="0" onkeyup="changeInput()" onchange="changeInput()">
+												<span class="input-unit">weeks</span>
+											</div>
 										</div>
-									</span>
-								</label>
-								<input id="limits-contract" class="input" type="number" min="0"
-									onchange="changeInput(this, false)">
-								<p id="limits-contract-average" class="average"></p>
-							</div>
-							<div class="content-item">
-								<label for="limits-storage">Max. Storage Price
-									<span class="hint-button">?
-										<div class="hint">
-											How much you want to pay for storing a whole TB of data
-											for one month not counting for redundancy.
+									</div>
+									<div class="content-item">
+										<label for="select-storage" class="content-label">Storage Volume
+											<span class="hint-button">?
+												<div class="hint">
+													How much data you want to store over the selected period.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="select-storage" class="input input-actual" type="number"
+													min="0" onkeyup="changeInput()" onchange="changeInput()">
+												<span class="input-unit">GiB</span>
+											</div>
 										</div>
-									</span>
-								</label>
-								<input id="limits-storage" class="input" type="number" min="0"
-									onchange="changeInput(this, false)">
-								<p id="limits-storage-average" class="average"></p>
-							</div>
-							<div class="content-item">
-								<label for="limits-upload">Max. Upload Price
-									<span class="hint-button">?
-										<div class="hint">
-											How much you want to pay for uploading a whole TB of data
-											not counting for redundancy.
+									</div>
+									<div class="content-item">
+										<label for="select-upload" class="content-label">Upload Volume
+											<span class="hint-button">?
+												<div class="hint">
+													How much data you want to upload over the selected period.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="select-upload" class="input input-actual" type="number"
+													min="0" onkeyup="changeInput()" onchange="changeInput()">
+												<span class="input-unit">GiB</span>
+											</div>
 										</div>
-									</span>
-								</label>
-								<input id="limits-upload" class="input" type="number" min="0"
-									onchange="changeInput(this, false)">
-								<p id="limits-upload-average" class="average"></p>
-							</div>
-							<div class="content-item">
-								<label for="limits-download">Max. Download Price
-									<span class="hint-button">?
-										<div class="hint">
-											How much you want to pay for downloading a whole TB of data.
+									</div>
+									<div class="content-item">
+										<label for="select-download" class="content-label">Download Volume
+											<span class="hint-button">?
+												<div class="hint">
+													How much data you want to download over the selected period.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="select-download" class="input input-actual" type="number"
+													min="0" onkeyup="changeInput()" onchange="changeInput()">
+												<span class="input-unit">GiB</span>
+											</div>
 										</div>
-									</span>
-								</label>
-								<input id="limits-download" class="input" type="number" min="0"
-									onchange="changeInput(this, false)">
-								<p id="limits-download-average" class="average"></p>
-							</div>
-						</div>
-						<button id="payment-calculate" disabled onclick="calculatePayment()">
-							<div class="spinner disabled" id="calculate-spinner"></div>
-							<span id="calculate-text">Calculate</span>
-						</button>
-						<div id="payment-amount" class="disabled">
-							<br>
-							<p id="amount-text"></p>
-							<label for="payment-actual">Amount to pay:</label>
-							<input id="payment-actual" class="input input-actual" type="number"
-								onchange="paymentChange(this)">
-							<span id="payment-currency"></span>
-							<button id="amount-proceed" onclick="toPayment()"></button>
+									</div>
+									<div class="content-item">
+										<label for="select-hosts" class="content-label">Number of Hosts
+											<span class="hint-button">?
+												<div class="hint">
+													How many hosts you want to form contracts with.
+													The more hosts, the more reliable, but involves more overhead costs.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="select-hosts" class="input input-actual" type="number"
+													min="0" value="50" onkeyup="changeInput()" onchange="changeInput()">
+											</div>
+										</div>
+									</div>
+									<div class="content-item">
+										<label for="select-redundancy" class="content-label">Redundancy Target
+											<span class="hint-button">?
+												<div class="hint">
+													What redundancy should the stored data have.
+													The greater, the more reliable,
+													but the more you pay for the storage and the uploads.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="select-redundancy" class="input input-actual" type="number"
+													min="1" value="3.0" onkeyup="changeInput()" onchange="changeInput()">
+											</div>
+										</div>
+									</div>
+									<div class="content-item">
+										<button id="payment-calculate" disabled onclick="calculatePayment()">
+											<div class="spinner disabled" id="calculate-spinner">
+												<div></div><div></div><div></div><div></div>
+											</div>
+											<span id="calculate-text">Calculate</span>
+										</button>
+										<div class="result">
+											<div id="calculate-result"></div>
+										</div>
+									</div>
+								</div>
+							</section>
+							<section>
+								<h2>Set price limits if you like:</h2>
+								<div class="content">
+									<div class="content-item content-item-top">
+										<label for="limits-contract" class="content-label">Max. Contract Price
+											<span class="hint-button">?
+												<div class="hint">
+													How much you want to pay for forming a contract with a single host.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="limits-contract" class="input input-actual" type="number"
+													min="0">
+												<span id="contract-currency" class="input-unit"></span>
+											</div>
+											<p id="limits-contract-average" class="average"
+												onclick="setAverage(0)"></p>
+										</div>
+									</div>
+									<div class="content-item content-item-top">
+										<label for="limits-storage" class="content-label">Max. Storage Price
+											<span class="hint-button">?
+												<div class="hint">
+													How much you want to pay for storing a whole TB of data
+													for one month not counting for redundancy.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="limits-storage" class="input input-actual" type="number"
+													min="0">
+												<span id="storage-currency" class="input-unit"></span>
+											</div>
+											<p id="limits-storage-average" class="average"
+												onclick="setAverage(1)"></p>
+										</div>
+									</div>
+									<div class="content-item content-item-top">
+										<label for="limits-upload" class="content-label">Max. Upload Price
+											<span class="hint-button">?
+												<div class="hint">
+													How much you want to pay for uploading a whole TB of data
+													not counting for redundancy.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="limits-upload" class="input input-actual" type="number"
+													min="0">
+												<span id="upload-currency" class="input-unit"></span>
+											</div>
+											<p id="limits-upload-average" class="average"
+												onclick="setAverage(2)"></p>
+										</div>
+									</div>
+									<div class="content-item content-item-top">
+										<label for="limits-download" class="content-label">Max. Download Price
+											<span class="hint-button">?
+												<div class="hint">
+													How much you want to pay for downloading a whole TB of data.
+												</div>
+											</span>
+										</label>
+										<div class="content-subitem">
+											<div class="flex-row">
+												<input id="limits-download" class="input input-actual" type="number"
+													min="0">
+												<span id="download-currency" class="input-unit"></span>
+											</div>
+											<p id="limits-download-average" class="average"
+												onclick="setAverage(3)"></p>
+										</div>
+									</div>
+								</div>
+							</section>
 						</div>
 					</section>
 					<section id="payment" class="disabled">
-						<p>You are going to make a payment of
-							<span id="to-pay"></span>.
+						<p>You are going to make a payment of</p>
+						<h2 id="to-pay"></h2>.
+						<p>
+							Your payment will be handled by Stripe directly.
+							Sia Satellite will <a class="link" href="privacy.html" target="_blank">not</a>
+							see your payment details.
 						</p>
 			      <div id="payment-element">
       			  <!--Stripe.js injects the Payment Element-->
       			</div>
       			<button id="payment-submit" onclick="handleSubmit(event)">
- 	    			  <div class="spinner disabled" id="spinner"></div>
+ 	    			  <div class="spinner disabled" id="spinner">
+ 	    			  	<div></div><div></div><div></div><div></div>
+ 	    			  </div>
  	    			  <span id="payment-text">Pay Now</span>
  	    			</button>
  	    			<button id="payment-back" onclick="backToSelect()">Back</button>
   	   			<div id="payment-message" class="disabled"></div>
+  	   			<a href="https://stripe.com" target="_blank">
+	  	   			<svg id="stripe-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 32"><path d="M113 26H6c-3.314 0-6-2.686-6-6V6c0-3.314 2.686-6 6-6h107c3.314 0 6 2.686 6 6v14c0 3.314-2.686 6-6 6zM11.128 8.892H8.571v7.241h1.347v-2.6h1.21c1.474 0 2.526-.947 2.526-2.315 0-1.368-1.052-2.326-2.526-2.326zm5.915 1.853c-1.589 0-2.715 1.136-2.715 2.757 0 1.61 1.126 2.757 2.715 2.757s2.705-1.147 2.705-2.757c0-1.621-1.116-2.757-2.705-2.757zm9.893.126l-1.063 3.578-1.063-3.578h-1.22l-1.063 3.578-1.063-3.578h-1.347l1.81 5.262h1.21l1.063-3.578 1.074 3.578h1.21l1.799-5.262zm4.316-.126c-1.505 0-2.599 1.126-2.599 2.715 0 1.641 1.115 2.799 2.704 2.799.589 0 1.189-.137 1.789-.41v-1.127c-.547.316-1.084.495-1.568.495-.884 0-1.515-.547-1.6-1.347h3.568c.021-.179.021-.347.021-.495 0-1.546-.937-2.63-2.315-2.63zm6.472.052c-.147-.042-.294-.052-.442-.052-.452 0-.915.231-1.294.652v-.526h-1.347v5.262h1.347v-3.515c.347-.442.821-.684 1.263-.684.158 0 .326.021.473.063zm3.084-.052c-1.505 0-2.599 1.126-2.599 2.715 0 1.641 1.115 2.799 2.704 2.799.59 0 1.19-.137 1.789-.41v-1.127c-.547.316-1.083.495-1.568.495-.883 0-1.515-.547-1.599-1.347h3.567c.021-.179.021-.347.021-.495 0-1.546-.936-2.63-2.315-2.63zm8.104-2.179h-1.358v2.663c-.41-.316-.873-.484-1.336-.484-1.4 0-2.378 1.136-2.378 2.757 0 1.62.978 2.757 2.378 2.757.463 0 .926-.168 1.336-.495v.369h1.358zm6.778 2.179c-.452 0-.916.168-1.336.484V8.566h-1.347v7.567h1.347v-.369c.42.327.884.495 1.336.495 1.41 0 2.378-1.137 2.378-2.757 0-1.621-.968-2.757-2.378-2.757zm6.62.126l-1.273 3.452-1.263-3.452h-1.379l2.01 5.072-1.01 2.494H60.7l2.989-7.566zm10.799-.583c.863 0 1.96.264 2.824.731V8.344c-.941-.375-1.881-.519-2.822-.519-2.303 0-3.838 1.203-3.838 3.213 0 3.143 4.316 2.633 4.316 3.988 0 .525-.456.695-1.089.695-.941 0-2.155-.389-3.108-.907v2.711c1.056.454 2.126.644 3.105.644 2.361 0 3.988-1.166 3.988-3.21 0-3.386-4.341-2.778-4.341-4.056 0-.443.37-.615.965-.615zm9.071-2.274h-2.156l-.002-2.466-2.772.59-.013 9.109c0 1.681 1.265 2.922 2.95 2.922.928 0 1.614-.168 1.992-.376v-2.311c-.363.145-2.155.666-2.155-1.007v-4.04h2.156zm6.095.001c-.378-.136-1.705-.384-2.37.838l-.178-.839h-2.455v9.952h2.838v-6.747c.671-.881 1.804-.711 2.165-.594zm3.724-3.785l-2.85.606v2.313l2.85-.606zm0 3.784h-2.85v9.952h2.85zm6.126-.189c-1.113 0-1.832.524-2.224.89l-.148-.701h-2.5l.001 13.254 2.839-.604.006-3.213c.408.299 1.015.718 2.009.718 2.031 0 3.889-1.634 3.889-5.242 0-3.306-1.878-5.102-3.872-5.102zm8.924 0c-2.701 0-4.345 2.296-4.345 5.188 0 3.424 1.938 5.156 4.704 5.156 1.357 0 2.376-.308 3.147-.736v-2.287c-.774.39-1.662.628-2.789.628-1.107 0-2.082-.392-2.209-1.723h5.559c.013-.153.038-.748.038-1.023 0-2.908-1.408-5.203-4.105-5.203zm-.018 2.315c.697 0 1.437.537 1.437 1.815h-2.936c0-1.279.789-1.815 1.499-1.815zm-9.585 5.521c-.666 0-1.063-.24-1.339-.539l-.017-4.219c.296-.325.705-.563 1.356-.563 1.039 0 1.754 1.164 1.754 2.649 0 1.529-.704 2.672-1.754 2.672zm-42.04-.56c-.368 0-.737-.158-1.052-.473v-2.252c.315-.316.684-.474 1.052-.474.758 0 1.284.653 1.284 1.6 0 .947-.526 1.599-1.284 1.599zm-8.893 0c-.769 0-1.295-.652-1.295-1.599s.526-1.6 1.295-1.6c.368 0 .736.158 1.041.474v2.252c-.305.315-.673.473-1.041.473zm-5.757-3.315c.599 0 1.031.495 1.073 1.211h-2.294c.063-.726.568-1.211 1.221-1.211zm-9.557 0c.6 0 1.032.495 1.074 1.211h-2.295c.064-.726.569-1.211 1.221-1.211zm-14.156 3.347c-.789 0-1.336-.663-1.336-1.631s.547-1.631 1.336-1.631c.779 0 1.326.663 1.326 1.631s-.547 1.631-1.326 1.631zm-6.104-2.694H9.918V9.987h1.021c.779 0 1.326.495 1.326 1.231 0 .726-.547 1.221-1.326 1.221z" fill="#FFF" fill-rule="evenodd"/></svg>
+	  	   		</a>
 			    </section>
 				</div>
 				<div class="page disabled">
@@ -358,7 +514,8 @@
 						<div id="history-non-empty" class="container disabled">
 							<div>
 								<label for="history-rows">Rows to Display:</label>
-								<select id="history-rows" onchange="changePaymentsStep(this)">
+								<select class="select" id="history-rows"
+									onchange="changePaymentsStep(this)">
 									<option value="10">10</option>
 									<option value="20">20</option>
 									<option value="50">50</option>
@@ -391,53 +548,63 @@
 				<div class="page disabled">
 					<h1>Account Settings</h1>
 					<section id="reveal" class="disabled">
-						<h2>Show Renter Seed</h2>
-						<p>Satellite  public key:&nbsp;<span id="reveal-key">N/A</span></p>
-						<label for="reveal-text">Your seed</label>
-						<input id="reveal-text" type="text" class="input" readonly>
-						<button id="reveal-button" onclick="revealSeed()">Show</button>
+						<h2>Show Renter Seed:</h2>
+						<div class="content">
+							<label for="reveal-key">Satellite  public key</label>
+							<input id="reveal-key" type="text" class="input" readonly>
+							<button id="copy-button" onclick="copyPK()">Copy</button>
+							<label for="reveal-text">Your seed</label>
+							<input id="reveal-text" type="text" class="input" readonly>
+							<button id="reveal-button" onclick="revealSeed()">Show</button>
+						</div>
 					</section>
-					<section>
-						<h2>Change Password</h2>
-						<label for="change-password">New Password
-							<span class="hint-button">?
-								<div class="hint">
-									Password must be minimum 8 characters long and contain
-									at least one small letter, one capital letter, one digit,
-									and one special character.
+					<div class="flex">
+						<section>
+							<h2>Change Password:</h2>
+							<div class="content">
+								<label for="change-password">New Password
+									<span class="hint-button">?
+										<div class="hint">
+											Password must be minimum 8 characters long and contain
+											at least one small letter, one capital letter, one digit,
+											and one special character.
+										</div>
+									</span>
+								</label>
+								<div class="password">
+									<input id="change-password" type="password" class="input"
+										onkeypress="changePasswordChange()" onchange="changePasswordChange()">
+									<img id="change-password-icon" src="assets/show-password.png"
+										class="toggle-icon">
+									<input id="change-password-toggle" type="checkbox"
+										class="toggle-checkbox" onChange="toggleChangePassword()">
 								</div>
-							</span>
-						</label>
-						<div class="password">
-							<input id="change-password" type="password" class="input"
-								onkeypress="changePasswordChange()" onchange="changePasswordChange()">
-							<img id="change-password-icon" src="assets/show-password.png"
-								class="toggle-icon">
-							<input id="change-password-toggle" type="checkbox"
-								class="toggle-checkbox" onChange="toggleChangePassword()">
-						</div>
-						<p id="change-password-error" class="error invisible">
-							Password is not strong enough
-						</p>
-						<label for="change-retype">Retype Password</label>
-						<div class="password">
-							<input id="change-retype" type="password" class="input"
-								onkeypress="changeRetypeChange()" onchange="changeRetypeChange()">
-							<img id="change-retype-icon" src="assets/show-password.png"
-								class="toggle-icon">
-							<input id="change-retype-toggle" type="checkbox"
-								class="toggle-checkbox" onChange="toggleChangeRetype()">
-						</div>
-						<p id="change-retype-error" class="error invisible">
-							The two passwords do not match
-						</p>
-						<button onclick="changeClick()">Submit</button>
-					</section>
-					<section>
-						<h2>Delete Account</h2>
-						<p>Warning! Deleting an account cannot be undone.</p>
-						<button onclick="deleteClick()">Delete Account</button>
-					</section>
+								<p id="change-password-error" class="error invisible">
+									Password is not strong enough
+								</p>
+								<label for="change-retype">Retype Password</label>
+								<div class="password">
+									<input id="change-retype" type="password" class="input"
+										onkeypress="changeRetypeChange()" onchange="changeRetypeChange()">
+									<img id="change-retype-icon" src="assets/show-password.png"
+										class="toggle-icon">
+									<input id="change-retype-toggle" type="checkbox"
+										class="toggle-checkbox" onChange="toggleChangeRetype()">
+								</div>
+								<p id="change-retype-error" class="error invisible">
+									The two passwords do not match
+								</p>
+								<button onclick="changeClick()">Submit</button>
+							</div>
+						</section>
+						<section>
+							<h2>Delete Account</h2>
+							<div class="content">
+								<p>Warning! Deleting an account cannot be undone.</p>
+								<button onclick="deleteClick()">Delete Account</button>
+							</div>
+						</section>
+					</div>
 					<button onclick="logout()">Sign Out</button>
 				</div>
 			</div>

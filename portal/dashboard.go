@@ -2,7 +2,6 @@ package portal
 
 import (
 	"encoding/hex"
-	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -21,7 +20,7 @@ type (
 	// averages.
 	sensibleHostAverages struct {
 		NumHosts               uint64  `json:"numhosts"`
-		Duration               string  `json:"duration"`
+		Duration               uint64  `json:"duration"`
 		StoragePrice           float64 `json:"storageprice"`
 		Collateral             float64 `json:"collateral"`
 		DownloadBandwidthPrice float64 `json:"downloadbandwidthprice"`
@@ -29,6 +28,7 @@ type (
 		ContractPrice          float64 `json:"contractprice"`
 		BaseRPCPrice           float64 `json:"baserpcprice"`
 		SectorAccessPrice      float64 `json:"sectoraccessprice"`
+		SCRate                 float64 `json:"scrate"`
 	}
 
 	// hostsRequest contains the body of a /dashboard/hosts request.
@@ -136,19 +136,6 @@ func (api *portalAPI) averagesHandlerGET(w http.ResponseWriter, req *http.Reques
 // readable format. rate is the exchange rate between SC and the
 // currency to display the values in.
 func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAverages {
-	var d string
-	switch {
-	case ha.Duration < types.BlocksPerWeek:
-		d = fmt.Sprintf("%.1f days", float64(ha.Duration) / float64(types.BlocksPerDay))
-		break
-	case ha.Duration < types.BlocksPerMonth:
-		d = fmt.Sprintf("%.1f weeks", float64(ha.Duration) / float64(types.BlocksPerWeek))
-		break
-	default:
-		d = fmt.Sprintf("%.1f months", float64(ha.Duration) / float64(types.BlocksPerMonth))
-		break
-	}
-
 	sp, _  := ha.StoragePrice.Mul(smodules.BlockBytesPerMonthTerabyte).Float64()
 	c, _   := ha.Collateral.Mul(smodules.BlockBytesPerMonthTerabyte).Float64()
 	dbp, _ := ha.DownloadBandwidthPrice.Mul(smodules.BytesPerTerabyte).Float64()
@@ -161,14 +148,15 @@ func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAver
 
 	sha := sensibleHostAverages{
 		NumHosts:               ha.NumHosts,
-		Duration:               d,
-		StoragePrice:           sp * rate / precision,
-		Collateral:             c * rate / precision,
-		DownloadBandwidthPrice: dbp * rate / precision,
-		UploadBandwidthPrice:   ubp * rate / precision,
-		ContractPrice:          cp * rate / precision,
-		BaseRPCPrice:           brp * rate / precision,
-		SectorAccessPrice:      sap * rate / precision,
+		Duration:               uint64(ha.Duration),
+		StoragePrice:           sp / precision,
+		Collateral:             c / precision,
+		DownloadBandwidthPrice: dbp / precision,
+		UploadBandwidthPrice:   ubp / precision,
+		ContractPrice:          cp / precision,
+		BaseRPCPrice:           brp / precision,
+		SectorAccessPrice:      sap / precision,
+		SCRate:                 rate,
 	}
 
 	return sha

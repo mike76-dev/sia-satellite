@@ -53,12 +53,15 @@ var averages = {
 	uploadBandwidthPrice: 0.0,
 	contractPrice: 0.0,
 	baseRPCPrice: 0.0,
-	sectorAccessPrice: 0.0
+	sectorAccessPrice: 0.0,
+	rate: 0.0
 }
 
 var paymentEstimation;
-var paymentAmount;
-var paymentCurrency;
+var paymentAmount = 0.0;
+var paymentCurrency = 'USD';
+var processing = false;
+var paying = false;
 
 retrieveBlockHeight();
 retrieveBalance();
@@ -272,10 +275,7 @@ function deleteClick() {
 	fetch(apiBaseURL + '/auth/delete', options)
 		.then(response => {
 			if (response.status == 204) {
-				deleteCookie('satellite');
-				let i = window.location.href.lastIndexOf('/');
-				window.location.replace(window.location.href.slice(0, i) + '/rent.html');
-				return 'request successful';
+				logout();
 			} else return response.json();
 		})
 		.then(data => {
@@ -327,30 +327,43 @@ function retrieveBalance() {
 		.then(data => {
 			if (data.code) {
 				if (data.code == 40) {
-					deleteCookie('satellite');
-					let i = window.location.href.lastIndexOf('/');
-					window.location.replace(window.location.href.slice(0, i) + '/rent.html');
+					logout();
 				} else {
 					console.log(data);
 				}
 			}
 			else {
-				let b = document.getElementById('balance');
-				let l = document.getElementById('locked');
+				let bp = document.getElementById('balance-primary');
+				let bs = document.getElementById('balance-secondary');
+				let lp = document.getElementById('locked-primary');
+				let ls = document.getElementById('locked-secondary');
 				let c = data.currency == '' ? 'USD' : data.currency;
-				b.innerHTML = (data.balance * data.scrate).toFixed(2) + ' ' + c;
-				l.innerHTML = (data.locked * data.scrate).toFixed(2) + ' ' + c;
+				bp.innerHTML = (data.balance * data.scrate).toFixed(2) + ' ' + c;
+				bs.innerHTML = data.balance.toFixed(2) + ' SC';
+				lp.innerHTML = (data.locked * data.scrate).toFixed(2) + ' ' + c;
+				ls.innerHTML = data.locked.toFixed(2) + ' SC';
+				paymentCurrency = c;
 				if (averages.currency != c) {
 					averages.currency = c;
 					retrieveAverages();
 				}
 				if (data.isuser) {
-					message = 'Your payment plan: ' +
+					document.getElementById('select-none').classList.add('disabled');
+					document.getElementById('select-plan').innerHTML =
 						(data.subscribed ? 'Subscription' : 'Pre-payment');
-					message += '<br>Remaining balance: ' +
+					document.getElementById('select-balance-primary').innerHTML = 
 						(data.balance * data.scrate).toFixed(2) + ' ' + c;
-					document.getElementById('select-info').innerHTML = message;
+					document.getElementById('select-balance-secondary').innerHTML = 
+						data.balance.toFixed(2) + ' SC';
 					document.getElementById('select-currency').value = c;
+					document.getElementById('payment-currency').innerHTML = c;
+					document.getElementById('contract-currency').innerHTML = c;
+					document.getElementById('storage-currency').innerHTML = c;
+					document.getElementById('upload-currency').innerHTML = c;
+					document.getElementById('download-currency').innerHTML = c;
+					if (!paying) {
+						document.getElementById('select').classList.remove('disabled');
+					}
 					document.getElementById('reveal').classList.remove('disabled');
 				}
 			}
@@ -379,47 +392,85 @@ function retrieveAverages() {
 				averages.contractPrice = data.contractprice;
 				averages.baseRPCPrice = data.baserpcprice;
 				averages.sectorAccessPrice = data.sectoraccessprice;
+				averages.rate = data.scrate;
 
 				document.getElementById('numhosts').innerHTML = data.numhosts;
-				document.getElementById('storage').innerHTML = data.storageprice.toPrecision(2) +
-					' ' + averages.currency + '/TiB/month';
-				document.getElementById('upload').innerHTML = data.uploadbandwidthprice.toPrecision(2) +
-					' ' + averages.currency + '/TiB';
-				document.getElementById('download').innerHTML = data.downloadbandwidthprice.toPrecision(2) +
-					' ' + averages.currency + '/TiB';
-				document.getElementById('duration').innerHTML = data.duration;
-				document.getElementById('limits-contract-average').innerHTML =
-					'Average: ' + data.contractprice.toPrecision(2) + ' ' + averages.currency;
-				document.getElementById('limits-storage-average').innerHTML =
-					'Average: ' + data.storageprice.toPrecision(2) + ' ' + averages.currency;
-				document.getElementById('limits-upload-average').innerHTML =
-					'Average: ' + data.uploadbandwidthprice.toPrecision(2) + ' ' + averages.currency;
-				document.getElementById('limits-download-average').innerHTML =
-					'Average: ' + data.downloadbandwidthprice.toPrecision(2) + ' ' + averages.currency;
+				document.getElementById('storage-primary').innerHTML =
+					(data.storageprice * data.scrate).toFixed(2) + ' ' + averages.currency;
+				document.getElementById('storage-secondary').innerHTML =
+					data.storageprice.toFixed(0) + ' SC';
+				document.getElementById('upload-primary').innerHTML =
+					(data.uploadbandwidthprice * data.scrate).toFixed(2) +' ' + averages.currency;
+				document.getElementById('upload-secondary').innerHTML =
+					data.uploadbandwidthprice.toFixed(0) +' SC';
+				document.getElementById('download-primary').innerHTML =
+					(data.downloadbandwidthprice * data.scrate).toFixed(2) + ' ' + averages.currency;
+				document.getElementById('download-secondary').innerHTML =
+					data.downloadbandwidthprice.toFixed(0) + ' SC';
+				document.getElementById('duration-primary').innerHTML = blocksToTime(data.duration);
+				document.getElementById('duration-secondary').innerHTML = data.duration + ' blocks';
+				calcAverages();
 			}
 		})
 		.catch(error => console.log(error));
 }
 
+function calcAverages() {
+	document.getElementById('limits-contract-average').innerHTML = 'Average: ' +
+		(averages.contractPrice * averages.rate).toPrecision(2) + ' ' + averages.currency;
+	document.getElementById('limits-storage-average').innerHTML = 'Average: ' +
+		(averages.storagePrice * averages.rate).toPrecision(2) + ' ' + averages.currency;
+	document.getElementById('limits-upload-average').innerHTML = 'Average: ' +
+		(averages.uploadBandwidthPrice * averages.rate).toPrecision(2) + ' ' + averages.currency;
+	document.getElementById('limits-download-average').innerHTML = 'Average: ' +
+		(averages.downloadBandwidthPrice * averages.rate).toPrecision(2) + ' ' + averages.currency;
+}
+
+function blocksToTime(blocks) {
+	if (blocks < 144 * 7) return (blocks / 144).toFixed(1) + ' days';
+	if (blocks < 144 * 30) return (blocks / 144 / 7).toFixed(1) + ' weeks';
+	return (blocks / 144 / 30).toFixed(1) + ' months';
+}
+
 function changeCurrency(s) {
 	averages.currency = s.value;
+	document.getElementById('payment-currency').innerHTML = s.value;
+	document.getElementById('contract-currency').innerHTML = s.value;
+	document.getElementById('storage-currency').innerHTML = s.value;
+	document.getElementById('upload-currency').innerHTML = s.value;
+	document.getElementById('download-currency').innerHTML = s.value;
 	retrieveAverages();
 }
 
-function changeInput(obj, check = true) {
-	if (check) {
-		let v = parseFloat(obj.value)
-		if (isNaN(v) || v <= 0) {
-			obj.classList.add('content-error');
-		} else {
-			obj.classList.remove('content-error');
-		}
-		updateEstimation();
+function changeInput() {
+	document.getElementById('calculate-result').innerHTML = '';
+	updateEstimation();
+}
+
+function setAverage(index) {
+	switch (index) {
+	case 0:
+		document.getElementById('limits-contract').value =
+			(averages.contractPrice * averages.rate).toPrecision(2);
+		break;
+	case 1:
+		document.getElementById('limits-storage').value =
+			(averages.storagePrice * averages.rate).toPrecision(2);
+		break;
+	case 2:
+		document.getElementById('limits-upload').value =
+			(averages.uploadBandwidthPrice * averages.rate).toPrecision(2);
+		break;
+	case 3:
+		document.getElementById('limits-download').value =
+			(averages.downloadBandwidthPrice * averages.rate).toPrecision(2);
+		break;
+	default:
 	}
-	document.getElementById('payment-amount').classList.add('disabled');
 }
 
 function updateEstimation() {
+	if (processing) return;
 	let payment = document.getElementById('select-payment');
 	let currency = document.getElementById('select-currency').value;
 	let duration = parseFloat(document.getElementById('select-duration').value);
@@ -433,7 +484,7 @@ function updateEstimation() {
 		isNaN(upload) || upload <= 0 ||
 		isNaN(download) || download <= 0 ||
 		isNaN(hosts) || hosts <= 0 ||
-		isNaN(redundancy) || redundancy <= 0) {
+		isNaN(redundancy) || redundancy < 1) {
 		document.getElementById('payment-calculate').disabled = true;
 		return;
 	}
@@ -452,7 +503,8 @@ function updateEstimation() {
 }
 
 function calculatePayment() {
-	updateEstimation();
+	let result = document.getElementById('calculate-result');
+	result.innerHTML = '';
 	let currency = document.getElementById('select-currency').value;
 	let duration = parseFloat(document.getElementById('select-duration').value);
 	let storage = parseFloat(document.getElementById('select-storage').value);
@@ -485,12 +537,13 @@ function calculatePayment() {
 		},
 		body: JSON.stringify(data)
 	}
+	processing = true;
 	document.getElementById('payment-calculate').disabled = true;
 	document.getElementById('calculate-text').classList.add('disabled');
 	document.getElementById('calculate-spinner').classList.remove('disabled');
-	document.getElementById('payment-amount').classList.add('disabled');
 	fetch(apiBaseURL + '/dashboard/hosts', options)
 		.then(response => {
+			processing = false;
 			document.getElementById('payment-calculate').disabled = false;
 			document.getElementById('calculate-text').classList.remove('disabled');
 			document.getElementById('calculate-spinner').classList.add('disabled');
@@ -500,39 +553,40 @@ function calculatePayment() {
 			if (data.code) {
 				console.log(data);
 			} else {
-				let text = document.getElementById('amount-text');
-				let button = document.getElementById('amount-proceed');
 				paymentAmount = data.estimation;
 				paymentCurrency = data.currency;
 				if (data.numhosts == hosts) {
-					text.innerHTML = 'Suggested payment amount: ' + paymentAmount.toFixed(2) + ' ' + paymentCurrency;
-					button.innerHTML = 'Proceed to Payment';
+					result.classList.remove('error');
+					result.innerHTML = 'Calculation successful, to pay: ' + paymentAmount +
+						' ' + paymentCurrency;
 				} else {
-					text.innerHTML = 'Warning: only ' + data.numhosts +
-						' hosts found that match these conditions. Suggested payment amount: ' +
-						paymentAmount.toFixed(2) + ' ' + paymentCurrency;
-					button.innerHTML = 'Proceed Anyway';
+					result.classList.add('error');
+					result.innerHTML = 'Warning: only ' + data.numhosts +
+						' hosts found';
 				}
-				document.getElementById('payment-amount').classList.remove('disabled');
 				document.getElementById('payment-actual').value = paymentAmount;
 				document.getElementById('payment-currency').innerHTML = paymentCurrency;
+				document.getElementById('payment-actual').focus();
+				document.getElementById('amount-proceed').disabled = false;
 			}
 		})
 		.catch(error => console.log(error));
 }
 
 function paymentChange(obj) {
-	obj.classList.remove('content-error');
+	let v = parseFloat(obj.value);
+	if (!isNaN(v) && v > 0) {
+		document.getElementById('amount-proceed').disabled = false;
+	} else {
+		document.getElementById('amount-proceed').disabled = true;
+	}
 }
 
 function toPayment() {
 	let a = document.getElementById('payment-actual');
-	if (a.value < paymentAmount) {
-		a.classList.add('content-error');
-		return;
-	}
 	paymentAmount = parseFloat(a.value);
 	initialize();
+	paying = true;
 	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
 		paymentCurrency;
 	document.getElementById('select').classList.add('disabled');
@@ -540,6 +594,7 @@ function toPayment() {
 }
 
 function backToSelect() {
+	paying = false;
 	document.getElementById('payment').classList.add('disabled');
 	document.getElementById('select').classList.remove('disabled');
 }
@@ -611,9 +666,22 @@ function paymentsNext() {
 	renderPayments();
 }
 
+function copyPK() {
+	let b = document.getElementById('copy-button');
+	let k = document.getElementById('reveal-key');
+	let pos = k.value.indexOf(':');
+	k.select();
+	k.setSelectionRange(pos + 1, 99);
+	navigator.clipboard.writeText(k.value.slice(pos + 1));
+	b.innerText = 'Copied!';
+	window.setTimeout(function() {
+		b.innerText = 'Copy';
+	}, 1000);
+}
+
 function revealSeed() {
-	b = document.getElementById('reveal-button');
-	t = document.getElementById('reveal-text');
+	let b = document.getElementById('reveal-button');
+	let t = document.getElementById('reveal-text');
 	if (b.innerText == 'Copy') {
 		b.disabled = true;
 		t.select();
@@ -649,7 +717,7 @@ function revealSeed() {
 }
 
 function retrieveKey() {
-	k = document.getElementById('reveal-key');
+	let k = document.getElementById('reveal-key');
 	let options = {
 		method: 'GET',
 		headers: {
@@ -660,14 +728,14 @@ function retrieveKey() {
 		.then(response => response.json())
 		.then(data => {
 			if (data.key) {
-				k.innerHTML = data.key;
+				k.value = data.key;
 			}
 		})
 		.catch(error => console.log(error));
 }
 
 function retrieveBlockHeight() {
-	bh = document.getElementById('block-height');
+	let bh = document.getElementById('block-height');
 	let options = {
 		method: 'GET',
 		headers: {
@@ -886,26 +954,38 @@ function getSpendings() {
 				let py = cm > 0 ? cy : cy - 1;
 				let c = document.getElementById('spendings-current');
 				let p = document.getElementById('spendings-prev');
-				let cl = document.getElementById('spendings-current-locked');
-				let cu = document.getElementById('spendings-current-used');
-				let co = document.getElementById('spendings-current-overhead');
-				let pl = document.getElementById('spendings-prev-locked');
-				let pu = document.getElementById('spendings-prev-used');
-				let po = document.getElementById('spendings-prev-overhead');
+				let clp = document.getElementById('spendings-current-locked-primary');
+				let cls = document.getElementById('spendings-current-locked-secondary');
+				let cup = document.getElementById('spendings-current-used-primary');
+				let cus = document.getElementById('spendings-current-used-secondary');
+				let cop = document.getElementById('spendings-current-overhead-primary');
+				let cos = document.getElementById('spendings-current-overhead-secondary');
+				let plp = document.getElementById('spendings-prev-locked-primary');
+				let pls = document.getElementById('spendings-prev-locked-secondary');
+				let pup = document.getElementById('spendings-prev-used-primary');
+				let pus = document.getElementById('spendings-prev-used-secondary');
+				let pop = document.getElementById('spendings-prev-overhead-primary');
+				let pos = document.getElementById('spendings-prev-overhead-secondary');
 				c.innerHTML = month[cm] + ' ' + cy;
 				p.innerHTML = month[pm] + ' ' + py;
-				cl.innerHTML = (data.currentlocked * data.scrate).toFixed(2) +
+				clp.innerHTML = (data.currentlocked * data.scrate).toFixed(2) +
 					' ' + averages.currency;
-				cu.innerHTML = (data.currentused * data.scrate).toFixed(2) +
+				cls.innerHTML = data.currentlocked.toFixed(2) + ' SC';
+				cup.innerHTML = (data.currentused * data.scrate).toFixed(2) +
 					' ' + averages.currency;
-				co.innerHTML = (data.currentoverhead * data.scrate).toFixed(2) +
+				cus.innerHTML = data.currentused.toFixed(2) + ' SC';
+				cop.innerHTML = (data.currentoverhead * data.scrate).toFixed(2) +
 					' ' + averages.currency;
-				pl.innerHTML = (data.prevlocked * data.scrate).toFixed(2) +
+				cos.innerHTML = data.currentoverhead.toFixed(2) + ' SC';
+				plp.innerHTML = (data.prevlocked * data.scrate).toFixed(2) +
 					' ' + averages.currency;
-				pu.innerHTML = (data.prevused * data.scrate).toFixed(2) +
+				pls.innerHTML = data.prevlocked.toFixed(2) + ' SC';
+				pup.innerHTML = (data.prevused * data.scrate).toFixed(2) +
 					' ' + averages.currency;
-				po.innerHTML = (data.prevoverhead * data.scrate).toFixed(2) +
+				pus.innerHTML = data.prevused.toFixed(2) + ' SC';
+				pop.innerHTML = (data.prevoverhead * data.scrate).toFixed(2) +
 					' ' + averages.currency;
+				pos.innerHTML = data.prevoverhead.toFixed(2) + ' SC';
 			}
 		})
 		.catch(error => console.log(error));
