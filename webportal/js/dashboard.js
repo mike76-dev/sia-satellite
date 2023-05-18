@@ -624,9 +624,9 @@ function renderPayments() {
 		tr = document.createElement('tr');
 		tr.innerHTML = '<td>' + (i + 1) + '</td>';
 		tr.innerHTML += '<td>' + timestamp.toLocaleString() + '</td>';
-		tr.innerHTML += '<td>' + (row.amount * row.scrate).toFixed(2) + '</td>';
+		tr.innerHTML += '<td>' + row.amount.toFixed(2) + '</td>';
 		tr.innerHTML += '<td>' + row.currency + '</td>';
-		tr.innerHTML += '<td>' + row.amount.toFixed(4) + ' SC</td>';
+		tr.innerHTML += '<td>' + row.amountsc.toFixed(2) + ' SC</td>';
 		tbody.appendChild(tr);
 	});
 	document.getElementById('history-empty').classList.add('disabled');
