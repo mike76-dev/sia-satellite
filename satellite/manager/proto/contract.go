@@ -9,7 +9,6 @@ import (
 	"gitlab.com/NebulousLabs/encoding"
 	"gitlab.com/NebulousLabs/errors"
 
-	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
@@ -20,10 +19,6 @@ type contractHeader struct {
 	// Transaction is the signed transaction containing the most recent
 	// revision of the file contract.
 	Transaction types.Transaction
-
-	// SecretKey is the key used by the renter to sign the file contract
-	// transaction.
-	SecretKey crypto.SecretKey
 
 	// Same as modules.RenterContract.
 	StartHeight         types.BlockHeight
@@ -156,14 +151,6 @@ func (c *FileContract) Metadata() modules.RenterContract {
 	}
 }
 
-// PublicKey returns the public key capable of verifying the renter's signature
-// on a contract.
-func (c *FileContract) PublicKey() crypto.PublicKey {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.header.SecretKey.PublicKey()
-}
-
 // RecordPaymentIntent will records the changes we are about to make to the
 // revision in order to pay a host for an RPC.
 func (c *FileContract) RecordPaymentIntent(rev types.FileContractRevision, amount types.Currency, details smodules.SpendingDetails) error {
@@ -180,13 +167,6 @@ func (c *FileContract) RecordPaymentIntent(rev types.FileContractRevision, amoun
 
 	// Update the database.
 	return c.saveContract(types.SiaPublicKey{})
-}
-
-// Sign will sign the given hash using the FileContract's secret key.
-func (c *FileContract) Sign(hash crypto.Hash) crypto.Signature {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return crypto.SignHash(hash, c.header.SecretKey)
 }
 
 // UpdateUtility updates the utility field of a contract.

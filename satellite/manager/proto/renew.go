@@ -142,7 +142,6 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	// Construct contract header.
 	header := contractHeader{
 		Transaction:     noOpRevTxn,
-		SecretKey:       renterSK,
 		StartHeight:     startHeight,
 		TotalCost:       funding,
 		ContractFee:     host.ContractPrice,

@@ -16,7 +16,6 @@ type (
 	contractPersist struct {
 		RenterPublicKey      string
 		StartHeight          uint64
-		SecretKey            string
 		DownloadSpending     string
 		FundAccountSpending  string
 		StorageSpending      string
@@ -105,14 +104,14 @@ func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
 		// Update contract.
 		_, err := fc.db.Exec(`
 			UPDATE contracts
-			SET renter_pk = ?, start_height = ?, secret_key = ?, download_spending = ?,
+			SET renter_pk = ?, start_height = ?, download_spending = ?,
 				fund_account_spending = ?, storage_spending = ?, upload_spending = ?,
 				total_cost = ?, contract_fee = ?, txn_fee = ?, siafund_fee = ?,
 				account_balance_cost = ?, fund_account_cost = ?,
 				update_price_table_cost = ?, good_for_upload = ?, good_for_renew = ?,
 				bad_contract = ?, last_oos_err = ?, locked = ?
 			WHERE contract_id = ?
-		`, renterKey, h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, id)
+		`, renterKey, h.StartHeight, h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, id)
 		if err != nil {
 			return err
 		}
@@ -147,13 +146,13 @@ func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
 	// Insert new contract.
 	_, err = fc.db.Exec(`
 		INSERT INTO contracts
-			(contract_id, renter_pk, start_height, secret_key, download_spending,
+			(contract_id, renter_pk, start_height, download_spending,
 			fund_account_spending, storage_spending, upload_spending, total_cost,
 			contract_fee, txn_fee, siafund_fee, account_balance_cost,
 			fund_account_cost, update_price_table_cost, good_for_upload,
 			good_for_renew, bad_contract, last_oos_err, locked, renewed_from, renewed_to)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, rpk.String(), h.StartHeight, hex.EncodeToString(h.SecretKey[:]), h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, "", "")
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id, rpk.String(), h.StartHeight, h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, "", "")
 	if err != nil {
 		return err
 	}
@@ -193,7 +192,7 @@ func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 	// Load the contracts.
 	rows, err := cs.db.Query(`
-		SELECT contract_id, start_height, secret_key, download_spending,
+		SELECT contract_id, start_height, download_spending,
 			fund_account_spending, storage_spending, upload_spending, total_cost,
 			contract_fee, txn_fee, siafund_fee, account_balance_cost, fund_account_cost,
 			update_price_table_cost, good_for_upload, good_for_renew, bad_contract,
@@ -210,7 +209,7 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 	var tp transactionPersist
 	var id, renewedTo string
 	for rows.Next() {
-		if err := rows.Scan(&id, &cp.StartHeight, &cp.SecretKey, &cp.DownloadSpending, &cp.FundAccountSpending, &cp.StorageSpending, &cp.UploadSpending, &cp.TotalCost, &cp.ContractFee, &cp.TxnFee, &cp.SiafundFee, &cp.AccountBalanceCost, &cp.FundAccountCost, &cp.UpdatePriceTableCost, &cp.GoodForUpload, &cp.GoodForRenew, &cp.BadContract, &cp.LastOOSErr, &cp.Locked, &renewedTo); err != nil {
+		if err := rows.Scan(&id, &cp.StartHeight, &cp.DownloadSpending, &cp.FundAccountSpending, &cp.StorageSpending, &cp.UploadSpending, &cp.TotalCost, &cp.ContractFee, &cp.TxnFee, &cp.SiafundFee, &cp.AccountBalanceCost, &cp.FundAccountCost, &cp.UpdatePriceTableCost, &cp.GoodForUpload, &cp.GoodForRenew, &cp.BadContract, &cp.LastOOSErr, &cp.Locked, &renewedTo); err != nil {
 			cs.log.Println("ERROR: unable to load file contract:", err)
 			continue
 		}
@@ -309,8 +308,6 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 		var h contractHeader
 		h.Transaction = t
 		h.StartHeight = types.BlockHeight(cp.StartHeight)
-		b, _ = hex.DecodeString(cp.SecretKey)
-		copy(h.SecretKey[:], b)
 		h.DownloadSpending = modules.ReadCurrency(cp.DownloadSpending)
 		h.FundAccountSpending = modules.ReadCurrency(cp.FundAccountSpending)
 		h.StorageSpending = modules.ReadCurrency(cp.StorageSpending)

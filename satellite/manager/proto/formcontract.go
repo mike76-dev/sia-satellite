@@ -185,7 +185,6 @@ func (cs *ContractSet) FormContract(params modules.ContractParams, txnBuilder tr
 	// Construct contract header.
 	header := contractHeader{
 		Transaction: revisionTxn,
-		SecretKey:   renterSK,
 		StartHeight: startHeight,
 		TotalCost:   funding,
 		ContractFee: host.ContractPrice,

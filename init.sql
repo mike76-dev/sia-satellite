@@ -146,7 +146,6 @@ CREATE TABLE contracts (
 	contract_id             VARCHAR(64) NOT NULL UNIQUE,
 	renter_pk               VARCHAR(128) NOT NULL,
 	start_height            BIGINT UNSIGNED NOT NULL,
-	secret_key              VARCHAR(128) NOT NULL,
 	download_spending       VARCHAR(64) NOT NULL,
 	fund_account_spending   VARCHAR(64) NOT NULL,
 	storage_spending        VARCHAR(64) NOT NULL,

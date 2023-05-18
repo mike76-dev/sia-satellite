@@ -52,10 +52,6 @@ type hostContractor interface {
 	// to a specific renter.
 	ContractsByRenter(types.SiaPublicKey) []modules.RenterContract
 
-	// ContractPublicKey returns the public key capable of verifying the renter's
-	// signature on a contract.
-	ContractPublicKey(types.SiaPublicKey, types.SiaPublicKey) (crypto.PublicKey, bool)
-
 	// ContractUtility returns the utility field for a given contract, along
 	// with a bool indicating if it exists.
 	ContractUtility(types.SiaPublicKey, types.SiaPublicKey) (smodules.ContractUtility, bool)

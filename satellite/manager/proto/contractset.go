@@ -6,7 +6,6 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/persist"
 	"go.sia.tech/siad/types"
 )
@@ -85,25 +84,6 @@ func (cs *ContractSet) IDs(rpk types.SiaPublicKey) []types.FileContractID {
 	return cs.managedFindIDs(rpk)
 }
 
-// InsertContract inserts an existing contract into the set.
-func (cs *ContractSet) InsertContract(rc modules.RecoverableContract, rpk types.SiaPublicKey, revTxn types.Transaction, roots []crypto.Hash, sk crypto.SecretKey) (modules.RenterContract, error) {
-	// Estimate the totalCost.
-	// NOTE: The actual totalCost is the funding amount. Which means
-	// renterPayout + txnFee + basePrice + contractPrice.
-	// Since we don't know the basePrice and contractPrice, we don't add them.
-	var totalCost types.Currency
-	totalCost = totalCost.Add(rc.FileContract.ValidRenterPayout())
-	totalCost = totalCost.Add(rc.TxnFee)
-	return cs.managedInsertContract(contractHeader{
-		Transaction: revTxn,
-		SecretKey:   sk,
-		StartHeight: rc.StartHeight,
-		TotalCost:   totalCost,
-		TxnFee:      rc.TxnFee,
-		SiafundFee:  types.Tax(rc.StartHeight, rc.Payout),
-	}, rpk)
-}
-
 // Len returns the number of contracts in the set.
 func (cs *ContractSet) Len() int {
 	cs.mu.Lock()
@@ -136,18 +116,6 @@ func (cs *ContractSet) View(id types.FileContractID) (modules.RenterContract, bo
 		return modules.RenterContract{}, false
 	}
 	return fileContract.Metadata(), true
-}
-
-// PublicKey returns the public key capable of verifying the renter's signature
-// on a contract.
-func (cs *ContractSet) PublicKey(id types.FileContractID) (crypto.PublicKey, bool) {
-	cs.mu.Lock()
-	fileContract, ok := cs.contracts[id]
-	cs.mu.Unlock()
-	if !ok {
-		return crypto.PublicKey{}, false
-	}
-	return fileContract.PublicKey(), true
 }
 
 // ViewAll returns the metadata of each contract in the set. The contracts are

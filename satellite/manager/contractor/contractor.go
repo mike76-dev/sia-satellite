@@ -13,7 +13,6 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/threadgroup"
 
-	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
@@ -85,18 +84,6 @@ func (c *Contractor) Allowance(rpk types.SiaPublicKey) modules.Allowance {
 		return modules.Allowance{}
 	}
 	return renter.Allowance
-}
-
-// ContractPublicKey returns the public key capable of verifying the renter's
-// signature on a contract.
-func (c *Contractor) ContractPublicKey(rpk, hpk types.SiaPublicKey) (crypto.PublicKey, bool) {
-	c.mu.RLock()
-	id, ok := c.pubKeysToContractID[rpk.String() + hpk.String()]
-	c.mu.RUnlock()
-	if !ok {
-		return crypto.PublicKey{}, false
-	}
-	return c.staticContracts.PublicKey(id)
 }
 
 // PeriodSpending returns the amount spent by the renter on contracts during
