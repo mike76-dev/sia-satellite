@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"encoding/hex"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/spf13/cobra"
 
+	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 )
 
@@ -66,6 +68,10 @@ func satelliterentercmd(key string) {
 	if err != nil {
 		die(err)
 	}
+	var sk string
+	if (renter.PrivateKey != crypto.SecretKey{}) {
+		sk = hex.EncodeToString(renter.PrivateKey[:])
+	}
 	fmt.Printf(`Public Key: %v
 Email:      %v
 
@@ -88,9 +94,12 @@ Max Storage Price:       %v
 Max Upload Price:        %v
 Min Max Collateral:      %v
 Block Height Leeway:     %v
+
+Private Key:          %v
+Auto Renew Contracts: %v
 `, renter.PublicKey.String(), renter.Email, renter.CurrentPeriod, renter.Allowance.Period, renter.Allowance.RenewWindow, renter.Allowance.Hosts, smodules.FilesizeUnits(renter.Allowance.ExpectedStorage), smodules.FilesizeUnits(renter.Allowance.ExpectedUpload), smodules.FilesizeUnits(renter.Allowance.ExpectedDownload),
 renter.Allowance.MinShards, renter.Allowance.TotalShards, modules.CurrencyUnits(renter.Allowance.MaxRPCPrice), modules.CurrencyUnits(renter.Allowance.MaxContractPrice), modules.CurrencyUnits(renter.Allowance.MaxDownloadBandwidthPrice), modules.CurrencyUnits(renter.Allowance.MaxSectorAccessPrice), modules.CurrencyUnits(renter.Allowance.MaxStoragePrice), modules.CurrencyUnits(renter.Allowance.MaxUploadBandwidthPrice),
-modules.CurrencyUnits(renter.Allowance.MinMaxCollateral), renter.Allowance.BlockHeightLeeway)
+modules.CurrencyUnits(renter.Allowance.MinMaxCollateral), renter.Allowance.BlockHeightLeeway, sk, renter.Settings.AutoRenewContracts)
 }
 
 // satellitebalancecmd is the handler for the command `satc satellite balance [public_key]`.

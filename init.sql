@@ -135,6 +135,8 @@ CREATE TABLE renters (
 	max_upload_bandwidth_price   VARCHAR(64) NOT NULL,
 	min_max_collateral           VARCHAR(64) NOT NULL,
 	blockheight_leeway           BIGINT UNSIGNED NOT NULL,
+	private_key                  VARCHAR(128) NOT NULL,
+	auto_renew_contracts         BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );

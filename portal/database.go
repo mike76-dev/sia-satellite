@@ -316,9 +316,10 @@ func (p *Portal) createNewRenter(email string, pk types.SiaPublicKey) error {
 			expected_download, min_shards, total_shards, max_rpc_price,
 			max_contract_price, max_download_bandwidth_price,
 			max_sector_access_price, max_storage_price,
-			max_upload_bandwidth_price, min_max_collateral, blockheight_leeway)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, email, pk.String(), 0, "", 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", 0)
+			max_upload_bandwidth_price, min_max_collateral, blockheight_leeway,
+			private_key, auto_renew_contracts)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, pk.String(), 0, "", 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", 0, "", false)
 	if err != nil {
 		return err
 	}

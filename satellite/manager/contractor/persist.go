@@ -1,6 +1,7 @@
 package contractor
 
 import (
+	"encoding/hex"
 	"path/filepath"
 	"time"
 
@@ -60,6 +61,9 @@ type renterData struct {
 	MaxUploadBandwidthPrice   string
 	MinMaxCollateral          string
 	BlockHeightLeeway         uint64
+
+	PrivateKey         string
+	AutoRenewContracts bool
 }
 
 // persistData returns the data in the Contractor that will be saved to disk.
@@ -115,7 +119,8 @@ func (c *Contractor) load() error {
 			expected_storage, expected_upload, expected_download, min_shards,
 			total_shards, max_rpc_price, max_contract_price,
 			max_download_bandwidth_price, max_sector_access_price, max_storage_price,
-			max_upload_bandwidth_price, min_max_collateral, blockheight_leeway
+			max_upload_bandwidth_price, min_max_collateral, blockheight_leeway,
+			private_key, auto_renew_contracts
 		FROM renters`)
 	if err != nil {
 		c.log.Println("ERROR: could not load the renters:", err)
@@ -125,12 +130,12 @@ func (c *Contractor) load() error {
 
 	var entry renterData
 	for rows.Next() {
-		if err := rows.Scan(&entry.Email, &entry.PublicKey, &entry.CurrentPeriod, &entry.Funds, &entry.Hosts, &entry.Period, &entry.RenewWindow, &entry.ExpectedStorage, &entry.ExpectedUpload, &entry.ExpectedDownload, &entry.MinShards, &entry.TotalShards, &entry.MaxRPCPrice, &entry.MaxContractPrice, &entry.MaxDownloadBandwidthPrice, &entry.MaxSectorAccessPrice, &entry.MaxStoragePrice, &entry.MaxUploadBandwidthPrice, &entry.MinMaxCollateral, &entry.BlockHeightLeeway); err != nil {
+		if err := rows.Scan(&entry.Email, &entry.PublicKey, &entry.CurrentPeriod, &entry.Funds, &entry.Hosts, &entry.Period, &entry.RenewWindow, &entry.ExpectedStorage, &entry.ExpectedUpload, &entry.ExpectedDownload, &entry.MinShards, &entry.TotalShards, &entry.MaxRPCPrice, &entry.MaxContractPrice, &entry.MaxDownloadBandwidthPrice, &entry.MaxSectorAccessPrice, &entry.MaxStoragePrice, &entry.MaxUploadBandwidthPrice, &entry.MinMaxCollateral, &entry.BlockHeightLeeway, &entry.PrivateKey, &entry.AutoRenewContracts); err != nil {
 			c.log.Println("ERROR: could not load the renter:", err)
 			continue
 		}
 
-		c.renters[entry.PublicKey] = modules.Renter{
+		 renter := modules.Renter{
 			Allowance: modules.Allowance{
 				Funds:       modules.ReadCurrency(entry.Funds),
 				Hosts:       entry.Hosts,
@@ -155,7 +160,14 @@ func (c *Contractor) load() error {
 			CurrentPeriod: types.BlockHeight(entry.CurrentPeriod),
 			PublicKey:     modules.ReadPublicKey(entry.PublicKey),
 			Email:         entry.Email,
+			Settings:      modules.RenterSettings{
+				AutoRenewContracts: entry.AutoRenewContracts,
+			},
 		}
+		sk, _ := hex.DecodeString(entry.PrivateKey)
+		copy(renter.PrivateKey[:], sk)
+
+		c.renters[entry.PublicKey] = renter
 	}
 
 	c.staticWatchdog, err = newWatchdogFromPersist(c, data.WatchdogData)

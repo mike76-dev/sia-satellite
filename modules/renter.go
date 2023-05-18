@@ -87,12 +87,19 @@ func (rc *RenterContract) Size() uint64 {
 	return size
 }
 
+// RenterSettings keep the opt-in settings of the renter.
+type RenterSettings struct {
+	AutoRenewContracts bool `json:"autorenew"`
+}
+
 // Renter holds the data related to the specific renter.
 type Renter struct {
 	Allowance     Allowance          `json:"allowance"`
 	CurrentPeriod types.BlockHeight  `json:"currentperiod"`
 	PublicKey     types.SiaPublicKey `json:"publickey"`
 	Email         string             `json:"email"` // Link to the user account.
+	Settings      RenterSettings     `json:"settings"`
+	PrivateKey    crypto.SecretKey   `json:"privatekey"`
 }
 
 // contractEndHeight returns the height at which the renter's contracts
