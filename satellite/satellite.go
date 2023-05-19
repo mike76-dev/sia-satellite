@@ -538,5 +538,10 @@ func (s *Satellite) Contract(fcid types.FileContractID) (modules.RenterContract,
 	return s.m.Contract(fcid)
 }
 
+// UpdateRenterSettings calls Manager.UpdateRenterSettings.
+func (s *Satellite) UpdateRenterSettings(rpk types.SiaPublicKey, settings modules.RenterSettings, sk crypto.SecretKey) error {
+	return s.m.UpdateRenterSettings(rpk, settings, sk)
+}
+
 // enforce that Satellite satisfies the modules.Satellite interface
 var _ modules.Satellite = (*Satellite)(nil)

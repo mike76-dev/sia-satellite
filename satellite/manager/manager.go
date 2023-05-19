@@ -114,6 +114,9 @@ type hostContractor interface {
 	// UpdateContract updates the contract with the new revision.
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 
+	// UpdateRenterSettings updates the renter's opt-in settings.
+	UpdateRenterSettings(types.SiaPublicKey, modules.RenterSettings, crypto.SecretKey) error
+
 	// RenewedFrom returns the ID of the contract the given contract was
 	// renewed from, if any.
 	RenewedFrom(types.FileContractID) types.FileContractID
@@ -689,4 +692,9 @@ func (m *Manager) FormContract(s *modules.RPCSession, pk, rpk, hpk types.SiaPubl
 // RenewContract calls hostContractor.RenewContract.
 func (m *Manager) RenewContract(s *modules.RPCSession, pk types.SiaPublicKey, contract modules.RenterContract, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
 	return m.hostContractor.RenewContract(s, pk, contract, endHeight, funding)
+}
+
+// UpdateRenterSettings calls hostContractor.UpdateRenterSettings.
+func (m *Manager) UpdateRenterSettings(rpk types.SiaPublicKey, settings modules.RenterSettings, sk crypto.SecretKey) error {
+	return m.hostContractor.UpdateRenterSettings(rpk, settings, sk)
 }

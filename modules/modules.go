@@ -284,4 +284,5 @@ type ContractFormer interface {
 	BlockHeight() types.BlockHeight
 	FormContract(*RPCSession, types.SiaPublicKey, types.SiaPublicKey, types.SiaPublicKey, types.BlockHeight, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
 	RenewContract(*RPCSession, types.SiaPublicKey, types.FileContractID, types.BlockHeight, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
+	UpdateRenterSettings(types.SiaPublicKey, RenterSettings, crypto.SecretKey) error
 }

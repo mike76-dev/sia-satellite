@@ -13,6 +13,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/NebulousLabs/threadgroup"
 
+	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/persist"
 	siasync "go.sia.tech/siad/sync"
@@ -520,4 +521,18 @@ func (c *Contractor) DeleteRenter(email string) {
 // Contract returns the contract with the given ID.
 func (c *Contractor) Contract(fcid types.FileContractID) (modules.RenterContract, bool) {
 	return c.staticContracts.View(fcid)
+}
+
+// UpdateRenterSettings updates the renter's opt-in settings.
+func (c *Contractor) UpdateRenterSettings(rpk types.SiaPublicKey, settings modules.RenterSettings, sk crypto.SecretKey) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	renter, exists := c.renters[rpk.String()]
+	if !exists {
+		return ErrRenterNotFound
+	}
+	renter.Settings = settings
+	copy(renter.PrivateKey[:], sk[:])
+	c.renters[rpk.String()] = renter
+	return c.UpdateRenter(renter)
 }
