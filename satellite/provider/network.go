@@ -49,6 +49,12 @@ var formContractSpecifier = types.NewSpecifier("FormContract")
 // Renter-Satellite protocol.
 var renewContractSpecifier = types.NewSpecifier("RenewContract")
 
+// getSettingsSpecifier is used to request the renter's opt-in settings.
+var getSettingsSpecifier = types.NewSpecifier("GetSettings")
+
+// updateSettingsSpecifier is used to update the renter's opt-in settings.
+var updateSettingsSpecifier = types.NewSpecifier("UpdateSettings")
+
 // threadedUpdateHostname periodically runs 'managedLearnHostname', which
 // checks if the Satellite's hostname has changed.
 func (p *Provider) threadedUpdateHostname(closeChan chan struct{}) {
@@ -318,6 +324,16 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		err = p.managedRenewContract(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCRenewContract failed: "), err)
+		}
+	case getSettingsSpecifier:
+		err = p.managedGetSettings(s)
+		if err != nil {
+			err = errors.Extend(errors.New("incoming RPCGetSettings failed: "), err)
+		}
+	case updateSettingsSpecifier:
+		err = p.managedUpdateSettings(s)
+		if err != nil {
+			err = errors.Extend(errors.New("incoming RPCUpdateSettings failed: "), err)
 		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO

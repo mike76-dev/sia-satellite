@@ -611,3 +611,87 @@ func (p *Provider) managedRenewContract(s *modules.RPCSession) error {
 
 	return s.WriteResponse(&ec)
 }
+
+// managedGetSettings returns the renter's opt-in settings.
+func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
+	// Extend the deadline to meet the formation of multiple contracts.
+	s.Conn.SetDeadline(time.Now().Add(settingsTime))
+
+	// Read the request.
+	var gsr getSettingsRequest
+	hash, err := s.ReadRequest(&gsr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	err = crypto.VerifyHash(crypto.Hash(hash), gsr.PubKey, crypto.Signature(gsr.Signature))
+	if err != nil {
+		err = fmt.Errorf("could not verify renter signature: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Check if we know this renter.
+	rpk := types.Ed25519PublicKey(gsr.PubKey)
+	renter, err := p.satellite.GetRenter(rpk)
+	if err != nil {
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	resp := getSettingsResponse{
+		AutoRenewContracts: renter.Settings.AutoRenewContracts,
+	}
+
+	return s.WriteResponse(&resp)
+}
+
+// managedUpdateSettings updates the renter's opt-in settings.
+func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
+	// Extend the deadline to meet the formation of multiple contracts.
+	s.Conn.SetDeadline(time.Now().Add(settingsTime))
+
+	// Read the request.
+	var usr updateSettingsRequest
+	hash, err := s.ReadRequest(&usr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	err = crypto.VerifyHash(crypto.Hash(hash), usr.PubKey, crypto.Signature(usr.Signature))
+	if err != nil {
+		err = fmt.Errorf("could not verify renter signature: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Check if we know this renter.
+	rpk := types.Ed25519PublicKey(usr.PubKey)
+	_, err = p.satellite.GetRenter(rpk)
+	if err != nil {
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Upsate the settings.
+	err = p.satellite.UpdateRenterSettings(rpk, modules.RenterSettings{
+		AutoRenewContracts: usr.AutoRenewContracts,
+	}, usr.PrivateKey)
+
+	// Send a response.
+	if err != nil {
+		err = fmt.Errorf("couldn't update settings: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	return s.WriteResponse(nil)
+}

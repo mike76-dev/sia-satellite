@@ -393,3 +393,66 @@ func (rcr *renewContractRequest) EncodeTo(e *types.Encoder) {
 	e.WriteUint64(rcr.MinShards)
 	e.WriteUint64(rcr.TotalShards)
 }
+
+// getSettingsRequest is used to retrieve the renter's opt-in
+// settings.
+type getSettingsRequest struct {
+	PubKey    crypto.PublicKey
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (gsr *getSettingsRequest) DecodeFrom(d *types.Decoder) {
+	copy(gsr.PubKey[:], d.ReadBytes())
+	gsr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (gsr *getSettingsRequest) EncodeTo(e *types.Encoder) {
+	e.WriteBytes(gsr.PubKey[:])
+}
+
+// getSettingsResponse is used to send the opt-in settings
+// to the renter.
+type getSettingsResponse struct {
+	AutoRenewContracts bool
+}
+
+// DecodeFrom implements requestBody.
+func (gsr *getSettingsResponse) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
+// EncodeTo implements requestBody.
+func (gsr *getSettingsResponse) EncodeTo(e *types.Encoder) {
+	e.WriteBool(gsr.AutoRenewContracts)
+}
+
+// updateSettingsRequest is used to update the renter's opt-in
+// settings.
+type updateSettingsRequest struct {
+	PubKey             crypto.PublicKey
+	AutoRenewContracts bool
+	PrivateKey         crypto.SecretKey
+
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
+	copy(usr.PubKey[:], d.ReadBytes())
+	usr.AutoRenewContracts = d.ReadBool()
+	if usr.AutoRenewContracts {
+		copy(usr.PrivateKey[:], d.ReadBytes())
+	}
+	usr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
+	e.WriteBytes(usr.PubKey[:])
+	e.WriteBool(usr.AutoRenewContracts)
+	if usr.AutoRenewContracts {
+		e.WriteBytes(usr.PrivateKey[:])
+	}
+}

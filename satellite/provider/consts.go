@@ -27,3 +27,7 @@ const formContractTime = 1 * time.Minute
 // renewContractTime defines the amount of time that the provider
 // has to renew a contract with a host.
 const renewContractTime = 1 * time.Minute
+
+// settingsTime defines the amount of time that the provider has to
+// send or receive renter's settings.
+const settingsTime = 1 * time.Minute
