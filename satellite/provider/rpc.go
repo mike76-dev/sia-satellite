@@ -681,7 +681,36 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		return err
 	}
 
-	// Upsate the settings.
+	// Sanity checks.
+	if usr.AutoRenewContracts {
+		if usr.Hosts == 0 {
+			err := errors.New("can't set zero hosts")
+			s.WriteError(err)
+			return err
+		}
+		if usr.Period == 0 {
+			err := errors.New("can't set zero period")
+			s.WriteError(err)
+			return err
+		}
+		if usr.RenewWindow == 0 {
+			err := errors.New("can't set zero renew window")
+			s.WriteError(err)
+			return err
+		}
+		if usr.Storage == 0 {
+			err := errors.New("can't set zero expected storage")
+			s.WriteError(err)
+			return err
+		}
+		if usr.MinShards == 0 || usr.TotalShards == 0 {
+			err := errors.New("can't set such redundancy params")
+			s.WriteError(err)
+			return err
+		}
+	}
+
+	// Update the settings.
 	err = p.satellite.UpdateRenterSettings(rpk, modules.RenterSettings{
 		AutoRenewContracts: usr.AutoRenewContracts,
 	}, usr.PrivateKey)
@@ -689,6 +718,36 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	// Send a response.
 	if err != nil {
 		err = fmt.Errorf("couldn't update settings: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Create an allowance.
+	a := modules.Allowance{
+		Hosts:       usr.Hosts,
+		Period:      types.BlockHeight(usr.Period),
+		RenewWindow: types.BlockHeight(usr.RenewWindow),
+
+		ExpectedStorage:    usr.Storage,
+		ExpectedUpload:     usr.Upload,
+		ExpectedDownload:   usr.Download,
+		MinShards:          usr.MinShards,
+		TotalShards:        usr.TotalShards,
+
+		MaxRPCPrice:               types.NewCurrency(usr.MaxRPCPrice.Big()),
+		MaxContractPrice:          types.NewCurrency(usr.MaxContractPrice.Big()),
+		MaxDownloadBandwidthPrice: types.NewCurrency(usr.MaxDownloadPrice.Big()).Div64(bytesInTerabyte),
+		MaxSectorAccessPrice:      types.NewCurrency(usr.MaxSectorAccessPrice.Big()),
+		MaxStoragePrice:           types.NewCurrency(usr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
+		MaxUploadBandwidthPrice:   types.NewCurrency(usr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
+		MinMaxCollateral:          types.NewCurrency(usr.MinMaxCollateral.Big()),
+		BlockHeightLeeway:         types.BlockHeight(usr.BlockHeightLeeway),
+	}
+
+	// Set the allowance.
+	err = p.satellite.SetAllowance(rpk, a)
+	if err != nil {
+		err = fmt.Errorf("could not set allowance: %v", err)
 		s.WriteError(err)
 		return err
 	}

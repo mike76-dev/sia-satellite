@@ -435,6 +435,26 @@ type updateSettingsRequest struct {
 	AutoRenewContracts bool
 	PrivateKey         crypto.SecretKey
 
+	Hosts       uint64
+	Period      uint64
+	RenewWindow uint64
+
+	Storage  uint64
+	Upload   uint64
+	Download uint64
+
+	MinShards   uint64
+	TotalShards uint64
+
+	MaxRPCPrice          types.Currency
+	MaxContractPrice     types.Currency
+	MaxDownloadPrice     types.Currency
+	MaxUploadPrice       types.Currency
+	MaxStoragePrice      types.Currency
+	MaxSectorAccessPrice types.Currency
+	MinMaxCollateral     types.Currency
+	BlockHeightLeeway    uint64
+
 	Signature types.Signature
 }
 
@@ -444,6 +464,22 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 	usr.AutoRenewContracts = d.ReadBool()
 	if usr.AutoRenewContracts {
 		copy(usr.PrivateKey[:], d.ReadBytes())
+		usr.Hosts = d.ReadUint64()
+		usr.Period = d.ReadUint64()
+		usr.RenewWindow = d.ReadUint64()
+		usr.Storage = d.ReadUint64()
+		usr.Upload = d.ReadUint64()
+		usr.Download = d.ReadUint64()
+		usr.MinShards = d.ReadUint64()
+		usr.TotalShards = d.ReadUint64()
+		usr.MaxRPCPrice.DecodeFrom(d)
+		usr.MaxContractPrice.DecodeFrom(d)
+		usr.MaxDownloadPrice.DecodeFrom(d)
+		usr.MaxUploadPrice.DecodeFrom(d)
+		usr.MaxStoragePrice.DecodeFrom(d)
+		usr.MaxSectorAccessPrice.DecodeFrom(d)
+		usr.MinMaxCollateral.DecodeFrom(d)
+		usr.BlockHeightLeeway = d.ReadUint64()
 	}
 	usr.Signature.DecodeFrom(d)
 }
@@ -454,5 +490,21 @@ func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBool(usr.AutoRenewContracts)
 	if usr.AutoRenewContracts {
 		e.WriteBytes(usr.PrivateKey[:])
+		e.WriteUint64(usr.Hosts)
+		e.WriteUint64(usr.Period)
+		e.WriteUint64(usr.RenewWindow)
+		e.WriteUint64(usr.Storage)
+		e.WriteUint64(usr.Upload)
+		e.WriteUint64(usr.Download)
+		e.WriteUint64(usr.MinShards)
+		e.WriteUint64(usr.TotalShards)
+		usr.MaxRPCPrice.EncodeTo(e)
+		usr.MaxContractPrice.EncodeTo(e)
+		usr.MaxDownloadPrice.EncodeTo(e)
+		usr.MaxUploadPrice.EncodeTo(e)
+		usr.MaxStoragePrice.EncodeTo(e)
+		usr.MaxSectorAccessPrice.EncodeTo(e)
+		usr.MinMaxCollateral.EncodeTo(e)
+		e.WriteUint64(usr.BlockHeightLeeway)
 	}
 }

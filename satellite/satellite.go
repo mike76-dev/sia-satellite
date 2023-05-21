@@ -308,6 +308,11 @@ func (s *Satellite) Renters() []modules.Renter {
 	return s.m.Renters()
 }
 
+// SetAllowance calls Manager.SetAllowance.
+func (s *Satellite) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) error {
+	return s.m.SetAllowance(rpk, a)
+}
+
 // FormContracts forms the specified number of contracts with the hosts
 // and returns them.
 func (s *Satellite) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, a modules.Allowance) ([]modules.RenterContract, error) {
