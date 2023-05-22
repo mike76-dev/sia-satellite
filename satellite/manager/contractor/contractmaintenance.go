@@ -972,6 +972,43 @@ func (c *Contractor) threadedContractMaintenance() {
 		return
 	}
 	c.managedLimitGFUHosts()
+
+	// Get the current block height.
+	c.mu.Lock()
+	blockHeight := c.blockHeight
+	c.mu.Unlock()
+
+	// Iterate through the active contracts and check which of them are
+	// up for renewal. If the renter has opted in, add them to the renew
+	// list.
+	var renewSet []fileContractRenewal
+	for _, contract := range c.staticContracts.ViewAll() {
+		renter, err := c.managedFindRenter(contract.ID)
+		if err != nil {
+			c.log.Println("WARN: unable to find renter for contract", contract.ID)
+			continue
+		}
+
+		// Check if the renter opted in for auto-renewals.
+		if !renter.Settings.AutoRenewContracts {
+			continue
+		}
+
+		// Check if the contract needs to be renewed because it is about to
+		// expire.
+		if blockHeight + renter.Allowance.RenewWindow >= contract.EndHeight {
+			renewAmount, err := c.managedEstimateRenewFundingRequirements(contract, blockHeight, renter.Allowance)
+			if err != nil {
+				c.log.Println("WARN: contract skipped because there was an error estimating renew funding requirements", renewAmount, err)
+				continue
+			}
+			renewSet = append(renewSet, fileContractRenewal{
+				id:         contract.ID,
+				amount:     renewAmount,
+				hostPubKey: contract.HostPublicKey,
+			})
+		}
+	}
 }
 
 // FormContracts forms up to the specified number of contracts, puts them
