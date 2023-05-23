@@ -361,3 +361,24 @@ func RPCRenewOldContract(ss *modules.RPCSession, t *rhpv3.Transport, txnBuilder 
 
 	return revisionTxn, nil
 }
+
+// RPCLatestRevision fetches the latest revision from the host.
+func RPCLatestRevision(t *rhpv3.Transport, contractID core.FileContractID) (core.FileContractRevision, error) {
+	s := t.DialStream()
+	defer s.Close()
+
+	s.SetDeadline(time.Now().Add(15 * time.Second))
+	req := rhpv3.RPCLatestRevisionRequest{
+		ContractID: contractID,
+	}
+	var resp rhpv3.RPCLatestRevisionResponse
+	pt := rhpv3.HostPriceTable{}
+	if err := s.WriteRequest(rhpv3.RPCLatestRevisionID, &req); err != nil {
+		return core.FileContractRevision{}, err
+	} else if err := s.ReadResponse(&resp, 4096); err != nil {
+		return core.FileContractRevision{}, err
+	} else if err := s.WriteResponse(&pt.UID); err != nil {
+		return core.FileContractRevision{}, err
+	}
+	return resp.Revision, nil
+}
