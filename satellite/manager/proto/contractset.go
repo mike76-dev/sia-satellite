@@ -156,7 +156,7 @@ func (cs *ContractSet) OldContracts() []modules.RenterContract {
 	return oldContracts
 }
 
-// ByRenter works the same as OldContracts but filters the contracts by the renter.
+// OldByRenter works the same as OldContracts but filters the contracts by the renter.
 func (cs *ContractSet) OldByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
 	ids := cs.managedFindIDs(rpk)
 	cs.mu.Lock()
