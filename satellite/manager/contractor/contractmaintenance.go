@@ -717,11 +717,13 @@ func (c *Contractor) managedRenew(id types.FileContractID, rpk types.SiaPublicKe
 
 	oldContract, ok := c.staticContracts.Acquire(id)
 	if !ok {
+		txnBuilder.Drop() // Return unused outputs to wallet.
 		return modules.RenterContract{}, errContractNotFound
 	}
 	defer c.staticContracts.Return(oldContract)
 
 	if !oldContract.Utility().GoodForRenew {
+		txnBuilder.Drop() // Return unused outputs to wallet.
 		return modules.RenterContract{}, errContractNotGFR
 	}
 	newContract, formationTxnSet, err = c.staticContracts.Renew(oldContract, params, txnBuilder, c.tpool, c.hdb, c.tg.StopChan())

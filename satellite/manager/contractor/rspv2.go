@@ -125,7 +125,7 @@ func (c *Contractor) managedFormNewContract(s *modules.RPCSession, pk, rpk types
 	c.mu.RUnlock()
 	contract, formationTxnSet, sweepTxn, sweepParents, err := c.staticContracts.FormNewContract(s, pk, rpk, host, startHeight, endHeight, funding, uc.UnlockHash(), txnBuilder, c.tpool, c.hdb, c.tg.StopChan())
 	if err != nil {
-		txnBuilder.Drop()
+		txnBuilder.Drop() // Return unused outputs to wallet.
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
 
@@ -317,6 +317,7 @@ func (c *Contractor) managedRenewOldContract(s *modules.RPCSession, pk types.Sia
 
 	oldContract, ok := c.staticContracts.Acquire(id)
 	if !ok {
+		txnBuilder.Drop() // Return unused outputs to wallet.
 		return types.ZeroCurrency, modules.RenterContract{}, errContractNotFound
 	}
 
