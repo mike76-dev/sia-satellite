@@ -943,7 +943,7 @@ func (c *Contractor) threadedContractMaintenance() {
 
 	// No contract maintenance unless contractor is synced.
 	if !c.managedSynced() {
-		c.log.Println("Skipping contract maintenance since consensus isn't synced yet")
+		c.log.Println("INFO: skipping contract maintenance since consensus isn't synced yet")
 		return
 	}
 
@@ -951,7 +951,7 @@ func (c *Contractor) threadedContractMaintenance() {
 	// fine to return early if another thread is already doing maintenance.
 	// The next block will trigger another round.
 	if !c.maintenanceLock.TryLock() {
-		c.log.Println("WARN: maintenance lock could not be obtained")
+		c.log.Println("ERROR: maintenance lock could not be obtained")
 		return
 	}
 	defer c.maintenanceLock.Unlock()
@@ -963,12 +963,12 @@ func (c *Contractor) threadedContractMaintenance() {
 	c.managedUpdatePubKeysToContractIDMap()
 	c.managedPruneRedundantAddressRange()
 	if err != nil {
-		c.log.Println("Unable to mark contract utilities:", err)
+		c.log.Println("ERROR: unable to mark contract utilities:", err)
 		return
 	}
 	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
-		c.log.Println("Unable to update hostdb contracts:", err)
+		c.log.Println("ERROR: unable to update hostdb contracts:", err)
 		return
 	}
 	c.managedLimitGFUHosts()
@@ -977,6 +977,10 @@ func (c *Contractor) threadedContractMaintenance() {
 	c.mu.Lock()
 	blockHeight := c.blockHeight
 	c.mu.Unlock()
+
+	// The total number of renews that failed for any reason.
+	var numRenewFails int
+	var renewErr error
 
 	// Iterate through the active contracts and check which of them are
 	// up for renewal. If the renter has opted in, add them to the renew
@@ -1003,12 +1007,104 @@ func (c *Contractor) threadedContractMaintenance() {
 				continue
 			}
 			renewSet = append(renewSet, fileContractRenewal{
-				id:         contract.ID,
-				amount:     renewAmount,
-				hostPubKey: contract.HostPublicKey,
+				id:           contract.ID,
+				amount:       renewAmount,
+				renterPubKey: renter.PublicKey,
+				hostPubKey:   contract.HostPublicKey,
+				secretKey:    renter.PrivateKey,
 			})
 		}
 	}
+
+	if len(renewSet) != 0 {
+		c.log.Printf("INFO: renewing %v contracts\n", len(renewSet))
+	}
+
+	// Go through the contracts we've assembled for renewal.
+	hastings, _ := types.SiacoinPrecision.Float64()
+	for _, renewal := range renewSet {
+		// Return here if an interrupt or kill signal has been sent.
+		select {
+		case <-c.tg.StopChan():
+			c.log.Println("INFO: returning because the contractor was stopped")
+		default:
+		}
+
+		unlocked, err := c.wallet.Unlocked()
+		if !unlocked || err != nil {
+			c.log.Println("WARN: contractor is attempting to renew contracts that are about to expire, however the wallet is locked")
+			return
+		}
+
+		// Get the renter. The error is ignored since we know already that
+		// the renter exists.
+		renter, _ := c.managedFindRenter(renewal.id)
+
+		// Check if the renter has a sufficient balance.
+		ub, err := c.satellite.GetBalance(renter.Email)
+		if err != nil {
+			c.log.Println("ERROR: couldn't get renter balance:", err)
+			continue
+		}
+		cost, _ := renewal.amount.Float64()
+		if ub.Balance < cost / hastings {
+			c.log.Println("INFO: renewal skipped, because renter balance is insufficient")
+			continue
+		}
+
+		// Renew one contract. The error is ignored because the renew function
+		// already will have logged the error, and in the event of an error,
+		// 'fundsSpent' will return '0'.
+		fundsSpent, newContract, err := c.managedRenewContract(renewal, blockHeight, renter.ContractEndHeight())
+		if errors.Contains(err, errContractNotGFR) {
+			// Do not add a renewal error.
+			c.log.Println("INFO: contract skipped because it is not good for renew", renewal.id)
+		} else if err != nil {
+			c.log.Println("ERROR: error renewing a contract", renewal.id, err)
+			renewErr = errors.Compose(renewErr, err)
+			numRenewFails++
+		}
+
+		if err == nil {
+			// Lock the funds in the database.
+			funds, _ := fundsSpent.Float64()
+			amount := funds / hastings
+			err = c.satellite.LockSiacoins(renter.Email, amount)
+			if err != nil {
+				c.log.Println("ERROR: couldn't lock funds")
+			}
+
+			// Add this contract to the contractor and save.
+			err = c.managedAcquireAndUpdateContractUtility(newContract.ID, smodules.ContractUtility{
+				GoodForUpload: true,
+				GoodForRenew:  true,
+			})
+			if err != nil {
+				c.log.Println("ERROR: failed to update the contract utilities", err)
+				continue
+			}
+			c.mu.Lock()
+			err = c.save()
+			c.mu.Unlock()
+			if err != nil {
+				c.log.Println("ERROR: unable to save the contractor:", err)
+			}
+		}
+	}
+
+	// Update the failed renew map so that it only contains contracts which we
+	// are currently trying to renew. The failed renew map is a map that we
+	// use to track how many times consecutively we failed to renew a contract
+	// with a host, so that we know if we need to abandon that host.
+	c.mu.Lock()
+	newFirstFailedRenew := make(map[types.FileContractID]types.BlockHeight)
+	for _, r := range renewSet {
+		if _, exists := c.numFailedRenews[r.id]; exists {
+			newFirstFailedRenew[r.id] = c.numFailedRenews[r.id]
+		}
+	}
+	c.numFailedRenews = newFirstFailedRenew
+	c.mu.Unlock()
 }
 
 // FormContracts forms up to the specified number of contracts, puts them

@@ -266,6 +266,9 @@ type FundLocker interface {
 	// UnlockSiacoins moves a part of the amount from "locked" to "available",
 	// while the other part (fees and other spent funds) is "burned".
 	UnlockSiacoins(string, float64, float64, types.BlockHeight) error
+
+	// GetBalance retrieves the balance information on the account.
+	GetBalance(string) (*UserBalance, error)
 }
 
 // ContractFormer is the minimal interface to be used by Provider.
