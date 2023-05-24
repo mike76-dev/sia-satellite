@@ -11,6 +11,7 @@ import (
 	"gitlab.com/NebulousLabs/errors"
 
 	rhpv3 "go.sia.tech/core/rhp/v3"
+	core "go.sia.tech/core/types"
 	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
@@ -23,7 +24,6 @@ import (
 func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB, cancel <-chan struct{}) (rc modules.RenterContract, formationTxnSet []types.Transaction, err error) {
 	// For convenience.
 	oldContract := oldFC.header
-	oldRev := oldContract.LastRevision()
 
 	// Extract vars from params, for convenience.
 	host, funding, startHeight, endHeight := params.Host, params.Funding, params.StartHeight, params.EndHeight
@@ -40,48 +40,12 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 		}
 	}()
 
-	// Fetch the price table.
-	rhp3pt, err := FetchPriceTable(host)
+	// Initiate protocol.
+	hostName, _, err := net.SplitHostPort(string(host.NetAddress))
 	if err != nil {
-		return modules.RenterContract{}, nil, err
+		return modules.RenterContract{}, nil, fmt.Errorf("failed to get host name: %s", err)
 	}
-	pt := modules.ConvertPriceTable(rhp3pt)
-
-	// RHP3 contains both the contract and final revision. So we double the
-	// estimation.
-	txnFee := pt.TxnFeeMaxRecommended.Mul64(2 * smodules.EstimatedFileContractTransactionSetSize)
-
-	// Calculate the base cost. This includes the RPC cost.
-	basePrice, baseCollateral := smodules.RenewBaseCosts(oldRev, &pt, endHeight)
-
-	// Create the final revision of the old contract.
-	renewCost := types.ZeroCurrency
-	finalRev, err := prepareFinalRevision(oldContract, renewCost)
-	if err != nil {
-		return modules.RenterContract{}, nil, fmt.Errorf("unable to create final revision: %s", err)
-	}
-
-	// Create the new file contract.
-	uc := createFileContractUnlockConds(host.PublicKey, renterPK)
-	uh := uc.UnlockHash()
-	fc, err := createRenewedContract(oldRev, uh, params, txnFee, basePrice, baseCollateral, tpool)
-	if err != nil {
-		return modules.RenterContract{}, nil, fmt.Errorf("unable to create new contract: %s", err)
-	}
-
-	// Add both the new final revision and the new contract to the same
-	// transaction.
-	txnBuilder.AddFileContractRevision(finalRev)
-	txnBuilder.AddFileContract(fc)
-
-	// Add the fee to the transaction.
-	txnBuilder.AddMinerFee(txnFee)
-
-	// Create transaction set.
-	txnSet, err := prepareTransactionSet(txnBuilder)
-	if err != nil {
-		return modules.RenterContract{}, nil, fmt.Errorf("failed to prepare txnSet with finalRev and new contract: %s", err)
-	}
+	siamuxAddr := net.JoinHostPort(hostName, host.SiaMuxPort)
 
 	// Increase Successful/Failed interactions accordingly.
 	defer func() {
@@ -93,29 +57,83 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 		}
 	}()
 
-	// Sign the final revision.
-	finalRevRenterSig := types.TransactionSignature{
-		ParentID:       crypto.Hash(finalRev.ParentID),
-		PublicKeyIndex: 0,
-		CoveredFields: types.CoveredFields{
-			FileContracts:         []uint64{0},
-			FileContractRevisions: []uint64{0},
-		},
-	}
-	finalRevTxn, _ := txnBuilder.View()
-	finalRevTxn.TransactionSignatures = append(finalRevTxn.TransactionSignatures, finalRevRenterSig)
-	finalRevRenterSigRaw := crypto.SignHash(finalRevTxn.SigHash(0, pt.HostBlockHeight), renterSK)
-	finalRevTxn.TransactionSignatures[0].Signature = finalRevRenterSigRaw[:]
-
-	// Initiate protocol.
-	hostName, _, err := net.SplitHostPort(string(host.NetAddress))
-	if err != nil {
-		return modules.RenterContract{}, nil, fmt.Errorf("failed to get host name: %s", err)
-	}
-	siamuxAddr := net.JoinHostPort(hostName, host.SiaMuxPort)
-
-	var noOpRevTxn types.Transaction
+	var noOpRevTxn, finalRevTxn types.Transaction
+	var txnFee, basePrice, baseCollateral, renewCost types.Currency
+	var fc types.FileContract
 	err = WithTransportV3(ctx, siamuxAddr, host.PublicKey, func(t *rhpv3.Transport) (err error) {
+		// Fetch the latest revision.
+		rev, err := RPCLatestRevision(t, core.FileContractID(oldContract.ID()))
+		if err != nil {
+			return fmt.Errorf("unable to get latest revision: %s", err)
+		}
+		oldRev := convertRevision(rev)
+
+		// Fetch the price table.
+		rhp3pt, err := RPCPriceTable(t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) { return nil, nil })
+		if err != nil {
+			return fmt.Errorf("unable to get price table: %s", err)
+		}
+		pt := modules.ConvertPriceTable(rhp3pt)
+
+		// RHP3 contains both the contract and final revision. So we double the
+		// estimation.
+		txnFee = pt.TxnFeeMaxRecommended.Mul64(2 * smodules.EstimatedFileContractTransactionSetSize)
+
+		// Calculate the base cost. This includes the RPC cost.
+		basePrice, baseCollateral = smodules.RenewBaseCosts(oldRev, &pt, endHeight)
+
+		// Create the final revision of the old contract.
+		renewCost = types.ZeroCurrency
+		finalRev, err := oldRev.PaymentRevision(renewCost)
+		if err != nil {
+			return fmt.Errorf("unable to create final revision: %s", err)
+		}
+
+		// Clear the revision.
+		finalRev.NewFileSize = 0
+		finalRev.NewFileMerkleRoot = crypto.Hash{}
+		finalRev.NewRevisionNumber = math.MaxUint64
+
+		// The valid proof outputs become the missed ones since the host won't need
+		// to provide a storage proof.
+		finalRev.NewMissedProofOutputs = finalRev.NewValidProofOutputs
+
+		// Create the new file contract.
+		uc := createFileContractUnlockConds(host.PublicKey, renterPK)
+		uh := uc.UnlockHash()
+		fc, err = createRenewedContract(oldRev, uh, params, txnFee, basePrice, baseCollateral, tpool)
+		if err != nil {
+			return fmt.Errorf("unable to create new contract: %s", err)
+		}
+
+		// Add both the new final revision and the new contract to the same
+		// transaction.
+		txnBuilder.AddFileContractRevision(finalRev)
+		txnBuilder.AddFileContract(fc)
+
+		// Add the fee to the transaction.
+		txnBuilder.AddMinerFee(txnFee)
+
+		// Create transaction set.
+		txnSet, err := prepareTransactionSet(txnBuilder)
+		if err != nil {
+			return fmt.Errorf("failed to prepare txnSet with finalRev and new contract: %s", err)
+		}
+
+		// Sign the final revision.
+		finalRevRenterSig := types.TransactionSignature{
+			ParentID:       crypto.Hash(finalRev.ParentID),
+			PublicKeyIndex: 0,
+			CoveredFields: types.CoveredFields{
+				FileContracts:         []uint64{0},
+				FileContractRevisions: []uint64{0},
+			},
+		}
+		finalRevTxn, _ = txnBuilder.View()
+		finalRevTxn.TransactionSignatures = append(finalRevTxn.TransactionSignatures, finalRevRenterSig)
+		finalRevRenterSigRaw := crypto.SignHash(finalRevTxn.SigHash(0, pt.HostBlockHeight), renterSK)
+		finalRevTxn.TransactionSignatures[0].Signature = finalRevRenterSigRaw[:]
+
 		noOpRevTxn, err = RPCRenewContract(t, txnBuilder, txnSet, renterSK, host.PublicKey, finalRevTxn, startHeight)
 		return err
 	})
@@ -124,7 +142,7 @@ func (cs *ContractSet) Renew(oldFC *FileContract, params modules.ContractParams,
 	}
 
 	// Construct the final transaction.
-	txnSet, err = prepareTransactionSet(txnBuilder)
+	txnSet, err := prepareTransactionSet(txnBuilder)
 	if err != nil {
 		return modules.RenterContract{}, nil, fmt.Errorf("failed to prepare txnSet with finalRev and new contract: %s", err)
 	}
