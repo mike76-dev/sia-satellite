@@ -785,12 +785,10 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 
 	// Mark the contract as being renewed, and defer logic to unmark it
 	// once renewing is complete.
-	c.log.Println("Marking a contract for renew:", id)
 	c.mu.Lock()
 	c.renewing[id] = true
 	c.mu.Unlock()
 	defer func() {
-		c.log.Println("Unmarking the contract for renew", id)
 		c.mu.Lock()
 		delete(c.renewing, id)
 		c.mu.Unlock()
@@ -801,9 +799,7 @@ func (c *Contractor) managedRenewContract(renewInstructions fileContractRenewal,
 	// before. Once it has failed for a certain number of blocks in a
 	// row and reached its second half of the renew window, we give up
 	// on renewing it and set goodForRenew to false.
-	c.log.Println("calling managedRenew on contract", id)
 	newContract, errRenew := c.managedRenew(id, renterPubKey, secretKey, hostPubKey, amount, blockHeight, endHeight)
-	c.log.Println("managedRenew has returned with error:", errRenew)
 	oldContract, exists := c.staticContracts.Acquire(id)
 	if !exists {
 		return types.ZeroCurrency, newContract, errors.AddContext(errContractNotFound, "failed to acquire oldContract after renewal")
