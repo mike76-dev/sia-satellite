@@ -574,10 +574,10 @@
 					<section id="reveal" class="disabled">
 						<h2>Show Renter Seed:</h2>
 						<div class="content">
-							<label for="reveal-key">Satellite  public key</label>
+							<label for="reveal-key">Satellite Public Key</label>
 							<input id="reveal-key" type="text" class="input" readonly>
 							<button id="copy-button" onclick="copyPK()">Copy</button>
-							<label for="reveal-text">Your seed</label>
+							<label for="reveal-text">Your Seed</label>
 							<input id="reveal-text" type="text" class="input" readonly>
 							<button id="reveal-button" onclick="revealSeed()">Show</button>
 						</div>
@@ -622,7 +622,20 @@
 							</div>
 						</section>
 						<section>
-							<h2>Delete Account</h2>
+							<h2>Opt-In Settings:*</h2>
+							<div class="content">
+								<div class="content-item">
+									<p class="content-label">Auto Renew Contracts</p>
+									<label class="checkbox">
+										<input id="settings-autorenew" type="checkbox" disabled>
+										<span class="checkmark"></span>
+									</label>
+								</div>
+								<p>*Can be adjusted in the renting software.</p>
+							</div>
+						</section>
+						<section>
+							<h2>Delete Account:</h2>
 							<div class="content">
 								<p>Warning! Deleting an account cannot be undone.</p>
 								<button onclick="deleteClick()">Delete Account</button>

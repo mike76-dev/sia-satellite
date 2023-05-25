@@ -109,6 +109,9 @@ function setActiveMenuIndex(ind) {
 	if (ind == 4) {
 		getPayments();
 	}
+	if (ind == 5) {
+		getSettings();
+	}
 }
 
 function showMenu(e) {
@@ -994,6 +997,26 @@ function getSpendings() {
 				pos.innerHTML = data.prevoverhead.toFixed(2) + ' SC';
 				pf.innerHTML = data.prevformed;
 				pr.innerHTML = data.prevrenewed;
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function getSettings() {
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/settings', options)
+		.then(response => response.json())
+		.then(data => {
+			if (data.code) {
+				console.log(data);
+			} else {
+				let ar = document.getElementById('settings-autorenew');
+				ar.checked = data.autorenew;
 			}
 		})
 		.catch(error => console.log(error));

@@ -612,3 +612,25 @@ func (api *portalAPI) spendingsHandlerGET(w http.ResponseWriter, req *http.Reque
 
 	writeJSON(w, us)
 }
+
+// settingsHandlerGET handles the GET /dashboard/settings requests.
+func (api *portalAPI) settingsHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Get the renter.
+	var renter modules.Renter
+	renters := api.portal.satellite.Renters()
+	for _, r := range renters {
+		if r.Email == email {
+			renter = r
+			break
+		}
+	}
+
+	writeJSON(w, renter.Settings)
+}
