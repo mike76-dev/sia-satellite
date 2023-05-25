@@ -966,6 +966,10 @@ function getSpendings() {
 				let pus = document.getElementById('spendings-prev-used-secondary');
 				let pop = document.getElementById('spendings-prev-overhead-primary');
 				let pos = document.getElementById('spendings-prev-overhead-secondary');
+				let cf = document.getElementById('spendings-current-formed');
+				let cr = document.getElementById('spendings-current-renewed');
+				let pf = document.getElementById('spendings-prev-formed');
+				let pr = document.getElementById('spendings-prev-renewed');
 				c.innerHTML = month[cm] + ' ' + cy;
 				p.innerHTML = month[pm] + ' ' + py;
 				clp.innerHTML = (data.currentlocked * data.scrate).toFixed(2) +
@@ -977,6 +981,8 @@ function getSpendings() {
 				cop.innerHTML = (data.currentoverhead * data.scrate).toFixed(2) +
 					' ' + averages.currency;
 				cos.innerHTML = data.currentoverhead.toFixed(2) + ' SC';
+				cf.innerHTML = data.currentformed;
+				cr.innerHTML = data.currentrenewed;
 				plp.innerHTML = (data.prevlocked * data.scrate).toFixed(2) +
 					' ' + averages.currency;
 				pls.innerHTML = data.prevlocked.toFixed(2) + ' SC';
@@ -986,6 +992,8 @@ function getSpendings() {
 				pop.innerHTML = (data.prevoverhead * data.scrate).toFixed(2) +
 					' ' + averages.currency;
 				pos.innerHTML = data.prevoverhead.toFixed(2) + ' SC';
+				pf.innerHTML = data.prevformed;
+				pr.innerHTML = data.prevrenewed;
 			}
 		})
 		.catch(error => console.log(error));

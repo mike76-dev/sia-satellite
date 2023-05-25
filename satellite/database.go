@@ -175,12 +175,15 @@ func (s *Satellite) UnlockSiacoins(email string, amount, total float64, height t
 func (s *Satellite) getSpendings(email string) (*modules.UserSpendings, error) {
 	var currLocked, currUsed, currOverhead float64
 	var prevLocked, prevUsed, prevOverhead float64
+	var currFormed, currRenewed, prevFormed, prevRenewed uint64
 
 	err := s.db.QueryRow(`
 		SELECT current_locked, current_used, current_overhead,
-		prev_locked, prev_used, prev_overhead
+			prev_locked, prev_used, prev_overhead,
+			current_formed, current_renewed,
+			prev_formed, prev_renewed
 		FROM spendings
-		WHERE email = ?`, email).Scan(&currLocked, &currUsed, &currOverhead, &prevLocked, &prevUsed, &prevOverhead)
+		WHERE email = ?`, email).Scan(&currLocked, &currUsed, &currOverhead, &prevLocked, &prevUsed, &prevOverhead, &currFormed, &currRenewed, &prevFormed, &prevRenewed)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -193,6 +196,10 @@ func (s *Satellite) getSpendings(email string) (*modules.UserSpendings, error) {
 		PrevLocked:      prevLocked,
 		PrevUsed:        prevUsed,
 		PrevOverhead:    prevOverhead,
+		CurrentFormed:   currFormed,
+		CurrentRenewed:  currRenewed,
+		PrevFormed:      prevFormed,
+		PrevRenewed:     prevRenewed,
 	}
 
 	return us, nil
@@ -215,16 +222,20 @@ func (s *Satellite) updateSpendings(email string, us modules.UserSpendings) erro
 		_, err = s.db.Exec(`
 			UPDATE spendings
 			SET current_locked = ?, current_used = ?, current_overhead = ?,
-			prev_locked = ?, prev_used = ?, prev_overhead = ?
+				prev_locked = ?, prev_used = ?, prev_overhead = ?,
+				current_formed = ?, current_renewed = ?,
+				prev_formed = ?, prev_renewed = ?
 			WHERE email = ?
-		`, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead, email)
+		`, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead, us.CurrentFormed, us.CurrentRenewed, us.PrevFormed, us.PrevRenewed, email)
 	} else {
 		_, err = s.db.Exec(`
 			INSERT INTO spendings
-			 (email, current_locked, current_used, current_overhead,
-			 prev_locked, prev_used, prev_overhead)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, email, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead)
+				 (email, current_locked, current_used, current_overhead,
+				 prev_locked, prev_used, prev_overhead,
+				 current_formed, current_renewed,
+				 prev_formed, prev_renewed)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, email, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead, us.CurrentFormed, us.CurrentRenewed, us.PrevFormed, us.PrevRenewed)
 	}
 
 	return err
@@ -249,4 +260,22 @@ func (s *Satellite) RetrieveSpendings(email string, currency string) (*modules.U
 	us.SCRate = scRate
 
 	return us, nil
+}
+
+// IncrementStats increments the number of formed or renewed contracts.
+func (s *Satellite) IncrementStats(email string, renewed bool) (err error) {
+	if renewed {
+		_, err = s.db.Exec(`
+			UPDATE spendings
+			SET current_renewed = current_renewed + 1
+			WHERE email = ?
+		`, email)
+	} else {
+		_, err = s.db.Exec(`
+			UPDATE spendings
+			SET current_formed = current_formed + 1
+			WHERE email = ?
+		`, email)
+	}
+	return
 }

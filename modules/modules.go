@@ -41,6 +41,10 @@ type UserSpendings struct {
 	PrevUsed        float64 `json:"prevused"`
 	PrevOverhead    float64 `json:"prevoverhead"`
 	SCRate          float64 `json:"scrate"`
+	CurrentFormed   uint64  `json:"currentformed"`
+	CurrentRenewed  uint64  `json:"currentrenewed"`
+	PrevFormed      uint64  `json:"prevformed"`
+	PrevRenewed     uint64  `json:"prevrenewed"`
 }
 
 // CreditData contains the information about any running promotion.
@@ -269,6 +273,9 @@ type FundLocker interface {
 
 	// GetBalance retrieves the balance information on the account.
 	GetBalance(string) (*UserBalance, error)
+
+	// IncrementStats increments the number of formed or renewed contracts.
+	IncrementStats(string, bool) error
 }
 
 // ContractFormer is the minimal interface to be used by Provider.

@@ -460,6 +460,10 @@ func (s *Satellite) ProcessConsensusChange(cc smodules.ConsensusChange) {
 					us.CurrentLocked = 0
 					us.CurrentUsed = 0
 					us.CurrentOverhead = 0
+					us.PrevFormed = us.CurrentFormed
+					us.PrevRenewed = us.CurrentRenewed
+					us.CurrentFormed = 0
+					us.CurrentRenewed = 0
 					err = s.updateSpendings(renter.Email, *us)
 					if err != nil {
 						s.log.Println("ERROR: couldn't update spendings")

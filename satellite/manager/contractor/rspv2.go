@@ -77,6 +77,12 @@ func (c *Contractor) FormContract(s *modules.RPCSession, pk, rpk, hpk types.SiaP
 		c.log.Println("ERROR: couldn't lock funds:", err)
 	}
 
+	// Increment the number of formations in the database.
+	err = c.satellite.IncrementStats(renter.Email, false)
+	if err != nil {
+		c.log.Println("ERROR: couldn't update stats")
+	}
+
 	// Add this contract to the contractor and save.
 	err = c.managedAcquireAndUpdateContractUtility(newContract.ID, smodules.ContractUtility{
 		GoodForUpload: true,
@@ -216,6 +222,12 @@ func (c *Contractor) RenewContract(s *modules.RPCSession, pk types.SiaPublicKey,
 	err = c.satellite.LockSiacoins(renter.Email, amount)
 	if err != nil {
 		c.log.Println("ERROR: couldn't lock funds")
+	}
+
+	// Increment the number of renewals in the database.
+	err = c.satellite.IncrementStats(renter.Email, true)
+	if err != nil {
+		c.log.Println("ERROR: couldn't update stats")
 	}
 
 	// Add this contract to the contractor and save.

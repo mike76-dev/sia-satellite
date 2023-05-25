@@ -45,6 +45,10 @@ CREATE TABLE spendings (
 	prev_locked      DOUBLE NOT NULL,
 	prev_used        DOUBLE NOT NULL,
 	prev_overhead    DOUBLE NOT NULL,
+	current_formed   BIGINT UNSIGNED NOT NULL,
+	current_renewed  BIGINT UNSIGNED NOT NULL,
+	prev_formed      BIGINT UNSIGNED NOT NULL,
+	prev_renewed     BIGINT UNSIGNED NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );
