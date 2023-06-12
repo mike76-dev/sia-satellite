@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/spf13/cobra"
 
 	"go.sia.tech/siad/build"
-	"go.sia.tech/siad/modules"
 )
 
 var (

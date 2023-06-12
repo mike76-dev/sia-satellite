@@ -5,37 +5,38 @@ import (
 	"fmt"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
+	"go.sia.tech/core/types"
 	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	siad "go.sia.tech/siad/types"
 )
 
 // Dependencies.
 type (
 	transactionBuilder interface {
 		AddArbitraryData(arb []byte) uint64
-		AddFileContract(types.FileContract) uint64
-		AddFileContractRevision(types.FileContractRevision) uint64
-		AddMinerFee(types.Currency) uint64
-		AddParents([]types.Transaction)
-		AddSiacoinInput(types.SiacoinInput) uint64
-		AddSiacoinOutput(types.SiacoinOutput) uint64
-		AddTransactionSignature(types.TransactionSignature) uint64
+		AddFileContract(siad.FileContract) uint64
+		AddFileContractRevision(siad.FileContractRevision) uint64
+		AddMinerFee(siad.Currency) uint64
+		AddParents([]siad.Transaction)
+		AddSiacoinInput(siad.SiacoinInput) uint64
+		AddSiacoinOutput(siad.SiacoinOutput) uint64
+		AddTransactionSignature(siad.TransactionSignature) uint64
 		Copy() modules.TransactionBuilder
-		FundSiacoins(types.Currency) error
-		Sign(bool) ([]types.Transaction, error)
-		UnconfirmedParents() ([]types.Transaction, error)
-		View() (types.Transaction, []types.Transaction)
+		FundSiacoins(siad.Currency) error
+		Sign(bool) ([]siad.Transaction, error)
+		UnconfirmedParents() ([]siad.Transaction, error)
+		View() (siad.Transaction, []siad.Transaction)
 		ViewAdded() (parents, coins, funds, signatures []int)
 	}
 
 	transactionPool interface {
-		AcceptTransactionSet([]types.Transaction) error
-		FeeEstimation() (min types.Currency, max types.Currency)
+		AcceptTransactionSet([]siad.Transaction) error
+		FeeEstimation() (min siad.Currency, siad types.Currency)
 	}
 
 	hostDB interface {
-		IncrementSuccessfulInteractions(key types.SiaPublicKey) error
-		IncrementFailedInteractions(key types.SiaPublicKey) error
+		IncrementSuccessfulInteractions(key types.PublicKey) error
+		IncrementFailedInteractions(key types.PublicKey) error
 	}
 )
 
@@ -57,15 +58,14 @@ func IsRevisionMismatch(err error) bool {
 }
 
 // HostSettings uses the Settings RPC to retrieve the host's settings.
-func HostSettings(address string, hpk types.SiaPublicKey) (modules.HostExternalSettings, error) {
+func HostSettings(address string, hpk types.PublicKey) (settings rhpv2.HostSettings, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), settingsHostTimeout)
 	defer cancel()
 
-	var hes modules.HostExternalSettings
-	err := WithTransportV2(ctx, address, hpk, func(t *rhpv2.Transport) (err error) {
-		hes, err = RPCSettings(ctx, t)
+	err = WithTransportV2(ctx, address, hpk, func(t *rhpv2.Transport) (err error) {
+		settings, err = RPCSettings(ctx, t)
 		return
 	})
 
-	return hes, err
+	return
 }

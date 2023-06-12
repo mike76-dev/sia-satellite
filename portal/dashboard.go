@@ -9,10 +9,9 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	"gitlab.com/NebulousLabs/fastrand"
+	"go.sia.tech/core/types"
 
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"lukechampine.com/frand"
 )
 
 type (
@@ -136,26 +135,26 @@ func (api *portalAPI) averagesHandlerGET(w http.ResponseWriter, req *http.Reques
 // readable format. rate is the exchange rate between SC and the
 // currency to display the values in.
 func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAverages {
-	sp, _  := ha.StoragePrice.Mul(smodules.BlockBytesPerMonthTerabyte).Float64()
-	c, _   := ha.Collateral.Mul(smodules.BlockBytesPerMonthTerabyte).Float64()
-	dbp, _ := ha.DownloadBandwidthPrice.Mul(smodules.BytesPerTerabyte).Float64()
-	ubp, _ := ha.UploadBandwidthPrice.Mul(smodules.BytesPerTerabyte).Float64()
-	cp, _  := ha.ContractPrice.Float64()
-	brp, _ := ha.BaseRPCPrice.Float64()
-	sap, _ := ha.SectorAccessPrice.Float64()
+	sp  := modules.Float64(ha.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte))
+	c   := modules.Float64(ha.Collateral.Mul(modules.BlockBytesPerMonthTerabyte))
+	dbp := modules.Float64(ha.DownloadBandwidthPrice.Mul64(modules.BytesPerTerabyte))
+	ubp := modules.Float64(ha.UploadBandwidthPrice.Mul64(modules.BytesPerTerabyte))
+	cp  := modules.Float64(ha.ContractPrice)
+	brp := modules.Float64(ha.BaseRPCPrice)
+	sap := modules.Float64(ha.SectorAccessPrice)
 
-	precision, _ := types.SiacoinPrecision.Float64()
+	hastings := modules.Float64(types.HastingsPerSiacoin)
 
 	sha := sensibleHostAverages{
 		NumHosts:               ha.NumHosts,
-		Duration:               uint64(ha.Duration),
-		StoragePrice:           sp / precision,
-		Collateral:             c / precision,
-		DownloadBandwidthPrice: dbp / precision,
-		UploadBandwidthPrice:   ubp / precision,
-		ContractPrice:          cp / precision,
-		BaseRPCPrice:           brp / precision,
-		SectorAccessPrice:      sap / precision,
+		Duration:               ha.Duration,
+		StoragePrice:           sp / hastings,
+		Collateral:             c / hastings,
+		DownloadBandwidthPrice: dbp / hastings,
+		UploadBandwidthPrice:   ubp / hastings,
+		ContractPrice:          cp / hastings,
+		BaseRPCPrice:           brp / hastings,
+		SectorAccessPrice:      sap / hastings,
 		SCRate:                 rate,
 	}
 
@@ -208,9 +207,9 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Create an allowance.
 	a := modules.DefaultAllowance
-	a.Funds = types.SiacoinPrecision.MulFloat(data.Estimation / scRate)
+	a.Funds = modules.FromFloat(data.Estimation / scRate)
 	a.Hosts = data.Hosts
-	a.Period = types.BlockHeight(data.Duration * float64(types.BlocksPerWeek))
+	a.Period = uint64(data.Duration * float64(modules.BlocksPerWeek))
 	a.ExpectedStorage = uint64(data.Storage * (1 << 30))
 	a.ExpectedUpload = uint64(data.Upload * (1 << 30))
 	a.ExpectedDownload = uint64(data.Download * (1 << 30))
@@ -218,10 +217,10 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	a.TotalShards = uint64(10 * data.Redundancy)
 	a.MaxRPCPrice = modules.MaxRPCPrice
 	a.MaxSectorAccessPrice = modules.MaxSectorAccessPrice
-	a.MaxContractPrice = types.SiacoinPrecision.MulFloat(data.MaxContractPrice / scRate)
-	a.MaxStoragePrice = types.SiacoinPrecision.MulFloat(data.MaxStoragePrice / scRate)
-	a.MaxUploadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxUploadPrice / scRate)
-	a.MaxDownloadBandwidthPrice = types.SiacoinPrecision.MulFloat(data.MaxDownloadPrice / scRate)
+	a.MaxContractPrice = modules.FromFloat(data.MaxContractPrice / scRate)
+	a.MaxStoragePrice = modules.FromFloat(data.MaxStoragePrice / scRate)
+	a.MaxUploadBandwidthPrice = modules.FromFloat(data.MaxUploadPrice / scRate)
+	a.MaxDownloadBandwidthPrice = modules.FromFloat(data.MaxDownloadPrice / scRate)
 
 	// Pick random hosts.
 	hosts, err := api.portal.satellite.RandomHosts(a.Hosts, a)
@@ -282,7 +281,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	// Add the cost of paying the transaction fees and then double the contract
 	// costs to account for renewing a full set of contracts.
 	_, feePerByte := api.portal.satellite.FeeEstimation()
-	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(uint64(a.Hosts))
+	txnsFees := feePerByte.Mul64(modules.EstimatedFileContractTransactionSetSize).Mul64(uint64(a.Hosts))
 	totalContractCost = totalContractCost.Add(txnsFees)
 	totalContractCost = totalContractCost.Mul64(2)
 
@@ -295,17 +294,17 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	taxableAmount = taxableAmount.Add(totalStorageCost)
 	taxableAmount = taxableAmount.Add(totalUploadCost)
 	taxableAmount = taxableAmount.Add(totalCollateral)
-	siafundFee := taxableAmount.MulTax().RoundDown(types.SiafundCount)
+	siafundFee := modules.Tax(taxableAmount)
 	totalPayout := taxableAmount.Add(siafundFee)
 
 	// Increase estimates by a factor of safety to account for host churn and
 	// any potential missed additions.
-	totalPayout = totalPayout.MulFloat(1.2)
+	totalPayout = totalPayout.Mul64(12).Div64(10)
 
 	// Apply exchange rate and round up to the whole number.
-	precision, _ := types.SiacoinPrecision.Float64()
-	estimation, _ := totalPayout.MulFloat(scRate).Float64()
-	toPay := math.Ceil(estimation / precision)
+	hastings := modules.Float64(types.HastingsPerSiacoin)
+	estimation := modules.Float64(totalPayout)
+	toPay := math.Ceil(estimation / hastings * scRate)
 
 	// Send the response.
 	resp := hostsResponse{
@@ -384,9 +383,9 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 		return
 	}
 	renterSeed := modules.DeriveRenterSeed(walletSeed, email)
-	defer fastrand.Read(renterSeed[:])
+	defer frand.Read(renterSeed)
 	
-	w.Header().Set("Renter-Seed", hex.EncodeToString(renterSeed[:]))
+	w.Header().Set("Renter-Seed", hex.EncodeToString(renterSeed))
 	writeSuccess(w)
 }
 
@@ -447,7 +446,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 		for _, c := range contracts {
 			// Fetch host address.
 			cp := types.ZeroCurrency
-			var netAddress smodules.NetAddress
+			var netAddress string
 			hdbe, exists, _ := api.portal.satellite.Host(c.HostPublicKey)
 			if exists {
 				netAddress = hdbe.NetAddress
@@ -458,27 +457,27 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			maintenanceSpending := c.MaintenanceSpending.AccountBalanceCost
 			maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.FundAccountCost)
 			maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.UpdatePriceTableCost)
-			remainingCollateral := c.Transaction.FileContractRevisions[0].NewMissedProofOutputs[1].Value
+			remainingCollateral := c.Transaction.FileContractRevisions[0].MissedProofOutputs[1].Value
 			contract := renterContract{
 				BadContract:         c.Utility.BadContract,
-				DownloadSpending:    modules.CurrencyUnits(c.DownloadSpending),
-				EndHeight:           uint64(c.EndHeight),
-				Fees:                modules.CurrencyUnits(c.TxnFee.Add(c.SiafundFee).Add(c.ContractFee)),
-				FundAccountSpending: modules.CurrencyUnits(c.FundAccountSpending),
+				DownloadSpending:    c.DownloadSpending.String(),
+				EndHeight:           c.EndHeight,
+				Fees:                c.TxnFee.Add(c.SiafundFee).Add(c.ContractFee).String(),
+				FundAccountSpending: c.FundAccountSpending.String(),
 				GoodForUpload:       c.Utility.GoodForUpload,
 				GoodForRenew:        c.Utility.GoodForRenew,
 				HostPublicKey:       c.HostPublicKey.String(),
 				HostVersion:         hdbe.Version,
 				ID:                  c.ID.String(),
-				NetAddress:          string(netAddress),
-				MaintenanceSpending: modules.CurrencyUnits(maintenanceSpending),
-				RenterFunds:         modules.CurrencyUnits(c.RenterFunds),
-				RemainingCollateral: modules.CurrencyUnits(remainingCollateral.Sub(cp)),
-				Size:                smodules.FilesizeUnits(c.Size()),
-				StartHeight:         uint64(c.StartHeight),
-				StorageSpending:     modules.CurrencyUnits(c.StorageSpending),
-				TotalCost:           modules.CurrencyUnits(c.TotalCost),
-				UploadSpending:      modules.CurrencyUnits(c.UploadSpending),
+				NetAddress:          netAddress,
+				MaintenanceSpending: maintenanceSpending.String(),
+				RenterFunds:         c.RenterFunds.String(),
+				RemainingCollateral: remainingCollateral.Sub(cp).String(),
+				Size:                modules.FilesizeUnits(c.Size()),
+				StartHeight:         c.StartHeight,
+				StorageSpending:     c.StorageSpending.String(),
+				TotalCost:           c.TotalCost.String(),
+				UploadSpending:      c.UploadSpending.String(),
 			}
 
 			// Determine contract status.
@@ -513,12 +512,12 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 		for _, c := range contracts {
 			var size uint64
 			if len(c.Transaction.FileContractRevisions) != 0 {
-				size = c.Transaction.FileContractRevisions[0].NewFileSize
+				size = c.Transaction.FileContractRevisions[0].Filesize
 			}
 
 			// Fetch host address.
 			cp := types.ZeroCurrency
-			var netAddress smodules.NetAddress
+			var netAddress string
 			hdbe, exists, _ := api.portal.satellite.Host(c.HostPublicKey)
 			if exists {
 				netAddress = hdbe.NetAddress
@@ -529,27 +528,27 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			maintenanceSpending := c.MaintenanceSpending.AccountBalanceCost
 			maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.FundAccountCost)
 			maintenanceSpending = maintenanceSpending.Add(c.MaintenanceSpending.UpdatePriceTableCost)
-			remainingCollateral := c.Transaction.FileContractRevisions[0].NewMissedProofOutputs[1].Value
+			remainingCollateral := c.Transaction.FileContractRevisions[0].MissedProofOutputs[1].Value
 			contract := renterContract{
 				BadContract:         c.Utility.BadContract,
-				DownloadSpending:    modules.CurrencyUnits(c.DownloadSpending),
-				EndHeight:           uint64(c.EndHeight),
-				Fees:                modules.CurrencyUnits(c.TxnFee.Add(c.SiafundFee).Add(c.ContractFee)),
-				FundAccountSpending: modules.CurrencyUnits(c.FundAccountSpending),
+				DownloadSpending:    c.DownloadSpending.String(),
+				EndHeight:           c.EndHeight,
+				Fees:                c.TxnFee.Add(c.SiafundFee).Add(c.ContractFee).String(),
+				FundAccountSpending: c.FundAccountSpending.String(),
 				GoodForUpload:       c.Utility.GoodForUpload,
 				GoodForRenew:        c.Utility.GoodForRenew,
 				HostPublicKey:       c.HostPublicKey.String(),
 				HostVersion:         hdbe.Version,
 				ID:                  c.ID.String(),
-				NetAddress:          string(netAddress),
-				MaintenanceSpending: modules.CurrencyUnits(maintenanceSpending),
-				RenterFunds:         modules.CurrencyUnits(c.RenterFunds),
-				RemainingCollateral: modules.CurrencyUnits(remainingCollateral.Sub(cp)),
-				Size:                smodules.FilesizeUnits(size),
-				StartHeight:         uint64(c.StartHeight),
-				StorageSpending:     modules.CurrencyUnits(c.StorageSpending),
-				TotalCost:           modules.CurrencyUnits(c.TotalCost),
-				UploadSpending:      modules.CurrencyUnits(c.UploadSpending),
+				NetAddress:          netAddress,
+				MaintenanceSpending: maintenanceSpending.String(),
+				RenterFunds:         c.RenterFunds.String(),
+				RemainingCollateral: remainingCollateral.Sub(cp).String(),
+				Size:                modules.FilesizeUnits(size),
+				StartHeight:         c.StartHeight,
+				StorageSpending:     c.StorageSpending.String(),
+				TotalCost:           c.TotalCost.String(),
+				UploadSpending:      c.UploadSpending.String(),
 			}
 
 			// Determine contract status.

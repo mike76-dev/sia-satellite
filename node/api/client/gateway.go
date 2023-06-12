@@ -2,14 +2,10 @@ package client
 
 import (
 	"encoding/json"
-	"net/url"
-	"strconv"
+	"errors"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
-
-	"gitlab.com/NebulousLabs/errors"
-
-	"go.sia.tech/siad/modules"
 )
 
 var (
@@ -19,17 +15,11 @@ var (
 	ErrPeerExists = errors.New("already connected to this peer")
 )
 
-// GatewayBandwidthGet requests the /gateway/bandwidth api resource.
-func (c *Client) GatewayBandwidthGet() (gbg api.GatewayBandwidthGET, err error) {
-	err = c.get("/gateway/bandwidth", &gbg)
-	return
-}
-
 // GatewayConnectPost uses the /gateway/connect/:address endpoint to connect to
 // the gateway at address.
 func (c *Client) GatewayConnectPost(address modules.NetAddress) (err error) {
 	err = c.post("/gateway/connect/" + string(address), "", nil)
-	if err != nil && errors.Contains(err, ErrPeerExists) {
+	if err != nil && modules.ContainsError(err, ErrPeerExists) {
 		err = ErrPeerExists
 	}
 	return
@@ -45,17 +35,6 @@ func (c *Client) GatewayDisconnectPost(address modules.NetAddress) (err error) {
 // GatewayGet requests the /gateway api resource.
 func (c *Client) GatewayGet() (gwg api.GatewayGET, err error) {
 	err = c.get("/gateway", &gwg)
-	return
-}
-
-// GatewayRateLimitPost uses the /gateway endpoint to change the gateway's
-// bandwidth rate limit. downloadSpeed and uploadSpeed are interpreted as
-// bytes/second.
-func (c *Client) GatewayRateLimitPost(downloadSpeed, uploadSpeed int64) (err error) {
-	values := url.Values{}
-	values.Set("maxdownloadspeed", strconv.FormatInt(downloadSpeed, 10))
-	values.Set("maxuploadspeed", strconv.FormatInt(uploadSpeed, 10))
-	err = c.post("/gateway", values.Encode(), nil)
 	return
 }
 

@@ -6,8 +6,8 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
+	"go.sia.tech/core/types"
 	"go.sia.tech/siad/persist"
-	"go.sia.tech/siad/types"
 )
 
 // A ContractSet provides access to a set of contracts. Its purpose is to
@@ -80,7 +80,7 @@ func (cs *ContractSet) ReplaceOldContract(fcid types.FileContractID, c *FileCont
 
 // IDs returns the fcid of each contract with in the set. The contracts are not
 // locked.
-func (cs *ContractSet) IDs(rpk types.SiaPublicKey) []types.FileContractID {
+func (cs *ContractSet) IDs(rpk types.PublicKey) []types.FileContractID {
 	return cs.managedFindIDs(rpk)
 }
 
@@ -131,7 +131,7 @@ func (cs *ContractSet) ViewAll() []modules.RenterContract {
 }
 
 // ByRenter works the same as ViewAll but filters the contracts by the renter.
-func (cs *ContractSet) ByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+func (cs *ContractSet) ByRenter(rpk types.PublicKey) []modules.RenterContract {
 	ids := cs.managedFindIDs(rpk)
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -157,7 +157,7 @@ func (cs *ContractSet) OldContracts() []modules.RenterContract {
 }
 
 // OldByRenter works the same as OldContracts but filters the contracts by the renter.
-func (cs *ContractSet) OldByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+func (cs *ContractSet) OldByRenter(rpk types.PublicKey) []modules.RenterContract {
 	ids := cs.managedFindIDs(rpk)
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -196,7 +196,7 @@ func (cs *ContractSet) RetireContract(id types.FileContractID) {
 
 // NewContractSet returns a ContractSet storing its contracts in the specified
 // database.
-func NewContractSet(db *sql.DB, log *persist.Logger, height types.BlockHeight) (*ContractSet, error) {
+func NewContractSet(db *sql.DB, log *persist.Logger, height uint64) (*ContractSet, error) {
 	cs := &ContractSet{
 		contracts:    make(map[types.FileContractID]*FileContract),
 		oldContracts: make(map[types.FileContractID]*FileContract),

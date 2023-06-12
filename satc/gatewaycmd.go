@@ -4,12 +4,9 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
-	"time"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/spf13/cobra"
-
-	"gitlab.com/NebulousLabs/errors"
-	"go.sia.tech/siad/modules"
 )
 
 var (
@@ -18,14 +15,6 @@ var (
 		Short: "Print the gateway address",
 		Long:  "Print the network address of the gateway.",
 		Run:   wrap(gatewayaddresscmd),
-	}
-
-	gatewayBandwidthCmd = &cobra.Command{
-		Use:   "bandwidth",
-		Short: "returns the total upload and download bandwidth usage for the gateway",
-		Long: `returns the total upload and download bandwidth usage for the gateway
-and the duration of the bandwidth tracking.`,
-		Run: wrap(gatewaybandwidthcmd),
 	}
 
 	gatewayCmd = &cobra.Command{
@@ -97,17 +86,6 @@ For example: satc gateway blocklist set 123.123.123.123 111.222.111.222 mysiahos
 		Long:  "View the current peer list.",
 		Run:   wrap(gatewaylistcmd),
 	}
-
-	gatewayRatelimitCmd = &cobra.Command{
-		Use:   "ratelimit [maxdownloadspeed] [maxuploadspeed]",
-		Short: "set maxdownloadspeed and maxuploadspeed",
-		Long: `Set the maxdownloadspeed and maxuploadspeed in 
-Bytes per second: B/s, KB/s, MB/s, GB/s, TB/s
-or
-Bits per second: Bps, Kbps, Mbps, Gbps, Tbps
-Set them to 0 for no limit.`,
-		Run: wrap(gatewayratelimitcmd),
-	}
 )
 
 // gatewayconnectcmd is the handler for the command `satc gateway add [address]`.
@@ -140,20 +118,6 @@ func gatewayaddresscmd() {
 	fmt.Println("Address:", info.NetAddress)
 }
 
-// gatewaybandwidthcmd is the handler for the command `satc gateway bandwidth`.
-// Returns the total upload and download bandwidth usage for the gateway.
-func gatewaybandwidthcmd() {
-	bandwidth, err := httpClient.GatewayBandwidthGet()
-	if err != nil {
-		die("Could not get bandwidth monitor", err)
-	}
-
-	fmt.Printf(`Download: %v 
-Upload:   %v 
-Duration: %v 
-`, modules.FilesizeUnits(bandwidth.Download), modules.FilesizeUnits(bandwidth.Upload), fmtDuration(time.Since(bandwidth.StartTime)))
-}
-
 // gatewaycmd is the handler for the command `satc gateway`.
 // Prints the gateway's network address and number of peers.
 func gatewaycmd() {
@@ -163,8 +127,6 @@ func gatewaycmd() {
 	}
 	fmt.Println("Address:", info.NetAddress)
 	fmt.Println("Active peers:", len(info.Peers))
-	fmt.Println("Max download speed:", info.MaxDownloadSpeed)
-	fmt.Println("Max upload speed:", info.MaxUploadSpeed)
 }
 
 // gatewayblocklistcmd is the handler for the command `satc gateway blocklist`
@@ -259,24 +221,4 @@ func gatewaylistcmd() {
 	if err := w.Flush(); err != nil {
 		die("failed to flush writer")
 	}
-}
-
-// gatewayratelimitcmd is the handler for the command `satc gateway ratelimit`.
-// Sets the maximum upload & download bandwidth the gateway module is permitted
-// to use.
-func gatewayratelimitcmd(downloadSpeedStr, uploadSpeedStr string) {
-	downloadSpeedInt, err := parseRatelimit(downloadSpeedStr)
-	if err != nil {
-		die(errors.AddContext(err, "unable to parse download speed"))
-	}
-	uploadSpeedInt, err := parseRatelimit(uploadSpeedStr)
-	if err != nil {
-		die(errors.AddContext(err, "unable to parse upload speed"))
-	}
-
-	err = httpClient.GatewayRateLimitPost(downloadSpeedInt, uploadSpeedInt)
-	if err != nil {
-		die("Could not set gateway ratelimit speed")
-	}
-	fmt.Println("Set gateway maxdownloadspeed to ", downloadSpeedInt, " and maxuploadspeed to ", uploadSpeedInt)
 }

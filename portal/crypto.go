@@ -14,19 +14,19 @@ import (
 
 var (
 	// verifyPrefix is used for generating a verification token.
-	verifyPrefix = authPrefix{'V', 'e', 'r', 'i', 'f', 'y', 0, 0}
+	verifyPrefix = authPrefix{"Verify"}
 
 	// resetPrefix is used for generating a password reset token.
-	resetPrefix = authPrefix{'P', 'W', 'R', 'e', 's', 'e', 't', 0}
+	resetPrefix = authPrefix{"PWReset"}
 
 	// changePrefix is used to authenticate a password change.
-	changePrefix = authPrefix{'P', 'W', 'C', 'h', 'a', 'n', 'g', 'e'}
+	changePrefix = authPrefix{"PWChange"}
 
 	// cookiePrefix is used for generating client-side cookies.
-	cookiePrefix = authPrefix{'C', 'o', 'o', 'k', 'i', 'e', 0, 0}
+	cookiePrefix = authPrefix{"Cookie"}
 
 	// threeFishTweak is the tweak for the ThreeFish block cipher.
-	threeFishTweak = []byte{'S', 'i', 'a', '-', 'S', 'a', 't', 'e', 'l', 'l', 'i', 't', 'e', 0, 0, 0}
+	threeFishTweak = [16]byte{"Sia-Satellite"}
 )
 
 type (
@@ -45,7 +45,7 @@ type (
 func (p *Portal) generateToken(prefix authPrefix, email string, expires time.Time) (string, error) {
 	// Generate a new Threefish cipher.
 	key := p.satellite.SecretKey()
-	cipher, err := threefish.NewCipher(key[:], threeFishTweak)
+	cipher, err := threefish.NewCipher(key[:], threeFishTweak[:])
 	if err != nil {
 		return "", err
 	}
@@ -81,7 +81,7 @@ func (p *Portal) decodeToken(token string) (authPrefix, string, time.Time, error
 
 	// Generate a new Threefish cipher.
 	key := p.satellite.SecretKey()
-	cipher, err := threefish.NewCipher(key[:], threeFishTweak)
+	cipher, err := threefish.NewCipher(key[:], threeFishTweak[:])
 	if err != nil {
 		return authPrefix{}, "", time.Unix(0, 0), errors.New("wrong key length")
 	}

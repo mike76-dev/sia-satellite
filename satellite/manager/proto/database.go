@@ -7,8 +7,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 type (
@@ -41,22 +40,22 @@ type (
 		PublicKey0         string
 		PublicKey1         string
 		SignaturesRequired uint64
-		NewRevisionNumber  uint64
-		NewFileSize        uint64
-		NewFileMerkleRoot  string
-		NewWindowStart     uint64
-		NewWindowEnd       uint64
+		RevisionNumber     uint64
+		Filesize           uint64
+		FileMerkleRoot     string
+		WindowStart        uint64
+		WindowEnd          uint64
 		ValidValue0        string
-		ValidUnlockHash0   string
+		ValidAddress0      string
 		ValidValue1        string
-		ValidUnlockHash1   string
+		ValidAddress1      string
 		MissedValue0       string
-		MissedUnlockHash0  string
+		MissedAddress0     string
 		MissedValue1       string
-		MissedUnlockHash1  string
+		MissedAddress1     string
 		MissedValue2       string
-		MissedUnlockHash2  string
-		NewUnlockHash      string
+		MissedAddress2     string
+		UnlockHash         string
 		ParentID0          string
 		PublicKeyIndex0    uint64
 		Timelock0          uint64
@@ -70,7 +69,7 @@ type (
 
 // saveContract saves the FileContract in the database. A lock must be acquired
 // on the contract.
-func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
+func (fc *FileContract) saveContract(rpk types.PublicKey) error {
 	// Prepare the necessary variables.
 	h := fc.header
 	rev := h.LastRevision()
@@ -111,7 +110,7 @@ func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
 				update_price_table_cost = ?, good_for_upload = ?, good_for_renew = ?,
 				bad_contract = ?, last_oos_err = ?, locked = ?
 			WHERE contract_id = ?
-		`, renterKey, h.StartHeight, h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, id)
+		`, renterKey, h.StartHeight, h.DownloadSpending.ExactString(), h.FundAccountSpending.ExactString(), h.StorageSpending.ExactString(), h.UploadSpending.ExactString(), h.TotalCost.ExactString(), h.ContractFee.ExactString(), h.TxnFee.ExactString(), h.SiafundFee.ExactString(), h.MaintenanceSpending.AccountBalanceCost.ExactString(), h.MaintenanceSpending.FundAccountCost.ExactString(), h.MaintenanceSpending.UpdatePriceTableCost.ExactString(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, id)
 		if err != nil {
 			return err
 		}
@@ -119,9 +118,9 @@ func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
 		// Update transaction. It may contain a variable number of missed proof
 		// outputs, so check that first.
 		var value, hash string
-		if len(rev.NewMissedProofOutputs) > 2 {
-			value = rev.NewMissedProofOutputs[2].Value.String()
-			hash = hex.EncodeToString(rev.NewMissedProofOutputs[2].UnlockHash[:])
+		if len(rev.MissedProofOutputs) > 2 {
+			value = rev.MissedProofOutputs[2].Value.ExactString()
+			hash = hex.EncodeToString(rev.NewMissedProofOutputs[2].Address[:])
 		}
 
 		_, err = fc.db.Exec(`
@@ -138,7 +137,7 @@ func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
 				signature_0 = ?, t_parent_id_1 = ?, pk_index_1 = ?, timelock_1 = ?,
 				signature_1 = ?
 			WHERE contract_id = ?
-		`, hex.EncodeToString(rev.ParentID[:]), rev.UnlockConditions.Timelock, rev.UnlockConditions.PublicKeys[0].String(), rev.UnlockConditions.PublicKeys[1].String(), rev.UnlockConditions.SignaturesRequired, rev.NewRevisionNumber, rev.NewFileSize, hex.EncodeToString(rev.NewFileMerkleRoot[:]), rev.NewWindowStart, rev.NewWindowEnd, rev.NewValidProofOutputs[0].Value.String(), hex.EncodeToString(rev.NewValidProofOutputs[0].UnlockHash[:]), rev.NewValidProofOutputs[1].Value.String(), hex.EncodeToString(rev.NewValidProofOutputs[1].UnlockHash[:]), rev.NewMissedProofOutputs[0].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[0].UnlockHash[:]), rev.NewMissedProofOutputs[1].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[1].UnlockHash[:]), value, hash, hex.EncodeToString(rev.NewUnlockHash[:]), hex.EncodeToString(ts0.ParentID[:]), ts0.PublicKeyIndex, ts0.Timelock, hex.EncodeToString(ts0.Signature), hex.EncodeToString(ts1.ParentID[:]), ts1.PublicKeyIndex, ts1.Timelock, hex.EncodeToString(ts1.Signature), id)
+		`, hex.EncodeToString(rev.ParentID[:]), rev.UnlockConditions.Timelock, rev.UnlockConditions.PublicKeys[0].Key.String(), rev.UnlockConditions.PublicKeys[1].Key.String(), rev.UnlockConditions.SignaturesRequired, rev.RevisionNumber, rev.Filesize, hex.EncodeToString(rev.FileMerkleRoot[:]), rev.WindowStart, rev.WindowEnd, rev.ValidProofOutputs[0].Value.ExactString(), hex.EncodeToString(rev.ValidProofOutputs[0].Address[:]), rev.ValidProofOutputs[1].Value.ExactString(), hex.EncodeToString(rev.ValidProofOutputs[1].Address[:]), rev.MissedProofOutputs[0].Value.ExactString(), hex.EncodeToString(rev.MissedProofOutputs[0].Address[:]), rev.MissedProofOutputs[1].Value.ExactString(), hex.EncodeToString(rev.MissedProofOutputs[1].Address[:]), value, hash, hex.EncodeToString(rev.UnlockHash[:]), hex.EncodeToString(ts0.ParentID[:]), ts0.PublicKeyIndex, ts0.Timelock, hex.EncodeToString(ts0.Signature), hex.EncodeToString(ts1.ParentID[:]), ts1.PublicKeyIndex, ts1.Timelock, hex.EncodeToString(ts1.Signature), id)
 
 		return err
 	}
@@ -152,7 +151,7 @@ func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
 			fund_account_cost, update_price_table_cost, good_for_upload,
 			good_for_renew, bad_contract, last_oos_err, locked, renewed_from, renewed_to)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, rpk.String(), h.StartHeight, h.DownloadSpending.String(), h.FundAccountSpending.String(), h.StorageSpending.String(), h.UploadSpending.String(), h.TotalCost.String(), h.ContractFee.String(), h.TxnFee.String(), h.SiafundFee.String(), h.MaintenanceSpending.AccountBalanceCost.String(), h.MaintenanceSpending.FundAccountCost.String(), h.MaintenanceSpending.UpdatePriceTableCost.String(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, "", "")
+	`, id, rpk.String(), h.StartHeight, h.DownloadSpending.ExactString(), h.FundAccountSpending.ExactString(), h.StorageSpending.ExactString(), h.UploadSpending.ExactString(), h.TotalCost.ExactString(), h.ContractFee.ExactString(), h.TxnFee.ExactString(), h.SiafundFee.ExactString(), h.MaintenanceSpending.AccountBalanceCost.ExactString(), h.MaintenanceSpending.FundAccountCost.ExactString(), h.MaintenanceSpending.UpdatePriceTableCost.ExactString(), h.Utility.GoodForUpload, h.Utility.GoodForRenew, h.Utility.BadContract, h.Utility.LastOOSErr, h.Utility.Locked, "", "")
 	if err != nil {
 		return err
 	}
@@ -172,7 +171,7 @@ func (fc *FileContract) saveContract(rpk types.SiaPublicKey) error {
 			t_parent_id_1, pk_index_1, timelock_1, signature_1)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id, hex.EncodeToString(rev.ParentID[:]), rev.UnlockConditions.Timelock, rev.UnlockConditions.PublicKeys[0].String(), rev.UnlockConditions.PublicKeys[1].String(), rev.UnlockConditions.SignaturesRequired, rev.NewRevisionNumber, rev.NewFileSize, hex.EncodeToString(rev.NewFileMerkleRoot[:]), rev.NewWindowStart, rev.NewWindowEnd, rev.NewValidProofOutputs[0].Value.String(), hex.EncodeToString(rev.NewValidProofOutputs[0].UnlockHash[:]), rev.NewValidProofOutputs[1].Value.String(), hex.EncodeToString(rev.NewValidProofOutputs[1].UnlockHash[:]), rev.NewMissedProofOutputs[0].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[0].UnlockHash[:]), rev.NewMissedProofOutputs[1].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[1].UnlockHash[:]), rev.NewMissedProofOutputs[2].Value.String(), hex.EncodeToString(rev.NewMissedProofOutputs[2].UnlockHash[:]), hex.EncodeToString(rev.NewUnlockHash[:]), hex.EncodeToString(ts0.ParentID[:]), ts0.PublicKeyIndex, ts0.Timelock, hex.EncodeToString(ts0.Signature), hex.EncodeToString(ts1.ParentID[:]), ts1.PublicKeyIndex, ts1.Timelock, hex.EncodeToString(ts1.Signature))
+	`, id, hex.EncodeToString(rev.ParentID[:]), rev.UnlockConditions.Timelock, rev.UnlockConditions.PublicKeys[0].Key.String(), rev.UnlockConditions.PublicKeys[1].Key.String(), rev.UnlockConditions.SignaturesRequired, rev.RevisionNumber, rev.Filesize, hex.EncodeToString(rev.FileMerkleRoot[:]), rev.WindowStart, rev.WindowEnd, rev.ValidProofOutputs[0].Value.ExactString(), hex.EncodeToString(rev.ValidProofOutputs[0].Address[:]), rev.ValidProofOutputs[1].Value.ExactString(), hex.EncodeToString(rev.ValidProofOutputs[1].Address[:]), rev.MissedProofOutputs[0].Value.ExactString(), hex.EncodeToString(rev.MissedProofOutputs[0].Address[:]), rev.MissedProofOutputs[1].Value.ExactString(), hex.EncodeToString(rev.MissedProofOutputs[1].Address[:]), rev.MissedProofOutputs[2].Value.ExactString(), hex.EncodeToString(rev.MissedProofOutputs[2].Address[:]), hex.EncodeToString(rev.UnlockHash[:]), hex.EncodeToString(ts0.ParentID[:]), ts0.PublicKeyIndex, ts0.Timelock, hex.EncodeToString(ts0.Signature), hex.EncodeToString(ts1.ParentID[:]), ts1.PublicKeyIndex, ts1.Timelock, hex.EncodeToString(ts1.Signature))
 
 	return err
 }
@@ -189,7 +188,7 @@ func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 }
 
 // loadContracts loads the entire contracts table into the contract set.
-func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
+func (cs *ContractSet) loadContracts(height uint64) error {
 	// Load the contracts.
 	rows, err := cs.db.Query(`
 		SELECT contract_id, start_height, download_spending,
@@ -228,7 +227,7 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 				t_parent_id_1, pk_index_1, timelock_1, signature_1
 			FROM transactions
 			WHERE contract_id = ?
-		`, id).Scan(&tp.ParentID, &tp.Timelock, &tp.PublicKey0, &tp.PublicKey1, &tp.SignaturesRequired, &tp.NewRevisionNumber, &tp.NewFileSize, &tp.NewFileMerkleRoot, &tp.NewWindowStart, &tp.NewWindowEnd, &tp.ValidValue0, &tp.ValidUnlockHash0, &tp.ValidValue1, &tp.ValidUnlockHash1, &tp.MissedValue0, &tp.MissedUnlockHash0, &tp.MissedValue1, &tp.MissedUnlockHash1, &tp.MissedValue2, &tp.MissedUnlockHash2, &tp.NewUnlockHash, &tp.ParentID0, &tp.PublicKeyIndex0, &tp.Timelock0, &tp.Signature0, &tp.ParentID1, &tp.PublicKeyIndex1, &tp.Timelock1, &tp.Signature1)
+		`, id).Scan(&tp.ParentID, &tp.Timelock, &tp.PublicKey0, &tp.PublicKey1, &tp.SignaturesRequired, &tp.RevisionNumber, &tp.Filesize, &tp.FileMerkleRoot, &tp.WindowStart, &tp.WindowEnd, &tp.ValidValue0, &tp.ValidAddress0, &tp.ValidValue1, &tp.ValidAddress1, &tp.MissedValue0, &tp.MissedAddress0, &tp.MissedValue1, &tp.MissedAddress1, &tp.MissedValue2, &tp.MissedAddress2, &tp.NewUnlockHash, &tp.ParentID0, &tp.PublicKeyIndex0, &tp.Timelock0, &tp.Signature0, &tp.ParentID1, &tp.PublicKeyIndex1, &tp.Timelock1, &tp.Signature1)
 		if err != nil {
 			cs.log.Println("ERROR: unable to load transaction:", err)
 			continue
@@ -242,48 +241,49 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 		b, _ = hex.DecodeString(tp.ParentID)
 		copy(t.FileContractRevisions[0].ParentID[:], b)
 		t.FileContractRevisions[0].UnlockConditions = types.UnlockConditions{
-			Timelock:           types.BlockHeight(tp.Timelock),
-			PublicKeys:         make([]types.SiaPublicKey, 2),
+			Timelock:           tp.Timelock,
+			PublicKeys:         {
+				modules.ReadPublicKey(tp.PublicKey0).UnlockKey(),
+				modules.ReadPublicKey(tp.PublicKey1).UnlockKey(),
+			},
 			SignaturesRequired: tp.SignaturesRequired,
 		}
-		_ = t.FileContractRevisions[0].UnlockConditions.PublicKeys[0].LoadString(tp.PublicKey0)
-		_ = t.FileContractRevisions[0].UnlockConditions.PublicKeys[1].LoadString(tp.PublicKey1)
-		t.FileContractRevisions[0].NewRevisionNumber = tp.NewRevisionNumber
-		t.FileContractRevisions[0].NewFileSize = tp.NewFileSize
-		b, _ = hex.DecodeString(tp.NewFileMerkleRoot)
-		copy(t.FileContractRevisions[0].NewFileMerkleRoot[:], b)
-		t.FileContractRevisions[0].NewWindowStart = types.BlockHeight(tp.NewWindowStart)
-		t.FileContractRevisions[0].NewWindowEnd = types.BlockHeight(tp.NewWindowEnd)
-		t.FileContractRevisions[0].NewValidProofOutputs = make([]types.SiacoinOutput, 2)
-		if tp.MissedValue2 != "" && tp.MissedUnlockHash2 != "" {
-			t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 3)
+		t.FileContractRevisions[0].RevisionNumber = tp.RevisionNumber
+		t.FileContractRevisions[0].Filesize = tp.Filesize
+		b, _ = hex.DecodeString(tp.FileMerkleRoot)
+		copy(t.FileContractRevisions[0].FileMerkleRoot[:], b)
+		t.FileContractRevisions[0].WindowStart = tp.WindowStart
+		t.FileContractRevisions[0].WindowEnd = tp.WindowEnd
+		t.FileContractRevisions[0].ValidProofOutputs = make([]types.SiacoinOutput, 2)
+		if tp.MissedValue2 != "" && tp.MissedAddress2 != "" {
+			t.FileContractRevisions[0].MissedProofOutputs = make([]types.SiacoinOutput, 3)
 		} else {
-			t.FileContractRevisions[0].NewMissedProofOutputs = make([]types.SiacoinOutput, 2)
+			t.FileContractRevisions[0].MissedProofOutputs = make([]types.SiacoinOutput, 2)
 		}
-		t.FileContractRevisions[0].NewValidProofOutputs[0].Value = modules.ReadCurrency(tp.ValidValue0)
-		b, _ = hex.DecodeString(tp.ValidUnlockHash0)
-		copy(t.FileContractRevisions[0].NewValidProofOutputs[0].UnlockHash[:], b)
-		t.FileContractRevisions[0].NewValidProofOutputs[1].Value = modules.ReadCurrency(tp.ValidValue1)
-		b, _ = hex.DecodeString(tp.ValidUnlockHash1)
-		copy(t.FileContractRevisions[0].NewValidProofOutputs[1].UnlockHash[:], b)
-		t.FileContractRevisions[0].NewMissedProofOutputs[0].Value = modules.ReadCurrency(tp.MissedValue0)
-		b, _ = hex.DecodeString(tp.MissedUnlockHash0)
-		copy(t.FileContractRevisions[0].NewMissedProofOutputs[0].UnlockHash[:], b)
-		t.FileContractRevisions[0].NewMissedProofOutputs[1].Value = modules.ReadCurrency(tp.MissedValue1)
-		b, _ = hex.DecodeString(tp.MissedUnlockHash1)
-		copy(t.FileContractRevisions[0].NewMissedProofOutputs[1].UnlockHash[:], b)
-		if tp.MissedValue2 != "" && tp.MissedUnlockHash2 != "" {
-			t.FileContractRevisions[0].NewMissedProofOutputs[2].Value = modules.ReadCurrency(tp.MissedValue2)
-			b, _ = hex.DecodeString(tp.MissedUnlockHash2)
-			copy(t.FileContractRevisions[0].NewMissedProofOutputs[2].UnlockHash[:], b)
+		t.FileContractRevisions[0].ValidProofOutputs[0].Value = modules.ReadCurrency(tp.ValidValue0)
+		b, _ = hex.DecodeString(tp.ValidAddress0)
+		copy(t.FileContractRevisions[0].ValidProofOutputs[0].Address[:], b)
+		t.FileContractRevisions[0].ValidProofOutputs[1].Value = modules.ReadCurrency(tp.ValidValue1)
+		b, _ = hex.DecodeString(tp.ValidAddress1)
+		copy(t.FileContractRevisions[0].ValidProofOutputs[1].Address[:], b)
+		t.FileContractRevisions[0].MissedProofOutputs[0].Value = modules.ReadCurrency(tp.MissedValue0)
+		b, _ = hex.DecodeString(tp.MissedAddress0)
+		copy(t.FileContractRevisions[0].MissedProofOutputs[0].Address[:], b)
+		t.FileContractRevisions[0].MissedProofOutputs[1].Value = modules.ReadCurrency(tp.MissedValue1)
+		b, _ = hex.DecodeString(tp.MissedAddress1)
+		copy(t.FileContractRevisions[0].MissedProofOutputs[1].Address[:], b)
+		if tp.MissedValue2 != "" && tp.MissedAddress2 != "" {
+			t.FileContractRevisions[0].MissedProofOutputs[2].Value = modules.ReadCurrency(tp.MissedValue2)
+			b, _ = hex.DecodeString(tp.MissedAddress2)
+			copy(t.FileContractRevisions[0].MissedProofOutputs[2].Address[:], b)
 		}
-		b, _ = hex.DecodeString(tp.NewUnlockHash)
-		copy(t.FileContractRevisions[0].NewUnlockHash[:], b)
+		b, _ = hex.DecodeString(tp.UnlockHash)
+		copy(t.FileContractRevisions[0].UnlockHash[:], b)
 		if tp.SignaturesRequired > 0 {
 			b, _ = hex.DecodeString(tp.ParentID0)
 			copy(t.TransactionSignatures[0].ParentID[:], b)
 			t.TransactionSignatures[0].PublicKeyIndex = tp.PublicKeyIndex0
-			t.TransactionSignatures[0].Timelock = types.BlockHeight(tp.Timelock0)
+			t.TransactionSignatures[0].Timelock = tp.Timelock0
 			b, _ = hex.DecodeString(tp.Signature0)
 			t.TransactionSignatures[0].Signature = make([]byte, len(b))
 			copy(t.TransactionSignatures[0].Signature, b)
@@ -295,7 +295,7 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 			b, _ = hex.DecodeString(tp.ParentID1)
 			copy(t.TransactionSignatures[1].ParentID[:], b)
 			t.TransactionSignatures[1].PublicKeyIndex = tp.PublicKeyIndex1
-			t.TransactionSignatures[1].Timelock = types.BlockHeight(tp.Timelock1)
+			t.TransactionSignatures[1].Timelock = tp.Timelock1
 			b, _ = hex.DecodeString(tp.Signature1)
 			t.TransactionSignatures[1].Signature = make([]byte, len(b))
 			copy(t.TransactionSignatures[1].Signature, b)
@@ -307,7 +307,7 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 		// Construct the contract header.
 		var h contractHeader
 		h.Transaction = t
-		h.StartHeight = types.BlockHeight(cp.StartHeight)
+		h.StartHeight = cp.StartHeight
 		h.DownloadSpending = modules.ReadCurrency(cp.DownloadSpending)
 		h.FundAccountSpending = modules.ReadCurrency(cp.FundAccountSpending)
 		h.StorageSpending = modules.ReadCurrency(cp.StorageSpending)
@@ -316,16 +316,16 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 		h.ContractFee = modules.ReadCurrency(cp.ContractFee)
 		h.TxnFee = modules.ReadCurrency(cp.TxnFee)
 		h.SiafundFee = modules.ReadCurrency(cp.SiafundFee)
-		h.MaintenanceSpending = smodules.MaintenanceSpending{
+		h.MaintenanceSpending = modules.MaintenanceSpending{
 			AccountBalanceCost:   modules.ReadCurrency(cp.AccountBalanceCost),
 			FundAccountCost:      modules.ReadCurrency(cp.FundAccountCost),
 			UpdatePriceTableCost: modules.ReadCurrency(cp.UpdatePriceTableCost),
 		}
-		h.Utility = smodules.ContractUtility{
+		h.Utility = modules.ContractUtility{
 			GoodForUpload: cp.GoodForUpload,
 			GoodForRenew:  cp.GoodForRenew,
 			BadContract:   cp.BadContract,
-			LastOOSErr:    types.BlockHeight(cp.LastOOSErr),
+			LastOOSErr:    cp.LastOOSErr,
 			Locked:        cp.Locked,
 		}
 
@@ -350,7 +350,7 @@ func (cs *ContractSet) loadContracts(height types.BlockHeight) error {
 
 // managedFindIDs returns a list of contract IDs belonging to the given renter.
 // NOTE: this function also returns the old contracts.
-func (cs *ContractSet) managedFindIDs(rpk types.SiaPublicKey) []types.FileContractID {
+func (cs *ContractSet) managedFindIDs(rpk types.PublicKey) []types.FileContractID {
 	rows, err := cs.db.Query(`
 		SELECT contract_id
 		FROM contracts

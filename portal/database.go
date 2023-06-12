@@ -9,13 +9,12 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	"gitlab.com/NebulousLabs/fastrand"
-
-	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/ed25519"
+
+	"lukechampine.com/frand"
 )
 
 const (
@@ -167,14 +166,7 @@ func (p *Portal) deleteAccount(email string) error {
 	_, err = p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
 	errs = append(errs, err)
 
-	// Iterate through the errors and return the first non-nil one.
-	for _, e := range errs {
-		if e != nil {
-			return e
-		}
-	}
-
-	return nil
+	return modules.ComposeErrors(errs...)
 }
 
 // putPayment inserts a payment into the database.
@@ -257,15 +249,13 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	if ub.Currency == "" {
 		// New renter, need to create a new record.
 		seed, err := p.satellite.GetWalletSeed()
-		defer fastrand.Read(seed[:])
+		defer frand.Read(seed)
 		if err != nil {
 			return err
 		}
 		renterSeed := modules.DeriveRenterSeed(seed, email)
-		defer fastrand.Read(renterSeed[:])
-		var sk crypto.SecretKey
-		copy(sk[:], ed25519.NewKeyFromSeed(renterSeed[:]))
-		pk := types.Ed25519PublicKey(sk.PublicKey())
+		defer frand.Read(renterSeed)
+		pk := types.NewPrivateKeyFromSeed(renterSeed).PublicKey()
 		if err = p.createNewRenter(email, pk); err != nil {
 			return err
 		}
@@ -309,7 +299,7 @@ func (p *Portal) getPayments(email string) ([]userPayment, error) {
 }
 
 // createNewRenter creates a new renter record in the database.
-func (p *Portal) createNewRenter(email string, pk types.SiaPublicKey) error {
+func (p *Portal) createNewRenter(email string, pk types.PublicKey) error {
 	_, err := p.db.Exec(`
 		INSERT INTO renters (email, public_key, current_period, funds, hosts,
 			period, renew_window, expected_storage, expected_upload,

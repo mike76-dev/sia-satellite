@@ -1,24 +1,18 @@
 package main
 
 import (
-	"encoding/base64"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/big"
-	"os"
 	"sort"
-	"strconv"
+	//"strconv"
 	"strings"
 	"time"
 
-	"github.com/mike76-dev/sia-satellite/modules"
+	//"github.com/mike76-dev/sia-satellite/modules"
 
-	"gitlab.com/NebulousLabs/encoding"
-	"gitlab.com/NebulousLabs/errors"
-
-	"go.sia.tech/siad/types"
+	//"go.sia.tech/core/types"
 )
 
 var (
@@ -28,16 +22,6 @@ var (
 	// ErrParsePeriodUnits is returned when the input is unable to be parsed
 	// into a period unit due to missing units.
 	ErrParsePeriodUnits = errors.New("amount is missing period units")
-
-	// ErrParseRateLimitAmount is returned when the input is unable to be parsed into
-	// a rate limit unit due to a malformed amount.
-	ErrParseRateLimitAmount = errors.New("malformed amount")
-	// ErrParseRateLimitNoAmount is returned when the input is unable to be
-	// parsed into a rate limit unit due to no amount being given.
-	ErrParseRateLimitNoAmount = errors.New("amount is missing")
-	// ErrParseRateLimitUnits is returned when the input is unable to be parsed
-	// into a rate limit unit due to missing units.
-	ErrParseRateLimitUnits = errors.New("amount is missing rate limit units")
 
 	// ErrParseSizeAmount is returned when the input is unable to be parsed into
 	// a file size unit due to a malformed amount.
@@ -53,24 +37,6 @@ var (
 	// into a timeout unit due to missing units.
 	ErrParseTimeoutUnits = errors.New("amount is missing timeout units")
 )
-
-// bandwidthUnit takes bps (bits per second) as an argument and converts
-// them into a more human-readable string with a unit.
-func bandwidthUnit(bps uint64) string {
-	units := []string{"Bps", "Kbps", "Mbps", "Gbps", "Tbps", "Pbps", "Ebps", "Zbps", "Ybps"}
-	mag := uint64(1)
-	unit := ""
-	for _, unit = range units {
-		if bps < 1e3 * mag {
-			break
-		} else if unit != units[len(units) - 1] {
-			// Don't want to perform this multiply on the last iter; that
-			// would give us 1.235 Ybps instead of 1235 Ybps.
-			mag *= 1e3
-		}
-	}
-	return fmt.Sprintf("%.2f %s", float64(bps) / float64(mag), unit)
-}
 
 // parseFilesize converts strings of form '10GB' or '10 gb' to a size in bytes.
 // Fractional sizes are truncated at the byte size.
@@ -113,7 +79,7 @@ func parseFilesize(strSize string) (string, error) {
 }
 
 // periodUnits turns a period in terms of blocks to a number of weeks.
-func periodUnits(blocks types.BlockHeight) string {
+func periodUnits(blocks uint64) string {
 	return fmt.Sprint(blocks / 1008) // 1008 blocks per week
 }
 
@@ -155,7 +121,7 @@ func parsePeriod(period string) (string, error) {
 }
 
 // parseTimeout converts a duration specified in seconds, hours, days or weeks
-// to a number of seconds
+// to a number of seconds.
 func parseTimeout(duration string) (string, error) {
 	units := []struct {
 		suffix     string
@@ -192,101 +158,6 @@ func parseTimeout(duration string) (string, error) {
 	return "", ErrParseTimeoutUnits
 }
 
-// currencyUnitsWithExchangeRate will format a types.Currency in the same way as
-// currencyUnits. If a non-nil exchange rate is provided, it will additionally
-// provide the result of applying the rate to the amount.
-func currencyUnitsWithExchangeRate(c types.Currency, rate *types.ExchangeRate) string {
-	cString := modules.CurrencyUnits(c)
-	if rate == nil {
-		return cString
-	}
-
-	return fmt.Sprintf("%s (%s)", cString, rate.ApplyAndFormat(c))
-}
-
-// parseRatelimit converts a ratelimit input string of to an int64 representing
-// the bytes per second ratelimit.
-func parseRatelimit(rateLimitStr string) (int64, error) {
-	// Check for 0 values signifying that the no limit is being set
-	if rateLimitStr == "0" {
-		return 0, nil
-	}
-	// Create struct of rates. Have to start at the high end so that B/s is
-	// checked last, otherwise it would return false positives
-	rates := []struct {
-		unit   string
-		factor float64
-	}{
-		{"TB/s", 1e12},
-		{"GB/s", 1e9},
-		{"MB/s", 1e6},
-		{"KB/s", 1e3},
-		{"B/s", 1e0},
-		{"Tbps", 1e12 / 8},
-		{"Gbps", 1e9 / 8},
-		{"Mbps", 1e6 / 8},
-		{"Kbps", 1e3 / 8},
-		{"Bps", 1e0 / 8},
-	}
-	rateLimitStr = strings.TrimSpace(rateLimitStr)
-	for _, rate := range rates {
-		if !strings.HasSuffix(rateLimitStr, rate.unit) {
-			continue
-		}
-
-		// trim units and spaces
-		rateLimitStr = strings.TrimSuffix(rateLimitStr, rate.unit)
-		rateLimitStr = strings.TrimSpace(rateLimitStr)
-
-		// Check for empty string meaning only the units were provided
-		if rateLimitStr == "" {
-			return 0, ErrParseRateLimitNoAmount
-		}
-
-		// convert string to float for exponation
-		rateLimitFloat, err := strconv.ParseFloat(rateLimitStr, 64)
-		if err != nil {
-			return 0, errors.Compose(ErrParseRateLimitAmount, err)
-		}
-		// Check for Bps to make sure it is greater than 8 Bps meaning that it is at
-		// least 1 B/s
-		if rateLimitFloat < 8 && rate.unit == "Bps" {
-			return 0, errors.AddContext(ErrParseRateLimitAmount, "Bps rate limit cannot be < 8 Bps")
-		}
-
-		// Determine factor and convert to int64 for bps
-		rateLimit := int64(rateLimitFloat * rate.factor)
-
-		return rateLimit, nil
-	}
-
-	return 0, ErrParseRateLimitUnits
-}
-
-// ratelimitUnits converts an int64 to a string with human-readable ratelimit
-// units. The unit used will be the largest unit that results in a value greater
-// than 1. The value is rounded to 4 significant digits.
-func ratelimitUnits(ratelimit int64) string {
-	// Check for bps
-	if ratelimit < 1e3 {
-		return fmt.Sprintf("%v %s", ratelimit, "B/s")
-	}
-	// iterate until we find a unit greater than c
-	mag := 1e3
-	unit := ""
-	for _, unit = range []string{"KB/s", "MB/s", "GB/s", "TB/s"} {
-		if float64(ratelimit) < mag * 1e3 {
-			break
-		} else if unit != "TB/s" {
-			// Don't want to perform this multiply on the last iter; that
-			// would give us 1.235 tbps instead of 1235 tbps.
-			mag = mag * 1e3
-		}
-	}
-
-	return fmt.Sprintf("%.4g %s", float64(ratelimit) / mag, unit)
-}
-
 // yesNo returns "Yes" if b is true, and "No" if b is false.
 func yesNo(b bool) string {
 	if b {
@@ -297,7 +168,7 @@ func yesNo(b bool) string {
 
 // parseTxn decodes a transaction from s, which can be JSON, base64, or a path
 // to a file containing either encoding.
-func parseTxn(s string) (types.Transaction, error) {
+/*func parseTxn(s string) (types.Transaction, error) {
 	// First assume s is a file.
 	txnBytes, err := ioutil.ReadFile(s)
 	if os.IsNotExist(err) {
@@ -323,7 +194,7 @@ func parseTxn(s string) (types.Transaction, error) {
 		}
 	}
 	return txn, nil
-}
+}*/
 
 // fmtDuration converts a time.Duration into a days,hours,minutes string.
 func fmtDuration(dur time.Duration) string {

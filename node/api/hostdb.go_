@@ -6,15 +6,14 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/mike76-dev/sia-satellite/modules"
 
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 type (
 	// ExtendedHostDBEntry is an extension to modules.HostDBEntry that includes
-	// the string representation of the public key, otherwise presented as two
-	// fields, a string and a base64 encoded byte slice.
+	// the string representation of the public key.
 	ExtendedHostDBEntry struct {
 		modules.HostDBEntry
 		PublicKeyString string `json:"publickeystring"`
@@ -39,8 +38,8 @@ type (
 
 	// HostdbGet holds information about the hostdb.
 	HostdbGet struct {
-		BlockHeight         types.BlockHeight `json:"blockheight"`
-		InitialScanComplete bool              `json:"initialscancomplete"`
+		BlockHeight         uint64 `json:"blockheight"`
+		InitialScanComplete bool   `json:"initialscancomplete"`
 	}
 
 	// HostdbFilterModeGET contains the information about the HostDB's
@@ -54,9 +53,9 @@ type (
 	// HostdbFilterModePOST contains the information needed to set the the
 	// FilterMode of the hostDB.
 	HostdbFilterModePOST struct {
-		FilterMode   string               `json:"filtermode"`
-		Hosts        []types.SiaPublicKey `json:"hosts"`
-		NetAddresses []string             `json:"netaddresses"`
+		FilterMode   string            `json:"filtermode"`
+		Hosts        []types.PublicKey `json:"hosts"`
+		NetAddresses []string          `json:"netaddresses"`
 	}
 )
 
@@ -138,8 +137,7 @@ func (api *API) hostdbAllHandler(w http.ResponseWriter, _ *http.Request, _ httpr
 // hostdbHostsHandler handles the API call asking for a specific host,
 // returning detailed information about that host.
 func (api *API) hostdbHostsHandler(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
-	var pk types.SiaPublicKey
-	pk.LoadString(ps.ByName("pubkey"))
+	pk := modules.ReadPublicKey(ps.ByName("pubkey"))
 
 	entry, exists, err := api.satellite.Host(pk)
 	if err != nil {

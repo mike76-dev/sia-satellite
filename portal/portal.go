@@ -14,7 +14,6 @@ import (
 	"github.com/mike76-dev/sia-satellite/persist"
 	"github.com/mike76-dev/sia-satellite/satellite"
 
-	"gitlab.com/NebulousLabs/errors"
 
 	smodules "go.sia.tech/siad/modules"
 	spersist "go.sia.tech/siad/persist"
@@ -71,7 +70,7 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, db *sql.DB, persist
 	defer func() {
 		if err != nil {
 			close(p.closeChan)
-			err = errors.Compose(p.threads.Stop(), err)
+			err = modules.ComposeErrors(p.threads.Stop(), err)
 		}
 	}()
 
@@ -100,7 +99,7 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, db *sql.DB, persist
 
 	// Load the portal persistence.
 	if err = p.load(); err != nil {
-		return nil, errors.AddContext(err, "unable to load portal")
+		return nil, fmt.Errorf("unable to load portal: %s", err)
 	}
 
 	// Spawn the thread to periodically save the portal.
@@ -123,7 +122,7 @@ func New(config *persist.SatdConfig, s *satellite.Satellite, db *sql.DB, persist
 
 	// Start listening to API requests.
 	if err = p.initNetworking("127.0.0.1" + p.apiPort); err != nil {
-		p.log.Println("Unable to start the portal server:", err)
+		p.log.Println("ERROR: unable to start the portal server:", err)
 		return nil, err
 	}
 

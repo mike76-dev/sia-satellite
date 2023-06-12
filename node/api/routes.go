@@ -42,39 +42,39 @@ func (api *API) buildHTTPRoutes() {
 	}
 
 	// Transaction pool API Calls.
-	if api.tpool != nil {
+	/*if api.tpool != nil {
 		RegisterRoutesTransactionPool(router, api.tpool)
-	}
+	}*/
 
 	// Wallet API Calls.
-	if api.wallet != nil {
+	/*if api.wallet != nil {
 		RegisterRoutesWallet(router, api.wallet, requiredPassword)
-	}
+	}*/
 
 	// HostDB API Calls.
-	if api.satellite != nil {
+	/*if api.satellite != nil {
 		router.GET("/hostdb", api.hostdbHandler)
 		router.GET("/hostdb/active", api.hostdbActiveHandler)
 		router.GET("/hostdb/all", api.hostdbAllHandler)
 		router.GET("/hostdb/hosts/:pubkey", api.hostdbHostsHandler)
 		router.GET("/hostdb/filtermode", api.hostdbFilterModeHandlerGET)
 		router.POST("/hostdb/filtermode", RequirePassword(api.hostdbFilterModeHandlerPOST, requiredPassword))
-	}
+	}*/
 
 	// Satellite API Calls.
-	if api.satellite != nil {
+	/*if api.satellite != nil {
 		router.GET("/satellite/renters", RequirePassword(api.satelliteRentersHandlerGET, requiredPassword))
 		router.GET("/satellite/renter/:publickey", RequirePassword(api.satelliteRenterHandlerGET, requiredPassword))
 		router.GET("/satellite/balance/:publickey", RequirePassword(api.satelliteBalanceHandlerGET, requiredPassword))
 		router.GET("/satellite/contracts", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))
 		router.GET("/satellite/contracts/:publickey", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))
-	}
+	}*/
 
 	// Portal API Calls.
-	if api.portal != nil {
+	/*if api.portal != nil {
 		router.GET("/portal/credits", RequirePassword(api.portalCreditsHandlerGET, requiredPassword))
 		router.POST("/portal/credits", RequirePassword(api.portalCreditsHandlerPOST, requiredPassword))
-	}
+	}*/
 
 	// Apply UserAgent middleware and return the Router.
 	api.routerMu.Lock()

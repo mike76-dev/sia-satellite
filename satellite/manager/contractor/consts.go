@@ -1,6 +1,8 @@
 package contractor
 
 import (
+	"errors"
+
 	"go.sia.tech/siad/modules"
 	"go.sia.tech/siad/types"
 )
@@ -117,3 +119,10 @@ var (
 	// be getting set in a lot more scientific way.
 	scoreLeewayGoodForUpload = types.NewCurrency64(40)
 )
+
+// errDuplicateTransactionSet is the error that gets returned if a
+// duplicate transaction set is given to the transaction pool.
+var errDuplicateTransactionSet = errors.New("transaction set contains only duplicate transactions")
+
+// errHostFault indicates if an error is the host's fault.
+var errHostFault = errors.New("host has returned an error")

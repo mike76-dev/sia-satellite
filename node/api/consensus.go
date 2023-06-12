@@ -3,24 +3,23 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/mike76-dev/sia-satellite/modules"
 
-	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 // ConsensusGET contains general information about the consensus set, with tags
 // to support idiomatic json encodings.
 type ConsensusGET struct {
-	Synced       bool              `json:"synced"`
-	Height       types.BlockHeight `json:"height"`
-	CurrentBlock types.BlockID     `json:"currentblock"`
-	Target       types.Target      `json:"target"`
-	Difficulty   types.Currency    `json:"difficulty"`
+	Synced       bool           `json:"synced"`
+	Height       uint64         `json:"height"`
+	CurrentBlock types.BlockID  `json:"currentblock"`
+	Target       modules.Target `json:"target"`
+	Difficulty   types.Currency `json:"difficulty"`
 }
 
 // ConsensusHeadersGET contains information from a blocks header.
@@ -32,11 +31,11 @@ type ConsensusHeadersGET struct {
 // fields for ID and Height.
 type ConsensusBlocksGet struct {
 	ID           types.BlockID           `json:"id"`
-	Height       types.BlockHeight       `json:"height"`
+	Height       uint64                  `json:"height"`
 	ParentID     types.BlockID           `json:"parentid"`
-	Nonce        types.BlockNonce        `json:"nonce"`
+	Nonce        uint64                  `json:"nonce"`
 	Difficulty   types.Currency          `json:"difficulty"`
-	Timestamp    types.Timestamp         `json:"timestamp"`
+	Timestamp    time.Time               `json:"timestamp"`
 	MinerPayouts []types.SiacoinOutput   `json:"minerpayouts"`
 	Transactions []ConsensusBlocksGetTxn `json:"transactions"`
 }
@@ -61,14 +60,14 @@ type ConsensusBlocksGetTxn struct {
 // and an additional ID field.
 type ConsensusBlocksGetFileContract struct {
 	ID                 types.FileContractID              `json:"id"`
-	FileSize           uint64                            `json:"filesize"`
-	FileMerkleRoot     crypto.Hash                       `json:"filemerkleroot"`
-	WindowStart        types.BlockHeight                 `json:"windowstart"`
-	WindowEnd          types.BlockHeight                 `json:"windowend"`
+	Filesize           uint64                            `json:"filesize"`
+	FileMerkleRoot     types.Hash256                     `json:"filemerkleroot"`
+	WindowStart        uint64                            `json:"windowstart"`
+	WindowEnd          uint64                            `json:"windowend"`
 	Payout             types.Currency                    `json:"payout"`
 	ValidProofOutputs  []ConsensusBlocksGetSiacoinOutput `json:"validproofoutputs"`
 	MissedProofOutputs []ConsensusBlocksGetSiacoinOutput `json:"missedproofoutputs"`
-	UnlockHash         types.UnlockHash                  `json:"unlockhash"`
+	UnlockHash         types.Hash256                     `json:"unlockhash"`
 	RevisionNumber     uint64                            `json:"revisionnumber"`
 }
 
@@ -77,15 +76,15 @@ type ConsensusBlocksGetFileContract struct {
 type ConsensusBlocksGetSiacoinOutput struct {
 	ID         types.SiacoinOutputID `json:"id"`
 	Value      types.Currency        `json:"value"`
-	UnlockHash types.UnlockHash      `json:"unlockhash"`
+	Address    types.Address         `json:"unlockhash"`
 }
 
 // ConsensusBlocksGetSiafundOutput contains all fields of a types.SiafundOutput
 // and an additional ID field.
 type ConsensusBlocksGetSiafundOutput struct {
 	ID         types.SiafundOutputID `json:"id"`
-	Value      types.Currency        `json:"value"`
-	UnlockHash types.UnlockHash      `json:"unlockhash"`
+	Value      uint64                `json:"value"`
+	Address    types.Address         `json:"unlockhash"`
 }
 
 // RegisterRoutesConsensus is a helper function to register all consensus routes.
@@ -103,52 +102,52 @@ func RegisterRoutesConsensus(router *httprouter.Router, cs modules.ConsensusSet)
 
 // consensusBlocksGetFromBlock is a helper method that uses a types.Block, types.BlockHeight and
 // types.Currency to create a ConsensusBlocksGet object.
-func consensusBlocksGetFromBlock(b types.Block, h types.BlockHeight, d types.Currency) ConsensusBlocksGet {
+func consensusBlocksGetFromBlock(b types.Block, h uint64, d types.Currency) ConsensusBlocksGet {
 	txns := make([]ConsensusBlocksGetTxn, 0, len(b.Transactions))
 	for _, t := range b.Transactions {
 		// Get the transaction's SiacoinOutputs.
 		scos := make([]ConsensusBlocksGetSiacoinOutput, 0, len(t.SiacoinOutputs))
 		for i, sco := range t.SiacoinOutputs {
 			scos = append(scos, ConsensusBlocksGetSiacoinOutput{
-				ID:         t.SiacoinOutputID(uint64(i)),
-				Value:      sco.Value,
-				UnlockHash: sco.UnlockHash,
+				ID:      t.SiacoinOutputID(i),
+				Value:   sco.Value,
+				Address: sco.Address,
 			})
 		}
 		// Get the transaction's SiafundOutputs.
 		sfos := make([]ConsensusBlocksGetSiafundOutput, 0, len(t.SiafundOutputs))
 		for i, sfo := range t.SiafundOutputs {
 			sfos = append(sfos, ConsensusBlocksGetSiafundOutput{
-				ID:         t.SiafundOutputID(uint64(i)),
-				Value:      sfo.Value,
-				UnlockHash: sfo.UnlockHash,
+				ID:      t.SiafundOutputID(i),
+				Value:   sfo.Value,
+				Address: sfo.Address,
 			})
 		}
 		// Get the transaction's FileContracts.
 		fcos := make([]ConsensusBlocksGetFileContract, 0, len(t.FileContracts))
 		for i, fc := range t.FileContracts {
 			// Get the FileContract's valid proof outputs.
-			fcid := t.FileContractID(uint64(i))
+			fcid := t.FileContractID(i)
 			vpos := make([]ConsensusBlocksGetSiacoinOutput, 0, len(fc.ValidProofOutputs))
 			for j, vpo := range fc.ValidProofOutputs {
 				vpos = append(vpos, ConsensusBlocksGetSiacoinOutput{
-					ID:         fcid.StorageProofOutputID(types.ProofValid, uint64(j)),
-					Value:      vpo.Value,
-					UnlockHash: vpo.UnlockHash,
+					ID:      fcid.ValidOutputID(j),
+					Value:   vpo.Value,
+					Address: vpo.Address,
 				})
 			}
 			// Get the FileContract's missed proof outputs.
 			mpos := make([]ConsensusBlocksGetSiacoinOutput, 0, len(fc.MissedProofOutputs))
 			for j, mpo := range fc.MissedProofOutputs {
 				mpos = append(mpos, ConsensusBlocksGetSiacoinOutput{
-					ID:         fcid.StorageProofOutputID(types.ProofMissed, uint64(j)),
-					Value:      mpo.Value,
-					UnlockHash: mpo.UnlockHash,
+					ID:      fcid.MissedOutputID(j),
+					Value:   mpo.Value,
+					Address: mpo.Address,
 				})
 			}
 			fcos = append(fcos, ConsensusBlocksGetFileContract{
 				ID:                 fcid,
-				FileSize:           fc.FileSize,
+				Filesize:           fc.Filesize,
 				FileMerkleRoot:     fc.FileMerkleRoot,
 				WindowStart:        fc.WindowStart,
 				WindowEnd:          fc.WindowEnd,
@@ -170,7 +169,7 @@ func consensusBlocksGetFromBlock(b types.Block, h types.BlockHeight, d types.Cur
 			SiafundOutputs:        sfos,
 			MinerFees:             t.MinerFees,
 			ArbitraryData:         t.ArbitraryData,
-			TransactionSignatures: t.TransactionSignatures,
+			TransactionSignatures: t.Signatures,
 		})
 	}
 	return ConsensusBlocksGet{
@@ -192,7 +191,6 @@ func consensusHandler(cs modules.ConsensusSet, w http.ResponseWriter, _ *http.Re
 	if !found {
 		err := "Failed to fetch block for current height"
 		WriteError(w, Error{err}, http.StatusInternalServerError)
-		log.Fatal(err)
 		return
 	}
 	cbid := b.ID()
@@ -206,7 +204,7 @@ func consensusHandler(cs modules.ConsensusSet, w http.ResponseWriter, _ *http.Re
 	})
 }
 
-// consensusBlocksIDHandler handles the API calls to /consensus/blocks
+// consensusBlocksHandler handles the API calls to /consensus/blocks
 // endpoint.
 func consensusBlocksHandler(cs modules.ConsensusSet, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Get query params and check them.
@@ -221,19 +219,19 @@ func consensusBlocksHandler(cs modules.ConsensusSet, w http.ResponseWriter, req 
 	}
 
 	var b types.Block
-	var h types.BlockHeight
+	var h uint64
 	var exists bool
 
-	// Handle request by id
+	// Handle request by id.
 	if id != "" {
 		var bid types.BlockID
-		if err := bid.LoadString(id); err != nil {
+		if err := bid.UnmarshalText([]byte(id)); err != nil {
 			WriteError(w, Error{"failed to unmarshal blockid"}, http.StatusBadRequest)
 			return
 		}
 		b, h, exists = cs.BlockByID(bid)
 	}
-	// Handle request by height
+	// Handle request by height.
 	if height != "" {
 		if _, err := fmt.Sscan(height, &h); err != nil {
 			WriteError(w, Error{"failed to parse block height"}, http.StatusBadRequest)
@@ -241,7 +239,7 @@ func consensusBlocksHandler(cs modules.ConsensusSet, w http.ResponseWriter, req 
 		}
 		b, exists = cs.BlockAtHeight(h)
 	}
-	// Check if block was found
+	// Check if block was found.
 	if !exists {
 		WriteError(w, Error{"block doesn't exist"}, http.StatusBadRequest)
 		return
@@ -250,7 +248,7 @@ func consensusBlocksHandler(cs modules.ConsensusSet, w http.ResponseWriter, req 
 	target, _ := cs.ChildTarget(b.ID())
 	d := target.Difficulty()
 
-	// Write response
+	// Write response.
 	WriteJSON(w, consensusBlocksGetFromBlock(b, h, d))
 }
 

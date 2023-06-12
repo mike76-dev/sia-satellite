@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	//"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,11 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	mnemonics "gitlab.com/NebulousLabs/entropy-mnemonics"
-	"gitlab.com/NebulousLabs/errors"
+	"github.com/mike76-dev/sia-satellite/modules"
 
-	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
+	//mnemonics "gitlab.com/NebulousLabs/entropy-mnemonics"
+
+	//"go.sia.tech/siad/crypto"
+	smodules "go.sia.tech/siad/modules"
 
 	"github.com/mike76-dev/sia-satellite/node"
 	"github.com/mike76-dev/sia-satellite/node/api"
@@ -60,14 +62,14 @@ func (srv *Server) Close() error {
 	err := srv.apiServer.Shutdown(context.Background())
 	// Wait for serve() to return and capture its error.
 	<-srv.serveChan
-	if !errors.Contains(srv.serveErr, http.ErrServerClosed) {
-		err = errors.Compose(err, srv.serveErr)
+	if !modules.ContainsError(srv.serveErr, http.ErrServerClosed) {
+		err = modules.ComposeErrors(err, srv.serveErr)
 	}
 	// Shutdown modules.
 	if srv.node != nil {
-		err = errors.Compose(err, srv.node.Close())
+		err = modules.ComposeErrors(err, srv.node.Close())
 	}
-	return errors.AddContext(err, "error while closing server")
+	return fmt.Errorf("error while closing server: %s", err)
 }
 
 // WaitClose blocks until the server is done shutting down.
@@ -98,13 +100,13 @@ func (srv *Server) ServeErr() <-chan error {
 
 // Unlock unlocks the wallet using the provided password.
 func (srv *Server) Unlock(password string) error {
-	if srv.node.Wallet == nil {
+	/*if srv.node.Wallet == nil {
 		return errors.New("server doesn't have a wallet")
 	}
 	var validKeys []crypto.CipherKey
 	dicts := []mnemonics.DictionaryID{"english", "german", "japanese"}
 	for _, dict := range dicts {
-		seed, err := modules.StringToSeed(password, dict)
+		seed, err := smodules.StringToSeed(password, dict)
 		if err != nil {
 			continue
 		}
@@ -115,8 +117,8 @@ func (srv *Server) Unlock(password string) error {
 		if err := srv.node.Wallet.Unlock(key); err == nil {
 			return nil
 		}
-	}
-	return modules.ErrBadEncryptionKey
+	}*/
+	return smodules.ErrBadEncryptionKey
 }
 
 // NewAsync creates a new API server. The API will require authentication using
@@ -137,7 +139,7 @@ func NewAsync(config *persist.SatdConfig, apiPassword string, dbPassword string,
 		}
 
 		// Create the api for the server.
-		api := api.New(config.UserAgent, apiPassword, nil, nil, nil, nil, nil, nil)
+		api := api.New(config.UserAgent, apiPassword, nil, nil)
 		srv := &Server{
 			api: api,
 			apiServer: &http.Server{
@@ -178,7 +180,7 @@ func NewAsync(config *persist.SatdConfig, apiPassword string, dbPassword string,
 			if isAddrInUseErr(err) {
 				return nil, fmt.Errorf("%v; are you running another instance of siad?", err.Error())
 			}
-			return nil, errors.AddContext(err, "server is unable to create the Sia node")
+			return nil, fmt.Errorf("server is unable to create the Sia node: %s", err)
 		}
 
 		// Make sure that the server wasn't shut down while loading the modules.
@@ -193,12 +195,12 @@ func NewAsync(config *persist.SatdConfig, apiPassword string, dbPassword string,
 
 		// Server wasn't shut down. Replace modules.
 		srv.node = n
-		api.SetModules(n.ConsensusSet, n.Gateway, n.Portal, n.Satellite, n.TransactionPool, n.Wallet)
+		api.SetModules(n.Gateway, n.ConsensusSet)
 		return srv, nil
 	}()
 	if err != nil {
 		if n != nil {
-			err = errors.Compose(err, n.Close())
+			err = modules.ComposeErrors(err, n.Close())
 		}
 		c <- err
 		return nil, c

@@ -3,14 +3,15 @@ package proto
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
+	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
-	core "go.sia.tech/core/types"
-	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
+	siad "go.sia.tech/siad/types"
 )
 
 // PriceTablePaymentFunc is a function that can be passed in to RPCPriceTable.
@@ -47,7 +48,7 @@ func RPCPriceTable(t *rhpv3.Transport, paymentFunc PriceTablePaymentFunc) (pt rh
 
 // processPayment carries out the payment for an RPC.
 func processPayment(s *rhpv3.Stream, payment rhpv3.PaymentMethod) error {
-	var paymentType core.Specifier
+	var paymentType types.Specifier
 	switch payment.(type) {
 	case *rhpv3.PayByContractRequest:
 		paymentType = rhpv3.PaymentTypeContract
@@ -72,28 +73,54 @@ func processPayment(s *rhpv3.Stream, payment rhpv3.PaymentMethod) error {
 }
 
 // RPCRenewContract negotiates a contract renewal with the host.
-func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet []types.Transaction, renterKey crypto.SecretKey, hostPK types.SiaPublicKey, finalRevTxn types.Transaction, height types.BlockHeight) (types.Transaction, error) {
-	s := t.DialStream()
+func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, renterKey types.PrivateKey, hostPK types.PublicKey, hostAddress, renterAddress types.Address, finalRevTxn types.Transaction, funding, newCollateral types.Currency, endHeight uint64) (_ rhpv2.ContractRevision, _ []types.Transaction, _ types.Transaction, _ []types.Transaction, err error) {
+	s, err := t.DialStream()
+	if err != nil {
+		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
+	}
 	defer s.Close()
-	s.SetDeadline(time.Now().Add(5 * time.Minute))
 
-	// Send an empty price table uid.
-	var pt rhpv3.HostPriceTable
-	if err := s.WriteRequest(rhpv3.RPCRenewContractID, &pt.UID); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to write price table uid: %s", err)
+	// Send the ptUID.
+	var ptUID rhpv3.SettingsID
+	if err = s.WriteRequest(rhpv3.RPCRenewContractID, &ptUID); err != nil {
+		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
 	}
 
-	// If the price table we sent contained a zero uid, we receive a temporary
-	// one.
-	var ptr rhpv3.RPCUpdatePriceTableResponse
-	err := s.ReadResponse(&ptr, 8192)
-	if err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to fetch temporary price table: %s", err)
+	// The price table we sent contained a zero uid so we receive a
+	// temporary one.
+	var ptResp rhpv3.RPCUpdatePriceTableResponse
+	if err = s.ReadResponse(&ptResp, 4096); err != nil {
+		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
 	}
 	err = json.Unmarshal(ptr.PriceTableJSON, &pt)
 	if err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to unmarshal temporary price table: %s", err)
+		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
 	}
+
+	// Prepare the signed transaction that contains the final revision as well
+	// as the new contract.
+	rev := finalRevTxn.FileContractRevisions[0]
+	txnSet, err := prepareRenewal(txnBuilder, rev, hostAddress, renterAddress, funding, newCollateral, pt, endHeight)
+	if err != nil {
+		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
+	}
+	parents, txn := txnSet[:len(txnSet) - 1], txnSet[len(txnSet) - 1]
+
+	// Make a copy of the transaction builder so far, to be used to by the watchdog
+	// to double spend these inputs in case the contract never appears on chain.
+	sweepBuilder := txnBuilder.Copy()
+
+	// Add an output that sends all funds back to the refundAddress.
+	// Note that in order to send this transaction, a miner fee will have to be subtracted.
+	output := siad.SiacoinOutput{
+		Value:      funding,
+		UnlockHash: uc.UnlockHash(),
+	}
+	sweepBuilder.AddSiacoinOutput(output)
+	st, sp := sweepBuilder.View()
+	sweepTxn := modules.ConvertToCore(st)
+	sweepParents := modules.ConvertToCore(sp)
+
 
 	// Create request.
 	renterPK := renterKey.PublicKey()
@@ -381,4 +408,43 @@ func RPCLatestRevision(t *rhpv3.Transport, contractID core.FileContractID) (core
 		return core.FileContractRevision{}, err
 	}
 	return resp.Revision, nil
+}
+
+// prepareRenewal prepares the final revision and a new contract.
+func prepareRenewal(txnBuilder transactionBuilder, rev types.FileContractRevision, hostAddress, renterAddress types.Address, renterFunds, newCollateral types.Currency, pt rhpv3.HostPriceTable, endHeight uint64) ([]types.Transaction, error) {
+	// Create the final revision from the provided revision.
+	finalRevision := rev
+	finalRevision.MissedProofOutputs = finalRevision.ValidProofOutputs
+	finalRevision.Filesize = 0
+	finalRevision.FileMerkleRoot = types.Hash256{}
+	finalRevision.RevisionNumber = math.MaxUint64
+
+	// Prepare the new contract.
+	fc, basePrice := rhpv3.PrepareContractRenewal(rev, hostAddress, renterAddress, renterFunds, newCollateral, pt, endHeight)
+
+	// Add revision, contract, and mining fee.
+	txnBuilder.AddFileContractRevision(modules.ConvertToSiad(finalRev))
+	txnBuilder.AddFileContract(modules.ConvertToSiad(fc))
+	minerFee := pt.TxnFeeMaxRecommended.Mul64(4096)
+	txnBuilder.AddMinerFee(siad.NewCurrency(minerFee.Big()))
+
+	// Compute how much renter funds to put into the new contract.
+	cost := fc.ValidRenterPayout().Add(pt.ContractPrice).Add(minerFee)
+	cost = cost.Add(basePrice).Add(modules.Tax(fc.Payout))
+
+	// Fund the transaction.
+	err = txnBuilder.FundSiacoins(siad.NewCurrency(cost.Big()))
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fund transaction: %s", err)
+	}
+
+	// Add any required parents.
+	up, err := txnBuilder.UnconfirmedParents()
+	if err != nil {
+		txnBuilder.Drop()
+		return nil, fmt.Errorf("couldn't load transaction dependencies: %s", err)
+	}
+
+	txn, parents := txnBuilder.View()
+	return append(modules.ConvertToCore(up), append(modules.ConvertToCore(parents), modules.ConvertToCore(txn))), nil
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -18,7 +19,6 @@ import (
 
 	"gitlab.com/NebulousLabs/encoding"
 	mnemonics "gitlab.com/NebulousLabs/entropy-mnemonics"
-	"gitlab.com/NebulousLabs/errors"
 
 	"go.sia.tech/siad/crypto"
 	smodules "go.sia.tech/siad/modules"
@@ -385,7 +385,7 @@ func walletsendsiacoinscmd(amount, dest string) {
 // walletbalancecmd retrieves and displays information about the wallet.
 func walletbalancecmd() {
 	status, err := httpClient.WalletGet()
-	if errors.Contains(err, api.ErrAPICallNotRecognized) {
+	if strings.Contains(err.Error(), api.ErrAPICallNotRecognized.Error()) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Wallet:\n  Status: %s\n\n", moduleNotReadyStatus)
 		return
@@ -412,9 +412,9 @@ Unlock the wallet to view balance
 	unconfirmedBalance := status.ConfirmedSiacoinBalance.Add(status.UnconfirmedIncomingSiacoins).Sub(status.UnconfirmedOutgoingSiacoins)
 	var delta string
 	if unconfirmedBalance.Cmp(status.ConfirmedSiacoinBalance) >= 0 {
-		delta = "+" + modules.CurrencyUnits(unconfirmedBalance.Sub(status.ConfirmedSiacoinBalance))
+		delta = "+" + modules.ConvertCurrency(unconfirmedBalance.Sub(status.ConfirmedSiacoinBalance)).String()
 	} else {
-		delta = "-" + modules.CurrencyUnits(status.ConfirmedSiacoinBalance.Sub(unconfirmedBalance))
+		delta = "-" + modules.ConvertCurrency(status.ConfirmedSiacoinBalance.Sub(unconfirmedBalance)).String()
 	}
 
 	fmt.Printf(`Wallet status:
@@ -424,8 +424,8 @@ Confirmed Balance:   %v
 Unconfirmed Delta:   %v
 Exact:               %v H
 Estimated Fee:       %v / KB
-`, encStatus, status.Height, modules.CurrencyUnits(status.ConfirmedSiacoinBalance), delta,
-		status.ConfirmedSiacoinBalance, fees.Maximum.Mul64(1e3).HumanString())
+`, encStatus, status.Height, modules.ConvertCurrency(status.ConfirmedSiacoinBalance), delta,
+		status.ConfirmedSiacoinBalance, modules.ConvertCurrency(fees.Maximum.Mul64(1e3)))
 }
 
 // walletbroadcastcmd broadcasts a transaction.
@@ -452,7 +452,7 @@ func walletsweepcmd() {
 	if err != nil {
 		die("Could not sweep seed:", err)
 	}
-	fmt.Printf("Swept %v from seed.\n", modules.CurrencyUnits(swept.Coins))
+	fmt.Printf("Swept %v from seed.\n", modules.ConvertCurrency(swept.Coins))
 }
 
 // walletsigncmd signs a transaction.

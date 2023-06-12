@@ -4,18 +4,17 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/julienschmidt/httprouter"
+	"github.com/mike76-dev/sia-satellite/modules"
 
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 type (
 	// Renter contains information about the renter.
 	Renter struct {
-		Email     string             `json:"email"`
-		PublicKey types.SiaPublicKey `json:"publickey"`
+		Email     string          `json:"email"`
+		PublicKey types.PublicKey `json:"publickey"`
 	}
 
 	// RentersGET contains the list of the renters.
@@ -28,16 +27,16 @@ type (
 		// Amount of contract funds that have been spent on downloads.
 		DownloadSpending types.Currency `json:"downloadspending"`
 		// Block height that the file contract ends on.
-		EndHeight types.BlockHeight `json:"endheight"`
+		EndHeight uint64 `json:"endheight"`
 		// Fees paid in order to form the file contract.
 		Fees types.Currency `json:"fees"`
 		// Amount of contract funds that have been spent on funding an ephemeral
 		// account on the host.
 		FundAccountSpending types.Currency `json:"fundaccountspending"`
 		// Public key of the renter that formed the contract.
-		RenterPublicKey types.SiaPublicKey `json:"renterpublickey"`
+		RenterPublicKey types.PublicKey `json:"renterpublickey"`
 		// Public key of the host the contract was formed with.
-		HostPublicKey types.SiaPublicKey `json:"hostpublickey"`
+		HostPublicKey types.PublicKey `json:"hostpublickey"`
 		// HostVersion is the version of Sia that the host is running.
 		HostVersion string `json:"hostversion"`
 		// ID of the file contract.
@@ -47,16 +46,16 @@ type (
 		// Amount of contract funds that have been spent on maintenance tasks
 		// such as updating the price table or syncing the ephemeral account
 		// balance.
-		MaintenanceSpending smodules.MaintenanceSpending `json:"maintenancespending"`
+		MaintenanceSpending modules.MaintenanceSpending `json:"maintenancespending"`
 		// Address of the host the file contract was formed with.
-		NetAddress smodules.NetAddress `json:"netaddress"`
+		NetAddress string `json:"netaddress"`
 		// Remaining funds left to spend on uploads & downloads.
 		RenterFunds types.Currency `json:"renterfunds"`
 		// Size of the file contract, which is typically equal to the number of
 		// bytes that have been uploaded to the host.
 		Size uint64 `json:"size"`
 		// Block height that the file contract began on.
-		StartHeight types.BlockHeight `json:"startheight"`
+		StartHeight uint64 `json:"startheight"`
 		// Amount of contract funds that have been spent on storage.
 		StorageSpending types.Currency `json:"storagespending"`
 		// Total cost to the wallet of forming the file contract.
@@ -185,7 +184,7 @@ func (api *API) satelliteContractsHandlerGET(w http.ResponseWriter, _ *http.Requ
 
 	for _, c := range contracts {
 		// Fetch host address.
-		var netAddress smodules.NetAddress
+		var netAddress string
 		hdbe, exists, _ := api.satellite.Host(c.HostPublicKey)
 		if exists {
 			netAddress = hdbe.NetAddress
@@ -240,11 +239,11 @@ func (api *API) satelliteContractsHandlerGET(w http.ResponseWriter, _ *http.Requ
 	for _, c := range oldContracts {
 		var size uint64
 		if len(c.Transaction.FileContractRevisions) != 0 {
-			size = c.Transaction.FileContractRevisions[0].NewFileSize
+			size = c.Transaction.FileContractRevisions[0].Filesize
 		}
 
 		// Fetch host address.
-		var netAddress smodules.NetAddress
+		var netAddress string
 		hdbe, exists, _ := api.satellite.Host(c.HostPublicKey)
 		if exists {
 			netAddress = hdbe.NetAddress
@@ -276,7 +275,7 @@ func (api *API) satelliteContractsHandlerGET(w http.ResponseWriter, _ *http.Requ
 
 		// Determine contract status.
 		refreshed := api.satellite.RefreshedContract(c.ID)
-		endHeightInPast := c.EndHeight < currentBlockHeight
+		endHeightInPast := c.EndHeight < uint64(currentBlockHeight)
 		if pk != "" {
 			endHeightInPast = endHeightInPast || c.StartHeight < renter.CurrentPeriod
 		}

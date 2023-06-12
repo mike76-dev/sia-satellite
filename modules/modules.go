@@ -1,22 +1,21 @@
 package modules
 
 import (
-	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
+	siad "go.sia.tech/siad/modules"
 )
 
 // HostAverages contains the host network averages from HostDB.
 type HostAverages struct {
-	NumHosts               uint64            `json:"numhosts"`
-	Duration               types.BlockHeight `json:"height"`
-	StoragePrice           types.Currency    `json:"storageprice"`
-	Collateral             types.Currency    `json:"collateral"`
-	DownloadBandwidthPrice types.Currency    `json:"downloadprice"`
-	UploadBandwidthPrice   types.Currency    `json:"uploadprice"`
-	ContractPrice          types.Currency    `json:"contractprice"`
-	BaseRPCPrice           types.Currency    `json:"baserpcprice"`
-	SectorAccessPrice      types.Currency    `json:"sectoraccessprice"`
+	NumHosts               uint64         `json:"numhosts"`
+	Duration               uint64         `json:"height"`
+	StoragePrice           types.Currency `json:"storageprice"`
+	Collateral             types.Currency `json:"collateral"`
+	DownloadBandwidthPrice types.Currency `json:"downloadprice"`
+	UploadBandwidthPrice   types.Currency `json:"uploadprice"`
+	ContractPrice          types.Currency `json:"contractprice"`
+	BaseRPCPrice           types.Currency `json:"baserpcprice"`
+	SectorAccessPrice      types.Currency `json:"sectoraccessprice"`
 }
 
 // userBalance holds the current balance as well as
@@ -56,14 +55,14 @@ type CreditData struct {
 // Satellite implements the methods necessary to communicate both with the
 // renters and the hosts.
 type Satellite interface {
-	smodules.Alerter
+	siad.Alerter
 
 	// ActiveHosts provides the list of hosts that the manager is selecting,
 	// sorted by preference.
-	ActiveHosts() ([]smodules.HostDBEntry, error)
+	ActiveHosts() ([]HostDBEntry, error)
 
 	// AllHosts returns the full list of hosts known to the manager.
-	AllHosts() ([]smodules.HostDBEntry, error)
+	AllHosts() ([]HostDBEntry, error)
 
 	// Close safely shuts down the satellite.
 	Close() error
@@ -73,34 +72,34 @@ type Satellite interface {
 
 	// EstimateHostScore will return the score for a host with the provided
 	// settings, assuming perfect age and uptime adjustments.
-	EstimateHostScore(smodules.HostDBEntry, Allowance) (smodules.HostScoreBreakdown, error)
+	EstimateHostScore(HostDBEntry, Allowance) (HostScoreBreakdown, error)
 
 	// Filter returns the hostdb's filterMode and filteredHosts.
-	Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error)
+	Filter() (FilterMode, map[string]types.PublicKey, []string, error)
 
 	// SetFilterMode sets the hostdb's filter mode.
-	SetFilterMode(smodules.FilterMode, []types.SiaPublicKey, []string) error
+	SetFilterMode(FilterMode, []types.PublicKey, []string) error
 
 	// Host provides the DB entry and score breakdown for the requested host.
-	Host(types.SiaPublicKey) (smodules.HostDBEntry, bool, error)
+	Host(types.PublicKey) (HostDBEntry, bool, error)
 
 	// InitialScanComplete returns a boolean indicating if the initial scan of
 	// the hostdb is completed.
-	InitialScanComplete() (bool, types.BlockHeight, error)
+	InitialScanComplete() (bool, uint64, error)
 
 	// ScoreBreakdown will return the score for a host db entry using the
 	// hostdb's weighting algorithm.
-	ScoreBreakdown(smodules.HostDBEntry) (smodules.HostScoreBreakdown, error)
+	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
 
 	// RandomHosts picks up to the specified number of random hosts from the
 	// hostdb sorted by weight.
-	RandomHosts(uint64, Allowance) ([]smodules.HostDBEntry, error)
+	RandomHosts(uint64, Allowance) ([]HostDBEntry, error)
 
 	// PublicKey returns the satellite's public key.
-	PublicKey() types.SiaPublicKey
+	PublicKey() types.PublicKey
 
 	// SecretKey returns the satellite's secret key.
-	SecretKey() crypto.SecretKey
+	SecretKey() types.PrivateKey
 
 	// GetAverages retrieves the host network averages.
 	GetAverages() HostAverages
@@ -110,10 +109,10 @@ type Satellite interface {
 	FeeEstimation() (min, max types.Currency)
 
 	// GetWalletSeed returns the wallet seed.
-	GetWalletSeed() (smodules.Seed, error)
+	GetWalletSeed() ([]byte, error)
 
 	// GetRenter returns the renter by the public key.
-	GetRenter(types.SiaPublicKey) (Renter, error)
+	GetRenter(types.PublicKey) (Renter, error)
 
 	// Renters retrieves the list of renters.
 	Renters() []Renter
@@ -125,7 +124,7 @@ type Satellite interface {
 	Contracts() []RenterContract
 
 	// ContractsByRenter returns storage contracts filtered by the renter.
-	ContractsByRenter(types.SiaPublicKey) []RenterContract
+	ContractsByRenter(types.PublicKey) []RenterContract
 
 	// RefreshedContract returns a bool indicating if the contract was refreshed.
 	RefreshedContract(types.FileContractID) bool
@@ -134,7 +133,7 @@ type Satellite interface {
 	OldContracts() []RenterContract
 
 	// OldContractsByRenter returns expired contracts filtered by the renter.
-	OldContractsByRenter(types.SiaPublicKey) []RenterContract
+	OldContractsByRenter(types.PublicKey) []RenterContract
 
 	// RetrieveSpendings retrieves the user's spendings.
 	RetrieveSpendings(string, string) (*UserSpendings, error)
@@ -143,7 +142,7 @@ type Satellite interface {
 // Manager implements the methods necessary to communicate with the
 // hosts.
 type Manager interface {
-	smodules.Alerter
+	siad.Alerter
 
 	// Close safely shuts down the manager.
 	Close() error
@@ -157,7 +156,7 @@ type Manager interface {
 // Provider implements the methods necessary to communicate with the
 // renters.
 type Provider interface {
-	smodules.Alerter
+	siad.Alerter
 
 	// Close safely shuts down the provider.
 	Close() error
@@ -165,7 +164,7 @@ type Provider interface {
 
 // Portal implements the portal server.
 type Portal interface {
-	smodules.Alerter
+	siad.Alerter
 
 	// Close safely shuts down the portal.
 	Close() error
@@ -180,47 +179,47 @@ type Portal interface {
 // A HostDB is a database of hosts that the manager can use for figuring out
 // who to upload to, and download from.
 type HostDB interface {
-	smodules.Alerter
+	siad.Alerter
 
 	// ActiveHosts returns the list of hosts that are actively being selected
 	// from.
-	ActiveHosts() ([]smodules.HostDBEntry, error)
+	ActiveHosts() ([]HostDBEntry, error)
 
 	// AllHosts returns the full list of hosts known to the hostdb, sorted in
 	// order of preference.
-	AllHosts() ([]smodules.HostDBEntry, error)
+	AllHosts() ([]HostDBEntry, error)
 
 	// CheckForIPViolations accepts a number of host public keys and returns the
 	// ones that violate the rules of the addressFilter.
-	CheckForIPViolations([]types.SiaPublicKey) ([]types.SiaPublicKey, error)
+	CheckForIPViolations([]types.PublicKey) ([]types.PublicKey, error)
 
 	// Close closes the hostdb.
 	Close() error
 
 	// EstimateHostScore returns the estimated score breakdown of a host with the
 	// provided settings.
-	EstimateHostScore(smodules.HostDBEntry, Allowance) (smodules.HostScoreBreakdown, error)
+	EstimateHostScore(HostDBEntry, Allowance) (HostScoreBreakdown, error)
 
 	// Filter returns the hostdb's filterMode and filteredHosts.
-	Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error)
+	Filter() (FilterMode, map[string]types.PublicKey, []string, error)
 
 	// SetFilterMode sets the renter's hostdb filter mode.
-	SetFilterMode(smodules.FilterMode, []types.SiaPublicKey, []string) error
+	SetFilterMode(FilterMode, []types.PublicKey, []string) error
 
 	// Host returns the HostDBEntry for a given host.
-	Host(pk types.SiaPublicKey) (smodules.HostDBEntry, bool, error)
+	Host(pk types.PublicKey) (HostDBEntry, bool, error)
 
 	// IncrementSuccessfulInteractions increments the number of successful
 	// interactions with a host for a given key
-	IncrementSuccessfulInteractions(types.SiaPublicKey) error
+	IncrementSuccessfulInteractions(types.PublicKey) error
 
 	// IncrementFailedInteractions increments the number of failed interactions with
 	// a host for a given key
-	IncrementFailedInteractions(types.SiaPublicKey) error
+	IncrementFailedInteractions(types.PublicKey) error
 
 	// initialScanComplete returns a boolean indicating if the initial scan of the
 	// hostdb is completed and the current block height of the hostdb.
-	InitialScanComplete() (bool, types.BlockHeight, error)
+	InitialScanComplete() (bool, uint64, error)
 
 	// IPViolationsCheck returns a boolean indicating if the IP violation check is
 	// enabled or not.
@@ -229,20 +228,20 @@ type HostDB interface {
 	// RandomHosts returns a set of random hosts, weighted by their estimated
 	// usefulness / attractiveness to the renter. RandomHosts will not return
 	// any offline or inactive hosts.
-	RandomHosts(int, []types.SiaPublicKey, []types.SiaPublicKey) ([]smodules.HostDBEntry, error)
+	RandomHosts(int, []types.PublicKey, []types.PublicKey) ([]HostDBEntry, error)
 
 	// RandomHostsWithAllowance is the same as RandomHosts but accepts an
 	// allowance as an argument to be used instead of the allowance set in the
 	// manager.
-	RandomHostsWithAllowance(int, []types.SiaPublicKey, []types.SiaPublicKey, Allowance) ([]smodules.HostDBEntry, error)
+	RandomHostsWithAllowance(int, []types.PublicKey, []types.PublicKey, Allowance) ([]HostDBEntry, error)
 
 	// RandomHostsWithLimits works as RandomHostsWithAllowance but uses the
 	// limits set in the allowance instead of calculating the weight function.
-	RandomHostsWithLimits(int, []types.SiaPublicKey, []types.SiaPublicKey, Allowance) ([]smodules.HostDBEntry, error)
+	RandomHostsWithLimits(int, []types.PublicKey, []types.PublicKey, Allowance) ([]HostDBEntry, error)
 
 	// ScoreBreakdown returns a detailed explanation of the various properties
 	// of the host.
-	ScoreBreakdown(smodules.HostDBEntry) (smodules.HostScoreBreakdown, error)
+	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
 
 	// SetAllowance updates the allowance used by the hostdb for weighing hosts by
 	// updating the host weight function. It will completely rebuild the hosttree so
@@ -269,7 +268,7 @@ type FundLocker interface {
 
 	// UnlockSiacoins moves a part of the amount from "locked" to "available",
 	// while the other part (fees and other spent funds) is "burned".
-	UnlockSiacoins(string, float64, float64, types.BlockHeight) error
+	UnlockSiacoins(string, float64, float64, uint64) error
 
 	// GetBalance retrieves the balance information on the account.
 	GetBalance(string) (*UserBalance, error)
@@ -280,20 +279,20 @@ type FundLocker interface {
 
 // ContractFormer is the minimal interface to be used by Provider.
 type ContractFormer interface {
-	PublicKey() types.SiaPublicKey
-	SecretKey() crypto.SecretKey
-	UserExists(types.SiaPublicKey) (bool, error)
-	FormContracts(types.SiaPublicKey, crypto.SecretKey, Allowance) ([]RenterContract, error)
-	RenewContracts(types.SiaPublicKey, crypto.SecretKey, Allowance, []types.FileContractID) ([]RenterContract, error)
+	PublicKey() types.PublicKey
+	SecretKey() types.PrivateKey
+	UserExists(types.PublicKey) (bool, error)
+	FormContracts(types.PublicKey, types.PrivateKey, Allowance) ([]RenterContract, error)
+	RenewContracts(types.PublicKey, types.PrivateKey, Allowance, []types.FileContractID) ([]RenterContract, error)
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
-	GetRenter(types.SiaPublicKey) (Renter, error)
-	ContractsByRenter(types.SiaPublicKey) []RenterContract
-	OldContractsByRenter(types.SiaPublicKey) []RenterContract
-	WalletSeed() (smodules.Seed, error)
+	GetRenter(types.PublicKey) (Renter, error)
+	ContractsByRenter(types.PublicKey) []RenterContract
+	OldContractsByRenter(types.PublicKey) []RenterContract
+	WalletSeed() ([]byte, error)
 	RenewedFrom(types.FileContractID) types.FileContractID
-	BlockHeight() types.BlockHeight
-	FormContract(*RPCSession, types.SiaPublicKey, types.SiaPublicKey, types.SiaPublicKey, types.BlockHeight, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
-	RenewContract(*RPCSession, types.SiaPublicKey, types.FileContractID, types.BlockHeight, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
-	UpdateRenterSettings(types.SiaPublicKey, RenterSettings, crypto.SecretKey) error
-	SetAllowance(types.SiaPublicKey, Allowance) error
+	BlockHeight() uint64
+	FormContract(*RPCSession, types.PublicKey, types.PublicKey, types.PublicKey, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
+	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
+	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error
+	SetAllowance(types.PublicKey, Allowance) error
 }

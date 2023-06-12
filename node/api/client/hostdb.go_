@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 
 	"github.com/mike76-dev/sia-satellite/node/api"
+	"github.com/mike76-dev/sia-satellite/modules"
 
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 // HostDbGet requests the /hostdb endpoint's resources.
@@ -34,7 +34,7 @@ func (c *Client) HostDbFilterModeGet() (hdfmg api.HostdbFilterModeGET, err error
 }
 
 // HostDbFilterModePost requests the /hostdb/filtermode POST endpoint.
-func (c *Client) HostDbFilterModePost(fm modules.FilterMode, hosts []types.SiaPublicKey, netAddresses []string) (err error) {
+func (c *Client) HostDbFilterModePost(fm modules.FilterMode, hosts []types.PublicKey, netAddresses []string) (err error) {
 	filterMode := fm.String()
 	hdblp := api.HostdbFilterModePOST{
 		FilterMode:   filterMode,
@@ -51,7 +51,7 @@ func (c *Client) HostDbFilterModePost(fm modules.FilterMode, hosts []types.SiaPu
 }
 
 // HostDbHostsGet request the /hostdb/hosts/:pubkey endpoint's resources.
-func (c *Client) HostDbHostsGet(pk types.SiaPublicKey) (hhg api.HostdbHostsGET, err error) {
+func (c *Client) HostDbHostsGet(pk types.PublicKey) (hhg api.HostdbHostsGET, err error) {
 	err = c.get("/hostdb/hosts/" + pk.String(), &hhg)
 	return
 }

@@ -5,12 +5,13 @@ package mail
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/smtp"
 	"os"
 	"path/filepath"
 
-	"gitlab.com/NebulousLabs/errors"
+	"github.com/mike76-dev/sia-satellite/modules"
 )
 
 // configFilename is the name of the mail client configuration
@@ -66,17 +67,17 @@ func New(configPath string) (MailSender, error) {
 	path := filepath.Join(configPath, configFilename)
 	config, err := os.Open(path)
 	if err != nil {
-		return nil, errors.AddContext(err, "unable to open config file")
+		return nil, fmt.Errorf("unable to open config file: %s", err)
 	}
 	defer func() {
-		err = errors.Compose(err, config.Close())
+		err = modules.ComposeErrors(err, config.Close())
 	}()
 
 	// Read the client type.
 	var typ string
 	dec := json.NewDecoder(config)
 	if err := dec.Decode(&typ); err != nil {
-		return nil, errors.AddContext(err, "unable to parse client type")
+		return nil, fmt.Errorf("unable to parse client type: %s", err)
 	}
 
 	// Initialize the client.
@@ -84,7 +85,7 @@ func New(configPath string) (MailSender, error) {
 		case "smtp":
 			var data smtpConfigData
 			if err := dec.Decode(&data); err != nil {
-				return nil, errors.AddContext(err, "unable to read the configuration")
+				return nil, fmt.Errorf("unable to read the configuration: %s", err)
 			}
 			pw := os.Getenv("SATD_MAIL_PASSWORD")
 			if pw == "" {

@@ -1,13 +1,12 @@
 package portal
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
-
-	"gitlab.com/NebulousLabs/errors"
 
 	"go.sia.tech/siad/persist"
 )
@@ -56,7 +55,7 @@ func (p *Portal) load() error {
 		return nil
 	}
 	if err != nil {
-		return errors.AddContext(err, "failed to load portal persistence")
+		return fmt.Errorf("failed to load portal persistence: %s", err)
 	}
 
 	// Copy over the data.

@@ -2,15 +2,15 @@ package proto
 
 import (
 	"database/sql"
+	"errors"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"gitlab.com/NebulousLabs/encoding"
-	"gitlab.com/NebulousLabs/errors"
 
+	"go.sia.tech/core/types"
 	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
 )
 
 // contractHeader holds all the information about a contract apart from the
@@ -21,17 +21,17 @@ type contractHeader struct {
 	Transaction types.Transaction
 
 	// Same as modules.RenterContract.
-	StartHeight         types.BlockHeight
+	StartHeight         uint64
 	DownloadSpending    types.Currency
 	FundAccountSpending types.Currency
-	MaintenanceSpending smodules.MaintenanceSpending
+	MaintenanceSpending modules.MaintenanceSpending
 	StorageSpending     types.Currency
 	UploadSpending      types.Currency
 	TotalCost           types.Currency
 	ContractFee         types.Currency
 	TxnFee              types.Currency
 	SiafundFee          types.Currency
-	Utility             smodules.ContractUtility
+	Utility             modules.ContractUtility
 }
 
 // validate returns an error if the contractHeader is invalid.
@@ -39,7 +39,7 @@ func (h *contractHeader) validate() error {
 	if len(h.Transaction.FileContractRevisions) == 0 {
 		return errors.New("no file contract revisions")
 	}
-	if len(h.Transaction.FileContractRevisions[0].NewValidProofOutputs) == 0 {
+	if len(h.Transaction.FileContractRevisions[0].ValidProofOutputs) == 0 {
 		return errors.New("not enough valid proof outputs")
 	}
 	if len(h.Transaction.FileContractRevisions[0].UnlockConditions.PublicKeys) != 2 {
@@ -61,18 +61,18 @@ func (h *contractHeader) LastRevision() types.FileContractRevision {
 
 // ID returns the contract's ID.
 func (h *contractHeader) ID() types.FileContractID {
-	return h.LastRevision().ID()
+	return h.LastRevision().ParentID
 }
 
 // RenterPublicKey returns the renter's public key from the last contract
 // revision.
-func (h *contractHeader) RenterPublicKey() types.SiaPublicKey {
-	return h.LastRevision().UnlockConditions.PublicKeys[0]
+func (h *contractHeader) RenterPublicKey() types.PublicKey {
+	return h.LastRevision().UnlockConditions.PublicKeys[0].Key
 }
 
 // HostPublicKey returns the host's public key from the last contract revision.
-func (h *contractHeader) HostPublicKey() types.SiaPublicKey {
-	return h.LastRevision().HostPublicKey()
+func (h *contractHeader) HostPublicKey() types.PublicKey {
+	return h.LastRevision().UnlockConditions.PublicKeys[1].Key
 }
 
 // RenterFunds returns the remaining renter funds as per the last contract
@@ -82,7 +82,7 @@ func (h *contractHeader) RenterFunds() types.Currency {
 }
 
 // EndHeight returns the block height of the last constract revision.
-func (h *contractHeader) EndHeight() types.BlockHeight {
+func (h *contractHeader) EndHeight() uint64 {
 	return h.LastRevision().EndHeight()
 }
 
@@ -101,7 +101,7 @@ type FileContract struct {
 
 // CommitPaymentIntent will commit the intent to pay a host for an rpc by
 // committing the signed txn in the contract's header.
-func (c *FileContract) CommitPaymentIntent(signedTxn types.Transaction, amount types.Currency, details smodules.SpendingDetails) error {
+func (c *FileContract) CommitPaymentIntent(signedTxn types.Transaction, amount types.Currency, details modules.SpendingDetails) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -114,7 +114,7 @@ func (c *FileContract) CommitPaymentIntent(signedTxn types.Transaction, amount t
 	c.header = newHeader
 
 	// Update the database.
-	return c.saveContract(types.SiaPublicKey{})
+	return c.saveContract(types.PublicKey{})
 }
 
 // LastRevision returns the most recent revision.
@@ -153,7 +153,7 @@ func (c *FileContract) Metadata() modules.RenterContract {
 
 // RecordPaymentIntent will records the changes we are about to make to the
 // revision in order to pay a host for an RPC.
-func (c *FileContract) RecordPaymentIntent(rev types.FileContractRevision, amount types.Currency, details smodules.SpendingDetails) error {
+func (c *FileContract) RecordPaymentIntent(rev types.FileContractRevision, amount types.Currency, details modules.SpendingDetails) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -166,11 +166,11 @@ func (c *FileContract) RecordPaymentIntent(rev types.FileContractRevision, amoun
 	c.header = newHeader
 
 	// Update the database.
-	return c.saveContract(types.SiaPublicKey{})
+	return c.saveContract(types.PublicKey{})
 }
 
 // UpdateUtility updates the utility field of a contract.
-func (c *FileContract) UpdateUtility(utility smodules.ContractUtility) error {
+func (c *FileContract) UpdateUtility(utility modules.ContractUtility) error {
 	// Construct new header.
 	c.mu.Lock()
 	newHeader := c.header
@@ -180,11 +180,11 @@ func (c *FileContract) UpdateUtility(utility smodules.ContractUtility) error {
 	c.mu.Unlock()
 
 	// Update the database.
-	return c.saveContract(types.SiaPublicKey{})
+	return c.saveContract(types.PublicKey{})
 }
 
 // Utility returns the contract utility for the contract.
-func (c *FileContract) Utility() smodules.ContractUtility {
+func (c *FileContract) Utility() modules.ContractUtility {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.header.Utility
@@ -193,7 +193,7 @@ func (c *FileContract) Utility() smodules.ContractUtility {
 // applySetHeader directly makes changes to the contract header.
 func (c *FileContract) applySetHeader(h contractHeader) error {
 	c.header = h
-	return c.saveContract(types.SiaPublicKey{})
+	return c.saveContract(types.PublicKey{})
 }
 
 // managedCommitAppend applies the contract update based on the provided
@@ -264,7 +264,7 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 
 	// If the revision number and Merkle root match, we don't need to do
 	// anything.
-	if rev.NewRevisionNumber == ourRev.NewRevisionNumber && rev.NewFileMerkleRoot == ourRev.NewFileMerkleRoot {
+	if rev.RevisionNumber == ourRev.RevisionNumber && rev.FileMerkleRoot == ourRev.FileMerkleRoot {
 		// If any other fields mismatch, it must be our fault, since we signed
 		// the revision reported by the host. So, to ensure things are
 		// consistent, we blindly overwrite our revision with the host's.
@@ -278,8 +278,8 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 	// "rewind" the contract to an earlier state. Even if the host does not have
 	// ill intent, this would mean that they failed to commit one or more
 	// revisions to durable storage, which reflects very poorly on them.
-	if rev.NewRevisionNumber < ourRev.NewRevisionNumber {
-		return &revisionNumberMismatchError{ourRev.NewRevisionNumber, rev.NewRevisionNumber}
+	if rev.RevisionNumber < ourRev.RevisionNumber {
+		return &revisionNumberMismatchError{ourRev.RevisionNumber, rev.RevisionNumber}
 	}
 
 	// The host's revision is still different. At this point, the best we can do
@@ -290,7 +290,7 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 	c.header.Transaction.FileContractRevisions[0] = rev
 	c.header.Transaction.TransactionSignatures = sigs
 
-	return c.saveContract(types.SiaPublicKey{})
+	return c.saveContract(types.PublicKey{})
 }
 
 // UpdateContract updates the contract with the new revision.
@@ -310,7 +310,7 @@ func (cs *ContractSet) UpdateContract(rev types.FileContractRevision, sigs []typ
 
 // managedInsertContract inserts a contract into a set. This will overwrite
 // existing contracts of the same name to make sure the update is idempotent.
-func (cs *ContractSet) managedInsertContract(h contractHeader, rpk types.SiaPublicKey) (modules.RenterContract, error) {
+func (cs *ContractSet) managedInsertContract(h contractHeader, rpk types.PublicKey) (modules.RenterContract, error) {
 	// Validate header.
 	if err := h.validate(); err != nil {
 		return modules.RenterContract{}, err
@@ -332,4 +332,22 @@ func (cs *ContractSet) managedInsertContract(h contractHeader, rpk types.SiaPubl
 	cs.mu.Unlock()
 	
 	return fc.Metadata(), fc.saveContract(rpk)
+}
+
+// InsertContract prepares a new contract header and adds it to the set.
+func (cs *ContractSet) InsertContract(revisionTxn types.Transaction, startHeight uint64, totalCost, contractFee, txnFee, siafundFee types.Currency, rpk types.PublicKey) (modules.RenterContract, error) {
+	header := contractHeader{
+		Transaction: revisionTxn,
+		StartHeight: startHeight,
+		TotalCost:   funding,
+		ContractFee: contractFee,
+		TxnFee:      txnFee,
+		SiafundFee:  siafundFee,
+		Utility: modules.ContractUtility{
+			GoodForUpload: true,
+			GoodForRenew:  true,
+		},
+	}
+
+	return cs.managedInsertContract(header, rpk)
 }

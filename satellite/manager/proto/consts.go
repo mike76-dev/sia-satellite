@@ -1,9 +1,8 @@
 package proto
 
 import (
+	"errors"
 	"time"
-
-	"gitlab.com/NebulousLabs/errors"
 )
 
 const (
@@ -21,25 +20,28 @@ const (
 	// payment.
 	hostPriceLeeway = 0.003
 
-	// contractHostFormTimeout is the amount of time we wait to form a
-	// contract with the host.
-	contractHostFormTimeout = 5 * time.Minute
+	// contractFormTimeout is the amount of time we wait to form a contract
+	// with the host.
+	contractFormTimeout = 5 * time.Minute
 
-	// contractHostRenewTimeout is the amount of time we wait to renew a
-	// contract.
-	contractHostRenewTimeout = 5 * time.Minute
+	// contractRenewTimeout is the amount of time we wait to renew a contract.
+	contractRenewTimeout = 5 * time.Minute
 
-	// settingsHostTimeout is the amount of time we wait to retrieve the
-	// settings from the host.
-	settingsHostTimeout = 30 * time.Second
+	// settingsTimeout is the amount of time we wait to retrieve the settings
+	// from the host.
+	settingsTimeout = 30 * time.Second
 
-	// contractHostPriceTableTimeout is the amount of time we wait to receive a
-	// price table from the host
-	contractHostPriceTableTimeout = 30 * time.Second
+	// priceTableTimeout is the amount of time we wait to receive a price table
+	// from the host.
+	priceTableTimeout = 30 * time.Second
+
+	// minimumSupportedRenterHostProtocolVersion is the minimum version of Sia
+	// that supports the currently used version of the renter-host protocol.
+	minimumSupportedRenterHostProtocolVersion = "1.4.1"
 )
 
 var (
 	// ErrBadHostVersion indicates that the host is using an older, incompatible
 	// version of the renter-host protocol.
-	ErrBadHostVersion = errors.New("Bad host version; host does not support required protocols")
+	ErrBadHostVersion = errors.New("bad host version; host does not support required protocols")
 )

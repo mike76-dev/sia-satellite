@@ -11,47 +11,45 @@ import (
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
-	core "go.sia.tech/core/types"
-	"go.sia.tech/siad/crypto"
+	"go.sia.tech/core/types"
 	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
-	"go.sia.tech/siad/types/typesutil"
+	siad "go.sia.tech/siad/types"
 )
 
 // signRequest is used to send the revision hash to the renter.
 type signRequest struct {
-	RevisionHash crypto.Hash
+	RevisionHash types.Hash256
 }
 
-// DecodeFrom implements modules.RequestBody.
-func (sr *signRequest) DecodeFrom(d *core.Decoder) {
+// DecodeFrom implements rhpv2.ProtocolObject.
+func (sr *signRequest) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
 }
 
-// EncodeTo implements modules.RequestBody.
-func (sr *signRequest) EncodeTo(e *core.Encoder) {
+// EncodeTo implements rhpv2.ProtocolObject.
+func (sr *signRequest) EncodeTo(e *types.Encoder) {
 	e.Write(sr.RevisionHash[:])
 }
 
 // signResponse is used to receive the revision signature from the renter.
 type signResponse struct {
-	Signature crypto.Signature
+	Signature types.Signature
 }
 
-// DecodeFrom implements modules.RequestBody.
-func (sr *signResponse) DecodeFrom(d *core.Decoder) {
+// DecodeFrom implements rhpv2.ProtocolObject.
+func (sr *signResponse) DecodeFrom(d *types.Decoder) {
 	d.Read(sr.Signature[:])
 }
 
-// EncodeTo implements modules.RequestBody.
-func (sr *signResponse) EncodeTo(e *core.Encoder) {
+// EncodeTo implements rhpv2.ProtocolObject.
+func (sr *signResponse) EncodeTo(e *types.Encoder) {
 	// Nothing to do here.
 }
 
 // FormNewContract forms a contract with a host and submits the contract
 // transaction to tpool. The contract is added to the ContractSet and its
 // metadata is returned. The new Renter-Satellite protocol is used.
-func (cs *ContractSet) FormNewContract(s *modules.RPCSession, pk, rpk types.SiaPublicKey, host smodules.HostDBEntry, startHeight, endHeight types.BlockHeight, funding types.Currency, refundAddress types.UnlockHash, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB, cancel <-chan struct{}) (rc modules.RenterContract, formationTxnSet []types.Transaction, sweepTxn types.Transaction, sweepParents []types.Transaction, err error) {
+func (cs *ContractSet) FormNewContract(s *modules.RPCSession, pk, rpk types.PublicKey, host modules.HostDBEntry, startHeight, endHeight uint64, funding types.Currency, refundAddress types.Address, txnBuilder transactionBuilder, tpool transactionPool, hdb hostDB, cancel <-chan struct{}) (rc modules.RenterContract, formationTxnSet []types.Transaction, sweepTxn types.Transaction, sweepParents []types.Transaction, err error) {
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), contractHostFormTimeout)
 	go func() {

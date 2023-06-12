@@ -352,102 +352,6 @@ func (c *Contractor) managedFindMinAllowedHostScores(rpk types.SiaPublicKey) (ty
 	return minScoreGFR, minScoreGFU, nil
 }
 
-// managedNewContract negotiates an initial file contract with the specified
-// host, saves it, and returns it.
-func (c *Contractor) managedNewContract(rpk types.SiaPublicKey, rsk crypto.SecretKey, host smodules.HostDBEntry, contractFunding types.Currency, endHeight types.BlockHeight) (_ types.Currency, _ modules.RenterContract, err error) {
-	// Check if we know this renter.
-	c.mu.RLock()
-	renter, exists := c.renters[rpk.String()]
-	c.mu.RUnlock()
-	if !exists {
-		return types.ZeroCurrency, modules.RenterContract{}, ErrRenterNotFound
-	}
-
-	// Check if the allowance is set.
-	if reflect.DeepEqual(renter.Allowance, modules.Allowance{}) {
-		return types.ZeroCurrency, modules.RenterContract{}, errors.New("called managedNewContract but allowance wasn't set")
-	}
-
-	// Get an address to use for negotiation.
-	uc, err := c.wallet.NextAddress()
-	if err != nil {
-		return types.ZeroCurrency, modules.RenterContract{}, err
-	}
-	defer func() {
-		if err != nil {
-			err = errors.Compose(err, c.wallet.MarkAddressUnused(uc))
-		}
-	}()
-
-	// Derive ephemeral key.
-	esk := modules.DeriveEphemeralKey(rsk, host.PublicKey)
-
-	// Create contract params.
-	c.mu.RLock()
-	params := modules.ContractParams{
-		Allowance:     renter.Allowance,
-		Host:          host,
-		Funding:       contractFunding,
-		StartHeight:   c.blockHeight,
-		EndHeight:     endHeight,
-		RefundAddress: uc.UnlockHash(),
-		PublicKey:     rpk,
-		SecretKey:     esk,
-	}
-	c.mu.RUnlock()
-
-	// Create transaction builder and trigger contract formation.
-	txnBuilder, err := c.wallet.StartTransaction()
-	if err != nil {
-		return types.ZeroCurrency, modules.RenterContract{}, err
-	}
-
-	contract, formationTxnSet, sweepTxn, sweepParents, err := c.staticContracts.FormContract(params, txnBuilder, c.tpool, c.hdb, c.tg.StopChan())
-	if err != nil {
-		txnBuilder.Drop()
-		return types.ZeroCurrency, modules.RenterContract{}, err
-	}
-
-	monitorContractArgs := monitorContractArgs{
-		false,
-		contract.ID,
-		contract.Transaction,
-		formationTxnSet,
-		sweepTxn,
-		sweepParents,
-		params.StartHeight,
-	}
-	err = c.staticWatchdog.callMonitorContract(monitorContractArgs)
-	if err != nil {
-		return types.ZeroCurrency, modules.RenterContract{}, err
-	}
-
-	// Add a mapping from the contract's id to the public keys of the host
-	// and the renter.
-	c.mu.Lock()
-	_, exists = c.pubKeysToContractID[contract.RenterPublicKey.String() + contract.HostPublicKey.String()]
-	if exists {
-		c.mu.Unlock()
-		txnBuilder.Drop()
-		// We need to return a funding value because money was spent on this
-		// host, even though the full process could not be completed.
-		c.log.Println("WARN: Attempted to form a new contract with a host that this renter already has a contract with.")
-		return contractFunding, modules.RenterContract{}, fmt.Errorf("%v already has a contract with host %v", contract.RenterPublicKey.String(), contract.HostPublicKey.String())
-	}
-	c.pubKeysToContractID[contract.RenterPublicKey.String() + contract.HostPublicKey.String()] = contract.ID
-	c.mu.Unlock()
-
-	contractValue := contract.RenterFunds
-	c.log.Printf("Formed contract %v with %v for %v\n", contract.ID, host.NetAddress, contractValue.HumanString())
-
-	// Update the hostdb to include the new contract.
-	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
-	if err != nil {
-		c.log.Println("Unable to update hostdb contracts:", err)
-	}
-	return contractFunding, contract, nil
-}
-
 // managedPruneRedundantAddressRange uses the hostdb to find hosts that
 // violate the rules about address ranges and cancels them.
 func (c *Contractor) managedPruneRedundantAddressRange() {
@@ -1112,7 +1016,7 @@ func (c *Contractor) threadedContractMaintenance() {
 
 // FormContracts forms up to the specified number of contracts, puts them
 // in the contract set, and returns them.
-func (c *Contractor) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey) ([]modules.RenterContract, error) {
+func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([]modules.RenterContract, error) {
 	// No contract formation until the contractor is synced.
 	if !c.managedSynced() {
 		return nil, errors.New("contractor isn't synced yet")
@@ -1154,8 +1058,8 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey)
 	// have active contracts with. Then select a new batch of hosts to attempt
 	// contract formation with.
 	allContracts := c.staticContracts.ByRenter(rpk)
-	var blacklist []types.SiaPublicKey
-	var addressBlacklist []types.SiaPublicKey
+	var blacklist []types.PublicKey
+	var addressBlacklist []types.PublicKey
 	for _, contract := range allContracts {
 		blacklist = append(blacklist, contract.HostPublicKey)
 		if !contract.Utility.Locked || contract.Utility.GoodForRenew || contract.Utility.GoodForUpload {
@@ -1176,7 +1080,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey)
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := c.tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(3)
+	txnFee := modules.ConvertCurrency(maxFee).Mul64(modules.EstimatedFileContractTransactionSetSize)
 
 	// Form contracts with the hosts one at a time, until we have enough contracts.
 	for _, host := range hosts {
@@ -1238,15 +1142,15 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey)
 		start := time.Now()
 		fundsSpent, newContract, err := c.managedNewContract(rpk, rsk, host, contractFunds, endHeight)
 		if err != nil {
-			c.log.Printf("Attempted to form a contract with %v, time spent %v, but negotiation failed: %v\n", host.NetAddress, time.Since(start).Round(time.Millisecond), err)
+			c.log.Printf("WARN: attempted to form a contract with %v, time spent %v, but negotiation failed: %v\n", host.NetAddress, time.Since(start).Round(time.Millisecond), err)
 			continue
 		}
 		fundsRemaining = fundsRemaining.Sub(fundsSpent)
 		neededContracts--
 
 		// Lock the funds in the database.
-		funds, _ := fundsSpent.Float64()
-		hastings, _ := types.SiacoinPrecision.Float64()
+		funds := modules.Float64(fundsSpent)
+		hastings := modules.Float64(types.HastingsPerSiacoin)
 		amount := funds / hastings
 		err = c.satellite.LockSiacoins(renter.Email, amount)
 		if err != nil {
@@ -1260,7 +1164,7 @@ func (c *Contractor) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey)
 
 		// Add this contract to the contractor and save.
 		contractSet = append(contractSet, newContract)
-		err = c.managedAcquireAndUpdateContractUtility(newContract.ID, smodules.ContractUtility{
+		err = c.managedAcquireAndUpdateContractUtility(newContract.ID, modules.ContractUtility{
 			GoodForUpload: true,
 			GoodForRenew:  true,
 		})

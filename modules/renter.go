@@ -1,45 +1,26 @@
 package modules
 
 import (
-	"gitlab.com/NebulousLabs/fastrand"
+	"crypto/ed25519"
+	"fmt"
+	"time"
 
-	core "go.sia.tech/core/types"
-	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	rhpv2 "go.sia.tech/core/rhp/v2"
+	"go.sia.tech/core/types"
+
+	"lukechampine.com/frand"
 )
-
-// RecoverableContract is a types.FileContract as it appears on the blockchain
-// with additional fields which contain the information required to recover its
-// latest revision from a host.
-type RecoverableContract struct {
-	types.FileContract
-	// ID is the FileContract's ID.
-	ID types.FileContractID `json:"id"`
-	// RenterPublicKey is the public key of the renter that formed this contract.
-	RenterPublicKey types.SiaPublicKey `json:"renterpublickey"`
-	// HostPublicKey is the public key of the host we formed this contract
-	// with.
-	HostPublicKey types.SiaPublicKey `json:"hostpublickey"`
-	// InputParentID is the ParentID of the first SiacoinInput of the
-	// transaction that contains this contract.
-	InputParentID types.SiacoinOutputID `json:"inputparentid"`
-	// StartHeight is the estimated startheight of a recoverable contract.
-	StartHeight types.BlockHeight `json:"startheight"`
-	// TxnFee of the transaction which contains the contract.
-	TxnFee types.Currency `json:"txnfee"`
-}
 
 // A RenterContract contains metadata about a file contract. It is read-only;
 // modifying a RenterContract does not modify the actual file contract.
 type RenterContract struct {
 	ID              types.FileContractID
-	HostPublicKey   types.SiaPublicKey
-	RenterPublicKey types.SiaPublicKey
+	HostPublicKey   types.PublicKey
+	RenterPublicKey types.PublicKey
 	Transaction     types.Transaction
 
-	StartHeight types.BlockHeight
-	EndHeight   types.BlockHeight
+	StartHeight uint64
+	EndHeight   uint64
 
 	// RenterFunds is the amount remaining in the contract that the renter can
 	// spend.
@@ -49,12 +30,12 @@ type RenterContract struct {
 	// to track the various costs manually.
 	DownloadSpending    types.Currency
 	FundAccountSpending types.Currency
-	MaintenanceSpending smodules.MaintenanceSpending
+	MaintenanceSpending MaintenanceSpending
 	StorageSpending     types.Currency
 	UploadSpending      types.Currency
 
 	// Utility contains utility information about the renter.
-	Utility smodules.ContractUtility
+	Utility ContractUtility
 
 	// TotalCost indicates the amount of money that the renter spent and/or
 	// locked up while forming a contract. This includes fees, and includes
@@ -82,7 +63,7 @@ type RenterContract struct {
 func (rc *RenterContract) Size() uint64 {
 	var size uint64
 	if len(rc.Transaction.FileContractRevisions) != 0 {
-		size = rc.Transaction.FileContractRevisions[0].NewFileSize
+		size = rc.Transaction.FileContractRevisions[0].Filesize
 	}
 	return size
 }
@@ -94,17 +75,17 @@ type RenterSettings struct {
 
 // Renter holds the data related to the specific renter.
 type Renter struct {
-	Allowance     Allowance          `json:"allowance"`
-	CurrentPeriod types.BlockHeight  `json:"currentperiod"`
-	PublicKey     types.SiaPublicKey `json:"publickey"`
-	Email         string             `json:"email"` // Link to the user account.
-	Settings      RenterSettings     `json:"settings"`
-	PrivateKey    crypto.SecretKey   `json:"privatekey"`
+	Allowance     Allowance        `json:"allowance"`
+	CurrentPeriod uint64           `json:"currentperiod"`
+	PublicKey     types.PublicKey  `json:"publickey"`
+	Email         string           `json:"email"` // Link to the user account.
+	Settings      RenterSettings   `json:"settings"`
+	PrivateKey    types.PrivateKey `json:"privatekey"`
 }
 
 // contractEndHeight returns the height at which the renter's contracts
 // end.
-func (r *Renter) ContractEndHeight() types.BlockHeight {
+func (r *Renter) ContractEndHeight() uint64 {
 	return r.CurrentPeriod + r.Allowance.Period + r.Allowance.RenewWindow
 }
 
@@ -112,28 +93,28 @@ func (r *Renter) ContractEndHeight() types.BlockHeight {
 // file contracts.
 // NOTE: The seed returned by this function should be wiped once it's no longer
 // in use.
-func DeriveRenterSeed(walletSeed smodules.Seed, email string) smodules.RenterSeed {
-	var renterSeed smodules.RenterSeed
-	rs := crypto.HashBytes(append(walletSeed[:], []byte(email)...))
-	defer fastrand.Read(rs[:])
-	copy(renterSeed[:], rs[:])
+func DeriveRenterSeed(walletSeed []byte, email string) []byte {
+	renterSeed := make([]byte, ed25519.SeedSize)
+	rs := types.HashBytes(append(walletSeed, []byte(email)...))
+	defer frand.Read(rs[:])
+	copy(renterSeed, rs[:])
 	return renterSeed
 }
 
 // DeriveEphemeralKey derives a secret key to be used by the renter for the
 // exchange with the hosts.
-func DeriveEphemeralKey(rsk crypto.SecretKey, hpk types.SiaPublicKey) crypto.SecretKey {
-	ers := crypto.HashBytes(append(rsk[:], hpk.Key...))
-	defer fastrand.Read(ers[:])
+func DeriveEphemeralKey(rsk types.PrivateKey, hpk types.PublicKey) types.PrivateKey {
+	ers := types.HashBytes(append(rsk, hpk[:]...))
+	defer frand.Read(ers[:])
 	esk, _ := GenerateKeyPair(ers)
 	return esk
 }
 
 // GenerateKeyPair generates a private/public keypair from a seed.
-func GenerateKeyPair(seed crypto.Hash) (sk crypto.SecretKey, pk crypto.PublicKey) {
-	xsk := core.NewPrivateKeyFromSeed(seed[:])
-	defer fastrand.Read(seed[:])
-	copy(sk[:], xsk[:])
+func GenerateKeyPair(seed types.Hash256) (sk types.PrivateKey, pk types.PublicKey) {
+	xsk := types.NewPrivateKeyFromSeed(seed[:])
+	defer frand.Read(seed[:])
+	copy(sk, xsk)
 	xpk := sk.PublicKey()
 	copy(pk[:], xpk[:])
 	return
@@ -144,8 +125,8 @@ func GenerateKeyPair(seed crypto.Hash) (sk crypto.SecretKey, pk crypto.PublicKey
 type Allowance struct {
 	Funds       types.Currency    `json:"funds"`
 	Hosts       uint64            `json:"hosts"`
-	Period      types.BlockHeight `json:"period"`
-	RenewWindow types.BlockHeight `json:"renewwindow"`
+	Period      uint64            `json:"period"`
+	RenewWindow uint64            `json:"renewwindow"`
 
 	// ExpectedStorage is the amount of data that we expect to have in a contract.
 	ExpectedStorage uint64 `json:"expectedstorage"`
@@ -173,23 +154,23 @@ type Allowance struct {
 	MaxStoragePrice           types.Currency    `json:"maxstorageprice"`
 	MaxUploadBandwidthPrice   types.Currency    `json:"maxuploadbandwidthprice"`
 	MinMaxCollateral          types.Currency    `json:"minmaxcollateral"`
-	BlockHeightLeeway         types.BlockHeight `json:"blockheightleeway"`
+	BlockHeightLeeway         uint64            `json:"blockheightleeway"`
 }
 
 // DefaultAllowance is the set of default allowance settings that will be
 // used when allowances are not set or not fully set.
 var DefaultAllowance = Allowance{
-	Funds:       types.SiacoinPrecision.Mul64(2500),
+	Funds:       types.HastingsPerSiacoin.Mul64(2500),
 	Hosts:       50,
-	Period:      2 * types.BlocksPerMonth,
-	RenewWindow: types.BlocksPerMonth,
+	Period:      2 * BlocksPerMonth,
+	RenewWindow: BlocksPerMonth,
 
-	ExpectedStorage:    1e12,                                         // 1 TB
-	ExpectedUpload:     uint64(200e9) / uint64(types.BlocksPerMonth), // 200 GB per month
-	ExpectedDownload:   uint64(100e9) / uint64(types.BlocksPerMonth), // 100 GB per month
+	ExpectedStorage:    1e12,                           // 1 TB
+	ExpectedUpload:     uint64(200e9) / BlocksPerMonth, // 200 GB per month
+	ExpectedDownload:   uint64(100e9) / BlocksPerMonth, // 100 GB per month
 	MinShards:          10,
 	TotalShards:        30,
-	BlockHeightLeeway:  types.BlockHeight(3),
+	BlockHeightLeeway:  3,
 }
 
 // Active returns true if and only if this allowance has been set in the
@@ -200,12 +181,181 @@ func (a Allowance) Active() bool {
 
 // ContractParams are supplied as an argument to FormContracts.
 type ContractParams struct {
-	Allowance      Allowance
-	Host           smodules.HostDBEntry
+	Host           HostDBEntry
 	Funding        types.Currency
-	StartHeight    types.BlockHeight
-	EndHeight      types.BlockHeight
-	RefundAddress  types.UnlockHash
-	PublicKey      types.SiaPublicKey
-	SecretKey      crypto.SecretKey
+	StartHeight    uint64
+	EndHeight      uint64
+	RefundAddress  types.Address
+	Collateral     types.Currency
+	PublicKey      types.PublicKey
+	SecretKey      types.PrivateKey
+}
+
+// A HostDBEntry represents one host entry in the satellite's host DB. It
+// aggregates the host's external settings and metrics with its public key.
+type HostDBEntry struct {
+	rhpv2.HostSettings
+
+	// FirstSeen is the last block height at which this host was announced.
+	FirstSeen uint64 `json:"firstseen"`
+
+	// Measurements that have been taken on the host. The most recent
+	// measurements are kept in full detail, historic ones are compressed into
+	// the historic values.
+	HistoricDowntime time.Duration `json:"historicdowntime"`
+	HistoricUptime   time.Duration `json:"historicuptime"`
+	ScanHistory      HostDBScans   `json:"scanhistory"`
+
+	// Measurements that are taken whenever we interact with a host.
+	HistoricFailedInteractions     float64 `json:"historicfailedinteractions"`
+	HistoricSuccessfulInteractions float64 `json:"historicsuccessfulinteractions"`
+	RecentFailedInteractions       float64 `json:"recentfailedinteractions"`
+	RecentSuccessfulInteractions   float64 `json:"recentsuccessfulinteractions"`
+
+	LastHistoricUpdate uint64 `json:"lasthistoricupdate"`
+
+	// Measurements related to the IP subnet mask.
+	IPNets          []string  `json:"ipnets"`
+	LastIPNetChange time.Time `json:"lastipnetchange"`
+
+	// The public key of the host, stored separately to minimize risk of certain
+	// MitM based vulnerabilities.
+	PublicKey types.PublicKey `json:"publickey"`
+
+	// Filtered says whether or not a HostDBEntry is being filtered out of the
+	// filtered hosttree due to the filter mode of the hosttree.
+	Filtered bool `json:"filtered"`
+}
+
+// HostDBScan represents a single scan event.
+type HostDBScan struct {
+	Timestamp time.Time `json:"timestamp"`
+	Success   bool      `json:"success"`
+}
+
+// HostDBScans represents a sortable slice of scans.
+type HostDBScans []HostDBScan
+
+func (s HostDBScans) Len() int           { return len(s) }
+func (s HostDBScans) Less(i, j int) bool { return s[i].Timestamp.Before(s[j].Timestamp) }
+func (s HostDBScans) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+// HostScoreBreakdown provides a piece-by-piece explanation of why a host has
+// the score that they do.
+type HostScoreBreakdown struct {
+	Score          types.Currency `json:"score"`
+	ConversionRate float64        `json:"conversionrate"`
+
+	AcceptContractAdjustment   float64 `json:"acceptcontractadjustment"`
+	AgeAdjustment              float64 `json:"ageadjustment"`
+	BasePriceAdjustment        float64 `json:"basepriceadjustment"`
+	BurnAdjustment             float64 `json:"burnadjustment"`
+	CollateralAdjustment       float64 `json:"collateraladjustment"`
+	DurationAdjustment         float64 `json:"durationadjustment"`
+	InteractionAdjustment      float64 `json:"interactionadjustment"`
+	PriceAdjustment            float64 `json:"pricesmultiplier,siamismatch"`
+	StorageRemainingAdjustment float64 `json:"storageremainingadjustment"`
+	UptimeAdjustment           float64 `json:"uptimeadjustment"`
+	VersionAdjustment          float64 `json:"versionadjustment"`
+}
+
+// FilterMode is the helper type for the enum constants for the HostDB filter
+// mode.
+type FilterMode int
+
+// HostDBFilterError HostDBDisableFilter HostDBActivateBlacklist and
+// HostDBActiveWhitelist are the constants used to enable and disable the filter
+// mode of the satellite's hostdb.
+const (
+	HostDBFilterError FilterMode = iota
+	HostDBDisableFilter
+	HostDBActivateBlacklist
+	HostDBActiveWhitelist
+)
+
+// String returns the string value for the FilterMode
+func (fm FilterMode) String() string {
+	switch fm {
+	case HostDBFilterError:
+		return "error"
+	case HostDBDisableFilter:
+		return "disable"
+	case HostDBActivateBlacklist:
+		return "blacklist"
+	case HostDBActiveWhitelist:
+		return "whitelist"
+	default:
+		return ""
+	}
+}
+
+// FromString assigned the FilterMode from the provide string
+func (fm *FilterMode) FromString(s string) error {
+	switch s {
+	case "disable":
+		*fm = HostDBDisableFilter
+	case "blacklist":
+		*fm = HostDBActivateBlacklist
+	case "whitelist":
+		*fm = HostDBActiveWhitelist
+	default:
+		*fm = HostDBFilterError
+		return fmt.Errorf("could not assigned FilterMode from string %v", s)
+	}
+	return nil
+}
+
+// SpendingDetails is a helper struct that contains a breakdown of where exactly
+// the money was spent. The MaintenanceSpending field is an aggregate of costs
+// spent on RHP3 maintenance, this includes updating the price table, syncing
+// the account balance, etc.
+type SpendingDetails struct {
+	DownloadSpending    types.Currency
+	FundAccountSpending types.Currency
+	MaintenanceSpending MaintenanceSpending
+	StorageSpending     types.Currency
+	UploadSpending      types.Currency
+}
+
+// MaintenanceSpending is a helper struct that contains a breakdown of costs
+// related to the maintenance (a.k.a upkeep) of the RHP3 protocol. This includes
+// the costs to sync the account balance, update the price table, etc.
+type MaintenanceSpending struct {
+	AccountBalanceCost   types.Currency `json:"accountbalancecost"`
+	FundAccountCost      types.Currency `json:"fundaccountcost"`
+	UpdatePriceTableCost types.Currency `json:"updatepricetablecost"`
+}
+
+// Add is a convenience function that sums the fields of the spending object
+// with the corresponding fields of the given object.
+func (x MaintenanceSpending) Add(y MaintenanceSpending) MaintenanceSpending {
+	return MaintenanceSpending{
+		AccountBalanceCost:   x.AccountBalanceCost.Add(y.AccountBalanceCost),
+		FundAccountCost:      x.FundAccountCost.Add(y.FundAccountCost),
+		UpdatePriceTableCost: x.UpdatePriceTableCost.Add(y.UpdatePriceTableCost),
+	}
+}
+
+// Sum is a convenience function that sums up all of the fields in the spending
+// object and returns the total as a types.Currency.
+func (x MaintenanceSpending) Sum() types.Currency {
+	return x.AccountBalanceCost.Add(x.FundAccountCost).Add(x.UpdatePriceTableCost)
+}
+
+// ContractUtility contains metrics internal to the contractor that reflect the
+// utility of a given contract.
+type ContractUtility struct {
+	GoodForUpload bool `json:"goodforupload"`
+	GoodForRenew  bool `json:"goodforrenew"`
+
+	// BadContract will be set to true if there's good reason to believe that
+	// the contract is unusable and will continue to be unusable. For example,
+	// if the host is claiming that the contract does not exist, the contract
+	// should be marked as bad.
+	BadContract bool   `json:"badcontract"`
+	LastOOSErr  uint64 `json:"lastooserr"` // OOS means Out Of Storage
+
+	// If a contract is locked, the utility should not be updated. 'Locked' is a
+	// value that gets persisted.
+	Locked bool `json:"locked"`
 }

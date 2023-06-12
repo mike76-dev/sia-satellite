@@ -2,19 +2,17 @@ package main
 
 import (
 	"fmt"
-	"math"
+	//"math"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/node/api/client"
 	"github.com/spf13/cobra"
 
-	"gitlab.com/NebulousLabs/errors"
-
 	"go.sia.tech/siad/build"
-	smodules "go.sia.tech/siad/modules"
 )
 
 var (
@@ -89,7 +87,7 @@ func statuscmd() {
 
 	// Consensus Info.
 	cg, err := httpClient.ConsensusGet()
-	if errors.Contains(err, api.ErrAPICallNotRecognized) {
+	if strings.Contains(err.Error(), api.ErrAPICallNotRecognized.Error()) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Consensus:\n  Status: %s\n\n", moduleNotReadyStatus)
 	} else if err != nil {
@@ -102,8 +100,8 @@ func statuscmd() {
 	}
 
 	// Wallet Info.
-	walletStatus, err := httpClient.WalletGet()
-	if errors.Contains(err, api.ErrAPICallNotRecognized) {
+	/*walletStatus, err := httpClient.WalletGet()
+	if strings.Contains(err.Error(), api.ErrAPICallNotRecognized.Error()) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Wallet:\n  Status: %s\n\n", moduleNotReadyStatus)
 	} else if err != nil {
@@ -112,15 +110,15 @@ func statuscmd() {
 		fmt.Printf(`Wallet:
   Status:          unlocked
   Siacoin Balance: %v
-`, modules.CurrencyUnits(walletStatus.ConfirmedSiacoinBalance))
+`, modules.ConvertCurrency(walletStatus.ConfirmedSiacoinBalance))
 	} else {
 		fmt.Printf(`Wallet:
   Status: Locked
 `)
-	}
+	}*/
 
 	// Satellite Info.
-	renters, err := httpClient.SatelliteRentersGet()
+	/*renters, err := httpClient.SatelliteRentersGet()
 	if err != nil {
 		die(err)
 	}
@@ -132,37 +130,7 @@ func statuscmd() {
 	fmt.Printf(`Satellite:
   Renters:          %v
   Active Contracts: %v
-`, len(renters.Renters), len(contracts.ActiveContracts))
-
-	// Gateway Rate Limits.
-	gg, err := httpClient.GatewayGet()
-	if err != nil {
-		die("Could not get gateway:", err)
-	}
-	fmt.Printf(`
-Gateway `)
-	rateLimitSummary(gg.MaxDownloadSpeed, gg.MaxUploadSpeed)
-}
-
-// rateLimitSummary displays the a summary of the provided rate limits.
-func rateLimitSummary(download, upload int64) {
-	fmt.Printf(`Rate limits: `)
-	if download == 0 {
-		fmt.Printf(`
-  Download Speed: %v`, "no limit")
-	} else {
-		fmt.Printf(`
-  Download Speed: %v`, ratelimitUnits(download))
-	}
-	if upload == 0 {
-		fmt.Printf(`
-  Upload Speed:   %v
-`, "no limit")
-	} else {
-		fmt.Printf(`
-  Upload Speed:   %v
-`, ratelimitUnits(upload))
-	}
+`, len(renters.Renters), len(contracts.ActiveContracts))*/
 }
 
 func main() {
@@ -180,7 +148,7 @@ func main() {
 		// Check for Critical Alerts.
 		alerts, err := httpClient.DaemonAlertsGet()
 		if err == nil && len(alerts.CriticalAlerts) > 0 && !alertSuppress {
-			printAlerts(alerts.CriticalAlerts, smodules.SeverityCritical)
+			printAlerts(alerts.CriticalAlerts, modules.SeverityCritical)
 			fmt.Println("------------------")
 			fmt.Printf("\n  The above %v critical alerts should be resolved ASAP\n\n", len(alerts.CriticalAlerts))
 		}
@@ -205,43 +173,44 @@ func initCmds() *cobra.Command {
 		Run:   wrap(statuscmd),
 	}
 
+	// Daemon Commands.
+	root.AddCommand(alertsCmd, stopCmd, versionCmd)
+
+
 	// Create command tree (alphabetized by root command).
 	root.AddCommand(consensusCmd)
 
 	root.AddCommand(gatewayCmd)
-	gatewayCmd.AddCommand(gatewayAddressCmd, gatewayBandwidthCmd, gatewayBlocklistCmd, gatewayConnectCmd, gatewayDisconnectCmd, gatewayListCmd, gatewayRatelimitCmd)
+	gatewayCmd.AddCommand(gatewayAddressCmd, gatewayBlocklistCmd, gatewayConnectCmd, gatewayDisconnectCmd, gatewayListCmd)
 	gatewayBlocklistCmd.AddCommand(gatewayBlocklistAppendCmd, gatewayBlocklistClearCmd, gatewayBlocklistRemoveCmd, gatewayBlocklistSetCmd)
 
-	root.AddCommand(hostdbCmd)
-	hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
-	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
+	//root.AddCommand(hostdbCmd)
+	//hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
+	//hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
 
-	root.AddCommand(satelliteCmd)
-	satelliteCmd.AddCommand(satelliteRentersCmd, satelliteRenterCmd, satelliteBalanceCmd, satelliteContractsCmd)
+	//root.AddCommand(portalCmd)
+	//portalCmd.AddCommand(portalSetCmd)
 
-	root.AddCommand(portalCmd)
-	portalCmd.AddCommand(portalSetCmd)
+	//root.AddCommand(satelliteCmd)
+	//satelliteCmd.AddCommand(satelliteRentersCmd, satelliteRenterCmd, satelliteBalanceCmd, satelliteContractsCmd)
 
-	// Daemon Commands.
-	root.AddCommand(alertsCmd, stopCmd, versionCmd)
-
-	root.AddCommand(walletCmd)
-	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangepasswordCmd,
-		walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd,
-		walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)
-	walletInitCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Prompt for a custom password")
-	walletInitCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet and re-encrypt")
-	walletInitSeedCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet")
-	walletInitSeedCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
-	walletLoadCmd.AddCommand(walletLoadSeedCmd)
-	walletSendCmd.AddCommand(walletSendSiacoinsCmd)
-	walletSendSiacoinsCmd.Flags().BoolVarP(&walletTxnFeeIncluded, "fee-included", "", false, "Take the transaction fee out of the balance being submitted instead of the fee being additional")
-	walletUnlockCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
-	walletUnlockCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Display interactive password prompt even if SATD_WALLET_PASSWORD is set")
-	walletBroadcastCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Decode transaction as base64 instead of JSON")
-	walletSignCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Encode signed transaction as base64 instead of JSON")
-	walletTransactionsCmd.Flags().Uint64Var(&walletStartHeight, "startheight", 0, " Height of the block where transaction history should begin.")
-	walletTransactionsCmd.Flags().Uint64Var(&walletEndHeight, "endheight", math.MaxUint64, " Height of the block where transaction history should end.")
+	//root.AddCommand(walletCmd)
+	//walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangepasswordCmd,
+		//walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd,
+		//walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)
+	//walletInitCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Prompt for a custom password")
+	//walletInitCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet and re-encrypt")
+	//walletInitSeedCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet")
+	//walletInitSeedCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
+	//walletLoadCmd.AddCommand(walletLoadSeedCmd)
+	//walletSendCmd.AddCommand(walletSendSiacoinsCmd)
+	//walletSendSiacoinsCmd.Flags().BoolVarP(&walletTxnFeeIncluded, "fee-included", "", false, "Take the transaction fee out of the balance being submitted instead of the fee being additional")
+	//walletUnlockCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
+	//walletUnlockCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Display interactive password prompt even if SATD_WALLET_PASSWORD is set")
+	//walletBroadcastCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Decode transaction as base64 instead of JSON")
+	//walletSignCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Encode signed transaction as base64 instead of JSON")
+	//walletTransactionsCmd.Flags().Uint64Var(&walletStartHeight, "startheight", 0, " Height of the block where transaction history should begin.")
+	//walletTransactionsCmd.Flags().Uint64Var(&walletEndHeight, "endheight", math.MaxUint64, " Height of the block where transaction history should end.")
 
 	return root
 }

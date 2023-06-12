@@ -4,11 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/julienschmidt/httprouter"
 
 	"gitlab.com/NebulousLabs/encoding"
-	"gitlab.com/NebulousLabs/errors"
 
 	"go.sia.tech/siad/crypto"
 	"go.sia.tech/siad/modules"
@@ -136,7 +136,7 @@ func tpoolRawHandlerPOST(tpool modules.TransactionPool, w http.ResponseWriter, r
 	txnSet := append(parents, txn)
 	tpool.Broadcast(txnSet)
 	err := tpool.AcceptTransactionSet(txnSet)
-	if err != nil && !errors.Contains(err, modules.ErrDuplicateTransactionSet) {
+	if err != nil && !strings.Contains(err.Error(), modules.ErrDuplicateTransactionSet.Error()) {
 		WriteError(w, Error{"error accepting transaction set: " + err.Error()}, http.StatusBadRequest)
 		return
 	}
