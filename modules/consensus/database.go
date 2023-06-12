@@ -473,34 +473,18 @@ func findSiacoinOutput(tx *sql.Tx, scoid types.SiacoinOutputID) (sco types.Siaco
 // addSiacoinOutput adds a Siacoin output to the database. An error is returned
 // if the Siacoin output is already in the database.
 func addSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, sco types.SiacoinOutput) error {
-	var count int
-	err := tx.QueryRow("SELECT COUNT(*) FROM cs_sco WHERE scoid = ?", id[:]).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return errors.New("repeat Siacoin output")
-	}
 	var buf bytes.Buffer
 	e := types.NewEncoder(&buf)
 	sco.EncodeTo(e)
 	e.Flush()
-	_, err = tx.Exec("INSERT INTO cs_sco (scoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec("INSERT INTO cs_sco (scoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 	return err
 }
 
 // removeSiacoinOutput removes a Siacoin output from the database. An error is
 // returned if the Siacoin output is not in the database prior to removal.
 func removeSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID) error {
-	var count int
-	err := tx.QueryRow("SELECT COUNT(*) FROM cs_sco WHERE scoid = ?", id[:]).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return errors.New("nil Siacoin output")
-	}
-	_, err = tx.Exec("DELETE FROM cs_sco WHERE scoid = ?", id[:])
+	_, err := tx.Exec("DELETE FROM cs_sco WHERE scoid = ?", id[:])
 	return err
 }
 
@@ -535,36 +519,20 @@ func addSiafundOutput(tx *sql.Tx, id types.SiafundOutputID, sfo types.SiafundOut
 	if sfo.Value == 0 {
 		return errors.New("zero value Siafund being added")
 	}
-	var count int
-	err := tx.QueryRow("SELECT COUNT(*) FROM cs_sfo WHERE sfoid = ?", id[:]).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return errors.New("repeat Siafund output")
-	}
 	var buf bytes.Buffer
 	e := types.NewEncoder(&buf)
 	types.NewCurrency64(sfo.Value).EncodeTo(e)
 	sfo.Address.EncodeTo(e)
 	claimStart.EncodeTo(e)
 	e.Flush()
-	_, err = tx.Exec("INSERT INTO cs_sfo (sfoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec("INSERT INTO cs_sfo (sfoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 	return err
 }
 
 // removeSiafundOutput removes a Siafund output from the database. An error is
 // returned if the Siafund output is not in the database prior to removal.
 func removeSiafundOutput(tx *sql.Tx, id types.SiafundOutputID) error {
-	var count int
-	err := tx.QueryRow("SELECT COUNT(*) FROM cs_sfo WHERE sfoid = ?", id[:]).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return errors.New("nil Siafund output")
-	}
-	_, err = tx.Exec("DELETE FROM cs_sfo WHERE sfoid = ?", id[:])
+	_, err := tx.Exec("DELETE FROM cs_sfo WHERE sfoid = ?", id[:])
 	return err
 }
 
@@ -594,20 +562,11 @@ func addFileContract(tx *sql.Tx, id types.FileContractID, fc types.FileContract)
 	}
 
 	// Add the file contract to the database.
-	var count int
-	err := tx.QueryRow("SELECT COUNT(*) FROM cs_fc WHERE fcid = ?", id[:]).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return errors.New("repeat file contract")
-	}
-
 	var buf bytes.Buffer
 	e := types.NewEncoder(&buf)
 	fc.EncodeTo(e)
 	e.Flush()
-	_, err = tx.Exec("INSERT INTO cs_fc (fcid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec("INSERT INTO cs_fc (fcid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 	if err != nil {
 		return err
 	}
@@ -619,18 +578,8 @@ func addFileContract(tx *sql.Tx, id types.FileContractID, fc types.FileContract)
 
 // removeFileContract removes a file contract from the database.
 func removeFileContract(tx *sql.Tx, id types.FileContractID) error {
-	// Sanity check - should not be removing a file contract not in the db.
-	var count int
-	err := tx.QueryRow("SELECT COUNT(*) FROM cs_fc WHERE fcid = ?", id[:]).Scan(&count)
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return errors.New("nil file contract")
-	}
-
 	// Delete the file contract entry.
-	_, err = tx.Exec("DELETE FROM cs_fc WHERE fcid = ?", id[:])
+	_, err := tx.Exec("DELETE FROM cs_fc WHERE fcid = ?", id[:])
 	if err != nil {
 		return err
 	}
