@@ -13,10 +13,10 @@ import (
 
 // applySiacoinInputs takes all of the siacoin inputs in a transaction and
 // applies them to the state, updating the diffs in the processed block.
-func applySiacoinInputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
+func (cs *ConsensusSet) applySiacoinInputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
 	// Remove all siacoin inputs from the unspent siacoin outputs list.
 	for _, sci := range t.SiacoinInputs {
-		sco, exists, err := findSiacoinOutput(tx, sci.ParentID)
+		sco, exists, err := cs.findSiacoinOutput(tx, sci.ParentID)
 		if err != nil {
 			return err
 		}
@@ -29,7 +29,7 @@ func applySiacoinInputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 			SiacoinOutput: sco,
 		}
 		pb.SiacoinOutputDiffs = append(pb.SiacoinOutputDiffs, scod)
-		err = commitSiacoinOutputDiff(tx, scod, modules.DiffApply)
+		err = cs.commitSiacoinOutputDiff(tx, scod, modules.DiffApply)
 		if err != nil {
 			return err
 		}
@@ -39,7 +39,7 @@ func applySiacoinInputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 
 // applySiacoinOutputs takes all of the siacoin outputs in a transaction and
 // applies them to the state, updating the diffs in the processed block.
-func applySiacoinOutputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
+func (cs *ConsensusSet) applySiacoinOutputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
 	// Add all siacoin outputs to the unspent siacoin outputs list.
 	for i, sco := range t.SiacoinOutputs {
 		scoid := t.SiacoinOutputID(i)
@@ -49,7 +49,7 @@ func applySiacoinOutputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) er
 			SiacoinOutput: sco,
 		}
 		pb.SiacoinOutputDiffs = append(pb.SiacoinOutputDiffs, scod)
-		err := commitSiacoinOutputDiff(tx, scod, modules.DiffApply)
+		err := cs.commitSiacoinOutputDiff(tx, scod, modules.DiffApply)
 		if err != nil {
 			return err
 		}
@@ -60,7 +60,7 @@ func applySiacoinOutputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) er
 // applyFileContracts iterates through all of the file contracts in a
 // transaction and applies them to the state, updating the diffs in the proccesed
 // block.
-func applyFileContracts(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
+func (cs *ConsensusSet) applyFileContracts(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
 	for i, fc := range t.FileContracts {
 		fcid := t.FileContractID(i)
 		fcd := modules.FileContractDiff{
@@ -69,7 +69,7 @@ func applyFileContracts(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 			FileContract: fc,
 		}
 		pb.FileContractDiffs = append(pb.FileContractDiffs, fcd)
-		err := commitFileContractDiff(tx, fcd, modules.DiffApply)
+		err := cs.commitFileContractDiff(tx, fcd, modules.DiffApply)
 		if err != nil {
 			return err
 		}
@@ -95,9 +95,9 @@ func applyFileContracts(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 // applyFileContractRevisions iterates through all of the file contract
 // revisions in a transaction and applies them to the state, updating the diffs
 // in the processed block.
-func applyFileContractRevisions(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
+func (cs *ConsensusSet) applyFileContractRevisions(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
 	for _, fcr := range t.FileContractRevisions {
-		fc, exists, err := findFileContract(tx, fcr.ParentID)
+		fc, exists, err := cs.findFileContract(tx, fcr.ParentID)
 		if err != nil {
 			return err
 		}
@@ -112,7 +112,7 @@ func applyFileContractRevisions(tx *sql.Tx, pb *processedBlock, t types.Transact
 			FileContract: fc,
 		}
 		pb.FileContractDiffs = append(pb.FileContractDiffs, fcd)
-		err = commitFileContractDiff(tx, fcd, modules.DiffApply)
+		err = cs.commitFileContractDiff(tx, fcd, modules.DiffApply)
 		if err != nil {
 			return err
 		}
@@ -135,7 +135,7 @@ func applyFileContractRevisions(tx *sql.Tx, pb *processedBlock, t types.Transact
 			FileContract: newFC,
 		}
 		pb.FileContractDiffs = append(pb.FileContractDiffs, fcd)
-		err = commitFileContractDiff(tx, fcd, modules.DiffApply)
+		err = cs.commitFileContractDiff(tx, fcd, modules.DiffApply)
 		if err != nil {
 			return err
 		}
@@ -147,9 +147,9 @@ func applyFileContractRevisions(tx *sql.Tx, pb *processedBlock, t types.Transact
 // applyStorageProofs iterates through all of the storage proofs in a
 // transaction and applies them to the state, updating the diffs in the processed
 // block.
-func applyStorageProofs(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
+func (cs *ConsensusSet) applyStorageProofs(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
 	for _, sp := range t.StorageProofs {
-		fc, exists, err := findFileContract(tx, sp.ParentID)
+		fc, exists, err := cs.findFileContract(tx, sp.ParentID)
 		if err != nil {
 			return err
 		}
@@ -179,7 +179,7 @@ func applyStorageProofs(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 			FileContract: fc,
 		}
 		pb.FileContractDiffs = append(pb.FileContractDiffs, fcd)
-		err = commitFileContractDiff(tx, fcd, modules.DiffApply)
+		err = cs.commitFileContractDiff(tx, fcd, modules.DiffApply)
 		if err != nil {
 			return err
 		}
@@ -267,7 +267,7 @@ func applySiafundOutputs(tx *sql.Tx, pb *processedBlock, t types.Transaction) er
 // Accordingly, this function dispatches on the various ArbitraryData values
 // that are recognized by consensus. Currently, types.FoundationUnlockHashUpdate
 // is the only recognized value.
-func applyArbitraryData(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
+func (cs *ConsensusSet) applyArbitraryData(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
 	// No ArbitraryData values were recognized prior to the Foundation hardfork.
 	if pb.Height < modules.FoundationHardforkHeight {
 		return nil
@@ -307,7 +307,7 @@ func applyArbitraryData(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 			if err != nil {
 				return err
 			}
-			err = transferFoundationOutputs(tx, pb.Height, update.NewPrimary)
+			err = cs.transferFoundationOutputs(tx, pb.Height, update.NewPrimary)
 			if err != nil {
 				return err
 			}
@@ -320,14 +320,14 @@ func applyArbitraryData(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 // transferFoundationOutputs transfers all unspent subsidy outputs to
 // newPrimary. This allows subsidies to be recovered in the event that the
 // primary key is lost or unusable when a subsidy is created.
-func transferFoundationOutputs(tx *sql.Tx, currentHeight uint64, newPrimary types.Address) error {
+func (cs *ConsensusSet) transferFoundationOutputs(tx *sql.Tx, currentHeight uint64, newPrimary types.Address) error {
 	for height := modules.FoundationHardforkHeight; height < currentHeight; height += modules.FoundationSubsidyFrequency {
 		blockID, err := getBlockAtHeight(tx, height)
 		if err != nil {
 			continue
 		}
 		id := blockID.FoundationOutputID()
-		sco, exists, err := findSiacoinOutput(tx, id)
+		sco, exists, err := cs.findSiacoinOutput(tx, id)
 		if err != nil {
 			return err
 		}
@@ -339,7 +339,7 @@ func transferFoundationOutputs(tx *sql.Tx, currentHeight uint64, newPrimary type
 		if err != nil {
 			return err
 		}
-		err = addSiacoinOutput(tx, id, sco)
+		err = cs.addSiacoinOutput(tx, id, sco)
 		if err != nil {
 			return err
 		}
@@ -351,24 +351,24 @@ func transferFoundationOutputs(tx *sql.Tx, currentHeight uint64, newPrimary type
 // applyTransaction applies the contents of a transaction to the ConsensusSet.
 // This produces a set of diffs, which are stored in the blockNode containing
 // the transaction. No verification is done by this function.
-func applyTransaction(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
-	err := applySiacoinInputs(tx, pb, t)
+func (cs *ConsensusSet) applyTransaction(tx *sql.Tx, pb *processedBlock, t types.Transaction) error {
+	err := cs.applySiacoinInputs(tx, pb, t)
 	if err != nil {
 		return err
 	}
-	err = applySiacoinOutputs(tx, pb, t)
+	err = cs.applySiacoinOutputs(tx, pb, t)
 	if err != nil {
 		return err
 	}
-	err = applyFileContracts(tx, pb, t)
+	err = cs.applyFileContracts(tx, pb, t)
 	if err != nil {
 		return err
 	}
-	err = applyFileContractRevisions(tx, pb, t)
+	err = cs.applyFileContractRevisions(tx, pb, t)
 	if err != nil {
 		return err
 	}
-	err = applyStorageProofs(tx, pb, t)
+	err = cs.applyStorageProofs(tx, pb, t)
 	if err != nil {
 		return err
 	}
@@ -380,7 +380,7 @@ func applyTransaction(tx *sql.Tx, pb *processedBlock, t types.Transaction) error
 	if err != nil {
 		return err
 	}
-	err = applyArbitraryData(tx, pb, t)
+	err = cs.applyArbitraryData(tx, pb, t)
 	if err != nil {
 		return err
 	}

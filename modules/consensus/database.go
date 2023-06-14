@@ -82,7 +82,7 @@ func (cs *ConsensusSet) createConsensusDB(tx *sql.Tx) error {
 	// needs to happen between the database being opened/initialized and the
 	// consensus set hash being calculated.
 	for _, scod := range cs.blockRoot.SiacoinOutputDiffs {
-		err := commitSiacoinOutputDiff(tx, scod, modules.DiffApply)
+		err := cs.commitSiacoinOutputDiff(tx, scod, modules.DiffApply)
 		if err != nil {
 			return err
 		}
@@ -124,7 +124,7 @@ func (cs *ConsensusSet) createConsensusDB(tx *sql.Tx) error {
 		return err
 	}
 
-	return addBlock(tx, &cs.blockRoot)
+	return cs.addBlock(tx, &cs.blockRoot)
 }
 
 // blockHeight returns the height of the blockchain.
@@ -147,8 +147,8 @@ func currentBlockID(tx *sql.Tx) types.BlockID {
 }
 
 // currentProcessedBlock retrieves the most recent processed block.
-func currentProcessedBlock(tx *sql.Tx) *processedBlock {
-	pb, exists, err := findBlockByID(tx, currentBlockID(tx))
+func (cs *ConsensusSet) currentProcessedBlock(tx *sql.Tx) *processedBlock {
+	pb, exists, err := cs.findBlockByID(tx, currentBlockID(tx))
 	if err != nil || !exists {
 		return nil
 	}
@@ -156,7 +156,11 @@ func currentProcessedBlock(tx *sql.Tx) *processedBlock {
 }
 
 // findBlockByID tries to find a block with the given ID in the consensus set.
-func findBlockByID(tx *sql.Tx, id types.BlockID) (*processedBlock, bool, error) {
+func (cs *ConsensusSet) findBlockByID(tx *sql.Tx, id types.BlockID) (*processedBlock, bool, error) {
+	pb, exists := cs.pbCache.Lookup(id)
+	if exists {
+		return &pb, true, nil
+	}
 	var pbBytes []byte
 	err := tx.QueryRow("SELECT bytes FROM cs_map WHERE bid = ?", id[:]).Scan(&pbBytes)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -165,7 +169,6 @@ func findBlockByID(tx *sql.Tx, id types.BlockID) (*processedBlock, bool, error) 
 	if err != nil {
 		return nil, false, err
 	}
-	var pb processedBlock
 	buf := bytes.NewBuffer(pbBytes)
 	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(pbBytes))})
 	pb.DecodeFrom(d)
@@ -174,7 +177,11 @@ func findBlockByID(tx *sql.Tx, id types.BlockID) (*processedBlock, bool, error) 
 
 // getParentID is a convenience method for retrieving only some fields
 // from the block.
-func getParentID(tx *sql.Tx, id types.BlockID) (parentID types.BlockID, timestamp time.Time, err error) {
+func (cs *ConsensusSet) getParentID(tx *sql.Tx, id types.BlockID) (parentID types.BlockID, timestamp time.Time, err error) {
+	pb, exists := cs.pbCache.Lookup(id)
+	if exists {
+		return pb.Block.ParentID, pb.Block.Timestamp, nil
+	}
 	var pbBytes []byte
 	err = tx.QueryRow("SELECT bytes FROM cs_map WHERE bid = ?", id[:]).Scan(&pbBytes)
 	if err != nil {
@@ -186,13 +193,14 @@ func getParentID(tx *sql.Tx, id types.BlockID) (parentID types.BlockID, timestam
 }
 
 // addBlock adds the processed block to the block map.
-func addBlock(tx *sql.Tx, pb *processedBlock) error {
+func (cs *ConsensusSet) addBlock(tx *sql.Tx, pb *processedBlock) error {
 	id := pb.Block.ID()
-	return saveBlock(tx, id, pb)
+	return cs.saveBlock(tx, id, pb)
 }
 
 // saveBlock adds the processed block under the given ID.
-func saveBlock(tx *sql.Tx, id types.BlockID, pb *processedBlock) error {
+func (cs *ConsensusSet) saveBlock(tx *sql.Tx, id types.BlockID, pb *processedBlock) error {
+	cs.pbCache.Push(id, *pb)
 	var buf bytes.Buffer
 	e := types.NewEncoder(&buf)
 	pb.EncodeTo(e)
@@ -455,7 +463,11 @@ func countSiafunds(tx *sql.Tx) (total uint64, err error) {
 
 // findSiacoinOutput tries to find a Siacoin output with the given ID in the
 // consensus set.
-func findSiacoinOutput(tx *sql.Tx, scoid types.SiacoinOutputID) (sco types.SiacoinOutput, exists bool, err error) {
+func (cs *ConsensusSet) findSiacoinOutput(tx *sql.Tx, scoid types.SiacoinOutputID) (sco types.SiacoinOutput, exists bool, err error) {
+	sco, exists = cs.scoCache.Lookup(scoid)
+	if exists {
+		return sco, true, nil
+	}
 	scoBytes := make([]byte, 0, 56)
 	err = tx.QueryRow("SELECT bytes FROM cs_sco WHERE scoid = ?", scoid[:]).Scan(&scoBytes)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -472,12 +484,13 @@ func findSiacoinOutput(tx *sql.Tx, scoid types.SiacoinOutputID) (sco types.Siaco
 
 // addSiacoinOutput adds a Siacoin output to the database. An error is returned
 // if the Siacoin output is already in the database.
-func addSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, sco types.SiacoinOutput) error {
+func (cs *ConsensusSet) addSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, sco types.SiacoinOutput) error {
 	var buf bytes.Buffer
 	e := types.NewEncoder(&buf)
 	sco.EncodeTo(e)
 	e.Flush()
 	_, err := tx.Exec("INSERT INTO cs_sco (scoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	cs.scoCache.Push(id, sco)
 	return err
 }
 
@@ -538,7 +551,11 @@ func removeSiafundOutput(tx *sql.Tx, id types.SiafundOutputID) error {
 
 // findFileContract tries to find a file contract with the given ID in the
 // consensus set.
-func findFileContract(tx *sql.Tx, fcid types.FileContractID) (fc types.FileContract, exists bool, err error) {
+func (cs *ConsensusSet) findFileContract(tx *sql.Tx, fcid types.FileContractID) (fc types.FileContract, exists bool, err error) {
+	fc, exists = cs.fcCache.Lookup(fcid)
+	if exists {
+		return fc, true, nil
+	}
 	fcBytes := make([]byte, 0, 416)
 	err = tx.QueryRow("SELECT bytes FROM cs_fc WHERE fcid = ?", fcid[:]).Scan(&fcBytes)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -555,11 +572,14 @@ func findFileContract(tx *sql.Tx, fcid types.FileContractID) (fc types.FileContr
 
 // addFileContract adds a file contract to the database. An error is returned
 // if the file contract is already in the database.
-func addFileContract(tx *sql.Tx, id types.FileContractID, fc types.FileContract) error {
+func (cs *ConsensusSet) addFileContract(tx *sql.Tx, id types.FileContractID, fc types.FileContract) error {
 	// Sanity check - should not be adding a zero-payout file contract.
 	if fc.Payout.IsZero() {
 		return errors.New("adding zero-payout file contract")
 	}
+
+	// Update the cache.
+	cs.fcCache.Push(id, fc)
 
 	// Add the file contract to the database.
 	var buf bytes.Buffer

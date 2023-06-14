@@ -282,7 +282,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 	}
 	csHeight := blockHeight(tx)
 	for _, id := range knownBlocks {
-		pb, exists, err := findBlockByID(tx, id)
+		pb, exists, err := cs.findBlockByID(tx, id)
 		if err != nil || !exists {
 			continue
 		}
@@ -340,7 +340,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 				tx.Rollback()
 				return err
 			}
-			pb, _, err := findBlockByID(tx, id)
+			pb, _, err := cs.findBlockByID(tx, id)
 			if err != nil {
 				cs.mu.RUnlock()
 				cs.log.Printf("CRITICAL: unable to get block from block map: height %v :: request %v :: id %s\n", height, i, id)
@@ -498,7 +498,7 @@ func (cs *ConsensusSet) rpcSendBlk(conn modules.PeerConn) error {
 		cs.log.Println("ERROR: unable to start transaction:", err)
 		return err
 	}
-	pb, exists, err := findBlockByID(tx, id)
+	pb, exists, err := cs.findBlockByID(tx, id)
 	if err != nil {
 		tx.Rollback()
 		cs.mu.RUnlock()

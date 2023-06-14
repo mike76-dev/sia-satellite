@@ -204,7 +204,7 @@ func (cs *ConsensusSet) initOak(tx *sql.Tx) error {
 		if err != nil {
 			return modules.AddContext(err, "unable to find block at height")
 		}
-		pb, exists, err := findBlockByID(tx, id)
+		pb, exists, err := cs.findBlockByID(tx, id)
 		if err != nil {
 			return modules.AddContext(err, "unable to find block from id")
 		}

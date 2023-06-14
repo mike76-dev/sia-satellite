@@ -124,14 +124,14 @@ func (cs *ConsensusSet) targetAdjustmentBase(tx *sql.Tx, pb *processedBlock) *bi
 	var err error
 	for windowSize = 0; windowSize < modules.TargetWindow && parentID != (types.BlockID{}); windowSize++ {
 		currentID = parentID
-		parentID, _, err = getParentID(tx, parentID)
+		parentID, _, err = cs.getParentID(tx, parentID)
 		if err != nil {
 			cs.log.Println("ERROR: unable to find parent ID:", err)
 			return nil
 		}
 	}
 
-	current, exists, err := findBlockByID(tx, currentID)
+	current, exists, err := cs.findBlockByID(tx, currentID)
 	if err != nil || !exists {
 		cs.log.Println("ERROR: unable to find block:", err)
 		return nil
@@ -170,7 +170,7 @@ func clampTargetAdjustment(base *big.Rat) *big.Rat {
 // have the same target.
 func (cs *ConsensusSet) setChildTarget(tx *sql.Tx, pb *processedBlock) {
 	// Fetch the parent block.
-	parent, exists, err := findBlockByID(tx, pb.Block.ParentID)
+	parent, exists, err := cs.findBlockByID(tx, pb.Block.ParentID)
 	if err != nil || !exists {
 		cs.log.Println("ERROR: unable to find block:", err)
 		return
@@ -213,7 +213,7 @@ func (cs *ConsensusSet) newChild(tx *sql.Tx, pb *processedBlock, b types.Block) 
 	} else {
 		child.ChildTarget = cs.childTargetOak(prevTotalTime, prevTotalTarget, pb.ChildTarget, pb.Height, pb.Block.Timestamp)
 	}
-	err = saveBlock(tx, childID, child)
+	err = cs.saveBlock(tx, childID, child)
 	if err != nil {
 		cs.log.Println("ERROR: couldn't save new block:", err)
 		return nil

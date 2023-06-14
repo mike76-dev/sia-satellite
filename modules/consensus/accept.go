@@ -39,7 +39,7 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 	}
 
 	// Check if the block is already known.
-	_, exists, err = findBlockByID(tx, id)
+	_, exists, err = cs.findBlockByID(tx, id)
 	if err != nil {
 		return nil, errDatabaseError
 	}
@@ -48,7 +48,7 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 	}
 
 	// Check for the parent.
-	parent, exists, err = findBlockByID(tx, b.ParentID)
+	parent, exists, err = cs.findBlockByID(tx, b.ParentID)
 	if err != nil {
 		return nil, errDatabaseError
 	}
@@ -88,7 +88,7 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	}
 
 	// Check if the block is already known.
-	_, exists, err = findBlockByID(tx, id)
+	_, exists, err = cs.findBlockByID(tx, id)
 	if err != nil {
 		return errDatabaseError
 	}
@@ -97,7 +97,7 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	}
 
 	// Check for the parent.
-	parent, exists, err := findBlockByID(tx, h.ParentID)
+	parent, exists, err := cs.findBlockByID(tx, h.ParentID)
 	if err != nil {
 		return errDatabaseError
 	}
@@ -153,7 +153,7 @@ func (cs *ConsensusSet) addBlockToTree(tx *sql.Tx, b types.Block, parent *proces
 	// Check whether the new node is part of a chain that is heavier than the
 	// current node. If not, return ErrNonExtending and don't fork the
 	// blockchain.
-	currentNode := currentProcessedBlock(tx)
+	currentNode := cs.currentProcessedBlock(tx)
 	if !newNode.heavierThan(currentNode) {
 		return changeEntry{}, modules.ErrNonExtendingBlock
 	}

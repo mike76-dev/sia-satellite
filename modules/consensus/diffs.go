@@ -19,9 +19,9 @@ var (
 )
 
 // commitSiacoinOutputDiff applies or reverts a SiacoinOutputDiff.
-func commitSiacoinOutputDiff(tx *sql.Tx, scod modules.SiacoinOutputDiff, dir modules.DiffDirection) error {
+func (cs *ConsensusSet) commitSiacoinOutputDiff(tx *sql.Tx, scod modules.SiacoinOutputDiff, dir modules.DiffDirection) error {
 	if scod.Direction == dir {
-		return addSiacoinOutput(tx, scod.ID, scod.SiacoinOutput)
+		return cs.addSiacoinOutput(tx, scod.ID, scod.SiacoinOutput)
 	} else {
 		return removeSiacoinOutput(tx, scod.ID)
 	}
@@ -29,9 +29,9 @@ func commitSiacoinOutputDiff(tx *sql.Tx, scod modules.SiacoinOutputDiff, dir mod
 }
 
 // commitFileContractDiff applies or reverts a FileContractDiff.
-func commitFileContractDiff(tx *sql.Tx, fcd modules.FileContractDiff, dir modules.DiffDirection) error {
+func (cs *ConsensusSet) commitFileContractDiff(tx *sql.Tx, fcd modules.FileContractDiff, dir modules.DiffDirection) error {
 	if fcd.Direction == dir {
-		return addFileContract(tx, fcd.ID, fcd.FileContract)
+		return cs.addFileContract(tx, fcd.ID, fcd.FileContract)
 	} else {
 		return removeFileContract(tx, fcd.ID)
 	}
@@ -68,15 +68,15 @@ func commitSiafundPoolDiff(tx *sql.Tx, sfpd modules.SiafundPoolDiff, dir modules
 }
 
 // commitNodeDiffs commits all of the diffs in a block node.
-func commitNodeDiffs(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) (err error) {
+func (cs *ConsensusSet) commitNodeDiffs(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) (err error) {
 	if dir == modules.DiffApply {
 		for _, scod := range pb.SiacoinOutputDiffs {
-			if err := commitSiacoinOutputDiff(tx, scod, dir); err != nil {
+			if err := cs.commitSiacoinOutputDiff(tx, scod, dir); err != nil {
 				return err
 			}
 		}
 		for _, fcd := range pb.FileContractDiffs {
-			if err := commitFileContractDiff(tx, fcd, dir); err != nil {
+			if err := cs.commitFileContractDiff(tx, fcd, dir); err != nil {
 				return err
 			}
 		}
@@ -97,12 +97,12 @@ func commitNodeDiffs(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) 
 		}
 	} else {
 		for i := len(pb.SiacoinOutputDiffs) - 1; i >= 0; i-- {
-			if err := commitSiacoinOutputDiff(tx, pb.SiacoinOutputDiffs[i], dir); err != nil {
+			if err := cs.commitSiacoinOutputDiff(tx, pb.SiacoinOutputDiffs[i], dir); err != nil {
 				return err
 			}
 		}
 		for i := len(pb.FileContractDiffs) - 1; i >= 0; i-- {
-			if err := commitFileContractDiff(tx, pb.FileContractDiffs[i], dir); err != nil {
+			if err := cs.commitFileContractDiff(tx, pb.FileContractDiffs[i], dir); err != nil {
 				return err
 			}
 		}
@@ -141,10 +141,10 @@ func updateCurrentPath(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection
 //
 // Because these updates do not have associated diffs, we cannot apply multiple
 // updates per block. Instead, we apply the first update and ignore the rest.
-func commitFoundationUpdate(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) (err error) {
+func (cs *ConsensusSet) commitFoundationUpdate(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) (err error) {
 	if dir == modules.DiffApply {
 		for i := range pb.Block.Transactions {
-			if err := applyArbitraryData(tx, pb, pb.Block.Transactions[i]); err != nil {
+			if err := cs.applyArbitraryData(tx, pb, pb.Block.Transactions[i]); err != nil {
 				return err
 			}
 		}
@@ -161,7 +161,7 @@ func commitFoundationUpdate(tx *sql.Tx, pb *processedBlock, dir modules.DiffDire
 			if err := deletePriorFoundationUnlockHashes(tx, pb.Height); err != nil {
 				return err
 			}
-			if err := transferFoundationOutputs(tx, pb.Height, primary); err != nil {
+			if err := cs.transferFoundationOutputs(tx, pb.Height, primary); err != nil {
 				return err
 			}
 		}
@@ -170,11 +170,11 @@ func commitFoundationUpdate(tx *sql.Tx, pb *processedBlock, dir modules.DiffDire
 }
 
 // commitDiffSet applies or reverts the diffs in a blockNode.
-func commitDiffSet(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) (err error) {
-	if err := commitNodeDiffs(tx, pb, dir); err != nil {
+func (cs *ConsensusSet) commitDiffSet(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) (err error) {
+	if err := cs.commitNodeDiffs(tx, pb, dir); err != nil {
 		return err
 	}
-	if err := commitFoundationUpdate(tx, pb, dir); err != nil {
+	if err := cs.commitFoundationUpdate(tx, pb, dir); err != nil {
 		return err
 	}
 	return updateCurrentPath(tx, pb, dir)
@@ -185,7 +185,7 @@ func commitDiffSet(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) (e
 // transactions are allowed to depend on each other. We can't be sure that a
 // transaction is valid unless we have applied all of the previous transactions
 // in the block, which means we need to apply while we verify.
-func generateAndApplyDiff(tx *sql.Tx, pb *processedBlock) error {
+func (cs *ConsensusSet) generateAndApplyDiff(tx *sql.Tx, pb *processedBlock) error {
 	// Sanity check - the block being applied should have the current block as
 	// a parent.
 	if pb.Block.ParentID != currentBlockID(tx) {
@@ -196,10 +196,10 @@ func generateAndApplyDiff(tx *sql.Tx, pb *processedBlock) error {
 	// validated all at once because some transactions may not be valid until
 	// previous transactions have been applied.
 	for _, txn := range pb.Block.Transactions {
-		if err := validTransaction(tx, txn); err != nil {
+		if err := cs.validTransaction(tx, txn); err != nil {
 			return err
 		}
-		if err := applyTransaction(tx, pb, txn); err != nil {
+		if err := cs.applyTransaction(tx, pb, txn); err != nil {
 			return err
 		}
 	}
@@ -208,7 +208,7 @@ func generateAndApplyDiff(tx *sql.Tx, pb *processedBlock) error {
 	// applied on the block. This includes adding any outputs that have reached
 	// maturity, applying any contracts with missed storage proofs, and adding
 	// the miner payouts and Foundation subsidy to the list of delayed outputs.
-	if err := applyMaintenance(tx, pb); err != nil {
+	if err := cs.applyMaintenance(tx, pb); err != nil {
 		return err
 	}
 
@@ -227,5 +227,5 @@ func generateAndApplyDiff(tx *sql.Tx, pb *processedBlock) error {
 		return err
 	}
 
-	return saveBlock(tx, bid, pb)
+	return cs.saveBlock(tx, bid, pb)
 }

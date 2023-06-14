@@ -51,6 +51,11 @@ type ConsensusSet struct {
 	// whether the consensus set is synced with the network.
 	synced bool
 
+	// Caches keeps the most recently accessed items.
+	scoCache *siacoinOutputCache
+	fcCache  *fileContractCache
+	pbCache  *blockCache
+
 	// Utilities.
 	db  *sql.DB
 	log *persist.Logger
@@ -77,6 +82,10 @@ func consensusSetBlockingStartup(gateway modules.Gateway, db *sql.DB, dir string
 
 			DiffsGenerated: true,
 		},
+
+		scoCache: newSiacoinOutputCache(),
+		fcCache:  newFileContractCache(),
+		pbCache:  newBlockCache(),
 	}
 
 	// Create the diffs for the genesis transaction outputs.
@@ -188,7 +197,7 @@ func (cs *ConsensusSet) BlockAtHeight(height uint64) (block types.Block, exists 
 		return types.Block{}, false
 	}
 
-	pb, exists, err := findBlockByID(tx, id)
+	pb, exists, err := cs.findBlockByID(tx, id)
 	if err != nil {
 		cs.log.Println("ERROR: unable to find block:", err)
 		tx.Rollback()
@@ -207,7 +216,7 @@ func (cs *ConsensusSet) BlockByID(id types.BlockID) (block types.Block, height u
 		return types.Block{}, 0, false
 	}
 
-	pb, exists, err := findBlockByID(tx, id)
+	pb, exists, err := cs.findBlockByID(tx, id)
 	if err != nil {
 		cs.log.Println("ERROR: unable to find block:", err)
 		tx.Rollback()
@@ -232,7 +241,7 @@ func (cs *ConsensusSet) ChildTarget(id types.BlockID) (target modules.Target, ex
 		return modules.Target{}, false
 	}
 
-	pb, exists, err := findBlockByID(tx, id)
+	pb, exists, err := cs.findBlockByID(tx, id)
 	if err != nil {
 		cs.log.Println("ERROR: unable to find block:", err)
 		tx.Rollback()
@@ -259,7 +268,7 @@ func (cs *ConsensusSet) managedCurrentBlock() (block types.Block) {
 		return types.Block{}
 	}
 
-	pb := currentProcessedBlock(tx)
+	pb := cs.currentProcessedBlock(tx)
 	if pb == nil {
 		tx.Rollback()
 		return types.Block{}
@@ -289,7 +298,7 @@ func (cs *ConsensusSet) CurrentBlock() (block types.Block) {
 		return types.Block{}
 	}
 
-	pb := currentProcessedBlock(tx)
+	pb := cs.currentProcessedBlock(tx)
 	if pb == nil {
 		tx.Rollback()
 		return types.Block{}
@@ -339,7 +348,7 @@ func (cs *ConsensusSet) InCurrentPath(id types.BlockID) (inPath bool) {
 		return false
 	}
 
-	pb, exists, err := findBlockByID(tx, id)
+	pb, exists, err := cs.findBlockByID(tx, id)
 	if err != nil || !exists {
 		tx.Rollback()
 		return false
@@ -370,7 +379,7 @@ func (cs *ConsensusSet) MinimumValidChildTimestamp(id types.BlockID) (timestamp 
 		return
 	}
 
-	pb, exists, err := findBlockByID(tx, id)
+	pb, exists, err := cs.findBlockByID(tx, id)
 	if err != nil {
 		tx.Rollback()
 		return
@@ -397,7 +406,7 @@ func (cs *ConsensusSet) StorageProofSegment(fcid types.FileContractID) (index ui
 		return 0, err
 	}
 
-	index, err = storageProofSegment(tx, fcid)
+	index, err = cs.storageProofSegment(tx, fcid)
 	if err != nil {
 		tx.Rollback()
 		return 0, err

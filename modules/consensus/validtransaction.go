@@ -27,11 +27,11 @@ var (
 
 // validSiacoins checks that the siacoin inputs and outputs are valid in the
 // context of the current consensus set.
-func validSiacoins(tx *sql.Tx, t types.Transaction) error {
+func (cs *ConsensusSet) validSiacoins(tx *sql.Tx, t types.Transaction) error {
 	var inputSum types.Currency
 	for _, sci := range t.SiacoinInputs {
 		// Check that the input spends an existing output.
-		sco, exists, err := findSiacoinOutput(tx, sci.ParentID)
+		sco, exists, err := cs.findSiacoinOutput(tx, sci.ParentID)
 		if err != nil {
 			return err
 		}
@@ -54,9 +54,9 @@ func validSiacoins(tx *sql.Tx, t types.Transaction) error {
 
 // storageProofSegment returns the index of the segment that needs to be proven
 // exists in a file contract.
-func storageProofSegment(tx *sql.Tx, fcid types.FileContractID) (uint64, error) {
+func (cs *ConsensusSet) storageProofSegment(tx *sql.Tx, fcid types.FileContractID) (uint64, error) {
 	// Check that the parent file contract exists.
-	fc, exists, err := findFileContract(tx, fcid)
+	fc, exists, err := cs.findFileContract(tx, fcid)
 	if err != nil {
 		return 0, err
 	}
@@ -101,15 +101,15 @@ func storageProofSegment(tx *sql.Tx, fcid types.FileContractID) (uint64, error) 
 // zero. A hardfork was added triggering at block 100,000 to enable an
 // optimization where hosts could submit empty storage proofs for files of size
 // 0, saving space on the blockchain in conditions where the renter is content.
-func validStorageProofs100e3(tx *sql.Tx, t types.Transaction) error {
+func (cs *ConsensusSet) validStorageProofs100e3(tx *sql.Tx, t types.Transaction) error {
 	for _, sp := range t.StorageProofs {
 		// Check that the storage proof itself is valid.
-		segmentIndex, err := storageProofSegment(tx, sp.ParentID)
+		segmentIndex, err := cs.storageProofSegment(tx, sp.ParentID)
 		if err != nil {
 			return err
 		}
 
-		fc, exists, err := findFileContract(tx, sp.ParentID)
+		fc, exists, err := cs.findFileContract(tx, sp.ParentID)
 		if err != nil {
 			return err
 		}
@@ -160,20 +160,20 @@ func validStorageProofs100e3(tx *sql.Tx, t types.Transaction) error {
 
 // validStorageProofs checks that the storage proofs are valid in the context
 // of the consensus set.
-func validStorageProofs(tx *sql.Tx, t types.Transaction) error {
+func (cs *ConsensusSet) validStorageProofs(tx *sql.Tx, t types.Transaction) error {
 	height := blockHeight(tx)
 	if height < modules.StorageProofHardforkHeight {
-		return validStorageProofs100e3(tx, t)
+		return cs.validStorageProofs100e3(tx, t)
 	}
 
 	for _, sp := range t.StorageProofs {
 		// Check that the storage proof itself is valid.
-		segmentIndex, err := storageProofSegment(tx, sp.ParentID)
+		segmentIndex, err := cs.storageProofSegment(tx, sp.ParentID)
 		if err != nil {
 			return err
 		}
 
-		fc, exists, err := findFileContract(tx, sp.ParentID)
+		fc, exists, err := cs.findFileContract(tx, sp.ParentID)
 		if err != nil {
 			return err
 		}
@@ -210,9 +210,9 @@ func validStorageProofs(tx *sql.Tx, t types.Transaction) error {
 
 // validFileContractRevision checks that each file contract revision is valid
 // in the context of the current consensus set.
-func validFileContractRevisions(tx *sql.Tx, t types.Transaction) error {
+func (cs *ConsensusSet) validFileContractRevisions(tx *sql.Tx, t types.Transaction) error {
 	for _, fcr := range t.FileContractRevisions {
-		fc, exists, err := findFileContract(tx, fcr.ParentID)
+		fc, exists, err := cs.findFileContract(tx, fcr.ParentID)
 		if err != nil {
 			return err
 		}
@@ -341,7 +341,7 @@ func foundationUpdateIsSigned(tx *sql.Tx, t types.Transaction) bool {
 
 // validTransaction checks that all fields are valid within the current
 // consensus state. If not an error is returned.
-func validTransaction(tx *sql.Tx, t types.Transaction) error {
+func (cs *ConsensusSet) validTransaction(tx *sql.Tx, t types.Transaction) error {
 	// StandaloneValid will check things like signatures and properties that
 	// should be inherent to the transaction. (storage proof rules, etc.)
 	currentHeight := blockHeight(tx)
@@ -351,13 +351,13 @@ func validTransaction(tx *sql.Tx, t types.Transaction) error {
 
 	// Check that each portion of the transaction is legal given the current
 	// consensus set.
-	if err := validSiacoins(tx, t); err != nil {
+	if err := cs.validSiacoins(tx, t); err != nil {
 		return err
 	}
-	if err := validStorageProofs(tx, t); err != nil {
+	if err := cs.validStorageProofs(tx, t); err != nil {
 		return err
 	}
-	if err := validFileContractRevisions(tx, t); err != nil {
+	if err := cs.validFileContractRevisions(tx, t); err != nil {
 		return err
 	}
 	if err := validSiafunds(tx, t); err != nil {
@@ -387,11 +387,11 @@ func (cs *ConsensusSet) tryTransactionSet(txns []types.Transaction) (modules.Con
 	diffHolder := new(processedBlock)
 	diffHolder.Height = blockHeight(tx)
 	for _, txn := range txns {
-		if err := validTransaction(tx, txn); err != nil {
+		if err := cs.validTransaction(tx, txn); err != nil {
 			tx.Rollback()
 			return modules.ConsensusChange{}, err
 		}
-		if err := applyTransaction(tx, diffHolder, txn); err != nil {
+		if err := cs.applyTransaction(tx, diffHolder, txn); err != nil {
 			tx.Rollback()
 			return modules.ConsensusChange{}, err
 		}

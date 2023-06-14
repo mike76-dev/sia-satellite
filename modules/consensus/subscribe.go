@@ -60,7 +60,7 @@ func (cs *ConsensusSet) computeConsensusChange(tx *sql.Tx, ce changeEntry) (modu
 		ID: ce.ID(),
 	}
 	for _, revertedBlockID := range ce.RevertedBlocks {
-		revertedBlock, exists, err := findBlockByID(tx, revertedBlockID)
+		revertedBlock, exists, err := cs.findBlockByID(tx, revertedBlockID)
 		if err != nil || !exists {
 			cs.log.Println("CRITICAL: unable to find block in computeConsensusChange:", err)
 			return modules.ConsensusChange{}, err
@@ -71,7 +71,7 @@ func (cs *ConsensusSet) computeConsensusChange(tx *sql.Tx, ce changeEntry) (modu
 		cc.AppendDiffs(diffs)
 	}
 	for _, appliedBlockID := range ce.AppliedBlocks {
-		appliedBlock, exists, err := findBlockByID(tx, appliedBlockID)
+		appliedBlock, exists, err := cs.findBlockByID(tx, appliedBlockID)
 		if err != nil || !exists {
 			cs.log.Println("CRITICAL: unable to find block in computeConsensusChange:", err)
 			return modules.ConsensusChange{}, err
@@ -84,7 +84,7 @@ func (cs *ConsensusSet) computeConsensusChange(tx *sql.Tx, ce changeEntry) (modu
 
 	// Grab the child target and the minimum valid child timestamp.
 	recentBlock := ce.AppliedBlocks[len(ce.AppliedBlocks) - 1]
-	pb, exists, err := findBlockByID(tx, recentBlock)
+	pb, exists, err := cs.findBlockByID(tx, recentBlock)
 	if err != nil || !exists {
 		cs.log.Println("CRITICAL: could not find process block for known block:", err)
 		return modules.ConsensusChange{}, err
