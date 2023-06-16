@@ -188,7 +188,7 @@ func (cs *ConsensusSet) setChildTarget(tx *sql.Tx, pb *processedBlock) {
 
 // newChild creates a blockNode from a block and adds it to the parent's set of
 // children. The new node is also returned. It necessarily modifies the database.
-func (cs *ConsensusSet) newChild(tx *sql.Tx, pb *processedBlock, b types.Block) *processedBlock {
+func (cs *ConsensusSet) newChild(tx *sql.Tx, pb *processedBlock, b types.Block) (*processedBlock, error) {
 	// Create the child node.
 	childID := b.ID()
 	child := &processedBlock{
@@ -199,11 +199,15 @@ func (cs *ConsensusSet) newChild(tx *sql.Tx, pb *processedBlock, b types.Block) 
 
 	// Push the total values for this block into the oak difficulty adjustment
 	// bucket. The previous totals are required to compute the new totals.
-	prevTotalTime, prevTotalTarget := cs.getBlockTotals(tx, b.ParentID)
-	_, _, err := cs.storeBlockTotals(tx, child.Height, childID, prevTotalTime, pb.Block.Timestamp, b.Timestamp, prevTotalTarget, pb.ChildTarget)
+	prevTotalTime, prevTotalTarget, err := cs.getBlockTotals(tx, b.ParentID)
+	if err != nil {
+		cs.log.Println("ERROR: couldn't retrieve block totals:", err)
+		return nil, err
+	}
+	_, _, err = cs.storeBlockTotals(tx, child.Height, childID, prevTotalTime, pb.Block.Timestamp, b.Timestamp, prevTotalTarget, pb.ChildTarget)
 	if err != nil {
 		cs.log.Println("ERROR: couldn't save block totals:", err)
-		return nil
+		return nil, err
 	}
 
 	// Use the difficulty adjustment algorithm to set the target of the child
@@ -216,8 +220,8 @@ func (cs *ConsensusSet) newChild(tx *sql.Tx, pb *processedBlock, b types.Block) 
 	err = cs.saveBlock(tx, childID, child)
 	if err != nil {
 		cs.log.Println("ERROR: couldn't save new block:", err)
-		return nil
+		return nil, err
 	}
 
-	return child
+	return child, nil
 }

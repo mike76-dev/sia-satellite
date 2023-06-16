@@ -44,13 +44,8 @@ func (cache *siacoinOutputCache) Lookup(id types.SiacoinOutputID) (types.Siacoin
 }
 
 // Push adds a new Siacoin output to the cache. If the output exists,
-// the function does nothing. If the cache is full, the oldest item
-// is deleted.
+// it is replaced. If the cache is full, the oldest item is deleted.
 func (cache *siacoinOutputCache) Push(id types.SiacoinOutputID, sco types.SiacoinOutput) {
-	_, exists := cache.index[id]
-	if exists {
-		return
-	}
 	cache.tip += 1
 	if cache.tip >= scoCacheSize {
 		cache.tip = 0
@@ -62,6 +57,17 @@ func (cache *siacoinOutputCache) Push(id types.SiacoinOutputID, sco types.Siacoi
 		sco: sco,
 	}
 	cache.index[id] = cache.tip
+}
+
+// Delete removes an existing SiacoinOutput from the cache.
+func (cache *siacoinOutputCache) Delete(id types.SiacoinOutputID) {
+	delete(cache.index, id)
+}
+
+// Reset resets the Siacoin output cache.
+func (cache *siacoinOutputCache) Reset() {
+	cache.index = make(map[types.SiacoinOutputID]int)
+	cache.tip = 0
 }
 
 // fileContractInfo is a helper type for fileContractCache.
@@ -97,13 +103,8 @@ func (cache *fileContractCache) Lookup(id types.FileContractID) (types.FileContr
 }
 
 // Push adds a new file contract to the cache. If the contract exists,
-// the function does nothing. If the cache is full, the oldest item
-// is deleted.
+// it is replaced. If the cache is full, the oldest item is deleted.
 func (cache *fileContractCache) Push(id types.FileContractID, fc types.FileContract) {
-	_, exists := cache.index[id]
-	if exists {
-		return
-	}
 	cache.tip += 1
 	if cache.tip >= fcCacheSize {
 		cache.tip = 0
@@ -115,6 +116,17 @@ func (cache *fileContractCache) Push(id types.FileContractID, fc types.FileContr
 		fc: fc,
 	}
 	cache.index[id] = cache.tip
+}
+
+// Delete removes an existing file contract from the cache.
+func (cache *fileContractCache) Delete(id types.FileContractID) {
+	delete(cache.index, id)
+}
+
+// Reset resets the file contract cache.
+func (cache *fileContractCache) Reset() {
+	cache.index = make(map[types.FileContractID]int)
+	cache.tip = 0
 }
 
 // blockInfo is a helper type for blockCache.
@@ -148,13 +160,8 @@ func (cache *blockCache) Lookup(id types.BlockID) (processedBlock, bool) {
 }
 
 // Push adds a new processed block to the cache. If the block exists,
-// the function does nothing. If the cache is full, the oldest item
-// is deleted.
+// it is replaced. If the cache is full, the oldest item is deleted.
 func (cache *blockCache) Push(id types.BlockID, pb processedBlock) {
-	_, exists := cache.index[id]
-	if exists {
-		return
-	}
 	cache.tip += 1
 	if cache.tip >= blockCacheSize {
 		cache.tip = 0
@@ -166,4 +173,17 @@ func (cache *blockCache) Push(id types.BlockID, pb processedBlock) {
 		pb: pb,
 	}
 	cache.index[id] = cache.tip
+}
+
+// Reset resets the block cache.
+func (cache *blockCache) Reset() {
+	cache.index = make(map[types.BlockID]int)
+	cache.tip = 0
+}
+
+// resetCaches resets the consensus set caches.
+func (cs *ConsensusSet) resetCaches() {
+	cs.scoCache.Reset()
+	cs.fcCache.Reset()
+	cs.pbCache.Reset()
 }

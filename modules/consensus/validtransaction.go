@@ -92,80 +92,9 @@ func (cs *ConsensusSet) storageProofSegment(tx *sql.Tx, fcid types.FileContractI
 	return index, nil
 }
 
-// validStorageProofsPre100e3 runs the code that was running before height
-// 100e3, which contains a hardforking bug, fixed at block 100e3.
-//
-// # HARDFORK 100,000
-//
-// Originally, it was impossible to provide a storage proof for data of length
-// zero. A hardfork was added triggering at block 100,000 to enable an
-// optimization where hosts could submit empty storage proofs for files of size
-// 0, saving space on the blockchain in conditions where the renter is content.
-func (cs *ConsensusSet) validStorageProofs100e3(tx *sql.Tx, t types.Transaction) error {
-	for _, sp := range t.StorageProofs {
-		// Check that the storage proof itself is valid.
-		segmentIndex, err := cs.storageProofSegment(tx, sp.ParentID)
-		if err != nil {
-			return err
-		}
-
-		fc, exists, err := cs.findFileContract(tx, sp.ParentID)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			return errors.New("storage contract not found")
-		}
-		leaves := modules.CalculateLeaves(fc.Filesize)
-		segmentLen := uint64(modules.SegmentSize)
-		if segmentIndex == leaves - 1 {
-			segmentLen = fc.Filesize % modules.SegmentSize
-		}
-
-		// HARDFORK 21,000
-		//
-		// Originally, the code used the entire segment to verify the
-		// correctness of the storage proof. This made the code incompatible
-		// with data sizes that did not fill an entire segment.
-		//
-		// This was patched with a hardfork in block 21,000. The new code made
-		// it possible to perform successful storage proofs on the final
-		// segment of a file if the final segment was not crypto.SegmentSize
-		// bytes.
-		//
-		// Unfortunately, a new bug was introduced where storage proofs on the
-		// final segment would fail if the final segment was selected and was
-		// crypto.SegmentSize bytes, because the segmentLen would be set to 0
-		// instead of crypto.SegmentSize, due to an error with the modulus
-		// math. This new error has been fixed with the block 100,000 hardfork.
-		height := blockHeight(tx)
-		if height < 21e3 {
-			segmentLen = uint64(modules.SegmentSize)
-		}
-
-		verified := modules.VerifySegment(
-			sp.Leaf[:segmentLen],
-			sp.Proof,
-			leaves,
-			segmentIndex,
-			fc.FileMerkleRoot,
-		)
-		if !verified {
-			return errInvalidStorageProof
-		}
-	}
-
-	return nil
-}
-
 // validStorageProofs checks that the storage proofs are valid in the context
 // of the consensus set.
 func (cs *ConsensusSet) validStorageProofs(tx *sql.Tx, t types.Transaction) error {
-	height := blockHeight(tx)
-	if height < modules.StorageProofHardforkHeight {
-		return cs.validStorageProofs100e3(tx, t)
-	}
-
 	for _, sp := range t.StorageProofs {
 		// Check that the storage proof itself is valid.
 		segmentIndex, err := cs.storageProofSegment(tx, sp.ParentID)
@@ -186,7 +115,8 @@ func (cs *ConsensusSet) validStorageProofs(tx *sql.Tx, t types.Transaction) erro
 
 		// If this segment chosen is the final segment, it should only be as
 		// long as necessary to complete the filesize.
-		if segmentIndex == leaves - 1 {
+		height := blockHeight(tx)
+		if segmentIndex == leaves - 1 && height >= 21e3 {
 			segmentLen = fc.Filesize % modules.SegmentSize
 		}
 		if segmentLen == 0 {

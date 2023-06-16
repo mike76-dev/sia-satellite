@@ -335,7 +335,7 @@ func (cs *ConsensusSet) transferFoundationOutputs(tx *sql.Tx, currentHeight uint
 			continue // Output has already been spent.
 		}
 		sco.Address = newPrimary
-		err = removeSiacoinOutput(tx, id)
+		err = cs.removeSiacoinOutput(tx, id)
 		if err != nil {
 			return err
 		}

@@ -23,7 +23,7 @@ func (cs *ConsensusSet) commitSiacoinOutputDiff(tx *sql.Tx, scod modules.Siacoin
 	if scod.Direction == dir {
 		return cs.addSiacoinOutput(tx, scod.ID, scod.SiacoinOutput)
 	} else {
-		return removeSiacoinOutput(tx, scod.ID)
+		return cs.removeSiacoinOutput(tx, scod.ID)
 	}
 	return nil
 }
@@ -33,7 +33,7 @@ func (cs *ConsensusSet) commitFileContractDiff(tx *sql.Tx, fcd modules.FileContr
 	if fcd.Direction == dir {
 		return cs.addFileContract(tx, fcd.ID, fcd.FileContract)
 	} else {
-		return removeFileContract(tx, fcd.ID)
+		return cs.removeFileContract(tx, fcd.ID)
 	}
 	return nil
 }

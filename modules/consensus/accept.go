@@ -148,7 +148,10 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 // on the block. Such errors are handled outside by the caller.
 func (cs *ConsensusSet) addBlockToTree(tx *sql.Tx, b types.Block, parent *processedBlock) (ce changeEntry, err error) {
 	// Prepare the child processed block associated with the parent block.
-	newNode := cs.newChild(tx, parent, b)
+	newNode, err := cs.newChild(tx, parent, b)
+	if err != nil {
+		return
+	}
 
 	// Check whether the new node is part of a chain that is heavier than the
 	// current node. If not, return ErrNonExtending and don't fork the
@@ -299,12 +302,14 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 			cs.log.Println("Consensus received a chain of blocks, where one was valid, but others were not:", setErr)
 		}
 		tx.Rollback()
+		cs.resetCaches()
 		return false, setErr
 	}
 
 	// Stop here if the blocks did not extend the longest blockchain.
 	if !chainExtended {
 		tx.Rollback()
+		cs.resetCaches()
 		return false, modules.ErrNonExtendingBlock
 	}
 
@@ -314,6 +319,7 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	}
 
 	if err := tx.Commit(); err != nil {
+		cs.resetCaches()
 		return false, err
 	}
 

@@ -206,7 +206,8 @@ func (cs *ConsensusSet) saveBlock(tx *sql.Tx, id types.BlockID, pb *processedBlo
 	pb.EncodeTo(e)
 	e.Flush()
 	_, err := tx.Exec(`
-		INSERT INTO cs_map (bid, bytes) VALUES (?, ?)
+		INSERT INTO cs_map (bid, bytes) VALUES (?, ?) AS new
+		ON DUPLICATE KEY UPDATE bytes = new.bytes
 	`, id[:], buf.Bytes())
 	return err
 }
@@ -378,7 +379,7 @@ func countFileContractPayouts(tx *sql.Tx) (total types.Currency, err error) {
 
 	for rows.Next() {
 		var fc types.FileContract
-		fcBytes := make([]byte, 0, 416)
+		var fcBytes []byte
 		if err = rows.Scan(&fcBytes); err != nil {
 			rows.Close()
 			return types.ZeroCurrency, err
@@ -496,7 +497,8 @@ func (cs *ConsensusSet) addSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, s
 
 // removeSiacoinOutput removes a Siacoin output from the database. An error is
 // returned if the Siacoin output is not in the database prior to removal.
-func removeSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID) error {
+func (cs *ConsensusSet) removeSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID) error {
+	cs.scoCache.Delete(id)
 	_, err := tx.Exec("DELETE FROM cs_sco WHERE scoid = ?", id[:])
 	return err
 }
@@ -556,7 +558,7 @@ func (cs *ConsensusSet) findFileContract(tx *sql.Tx, fcid types.FileContractID) 
 	if exists {
 		return fc, true, nil
 	}
-	fcBytes := make([]byte, 0, 416)
+	var fcBytes []byte
 	err = tx.QueryRow("SELECT bytes FROM cs_fc WHERE fcid = ?", fcid[:]).Scan(&fcBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return types.FileContract{}, false, nil
@@ -597,7 +599,10 @@ func (cs *ConsensusSet) addFileContract(tx *sql.Tx, id types.FileContractID, fc 
 }
 
 // removeFileContract removes a file contract from the database.
-func removeFileContract(tx *sql.Tx, id types.FileContractID) error {
+func (cs *ConsensusSet) removeFileContract(tx *sql.Tx, id types.FileContractID) error {
+	// Update the cache.
+	cs.fcCache.Delete(id)
+
 	// Delete the file contract entry.
 	_, err := tx.Exec("DELETE FROM cs_fc WHERE fcid = ?", id[:])
 	if err != nil {

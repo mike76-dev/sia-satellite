@@ -101,9 +101,9 @@ func (cs *ConsensusSet) childTargetOak(parentTotalTime int64, parentTotalTarget,
 
 // getBlockTotals returns the block totals values that get stored in
 // storeBlockTotals.
-func (cs *ConsensusSet) getBlockTotals(tx *sql.Tx, id types.BlockID) (totalTime int64, totalTarget modules.Target) {
+func (cs *ConsensusSet) getBlockTotals(tx *sql.Tx, id types.BlockID) (totalTime int64, totalTarget modules.Target, err error) {
 	totalsBytes := make([]byte, 40)
-	err := tx.QueryRow(`SELECT bytes FROM cs_oak WHERE bid = ?`, id[:]).Scan(&totalsBytes)
+	err = tx.QueryRow(`SELECT bytes FROM cs_oak WHERE bid = ?`, id[:]).Scan(&totalsBytes)
 	if err != nil {
 		cs.log.Println("ERROR: unable to retrieve Oak data:", err)
 		return
@@ -155,7 +155,8 @@ func (cs *ConsensusSet) storeBlockTotals(tx *sql.Tx, currentHeight uint64, curre
 	binary.LittleEndian.PutUint64(totalsBytes[:8], uint64(newTotalTime))
 	copy(totalsBytes[8:], newTotalTarget[:])
 	_, err = tx.Exec(`
-		INSERT INTO cs_oak (bid, bytes) VALUES (?, ?)
+		INSERT INTO cs_oak (bid, bytes) VALUES (?, ?) AS new
+		ON DUPLICATE KEY UPDATE bytes = new.bytes
 	`, currentBlockID[:], totalsBytes)
 	if err != nil {
 		return 0, modules.Target{}, modules.AddContext(err, "unable to store total time values")
