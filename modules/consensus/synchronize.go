@@ -452,7 +452,7 @@ func (cs *ConsensusSet) threadedRPCRelayHeader(conn modules.PeerConn) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = cs.gateway.RPC(conn.RPCAddr(), "SendBlk", cs.managedReceiveBlock(h.ID()))
+		err = cs.gateway.RPC(conn.RPCAddr(), "SendBlk", cs.managedReceiveBlock(cs.blockHeaderID(h)))
 		if err != nil {
 			cs.log.Println("WARN: failed to get header's corresponding block:", err)
 		}

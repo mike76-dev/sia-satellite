@@ -67,8 +67,8 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 }
 
 // checkHeaderTarget returns true if the header's ID meets the given target.
-func checkHeaderTarget(h types.BlockHeader, target modules.Target) bool {
-	blockHash := h.ID()
+func (cs *ConsensusSet) checkHeaderTarget(h types.BlockHeader, target modules.Target) bool {
+	blockHash := cs.blockHeaderID(h)
 	return bytes.Compare(target[:], blockHash[:]) >= 0
 }
 
@@ -78,7 +78,7 @@ func checkHeaderTarget(h types.BlockHeader, target modules.Target) bool {
 func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	// Check if the block is a DoS block - a known invalid block that is expensive
 	// to validate.
-	id := h.ID()
+	id := cs.blockHeaderID(h)
 	exists, err := checkDoSBlock(tx, id)
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 		return errors.New("block does not meet nonce requirements")
 	}
 	// Check that the target of the new block is sufficient.
-	if !checkHeaderTarget(h, parent.ChildTarget) {
+	if !cs.checkHeaderTarget(h, parent.ChildTarget) {
 		return modules.ErrBlockUnsolved
 	}
 

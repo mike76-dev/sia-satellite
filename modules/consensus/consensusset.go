@@ -454,6 +454,18 @@ func (cs *ConsensusSet) blockID(b types.Block) types.BlockID {
 	return id
 }
 
+// blockHeaderID returns the ID of the block header. It tries to look up in the
+// cache first.
+func (cs *ConsensusSet) blockHeaderID(h types.BlockHeader) types.BlockID {
+	id, exists := cs.idCache.Lookup(h.Nonce)
+	if exists {
+		return id
+	}
+	id = h.ID()
+	cs.idCache.Push(h.Nonce, id)
+	return id
+}
+
 // resetCaches resets the consensus set caches.
 func (cs *ConsensusSet) resetCaches() {
 	cs.scoCache.Reset()
