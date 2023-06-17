@@ -55,6 +55,7 @@ type ConsensusSet struct {
 	scoCache *siacoinOutputCache
 	fcCache  *fileContractCache
 	pbCache  *blockCache
+	idCache  *blockIDCache
 
 	// Utilities.
 	db  *sql.DB
@@ -86,6 +87,7 @@ func consensusSetBlockingStartup(gateway modules.Gateway, db *sql.DB, dir string
 		scoCache: newSiacoinOutputCache(),
 		fcCache:  newFileContractCache(),
 		pbCache:  newBlockCache(),
+		idCache:  newBlockIDCache(),
 	}
 
 	// Create the diffs for the genesis transaction outputs.
@@ -438,4 +440,24 @@ func (cs *ConsensusSet) FoundationUnlockHashes() (primary, failsafe types.Addres
 
 	tx.Commit()
 	return
+}
+
+// blockID returns the ID of the given block. It tries to look up in the
+// cache first.
+func (cs *ConsensusSet) blockID(b types.Block) types.BlockID {
+	id, exists := cs.idCache.Lookup(b.Nonce)
+	if exists {
+		return id
+	}
+	id = b.ID()
+	cs.idCache.Push(b.Nonce, id)
+	return id
+}
+
+// resetCaches resets the consensus set caches.
+func (cs *ConsensusSet) resetCaches() {
+	cs.scoCache.Reset()
+	cs.fcCache.Reset()
+	cs.pbCache.Reset()
+	cs.idCache.Reset()
 }

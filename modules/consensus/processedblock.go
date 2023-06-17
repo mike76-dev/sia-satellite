@@ -120,7 +120,7 @@ func (cs *ConsensusSet) targetAdjustmentBase(tx *sql.Tx, pb *processedBlock) *bi
 	// block.
 	var windowSize uint64
 	parentID := pb.Block.ParentID
-	currentID := pb.Block.ID()
+	currentID := cs.blockID(pb.Block)
 	var err error
 	for windowSize = 0; windowSize < modules.TargetWindow && parentID != (types.BlockID{}); windowSize++ {
 		currentID = parentID
@@ -190,7 +190,7 @@ func (cs *ConsensusSet) setChildTarget(tx *sql.Tx, pb *processedBlock) {
 // children. The new node is also returned. It necessarily modifies the database.
 func (cs *ConsensusSet) newChild(tx *sql.Tx, pb *processedBlock, b types.Block) (*processedBlock, error) {
 	// Create the child node.
-	childID := b.ID()
+	childID := cs.blockID(b)
 	child := &processedBlock{
 		Block:  b,
 		Height: pb.Height + 1,

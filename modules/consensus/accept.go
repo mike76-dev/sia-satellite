@@ -169,10 +169,10 @@ func (cs *ConsensusSet) addBlockToTree(tx *sql.Tx, b types.Block, parent *proces
 		return changeEntry{}, err
 	}
 	for _, rn := range revertedBlocks {
-		ce.RevertedBlocks = append(ce.RevertedBlocks, rn.Block.ID())
+		ce.RevertedBlocks = append(ce.RevertedBlocks, cs.blockID(rn.Block))
 	}
 	for _, an := range appliedBlocks {
-		ce.AppliedBlocks = append(ce.AppliedBlocks, an.Block.ID())
+		ce.AppliedBlocks = append(ce.AppliedBlocks, cs.blockID(an.Block))
 	}
 	err = appendChangeLog(tx, ce)
 	if err != nil {
@@ -234,7 +234,7 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	// This is the first time that IDs on the blocks have been computed.
 	blockIDs := make([]types.BlockID, 0, len(blocks))
 	for i := 0; i < len(blocks); i++ {
-		blockIDs = append(blockIDs, blocks[i].ID())
+		blockIDs = append(blockIDs, cs.blockID(blocks[i]))
 		if i > 0 && blocks[i].ParentID != blockIDs[i - 1] {
 			return false, errNonLinearChain
 		}

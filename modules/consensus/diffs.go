@@ -126,10 +126,10 @@ func (cs *ConsensusSet) commitNodeDiffs(tx *sql.Tx, pb *processedBlock, dir modu
 }
 
 // updateCurrentPath updates the current path after applying a diff set.
-func updateCurrentPath(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) error {
+func (cs *ConsensusSet) updateCurrentPath(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection) error {
 	// Update the current path.
 	if dir == modules.DiffApply {
-		return pushPath(tx, pb.Block.ID())
+		return pushPath(tx, cs.blockID(pb.Block))
 	} else {
 		return popPath(tx)
 	}
@@ -177,7 +177,7 @@ func (cs *ConsensusSet) commitDiffSet(tx *sql.Tx, pb *processedBlock, dir module
 	if err := cs.commitFoundationUpdate(tx, pb, dir); err != nil {
 		return err
 	}
-	return updateCurrentPath(tx, pb, dir)
+	return cs.updateCurrentPath(tx, pb, dir)
 }
 
 // generateAndApplyDiff will verify the block and then integrate it into the
@@ -222,8 +222,8 @@ func (cs *ConsensusSet) generateAndApplyDiff(tx *sql.Tx, pb *processedBlock) err
 	pb.DiffsGenerated = true
 
 	// Add the block to the current path and block map.
-	bid := pb.Block.ID()
-	if err := updateCurrentPath(tx, pb, modules.DiffApply); err != nil {
+	bid := cs.blockID(pb.Block)
+	if err := cs.updateCurrentPath(tx, pb, modules.DiffApply); err != nil {
 		return err
 	}
 

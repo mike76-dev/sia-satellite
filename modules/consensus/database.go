@@ -194,7 +194,7 @@ func (cs *ConsensusSet) getParentID(tx *sql.Tx, id types.BlockID) (parentID type
 
 // addBlock adds the processed block to the block map.
 func (cs *ConsensusSet) addBlock(tx *sql.Tx, pb *processedBlock) error {
-	id := pb.Block.ID()
+	id := cs.blockID(pb.Block)
 	return cs.saveBlock(tx, id, pb)
 }
 

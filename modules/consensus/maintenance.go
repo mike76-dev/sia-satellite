@@ -20,7 +20,7 @@ var (
 // applyFoundationSubsidy adds a Foundation subsidy to the consensus set as a
 // delayed siacoin output. If no subsidy is due on the given block, no output is
 // added.
-func applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) error {
+func (cs *ConsensusSet) applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) error {
 	// NOTE: this conditional is split up to better visualize test coverage.
 	if pb.Height < modules.FoundationHardforkHeight {
 		return nil
@@ -39,7 +39,7 @@ func applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) error {
 	}
 	dscod := modules.DelayedSiacoinOutputDiff{
 		Direction: modules.DiffApply,
-		ID:        pb.Block.ID().FoundationOutputID(),
+		ID:        cs.blockID(pb.Block).FoundationOutputID(),
 		SiacoinOutput: types.SiacoinOutput{
 			Value:   value,
 			Address: addr,
@@ -53,9 +53,9 @@ func applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) error {
 
 // applyMinerPayouts adds a block's miner payouts to the consensus set as
 // delayed siacoin outputs.
-func applyMinerPayouts(tx *sql.Tx, pb *processedBlock) error {
+func (cs *ConsensusSet) applyMinerPayouts(tx *sql.Tx, pb *processedBlock) error {
 	for i := range pb.Block.MinerPayouts {
-		mpid := pb.Block.ID().MinerOutputID(i)
+		mpid := cs.blockID(pb.Block).MinerOutputID(i)
 		dscod := modules.DelayedSiacoinOutputDiff{
 			Direction:      modules.DiffApply,
 			ID:             mpid,
@@ -250,10 +250,10 @@ func (cs *ConsensusSet) applyFileContractMaintenance(tx *sql.Tx, pb *processedBl
 // Maintenance is applied after all of the transactions for the block have been
 // applied.
 func (cs *ConsensusSet) applyMaintenance(tx *sql.Tx, pb *processedBlock) error {
-	if err := applyMinerPayouts(tx, pb); err != nil {
+	if err := cs.applyMinerPayouts(tx, pb); err != nil {
 		return err
 	}
-	if err := applyFoundationSubsidy(tx, pb); err != nil {
+	if err := cs.applyFoundationSubsidy(tx, pb); err != nil {
 		return err
 	}
 	if err := cs.applyMaturedSiacoinOutputs(tx, pb); err != nil {

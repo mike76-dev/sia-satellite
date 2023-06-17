@@ -9,6 +9,7 @@ const (
 	scoCacheSize   = 2e5
 	fcCacheSize    = 1e5
 	blockCacheSize = 32
+	idCacheSize    = 32
 )
 
 // siacoinOutputInfo is a helper type for siacoinOutputCache.
@@ -181,9 +182,54 @@ func (cache *blockCache) Reset() {
 	cache.tip = 0
 }
 
-// resetCaches resets the consensus set caches.
-func (cs *ConsensusSet) resetCaches() {
-	cs.scoCache.Reset()
-	cs.fcCache.Reset()
-	cs.pbCache.Reset()
+// blockIDInfo is a helper type for blockIDCache.
+type blockIDInfo struct {
+	nonce uint64
+	id    types.BlockID
+}
+
+// blockIDCache is a storage for the most recently calculated block IDs.
+type blockIDCache struct {
+	index map[uint64]int
+	ids   []blockIDInfo
+	tip   int
+}
+
+// newBlockIDCache returns an initialized blockIDCache object.
+func newBlockIDCache() *blockIDCache {
+	return &blockIDCache{
+		index: make(map[uint64]int),
+		ids:   make([]blockIDInfo, idCacheSize),
+	}
+}
+
+// Lookup tries to find a block ID in the cache.
+func (cache *blockIDCache) Lookup(nonce uint64) (types.BlockID, bool) {
+	i, exists := cache.index[nonce]
+	if !exists {
+		return types.BlockID{}, false
+	}
+	return cache.ids[i].id, true
+}
+
+// Push adds a new block ID to the cache. If the block ID exists,
+// it is replaced. If the cache is full, the oldest item is deleted.
+func (cache *blockIDCache) Push(nonce uint64, id types.BlockID) {
+	cache.tip += 1
+	if cache.tip >= idCacheSize {
+		cache.tip = 0
+	}
+	old := cache.ids[cache.tip].nonce
+	delete(cache.index, old)
+	cache.ids[cache.tip] = blockIDInfo{
+		nonce: nonce,
+		id:    id,
+	}
+	cache.index[nonce] = cache.tip
+}
+
+// Reset resets the block ID cache.
+func (cache *blockIDCache) Reset() {
+	cache.index = make(map[uint64]int)
+	cache.tip = 0
 }

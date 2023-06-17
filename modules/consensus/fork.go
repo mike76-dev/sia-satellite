@@ -23,7 +23,7 @@ func (cs *ConsensusSet) backtrackToCurrentPath(tx *sql.Tx, pb *processedBlock) [
 		// Error is not checked in production code - an error can only indicate
 		// that pb.Height > blockHeight.
 		currentPathID, err := getBlockAtHeight(tx, pb.Height)
-		if currentPathID == pb.Block.ID() {
+		if currentPathID == cs.blockID(pb.Block) {
 			break
 		}
 			
@@ -50,12 +50,12 @@ func (cs *ConsensusSet) backtrackToCurrentPath(tx *sql.Tx, pb *processedBlock) [
 func (cs *ConsensusSet) revertToBlock(tx *sql.Tx, pb *processedBlock) (revertedBlocks []*processedBlock, err error) {
 	// Sanity check - make sure that pb is in the current path.
 	currentPathID, err := getBlockAtHeight(tx, pb.Height)
-	if err != nil || currentPathID != pb.Block.ID() {
+	if err != nil || currentPathID != cs.blockID(pb.Block) {
 		return nil, errExternalRevert
 	}
 
 	// Rewind blocks until 'pb' is the current block.
-	for currentBlockID(tx) != pb.Block.ID() {
+	for currentBlockID(tx) != cs.blockID(pb.Block) {
 		block := cs.currentProcessedBlock(tx)
 		if err := cs.commitDiffSet(tx, block, modules.DiffRevert); err != nil {
 			return nil, err
@@ -85,7 +85,7 @@ func (cs *ConsensusSet) applyUntilBlock(tx *sql.Tx, pb *processedBlock) (applied
 			err := cs.generateAndApplyDiff(tx, block)
 			if err != nil {
 				// Mark the block as invalid.
-				addDoSBlock(tx, block.Block.ID())
+				addDoSBlock(tx, cs.blockID(block.Block))
 				return nil, err
 			}
 		}

@@ -290,7 +290,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 		if err != nil {
 			continue
 		}
-		if pathID != pb.Block.ID() {
+		if pathID != cs.blockID(pb.Block) {
 			continue
 		}
 		if pb.Height == csHeight {
