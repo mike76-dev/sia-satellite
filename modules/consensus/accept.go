@@ -39,7 +39,7 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 	}
 
 	// Check if the block is already known.
-	_, exists, err = cs.findBlockByID(tx, id)
+	_, exists, err = findBlockByID(tx, id)
 	if err != nil {
 		return nil, errDatabaseError
 	}
@@ -48,7 +48,7 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 	}
 
 	// Check for the parent.
-	parent, exists, err = cs.findBlockByID(tx, b.ParentID)
+	parent, exists, err = findBlockByID(tx, b.ParentID)
 	if err != nil {
 		return nil, errDatabaseError
 	}
@@ -68,7 +68,7 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 
 // checkHeaderTarget returns true if the header's ID meets the given target.
 func (cs *ConsensusSet) checkHeaderTarget(h types.BlockHeader, target modules.Target) bool {
-	blockHash := cs.blockHeaderID(h)
+	blockHash := h.ID()
 	return bytes.Compare(target[:], blockHash[:]) >= 0
 }
 
@@ -78,7 +78,7 @@ func (cs *ConsensusSet) checkHeaderTarget(h types.BlockHeader, target modules.Ta
 func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	// Check if the block is a DoS block - a known invalid block that is expensive
 	// to validate.
-	id := cs.blockHeaderID(h)
+	id := h.ID()
 	exists, err := checkDoSBlock(tx, id)
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	}
 
 	// Check if the block is already known.
-	_, exists, err = cs.findBlockByID(tx, id)
+	_, exists, err = findBlockByID(tx, id)
 	if err != nil {
 		return errDatabaseError
 	}
@@ -97,7 +97,7 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	}
 
 	// Check for the parent.
-	parent, exists, err := cs.findBlockByID(tx, h.ParentID)
+	parent, exists, err := findBlockByID(tx, h.ParentID)
 	if err != nil {
 		return errDatabaseError
 	}
@@ -156,7 +156,7 @@ func (cs *ConsensusSet) addBlockToTree(tx *sql.Tx, b types.Block, parent *proces
 	// Check whether the new node is part of a chain that is heavier than the
 	// current node. If not, return ErrNonExtending and don't fork the
 	// blockchain.
-	currentNode := cs.currentProcessedBlock(tx)
+	currentNode := currentProcessedBlock(tx)
 	if !newNode.heavierThan(currentNode) {
 		return changeEntry{}, modules.ErrNonExtendingBlock
 	}
@@ -169,10 +169,10 @@ func (cs *ConsensusSet) addBlockToTree(tx *sql.Tx, b types.Block, parent *proces
 		return changeEntry{}, err
 	}
 	for _, rn := range revertedBlocks {
-		ce.RevertedBlocks = append(ce.RevertedBlocks, cs.blockID(rn.Block))
+		ce.RevertedBlocks = append(ce.RevertedBlocks, rn.Block.ID())
 	}
 	for _, an := range appliedBlocks {
-		ce.AppliedBlocks = append(ce.AppliedBlocks, cs.blockID(an.Block))
+		ce.AppliedBlocks = append(ce.AppliedBlocks, an.Block.ID())
 	}
 	err = appendChangeLog(tx, ce)
 	if err != nil {
@@ -234,7 +234,7 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	// This is the first time that IDs on the blocks have been computed.
 	blockIDs := make([]types.BlockID, 0, len(blocks))
 	for i := 0; i < len(blocks); i++ {
-		blockIDs = append(blockIDs, cs.blockID(blocks[i]))
+		blockIDs = append(blockIDs, blocks[i].ID())
 		if i > 0 && blocks[i].ParentID != blockIDs[i - 1] {
 			return false, errNonLinearChain
 		}
@@ -302,14 +302,12 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 			cs.log.Println("Consensus received a chain of blocks, where one was valid, but others were not:", setErr)
 		}
 		tx.Rollback()
-		cs.resetCaches()
 		return false, setErr
 	}
 
 	// Stop here if the blocks did not extend the longest blockchain.
 	if !chainExtended {
 		tx.Rollback()
-		cs.resetCaches()
 		return false, modules.ErrNonExtendingBlock
 	}
 
@@ -319,7 +317,6 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	}
 
 	if err := tx.Commit(); err != nil {
-		cs.resetCaches()
 		return false, err
 	}
 

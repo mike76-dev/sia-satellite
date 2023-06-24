@@ -20,7 +20,7 @@ var (
 // applyFoundationSubsidy adds a Foundation subsidy to the consensus set as a
 // delayed siacoin output. If no subsidy is due on the given block, no output is
 // added.
-func (cs *ConsensusSet) applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) error {
+func applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) error {
 	// NOTE: this conditional is split up to better visualize test coverage.
 	if pb.Height < modules.FoundationHardforkHeight {
 		return nil
@@ -39,7 +39,7 @@ func (cs *ConsensusSet) applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) e
 	}
 	dscod := modules.DelayedSiacoinOutputDiff{
 		Direction: modules.DiffApply,
-		ID:        cs.blockID(pb.Block).FoundationOutputID(),
+		ID:        pb.Block.ID().FoundationOutputID(),
 		SiacoinOutput: types.SiacoinOutput{
 			Value:   value,
 			Address: addr,
@@ -53,9 +53,9 @@ func (cs *ConsensusSet) applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) e
 
 // applyMinerPayouts adds a block's miner payouts to the consensus set as
 // delayed siacoin outputs.
-func (cs *ConsensusSet) applyMinerPayouts(tx *sql.Tx, pb *processedBlock) error {
+func applyMinerPayouts(tx *sql.Tx, pb *processedBlock) error {
 	for i := range pb.Block.MinerPayouts {
-		mpid := cs.blockID(pb.Block).MinerOutputID(i)
+		mpid := pb.Block.ID().MinerOutputID(i)
 		dscod := modules.DelayedSiacoinOutputDiff{
 			Direction:      modules.DiffApply,
 			ID:             mpid,
@@ -73,7 +73,7 @@ func (cs *ConsensusSet) applyMinerPayouts(tx *sql.Tx, pb *processedBlock) error 
 // applyMaturedSiacoinOutputs goes through the list of siacoin outputs that
 // have matured and adds them to the consensus set. This also updates the block
 // node diff set.
-func (cs *ConsensusSet) applyMaturedSiacoinOutputs(tx *sql.Tx, pb *processedBlock) error {
+func applyMaturedSiacoinOutputs(tx *sql.Tx, pb *processedBlock) error {
 	// Skip this step if the blockchain is not old enough to have maturing
 	// outputs.
 	if pb.Height < modules.MaturityDelay {
@@ -137,7 +137,7 @@ func (cs *ConsensusSet) applyMaturedSiacoinOutputs(tx *sql.Tx, pb *processedBloc
 
 	for _, scod := range scods {
 		pb.SiacoinOutputDiffs = append(pb.SiacoinOutputDiffs, scod)
-		if err := cs.commitSiacoinOutputDiff(tx, scod, modules.DiffApply); err != nil {
+		if err := commitSiacoinOutputDiff(tx, scod, modules.DiffApply); err != nil {
 			return err
 		}
 	}
@@ -155,9 +155,9 @@ func (cs *ConsensusSet) applyMaturedSiacoinOutputs(tx *sql.Tx, pb *processedBloc
 
 // applyMissedStorageProof adds the outputs and diffs that result from a file
 // contract expiring.
-func (cs *ConsensusSet) applyMissedStorageProof(tx *sql.Tx, pb *processedBlock, fcid types.FileContractID) (dscods []modules.DelayedSiacoinOutputDiff, fcd modules.FileContractDiff, err error) {
+func applyMissedStorageProof(tx *sql.Tx, pb *processedBlock, fcid types.FileContractID) (dscods []modules.DelayedSiacoinOutputDiff, fcd modules.FileContractDiff, err error) {
 	// Sanity checks.
-	fc, exists, err := cs.findFileContract(tx, fcid)
+	fc, exists, err := findFileContract(tx, fcid)
 	if err != nil {
 		return nil, modules.FileContractDiff{}, err
 	}
@@ -196,7 +196,7 @@ func (cs *ConsensusSet) applyMissedStorageProof(tx *sql.Tx, pb *processedBlock, 
 // applyFileContractMaintenance looks for all of the file contracts that have
 // expired without an appropriate storage proof, and calls 'applyMissedProof'
 // for the file contract.
-func (cs *ConsensusSet) applyFileContractMaintenance(tx *sql.Tx, pb *processedBlock) error {
+func applyFileContractMaintenance(tx *sql.Tx, pb *processedBlock) error {
 	// Get all of the expiring file contracts.
 	rows, err := tx.Query("SELECT fcid FROM cs_fcex WHERE height = ?", pb.Height)
 	if err != nil {
@@ -220,7 +220,7 @@ func (cs *ConsensusSet) applyFileContractMaintenance(tx *sql.Tx, pb *processedBl
 	rows.Close()
 
 	for _, fcid := range fcids {
-		amspDSCODS, fcd, err := cs.applyMissedStorageProof(tx, pb, fcid)
+		amspDSCODS, fcd, err := applyMissedStorageProof(tx, pb, fcid)
 		if err != nil {
 			return err
 		}
@@ -236,7 +236,7 @@ func (cs *ConsensusSet) applyFileContractMaintenance(tx *sql.Tx, pb *processedBl
 	}
 	for _, fcd := range fcds {
 		pb.FileContractDiffs = append(pb.FileContractDiffs, fcd)
-		if err := cs.commitFileContractDiff(tx, fcd, modules.DiffApply); err != nil {
+		if err := commitFileContractDiff(tx, fcd, modules.DiffApply); err != nil {
 			return err
 		}
 	}
@@ -249,15 +249,15 @@ func (cs *ConsensusSet) applyFileContractMaintenance(tx *sql.Tx, pb *processedBl
 // applyMaintenance applies block-level alterations to the consensus set.
 // Maintenance is applied after all of the transactions for the block have been
 // applied.
-func (cs *ConsensusSet) applyMaintenance(tx *sql.Tx, pb *processedBlock) error {
-	if err := cs.applyMinerPayouts(tx, pb); err != nil {
+func applyMaintenance(tx *sql.Tx, pb *processedBlock) error {
+	if err := applyMinerPayouts(tx, pb); err != nil {
 		return err
 	}
-	if err := cs.applyFoundationSubsidy(tx, pb); err != nil {
+	if err := applyFoundationSubsidy(tx, pb); err != nil {
 		return err
 	}
-	if err := cs.applyMaturedSiacoinOutputs(tx, pb); err != nil {
+	if err := applyMaturedSiacoinOutputs(tx, pb); err != nil {
 		return err
 	}
-	return cs.applyFileContractMaintenance(tx, pb)
+	return applyFileContractMaintenance(tx, pb)
 }

@@ -282,7 +282,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 	}
 	csHeight := blockHeight(tx)
 	for _, id := range knownBlocks {
-		pb, exists, err := cs.findBlockByID(tx, id)
+		pb, exists, err := findBlockByID(tx, id)
 		if err != nil || !exists {
 			continue
 		}
@@ -290,7 +290,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 		if err != nil {
 			continue
 		}
-		if pathID != cs.blockID(pb.Block) {
+		if pathID != pb.Block.ID() {
 			continue
 		}
 		if pb.Height == csHeight {
@@ -315,6 +315,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 		e.WriteUint64(0)
 		e.WriteUint64(0)
 		// Indicate that no more blocks are available.
+		e.WriteUint64(1)
 		e.WriteBool(false)
 		e.Flush()
 		return nil
@@ -340,7 +341,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 				tx.Rollback()
 				return err
 			}
-			pb, _, err := cs.findBlockByID(tx, id)
+			pb, _, err := findBlockByID(tx, id)
 			if err != nil {
 				cs.mu.RUnlock()
 				cs.log.Printf("CRITICAL: unable to get block from block map: height %v :: request %v :: id %s\n", height, i, id)
@@ -362,14 +363,29 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 
 		// Send a set of blocks to the caller + a flag indicating whether more
 		// are available.
-		e.WritePrefix(8 + 32 * len(blocks))
+		var buf bytes.Buffer
+		e := types.NewEncoder(&buf)
+		e.WriteUint64(0)
 		e.WritePrefix(len(blocks))
-		for _, b := range blocks {
-			b.EncodeTo(e)
+		for _, block := range blocks {
+			block.EncodeTo(e)
 		}
+		e.Flush()
+		b := buf.Bytes()
+		binary.LittleEndian.PutUint64(b[:8], uint64(len(b) - 8))
+		_, err = conn.Write(b)
+		if err != nil {
+			return err
+		}
+		buf.Reset()
 		e.WritePrefix(1)
 		e.WriteBool(moreAvailable)
 		e.Flush()
+		b = buf.Bytes()
+		_, err = conn.Write(b)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -452,7 +468,7 @@ func (cs *ConsensusSet) threadedRPCRelayHeader(conn modules.PeerConn) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err = cs.gateway.RPC(conn.RPCAddr(), "SendBlk", cs.managedReceiveBlock(cs.blockHeaderID(h)))
+		err = cs.gateway.RPC(conn.RPCAddr(), "SendBlk", cs.managedReceiveBlock(h.ID()))
 		if err != nil {
 			cs.log.Println("WARN: failed to get header's corresponding block:", err)
 		}
@@ -498,7 +514,7 @@ func (cs *ConsensusSet) rpcSendBlk(conn modules.PeerConn) error {
 		cs.log.Println("ERROR: unable to start transaction:", err)
 		return err
 	}
-	pb, exists, err := cs.findBlockByID(tx, id)
+	pb, exists, err := findBlockByID(tx, id)
 	if err != nil {
 		tx.Rollback()
 		cs.mu.RUnlock()

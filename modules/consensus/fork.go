@@ -17,19 +17,19 @@ var (
 // in the ConsensusSet's current path (the "common parent"). It returns the
 // (inclusive) set of blocks between the common parent and 'pb', starting from
 // the former.
-func (cs *ConsensusSet) backtrackToCurrentPath(tx *sql.Tx, pb *processedBlock) []*processedBlock {
+func backtrackToCurrentPath(tx *sql.Tx, pb *processedBlock) []*processedBlock {
 	path := []*processedBlock{pb}
 	for {
 		// Error is not checked in production code - an error can only indicate
 		// that pb.Height > blockHeight.
 		currentPathID, err := getBlockAtHeight(tx, pb.Height)
-		if currentPathID == cs.blockID(pb.Block) {
+		if currentPathID == pb.Block.ID() {
 			break
 		}
 			
 		// Prepend the next block to the list of blocks leading from the
 		// current path to the input block.
-		pb, exists, err := cs.findBlockByID(tx, pb.Block.ParentID)
+		pb, exists, err := findBlockByID(tx, pb.Block.ParentID)
 		if err != nil {
 			return nil
 		}
@@ -50,14 +50,14 @@ func (cs *ConsensusSet) backtrackToCurrentPath(tx *sql.Tx, pb *processedBlock) [
 func (cs *ConsensusSet) revertToBlock(tx *sql.Tx, pb *processedBlock) (revertedBlocks []*processedBlock, err error) {
 	// Sanity check - make sure that pb is in the current path.
 	currentPathID, err := getBlockAtHeight(tx, pb.Height)
-	if err != nil || currentPathID != cs.blockID(pb.Block) {
+	if err != nil || currentPathID != pb.Block.ID() {
 		return nil, errExternalRevert
 	}
 
 	// Rewind blocks until 'pb' is the current block.
-	for currentBlockID(tx) != cs.blockID(pb.Block) {
-		block := cs.currentProcessedBlock(tx)
-		if err := cs.commitDiffSet(tx, block, modules.DiffRevert); err != nil {
+	for currentBlockID(tx) != pb.Block.ID() {
+		block := currentProcessedBlock(tx)
+		if err := commitDiffSet(tx, block, modules.DiffRevert); err != nil {
 			return nil, err
 		}
 		revertedBlocks = append(revertedBlocks, block)
@@ -73,19 +73,19 @@ func (cs *ConsensusSet) revertToBlock(tx *sql.Tx, pb *processedBlock) (revertedB
 // set's current path and 'pb'.
 func (cs *ConsensusSet) applyUntilBlock(tx *sql.Tx, pb *processedBlock) (appliedBlocks []*processedBlock, err error) {
 	// Backtrack to the common parent of 'bn' and current path and then apply the new blocks.
-	newPath := cs.backtrackToCurrentPath(tx, pb)
+	newPath := backtrackToCurrentPath(tx, pb)
 	for _, block := range newPath[1:] {
 		// If the diffs for this block have already been generated, apply diffs
 		// directly instead of generating them. This is much faster.
 		if block.DiffsGenerated {
-			if err := cs.commitDiffSet(tx, block, modules.DiffApply); err != nil {
+			if err := commitDiffSet(tx, block, modules.DiffApply); err != nil {
 				return nil, err
 			}
 		} else {
-			err := cs.generateAndApplyDiff(tx, block)
+			err := generateAndApplyDiff(tx, block)
 			if err != nil {
 				// Mark the block as invalid.
-				addDoSBlock(tx, cs.blockID(block.Block))
+				addDoSBlock(tx, block.Block.ID())
 				return nil, err
 			}
 		}
@@ -103,7 +103,7 @@ func (cs *ConsensusSet) applyUntilBlock(tx *sql.Tx, pb *processedBlock) (applied
 // found to be invalid. forkBlockchain is atomic; the ConsensusSet is only
 // updated if the function returns nil.
 func (cs *ConsensusSet) forkBlockchain(tx *sql.Tx, newBlock *processedBlock) (revertedBlocks, appliedBlocks []*processedBlock, err error) {
-	commonParent := cs.backtrackToCurrentPath(tx, newBlock)[0]
+	commonParent := backtrackToCurrentPath(tx, newBlock)[0]
 	revertedBlocks, err = cs.revertToBlock(tx, commonParent)
 	if err != nil {
 		return nil, nil, err

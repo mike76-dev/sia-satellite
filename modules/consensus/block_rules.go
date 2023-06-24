@@ -48,7 +48,7 @@ func (cs *ConsensusSet) minimumValidChildTimestamp(tx *sql.Tx, pb *processedBloc
 		}
 
 		// Get the next parent.
-		parentID, timestamp, err = cs.getParentID(tx, parentID)
+		parentID, timestamp, err = getParentID(tx, parentID)
 		if err != nil {
 			cs.log.Println("ERROR: unable to get parent ID:", err)
 		}

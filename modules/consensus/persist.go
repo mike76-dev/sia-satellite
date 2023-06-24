@@ -47,7 +47,7 @@ func (cs *ConsensusSet) loadDB() error {
 	}
 
 	// Initialize the Foundation hardfork fields, if necessary.
-	err = cs.initFoundation(tx)
+	err = initFoundation(tx)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -70,7 +70,7 @@ func (cs *ConsensusSet) loadDB() error {
 
 // initFoundation initializes the database fields relating to the Foundation
 // subsidy hardfork. If these fields have already been set, it does nothing.
-func (cs *ConsensusSet) initFoundation(tx *sql.Tx) error {
+func initFoundation(tx *sql.Tx) error {
 	var count int
 	err := tx.QueryRow("SELECT COUNT(*) FROM cs_fuh_current").Scan(&count)
 	if err != nil {
