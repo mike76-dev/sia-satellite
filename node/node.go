@@ -11,11 +11,11 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/consensus"
 	"github.com/mike76-dev/sia-satellite/modules/gateway"
+	"github.com/mike76-dev/sia-satellite/modules/transactionpool"
 	"github.com/mike76-dev/sia-satellite/persist"
 	//"github.com/mike76-dev/sia-satellite/portal"
 	//"github.com/mike76-dev/sia-satellite/satellite"
 
-	//"go.sia.tech/siad/modules/transactionpool"
 	//"go.sia.tech/siad/modules/wallet"
 )
 
@@ -29,7 +29,7 @@ type Node struct {
 	Gateway         modules.Gateway
 	//Portal          modules.Portal
 	//Satellite       modules.Satellite
-	//TransactionPool smodules.TransactionPool
+	TransactionPool modules.TransactionPool
 	//Wallet          smodules.Wallet
 
 	// The high level directory where all the persistence gets stored for the
@@ -51,11 +51,11 @@ func (n *Node) Close() (err error) {
 	if n.Wallet != nil {
 		fmt.Println("Closing wallet...")
 		err = modules.ComposeErrors(err, n.Wallet.Close())
-	}
+	}*/
 	if n.TransactionPool != nil {
 		fmt.Println("Closing transaction pool...")
 		err = modules.ComposeErrors(err, n.TransactionPool.Close())
-	}*/
+	}
 	if n.ConsensusSet != nil {
 		fmt.Println("Closing consensus...")
 		err = modules.ComposeErrors(err, n.ConsensusSet.Close())
@@ -120,16 +120,12 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	}
 
 	// Load transaction pool.
-	/*fmt.Println("Loading transaction pool...")
-	tpoolDir := filepath.Join(d, "transactionpool")
-	if err := os.MkdirAll(tpoolDir, 0700); err != nil {
-		return nil, errChan
-	}
-	tp, err := transactionpool.New(cs, g, tpoolDir)
+	fmt.Println("Loading transaction pool...")
+	tp, err := transactionpool.New(db, cs, g, d)
 	if err != nil {
 		errChan <- modules.AddContext(err, "unable to create transaction pool")
 		return nil, errChan
-	}*/
+	}
 
 	// Load wallet.
 	/*fmt.Println("Loading wallet...")
@@ -180,7 +176,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 		Gateway:         g,
 		//Portal:          p,
 		//Satellite:       s,
-		//TransactionPool: tp,
+		TransactionPool: tp,
 		//Wallet:          w,
 
 		Dir: d,

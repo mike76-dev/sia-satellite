@@ -95,7 +95,7 @@ type (
 		gateway           modules.Gateway
 		//portal            modules.Portal
 		//satellite         modules.Satellite
-		//tpool             smodules.TransactionPool
+		tpool             modules.TransactionPool
 		//wallet            smodules.Wallet
 
 		router            http.Handler
@@ -116,7 +116,7 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetModules allows for replacing the modules in the API at runtime.
-func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet) {
+func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet, tp modules.TransactionPool) {
 	if api.modulesSet {
 		log.Fatal("can't call SetModules more than once")
 	}
@@ -124,7 +124,7 @@ func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet) {
 	api.gateway = g
 	//api.portal = p
 	//api.satellite = s
-	//api.tpool = tp
+	api.tpool = tp
 	//api.wallet = w
 	api.modulesSet = true
 	api.buildHTTPRoutes()
@@ -133,13 +133,13 @@ func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet) {
 // New creates a new API. The API will require authentication using HTTP basic
 // auth for certain endpoints if the supplied password is not the empty string.
 // Usernames are ignored for authentication.
-func New(requiredUserAgent string, requiredPassword string, g modules.Gateway, cs modules.ConsensusSet) *API {
+func New(requiredUserAgent string, requiredPassword string, g modules.Gateway, cs modules.ConsensusSet, tp modules.TransactionPool) *API {
 	api := &API{
 		cs:                cs,
 		gateway:           g,
 		//portal:            p,
 		//satellite:         s,
-		//tpool:             tp,
+		tpool:             tp,
 		//wallet:            w,
 		requiredUserAgent: requiredUserAgent,
 		requiredPassword:  requiredPassword,

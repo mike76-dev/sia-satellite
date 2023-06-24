@@ -20,7 +20,10 @@ import (
 // ProtocolVersion is the current version of the gateway p2p protocol.
 const ProtocolVersion = "1.5.4"
 
-var errNoPeers = errors.New("no peers")
+var (
+	errNoPeers = errors.New("no peers")
+	errNilDB   = errors.New("cannot have a nil database as a dependency")
+)
 
 // Gateway implements the modules.Gateway interface.
 type Gateway struct {
@@ -212,6 +215,11 @@ func (g *Gateway) SetBlocklist(addresses []string) error {
 
 // New returns an initialized Gateway.
 func New(db *sql.DB, addr string, bootstrap bool, useUPNP bool, dir string) (*Gateway, error) {
+	// Check for the nil dependency.
+	if db == nil {
+		return nil, errNilDB
+	}
+
 	g := &Gateway{
 		db: db,
 

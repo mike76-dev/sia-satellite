@@ -58,7 +58,7 @@ func CalculateLeaves(dataSize uint64) uint64 {
 // VerifySegment will verify that a segment, given the proof, is a part of a
 // Merkle root.
 func VerifySegment(base []byte, hashSet []types.Hash256, numSegments, proofIndex uint64, root types.Hash256) bool {
-	// Convert base and hashSet to proofSet
+	// Convert base and hashSet to proofSet.
 	proofSet := make([][32]byte, len(hashSet) + 1)
 	proofSet[0] = merkletree.LeafSum(base)
 	for i := range hashSet {

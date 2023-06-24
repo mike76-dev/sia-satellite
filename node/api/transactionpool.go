@@ -1,18 +1,17 @@
 package api
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/mike76-dev/sia-satellite/modules"
 
-	"gitlab.com/NebulousLabs/encoding"
-
-	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 type (
@@ -63,13 +62,9 @@ func RegisterRoutesTransactionPool(router *httprouter.Router, tpool modules.Tran
 }
 
 // decodeTransactionID will decode a transaction id from a string.
-func decodeTransactionID(txidStr string) (types.TransactionID, error) {
-	txid := new(crypto.Hash)
-	err := txid.LoadString(txidStr)
-	if err != nil {
-		return types.TransactionID{}, err
-	}
-	return types.TransactionID(*txid), nil
+func decodeTransactionID(txidStr string) (txid types.TransactionID, err error) {
+	err = txid.UnmarshalText([]byte(txidStr))
+	return
 }
 
 // tpoolFeeHandlerGET returns the current estimated fee. Transactions with
@@ -96,10 +91,20 @@ func tpoolRawHandlerGET(tpool modules.TransactionPool, w http.ResponseWriter, _ 
 		return
 	}
 
+	var p, t bytes.Buffer
+	e := types.NewEncoder(&p)
+	e.WritePrefix(len(parents))
+	for _, parent := range parents {
+		parent.EncodeTo(e)
+	}
+	e.Flush()
+	e = types.NewEncoder(&t)
+	txn.EncodeTo(e)
+	e.Flush()
 	WriteJSON(w, TpoolRawGET{
 		ID:          txid,
-		Parents:     encoding.Marshal(parents),
-		Transaction: encoding.Marshal(txn),
+		Parents:     p.Bytes(),
+		Transaction: t.Bytes(),
 	})
 }
 
@@ -109,16 +114,27 @@ func tpoolRawHandlerGET(tpool modules.TransactionPool, w http.ResponseWriter, _ 
 func tpoolRawHandlerPOST(tpool modules.TransactionPool, w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	var parents []types.Transaction
 	var txn types.Transaction
-
-	// JSON, base64, and raw binary are accepted
+	
+	// JSON, base64, and raw binary are accepted.
 	if err := json.Unmarshal([]byte(req.FormValue("parents")), &parents); err != nil {
 		rawParents, err := base64.StdEncoding.DecodeString(req.FormValue("parents"))
 		if err != nil {
 			rawParents = []byte(req.FormValue("parents"))
 		}
-		if err := encoding.Unmarshal(rawParents, &parents); err != nil {
+		pBuf := bytes.NewBuffer(rawParents)
+		d := types.NewDecoder(io.LimitedReader{R: pBuf, N: int64(len(rawParents))})
+		l := d.ReadPrefix()
+		if err := d.Err(); err != nil {
 			WriteError(w, Error{"error decoding parents: " + err.Error()}, http.StatusBadRequest)
 			return
+		}
+		parents = make([]types.Transaction, l)
+		for i := 0; i < l; i++ {
+			parents[i].DecodeFrom(d)
+			if err := d.Err(); err != nil {
+				WriteError(w, Error{"error decoding parents: " + err.Error()}, http.StatusBadRequest)
+				return
+			}
 		}
 	}
 	if err := json.Unmarshal([]byte(req.FormValue("transaction")), &txn); err != nil {
@@ -126,11 +142,15 @@ func tpoolRawHandlerPOST(tpool modules.TransactionPool, w http.ResponseWriter, r
 		if err != nil {
 			rawTransaction = []byte(req.FormValue("transaction"))
 		}
-		if err := encoding.Unmarshal(rawTransaction, &txn); err != nil {
+		tBuf := bytes.NewBuffer(rawTransaction)
+		d := types.NewDecoder(io.LimitedReader{R: tBuf, N: int64(len(rawTransaction))})
+		txn.DecodeFrom(d)
+		if err := d.Err(); err != nil {
 			WriteError(w, Error{"error decoding transaction: " + err.Error()}, http.StatusBadRequest)
 			return
 		}
 	}
+
 	// Broadcast the transaction set, so that they are passed to any peers that
 	// may have rejected them earlier.
 	txnSet := append(parents, txn)

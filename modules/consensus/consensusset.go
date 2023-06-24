@@ -14,6 +14,7 @@ import (
 )
 
 var (
+	errNilDB      = errors.New("cannot have a nil database as input")
 	errNilGateway = errors.New("cannot have a nil gateway as input")
 )
 
@@ -61,6 +62,9 @@ type ConsensusSet struct {
 // consensusSetBlockingStartup handles the blocking portion of New.
 func consensusSetBlockingStartup(gateway modules.Gateway, db *sql.DB, dir string) (*ConsensusSet, error) {
 	// Check for nil dependencies.
+	if db == nil {
+		return nil, errNilDB
+	}
 	if gateway == nil {
 		return nil, errNilGateway
 	}

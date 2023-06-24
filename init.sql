@@ -1,3 +1,5 @@
+/* gateway */
+
 DROP TABLE IF EXISTS gw_nodes;
 DROP TABLE IF EXISTS gw_url;
 DROP TABLE IF EXISTS gw_blocklist;
@@ -19,14 +21,7 @@ CREATE TABLE gw_blocklist (
 	PRIMARY KEY (ip)
 );
 
-DROP INDEX scoid ON cs_dsco;
-DROP INDEX fcid ON cs_fcex;
-DROP INDEX bid ON cs_oak;
-DROP INDEX scoid ON cs_sco;
-DROP INDEX fcid ON cs_fc;
-DROP INDEX bid ON cs_map;
-DROP INDEX height ON cs_path;
-DROP INDEX ceid ON cs_cl;
+/* consensus */
 
 DROP TABLE IF EXISTS cs_height;
 DROP TABLE IF EXISTS cs_consistency;
@@ -72,27 +67,23 @@ CREATE TABLE cs_changelog (
 
 CREATE TABLE cs_dsco (
 	height BIGINT UNSIGNED NOT NULL,
-	scoid  BINARY(32) NOT NULL UNIQUE,
-	bytes  VARBINARY(56) NOT NULL
+	scoid  BINARY(32) NOT NULL,
+	bytes  VARBINARY(56) NOT NULL,
+	PRIMARY KEY (scoid ASC)
 );
-
-CREATE INDEX scoid ON cs_dsco(scoid);
 
 CREATE TABLE cs_fcex (
 	height BIGINT UNSIGNED NOT NULL,
-	fcid   BINARY(32) NOT NULL UNIQUE,
-	bytes  VARBINARY(416) NOT NULL
+	fcid   BINARY(32) NOT NULL,
+	bytes  BLOB NOT NULL,
+	PRIMARY KEY (fcid ASC)
 );
-
-CREATE INDEX fcid ON cs_fcex(fcid);
 
 CREATE TABLE cs_oak (
 	bid   BINARY(32) NOT NULL UNIQUE,
 	bytes BINARY(40) NOT NULL,
-	PRIMARY KEY (bid)
+	PRIMARY KEY (bid ASC)
 );
-
-CREATE INDEX bid ON cs_oak(bid);
 
 CREATE TABLE cs_oak_init (
 	id   INT NOT NULL AUTO_INCREMENT,
@@ -103,29 +94,25 @@ CREATE TABLE cs_oak_init (
 CREATE TABLE cs_sco (
 	scoid BINARY(32) NOT NULL,
 	bytes VARBINARY(56) NOT NULL,
-	PRIMARY KEY (scoid)
+	PRIMARY KEY (scoid ASC)
 );
-
-CREATE INDEX scoid ON cs_sco(scoid);
 
 CREATE TABLE cs_fc (
 	fcid  BINARY(32) NOT NULL,
-	bytes VARBINARY(416) NOT NULL,
-	PRIMARY KEY (fcid)
+	bytes BLOB NOT NULL,
+	PRIMARY KEY (fcid ASC)
 );
-
-CREATE INDEX fcid ON cs_fc(fcid);
 
 CREATE TABLE cs_sfo (
 	sfoid BINARY(32) NOT NULL,
 	bytes VARBINARY(80) NOT NULL,
-	PRIMARY KEY (sfoid)
+	PRIMARY KEY (sfoid ASC)
 );
 
 CREATE TABLE cs_fuh (
 	height BIGINT UNSIGNED NOT NULL,
 	bytes  BINARY(64) NOT NULL,
-	PRIMARY KEY (height)
+	PRIMARY KEY (height ASC)
 );
 
 CREATE TABLE cs_fuh_current (
@@ -137,30 +124,66 @@ CREATE TABLE cs_fuh_current (
 CREATE TABLE cs_path (
 	height BIGINT UNSIGNED NOT NULL,
 	bid    BINARY(32) NOT NULL,
-	PRIMARY KEY (height)
+	PRIMARY KEY (height ASC)
 );
-
-CREATE INDEX height ON cs_path(height);
 
 CREATE TABLE cs_map (
-	bid   BINARY(32) NOT NULL,
-	bytes LONGBLOB NOT NULL
+	id    INT NOT NULL AUTO_INCREMENT,
+	bid   BINARY(32) NOT NULL UNIQUE,
+	bytes LONGBLOB NOT NULL,
+	PRIMARY KEY (id)
 );
-
-CREATE INDEX bid ON cs_map(bid);
 
 CREATE TABLE cs_cl (
 	ceid  BINARY(32) NOT NULL,
 	bytes VARBINARY(1024) NOT NULL,
-	PRIMARY KEY (ceid)
+	PRIMARY KEY (ceid ASC)
 );
-
-CREATE INDEX ceid ON cs_cl(ceid);
 
 CREATE TABLE cs_dos (
 	bid BINARY(32) NOT NULL,
-	PRIMARY KEY (bid)
+	PRIMARY KEY (bid ASC)
 );
+
+/* transactionpool */
+
+DROP TABLE IF EXISTS tp_height;
+DROP TABLE IF EXISTS tp_ctx;
+DROP TABLE IF EXISTS tp_median;
+DROP TABLE IF EXISTS tp_cc;
+DROP TABLE IF EXISTS tp_recent;
+
+CREATE TABLE tp_height (
+	id     INT NOT NULL AUTO_INCREMENT,
+	height BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE tp_ctx (
+	txid BINARY(32) NOT NULL,
+	PRIMARY KEY (txid),
+	INDEX txid (txid ASC)
+);
+
+CREATE TABLE tp_median (
+	id    INT NOT NULL AUTO_INCREMENT,
+	bytes BLOB NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE tp_cc (
+	id   INT NOT NULL AUTO_INCREMENT,
+	ceid BINARY(32) NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE tp_recent (
+	id  INT NOT NULL AUTO_INCREMENT,
+	bid BINARY(32) NOT NULL,
+	PRIMARY KEY (id)
+);
+
+/* satellite */
 
 DROP TABLE IF EXISTS spendings;
 DROP TABLE IF EXISTS payments;
