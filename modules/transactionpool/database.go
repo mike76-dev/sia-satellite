@@ -166,6 +166,6 @@ func (tp *TransactionPool) putRecentConsensusChange(cc modules.ConsensusChangeID
 
 // putTransaction adds a transaction to the list of confirmed transactions.
 func (tp *TransactionPool) putTransaction(id types.TransactionID) error {
-	_, err := tp.dbTx.Exec("INSERT INTO tp_ctx (txid) VALUES (?)", id[:])
+	_, err := tp.dbTx.Exec("REPLACE INTO tp_ctx (txid) VALUES (?)", id[:])
 	return err
 }

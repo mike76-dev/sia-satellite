@@ -40,13 +40,14 @@ func (cs *ConsensusSet) initDB(tx *sql.Tx) error {
 	// If the database has already been initialized, there is nothing to do.
 	// Initialization can be detected by looking for the presence of the Siafund
 	// pool bucket. (legacy design choice - ultimately probably not the best way
-	// ot tell).
+	// to tell).
 	var count int
 	err := tx.QueryRow("SELECT COUNT(*) FROM cs_sfpool").Scan(&count)
 	if err != nil {
 		return err
 	}
 	if count > 0 {
+		cs.checkConsistency(tx) // Check on every startup.
 		return nil
 	}
 

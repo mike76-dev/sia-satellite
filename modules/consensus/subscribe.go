@@ -234,7 +234,7 @@ func (cs *ConsensusSet) recentConsensusChangeID() (cid modules.ConsensusChangeID
 	}
 
 	id := make([]byte, 32)
-	err = tx.QueryRow("SELECT bytes FROM changelog WHERE id = 1").Scan(&id)
+	err = tx.QueryRow("SELECT bytes FROM cs_changelog WHERE id = 1").Scan(&id)
 	if err != nil {
 		tx.Rollback()
 		return modules.ConsensusChangeID{}, err

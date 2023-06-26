@@ -311,13 +311,14 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 		return false, modules.ErrNonExtendingBlock
 	}
 
+	// Commit all changes before updating the subscribers.
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+
 	// Send any changes to subscribers.
 	for i := 0; i < len(changes); i++ {
 		cs.updateSubscribers(changes[i])
-	}
-
-	if err := tx.Commit(); err != nil {
-		return false, err
 	}
 
 	return chainExtended, nil
