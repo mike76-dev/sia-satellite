@@ -138,12 +138,12 @@ func ConvertToCore(siad encoding.SiaMarshaler, core types.DecoderFrom) {
 // the file contract that the proof is for, a boolean indicating whether the
 // proof was valid (true) or missed (false), and the index of the output
 // within the file contract.
-func StorageProofOutputID(fcid types.FileContractID, proofStatus bool, i uint64) types.SiacoinOutputID {
+func StorageProofOutputID(fcid types.FileContractID, proofStatus bool, i int) types.SiacoinOutputID {
 	h := types.NewHasher()
 	types.SpecifierStorageProof.EncodeTo(h.E)
 	fcid.EncodeTo(h.E)
 	h.E.WriteBool(proofStatus)
-	h.E.WriteUint64(i)
+	h.E.WriteUint64(uint64(i))
 	return types.SiacoinOutputID(h.Sum())
 }
 

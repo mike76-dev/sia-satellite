@@ -37,11 +37,11 @@ func (ce *changeEntry) EncodeTo(e *types.Encoder) {
 
 // DecodeFrom implements types.DecoderFrom.
 func (ce *changeEntry) DecodeFrom(d *types.Decoder) {
-	ce.RevertedBlocks = make([]types.BlockID, d.ReadPrefix())
+	ce.RevertedBlocks = make([]types.BlockID, d.ReadUint64())
 	for i := 0; i < len(ce.RevertedBlocks); i++ {
 		ce.RevertedBlocks[i].DecodeFrom(d)
 	}
-	ce.AppliedBlocks = make([]types.BlockID, d.ReadPrefix())
+	ce.AppliedBlocks = make([]types.BlockID, d.ReadUint64())
 	for i := 0; i < len(ce.AppliedBlocks); i++ {
 		ce.AppliedBlocks[i].DecodeFrom(d)
 	}

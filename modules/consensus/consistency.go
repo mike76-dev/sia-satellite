@@ -50,7 +50,7 @@ func checkSiacoinCount(tx *sql.Tx) {
 	expectedSiacoins := modules.CalculateNumSiacoins(blockHeight(tx))
 	totalSiacoins := dscoSiacoins.Add(scoSiacoins).Add(fcSiacoins).Add(claimSiacoins)
 	if !totalSiacoins.Equals(expectedSiacoins) {
-		diagnostics := fmt.Sprintf("Wrong number of siacoins\nDsco: %v\nSco: %v\nFc: %v\nClaim: %v\n", dscoSiacoins, scoSiacoins, fcSiacoins, claimSiacoins)
+		diagnostics := fmt.Sprintf("Number of Siacoins\nDsco: %v\nSco: %v\nFc: %v\nClaim: %v\n", dscoSiacoins, scoSiacoins, fcSiacoins, claimSiacoins)
 		if totalSiacoins.Cmp(expectedSiacoins) < 0 {
 			diagnostics += fmt.Sprintf("total: %v\nexpected: %v\n expected is bigger: %v", totalSiacoins, expectedSiacoins, expectedSiacoins.Sub(totalSiacoins))
 		} else {

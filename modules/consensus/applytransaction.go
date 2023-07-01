@@ -159,7 +159,7 @@ func applyStorageProofs(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 
 		// Add all of the outputs in the ValidProofOutputs of the contract.
 		for i, vpo := range fc.ValidProofOutputs {
-			spoid := modules.StorageProofOutputID(sp.ParentID, true, uint64(i))
+			spoid := modules.StorageProofOutputID(sp.ParentID, true, i)
 			dscod := modules.DelayedSiacoinOutputDiff{
 				Direction:      modules.DiffApply,
 				ID:             spoid,

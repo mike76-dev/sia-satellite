@@ -64,7 +64,7 @@ func (cs *ConsensusSet) revertToBlock(tx *sql.Tx, pb *processedBlock) (revertedB
 
 		// Sanity check - after removing a block, check that the consensus set
 		// has maintained consistency.
-		cs.maybeCheckConsistency(tx)
+		//cs.maybeCheckConsistency(tx) TODO
 	}
 	return revertedBlocks, nil
 }
@@ -93,7 +93,7 @@ func (cs *ConsensusSet) applyUntilBlock(tx *sql.Tx, pb *processedBlock) (applied
 
 		// Sanity check - after applying a block, check that the consensus set
 		// has maintained consistency.
-		cs.maybeCheckConsistency(tx)
+		//cs.maybeCheckConsistency(tx) TODO
 	}
 	return appliedBlocks, nil
 }

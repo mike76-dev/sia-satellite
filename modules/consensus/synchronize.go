@@ -175,7 +175,7 @@ func (cs *ConsensusSet) managedReceiveBlocks(conn modules.PeerConn) (returnErr e
 	moreAvailable := true
 	for moreAvailable {
 		// Read a slice of blocks from the wire.
-		d := types.NewDecoder(io.LimitedReader{R: conn, N: int64(MaxCatchUpBlocks * modules.BlockSizeLimit) + 9})
+		d := types.NewDecoder(io.LimitedReader{R: conn, N: int64(MaxCatchUpBlocks * modules.BlockSizeLimit) + 17})
 		_ = d.ReadUint64()
 		num := d.ReadPrefix()
 		newBlocks := make([]types.Block, num)
@@ -280,27 +280,30 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 		cs.log.Println("ERROR: unable to start transaction:", err)
 		return err
 	}
-	csHeight := blockHeight(tx)
-	for _, id := range knownBlocks {
-		pb, exists, err := findBlockByID(tx, id)
-		if err != nil || !exists {
-			continue
-		}
-		pathID, err := getBlockAtHeight(tx, pb.Height)
-		if err != nil {
-			continue
-		}
-		if pathID != pb.Block.ID() {
-			continue
-		}
-		if pb.Height == csHeight {
+	err = func(tx *sql.Tx) error {
+		csHeight := blockHeight(tx)
+		for _, id := range knownBlocks {
+			pb, exists, err := findBlockByID(tx, id)
+			if err != nil || !exists {
+				continue
+			}
+			pathID, err := getBlockAtHeight(tx, pb.Height)
+			if err != nil {
+				continue
+			}
+			if pathID != pb.Block.ID() {
+				continue
+			}
+			if pb.Height == csHeight {
+				break
+			}
+			found = true
+			// Start from the child of the common block.
+			start = pb.Height + 1
 			break
 		}
-		found = true
-		// Start from the child of the common block.
-		start = pb.Height + 1
-		break
-	}
+		return nil
+	}(tx)
 	tx.Commit()
 	cs.mu.RUnlock()
 	if err != nil {
@@ -332,34 +335,34 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 			cs.log.Println("ERROR: unable to start transaction:", err)
 			return err
 		}
-		height := blockHeight(tx)
-		for i := start; i <= height && i < start + MaxCatchUpBlocks; i++ {
-			id, err := getBlockAtHeight(tx, i)
-			if err != nil {
-				cs.mu.RUnlock()
-				cs.log.Printf("CRITICAL: unable to get path: height %v :: request %v\n", height, i)
-				tx.Rollback()
-				return err
+		err = func(tx *sql.Tx) error {
+			height := blockHeight(tx)
+			for i := start; i <= height && i < start + MaxCatchUpBlocks; i++ {
+				id, err := getBlockAtHeight(tx, i)
+				if err != nil {
+					cs.log.Printf("CRITICAL: unable to get path: height %v :: request %v\n", height, i)
+					return err
+				}
+				pb, exists, err := findBlockByID(tx, id)
+				if err != nil {
+					cs.log.Printf("CRITICAL: unable to get block from block map: height %v :: request %v :: id %s\n", height, i, id)
+					return err
+				}
+				if !exists {
+					cs.log.Printf("WARN: findBlockByID yielded 'nil' block: %v :: request %v :: id %s\n", height, i, id)
+					return errNilProcBlock
+				}
+				blocks = append(blocks, pb.Block)
 			}
-			pb, _, err := findBlockByID(tx, id)
-			if err != nil {
-				cs.mu.RUnlock()
-				cs.log.Printf("CRITICAL: unable to get block from block map: height %v :: request %v :: id %s\n", height, i, id)
-				tx.Rollback()
-				return err
-			}
-			if pb == nil {
-				cs.mu.RUnlock()
-				cs.log.Printf("WARN: findBlockByID yielded 'nil' block: %v :: request %v :: id %s\n", height, i, id)
-				tx.Rollback()
-				return errNilProcBlock
-			}
-			blocks = append(blocks, pb.Block)
-		}
+			moreAvailable = start + MaxCatchUpBlocks <= height
+			start += MaxCatchUpBlocks
+			return nil
+		}(tx)
 		tx.Commit()
 		cs.mu.RUnlock()
-		moreAvailable = start + MaxCatchUpBlocks <= height
-		start += MaxCatchUpBlocks
+		if err != nil {
+			return err
+		}
 
 		// Send a set of blocks to the caller + a flag indicating whether more
 		// are available.
@@ -434,11 +437,13 @@ func (cs *ConsensusSet) threadedRPCRelayHeader(conn modules.PeerConn) error {
 		cs.log.Println("ERROR: unable to start transaction:", err)
 		return err
 	}
-	err = cs.validateHeader(tx, h)
+	err = func(tx *sql.Tx) error {
+		return cs.validateHeader(tx, h)
+	}(tx)
 	tx.Commit()
 	cs.mu.RUnlock()
 
-	// WARN: orphan multithreading logic (dangerous areas, see below)
+	// WARN: orphan multithreading logic (dangerous areas, see below).
 	//
 	// If the header is valid and extends the heaviest chain, fetch the
 	// corresponding block. Call needs to be made in a separate goroutine
@@ -514,20 +519,22 @@ func (cs *ConsensusSet) rpcSendBlk(conn modules.PeerConn) error {
 		cs.log.Println("ERROR: unable to start transaction:", err)
 		return err
 	}
-	pb, exists, err := findBlockByID(tx, id)
+	err = func(tx *sql.Tx) error {
+		pb, exists, err := findBlockByID(tx, id)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.New("block not found")
+		}
+		b = pb.Block
+		return nil
+	}(tx)
+	tx.Commit()
+	cs.mu.RUnlock()
 	if err != nil {
-		tx.Rollback()
-		cs.mu.RUnlock()
 		return err
 	}
-	if !exists {
-		tx.Rollback()
-		cs.mu.RUnlock()
-		return errors.New("block not found")
-	}
-	tx.Commit()
-	b = pb.Block
-	cs.mu.RUnlock()
 
 	// Encode and send the block to the caller.
 	var buf bytes.Buffer

@@ -16,9 +16,9 @@ var (
 	errInvalidStorageProof        = errors.New("provided storage proof is invalid")
 	errLateRevision               = errors.New("file contract revision submitted after deadline")
 	errLowRevisionNumber          = errors.New("transaction has a file contract with an outdated revision number")
-	errMissingSiacoinOutput       = errors.New("transaction spends a nonexisting siacoin output")
-	errSiacoinInputOutputMismatch = errors.New("siacoin inputs do not equal siacoin outputs for transaction")
-	errSiafundInputOutputMismatch = errors.New("siafund inputs do not equal siafund outputs for transaction")
+	errMissingSiacoinOutput       = errors.New("transaction spends a nonexisting Siacoin output")
+	errSiacoinInputOutputMismatch = errors.New("Siacoin inputs do not equal Siacoin outputs for transaction")
+	errSiafundInputOutputMismatch = errors.New("Siafund inputs do not equal Siafund outputs for transaction")
 	errUnfinishedFileContract     = errors.New("file contract window has not yet openend")
 	errUnrecognizedFileContractID = errors.New("cannot fetch storage proof segment for unknown file contract")
 	errWrongUnlockConditions      = errors.New("transaction contains incorrect unlock conditions")
@@ -315,17 +315,25 @@ func (cs *ConsensusSet) tryTransactionSet(txns []types.Transaction) (modules.Con
 	// changes. At the end of the function, all changes that were made to the
 	// consensus set get reverted.
 	diffHolder := new(processedBlock)
-	diffHolder.Height = blockHeight(tx)
-	for _, txn := range txns {
-		if err := validTransaction(tx, txn); err != nil {
-			tx.Rollback()
-			return modules.ConsensusChange{}, err
+
+	// In the case of tryTransactionSet, we want to roll back the tx even if
+	// there is no error. So errSuccess is returned.
+	errSuccess := errors.New("success")
+	err = func(tx *sql.Tx) error {
+		diffHolder.Height = blockHeight(tx)
+		for _, txn := range txns {
+			if err := validTransaction(tx, txn); err != nil {
+				return err
+			}
+			applyTransaction(tx, diffHolder, txn)
 		}
-		if err := applyTransaction(tx, diffHolder, txn); err != nil {
-			tx.Rollback()
-			return modules.ConsensusChange{}, err
-		}
+		return errSuccess
+	}(tx)
+	tx.Rollback()
+	if !modules.ContainsError(err, errSuccess) {
+		return modules.ConsensusChange{}, err
 	}
+
 	cc := modules.ConsensusChange{
 		ConsensusChangeDiffs: modules.ConsensusChangeDiffs{
 			SiacoinOutputDiffs:        diffHolder.SiacoinOutputDiffs,
@@ -334,10 +342,6 @@ func (cs *ConsensusSet) tryTransactionSet(txns []types.Transaction) (modules.Con
 			DelayedSiacoinOutputDiffs: diffHolder.DelayedSiacoinOutputDiffs,
 			SiafundPoolDiffs:          diffHolder.SiafundPoolDiffs,
 		},
-	}
-
-	if err := tx.Commit(); err != nil {
-		return modules.ConsensusChange{}, err
 	}
 	
 	return cc, nil

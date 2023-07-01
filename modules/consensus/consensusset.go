@@ -96,7 +96,7 @@ func consensusSetBlockingStartup(gateway modules.Gateway, db *sql.DB, dir string
 			cs.blockRoot.SiacoinOutputDiffs = append(cs.blockRoot.SiacoinOutputDiffs, scod)
 		}
 
-		// Create the diffs for the genesis siafund outputs.
+		// Create the diffs for the genesis Siafund outputs.
 		for i, siafundOutput := range transaction.SiafundOutputs {
 			sfid := transaction.SiafundOutputID(i)
 			sfod := modules.SiafundOutputDiff{

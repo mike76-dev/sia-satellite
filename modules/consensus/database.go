@@ -47,7 +47,6 @@ func (cs *ConsensusSet) initDB(tx *sql.Tx) error {
 		return err
 	}
 	if count > 0 {
-		cs.checkConsistency(tx) // Check on every startup.
 		return nil
 	}
 

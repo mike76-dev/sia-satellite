@@ -248,52 +248,52 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	if err != nil {
 		return false, err
 	}
-	var setErr error
-	for i := 0; i < len(blocks); i++ {
-		// Start by checking the header of the block.
-		parent, err := cs.validateHeaderAndBlock(tx, blocks[i], blockIDs[i])
-		if modules.ContainsError(err, modules.ErrBlockKnown) {
-			// Skip over known blocks.
-			continue
-		}
-		if modules.ContainsError(err, ErrFutureTimestamp) {
-			// Queue the block to be tried again if it is a future block.
-			go cs.threadedSleepOnFutureBlock(blocks[i])
-		}
-		if err != nil {
-			setErr = err
-			break
+	setErr := func(tx *sql.Tx) error {
+		for i := 0; i < len(blocks); i++ {
+			// Start by checking the header of the block.
+			parent, err := cs.validateHeaderAndBlock(tx, blocks[i], blockIDs[i])
+			if modules.ContainsError(err, modules.ErrBlockKnown) {
+				// Skip over known blocks.
+				continue
+			}
+			if modules.ContainsError(err, ErrFutureTimestamp) {
+				// Queue the block to be tried again if it is a future block.
+				go cs.threadedSleepOnFutureBlock(blocks[i])
+			}
+			if err != nil {
+				return err
+			}
+
+			// Try adding the block to consensus.
+			changeEntry, err := cs.addBlockToTree(tx, blocks[i], parent)
+			if err == nil {
+				changes = append(changes, changeEntry)
+				chainExtended = true
+				var applied, reverted []string
+				for _, b := range changeEntry.AppliedBlocks {
+						applied = append(applied, b.String()[:6])
+				}
+				for _, b := range changeEntry.RevertedBlocks {
+					reverted = append(reverted, b.String()[:6])
+				}
+			}
+			if modules.ContainsError(err, modules.ErrNonExtendingBlock) {
+				err = nil
+			}
+			if err != nil {
+				return err
+			}
+
+			// Sanity check - we should never apply fewer blocks than we revert.
+			if len(changeEntry.AppliedBlocks) < len(changeEntry.RevertedBlocks) {
+				err := errors.New("after adding a change entry, there are more reverted blocks than applied ones")
+				cs.log.Severe(err)
+				return err
+			}
 		}
 
-		// Try adding the block to consensus.
-		changeEntry, err := cs.addBlockToTree(tx, blocks[i], parent)
-		if err == nil {
-			changes = append(changes, changeEntry)
-			chainExtended = true
-			var applied, reverted []string
-			for _, b := range changeEntry.AppliedBlocks {
-					applied = append(applied, b.String()[:6])
-			}
-			for _, b := range changeEntry.RevertedBlocks {
-				reverted = append(reverted, b.String()[:6])
-			}
-		}
-		if modules.ContainsError(err, modules.ErrNonExtendingBlock) {
-			err = nil
-		}
-		if err != nil {
-			setErr = err
-			break
-		}
-
-		// Sanity check - we should never apply fewer blocks than we revert.
-		if len(changeEntry.AppliedBlocks) < len(changeEntry.RevertedBlocks) {
-			err = errors.New("after adding a change entry, there are more reverted blocks than applied ones")
-			cs.log.Severe(err)
-			setErr = err
-			break
-		}
-	}
+		return nil
+	}(tx)
 
 	if setErr != nil {
 		if len(changes) == 0 {

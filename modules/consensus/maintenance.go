@@ -168,7 +168,7 @@ func applyMissedStorageProof(tx *sql.Tx, pb *processedBlock, fcid types.FileCont
 	// Add all of the outputs in the missed proof outputs to the consensus set.
 	for i, mpo := range fc.MissedProofOutputs {
 		// Sanity check - output should not already exist.
-		spoid := modules.StorageProofOutputID(fcid, false, uint64(i))
+		spoid := modules.StorageProofOutputID(fcid, false, i)
 		if isSiacoinOutput(tx, spoid) {
 			return nil, modules.FileContractDiff{}, errPayoutsAlreadyPaid
 		}

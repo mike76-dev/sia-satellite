@@ -54,7 +54,7 @@ var (
 	ErrFileContractWindowStartViolation = errors.New("file contract window must start in the future")
 	// ErrNonZeroClaimStart is an error when a transaction has a siafund
 	// output with a non-zero Siafund claim.
-	ErrNonZeroClaimStart = errors.New("transaction has a siafund output with a non-zero siafund claim")
+	ErrNonZeroClaimStart = errors.New("transaction has a Siafund output with a non-zero Siafund claim")
 	// ErrNonZeroRevision is an error when a new file contract has a
 	// nonzero revision number.
 	ErrNonZeroRevision = errors.New("new file contract has a nonzero revision number")
@@ -442,9 +442,9 @@ func validCoveredFields(t types.Transaction) error {
 func SigHash(t types.Transaction, i int, height uint64) (hash types.Hash256) {
 	sig := t.Signatures[i]
 	if sig.CoveredFields.WholeTransaction {
-		return wholeSigHash(t, sig, height)
+		return WholeSigHash(t, sig, height)
 	}
-	return partialSigHash(t, sig.CoveredFields, height)
+	return PartialSigHash(t, sig.CoveredFields, height)
 }
 
 // replayPrefix returns the replay protection prefix for the specified height.
@@ -461,9 +461,9 @@ func replayPrefix(height uint64) []byte {
 	}
 }
 
-// wholeSigHash calculates the hash for a signature that specifies
+// WholeSigHash calculates the hash for a signature that specifies
 // WholeTransaction = true.
-func wholeSigHash(t types.Transaction, sig types.TransactionSignature, height uint64) (hash types.Hash256) {
+func WholeSigHash(t types.Transaction, sig types.TransactionSignature, height uint64) (hash types.Hash256) {
 	h := types.NewHasher()
 
 	h.E.WritePrefix(len((t.SiacoinInputs)))
@@ -516,9 +516,9 @@ func wholeSigHash(t types.Transaction, sig types.TransactionSignature, height ui
 	return h.Sum()
 }
 
-// partialSigHash calculates the hash of the fields of the transaction
+// PartialSigHash calculates the hash of the fields of the transaction
 // specified in cf.
-func partialSigHash(t types.Transaction, cf types.CoveredFields, height uint64) (hash types.Hash256) {
+func PartialSigHash(t types.Transaction, cf types.CoveredFields, height uint64) (hash types.Hash256) {
 	h := types.NewHasher()
 
 	for _, input := range cf.SiacoinInputs {
@@ -856,4 +856,16 @@ func MinimumTransactionSet(requiredTxns []types.Transaction, relatedTxns []types
 	}
 	minSet = append(minSet, requiredTxns...)
 	return minSet
+}
+
+// CopyTransaction creates a deep copy of the transaction.
+func CopyTransaction(txn types.Transaction) types.Transaction {
+	var newTxn types.Transaction
+	var buf bytes.Buffer
+	e := types.NewEncoder(&buf)
+	txn.EncodeTo(e)
+	e.Flush()
+	d := types.NewDecoder(io.LimitedReader{R: &buf, N: int64(buf.Len())})
+	newTxn.DecodeFrom(d)
+	return newTxn
 }
