@@ -183,11 +183,96 @@ CREATE TABLE tp_recent (
 	PRIMARY KEY (id)
 );
 
+/* wallet */
+
+DROP TABLE IF EXISTS wt_addr;
+DROP TABLE IF EXISTS wt_txn;
+DROP TABLE IF EXISTS wt_sco;
+DROP TABLE IF EXISTS wt_sfo;
+DROP TABLE IF EXISTS wt_spo;
+DROP TABLE IF EXISTS wt_uc;
+DROP TABLE IF EXISTS wt_info;
+DROP TABLE IF EXISTS wt_watch;
+
+CREATE TABLE wt_txn (
+	id    INT NOT NULL AUTO_INCREMENT,
+	txid  BINARY(32) NOT NULL UNIQUE,
+	bytes BLOB NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE wt_addr (
+	id   INT NOT NULL AUTO_INCREMENT,
+	addr BINARY(32) NOT NULL,
+	txid BINARY(32) NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (txid) REFERENCES wt_txn(txid)
+);
+
+CREATE TABLE wt_sco (
+	scoid BINARY(32) NOT NULL,
+	bytes VARBINARY(56) NOT NULL,
+	PRIMARY KEY (scoid ASC)
+);
+
+CREATE TABLE wt_sfo (
+	sfoid BINARY(32) NOT NULL,
+	bytes VARBINARY(80) NOT NULL,
+	PRIMARY KEY (sfoid ASC)
+);
+
+CREATE TABLE wt_spo (
+	oid    BINARY(32) NOT NULL,
+	height BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (oid ASC)
+);
+
+CREATE TABLE wt_uc (
+	addr  BINARY(32) NOT NULL,
+	bytes BLOB NOT NULL,
+	PRIMARY KEY (addr ASC)
+);
+
+CREATE TABLE wt_info (
+	id        INT NOT NULL AUTO_INCREMENT,
+	cc        BINARY(32) NOT NULL,
+	height    BIGINT UNSIGNED NOT NULL,
+	encrypted BINARY(32) NOT NULL,
+	sfpool    VARBINARY(24) NOT NULL,
+	salt      BINARY(32) NOT NULL,
+	progress  BIGINT UNSIGNED NOT NULL,
+	seed      BINARY(32) NOT NULL,
+	pwd       BINARY(32) NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE wt_aux (
+	salt      BINARY(32) NOT NULL,
+	encrypted BINARY(32) NOT NULL,
+	seed      BINARY(32) NOT NULL,
+	PRIMARY KEY (seed)
+);
+
+CREATE TABLE wt_keys (
+	salt      BINARY(32) NOT NULL,
+	encrypted BINARY(32) NOT NULL,
+	key       BINARY(32) NOT NULL,
+	PRIMARY KEY (key)
+);
+
+CREATE TABLE wt_watch (
+	addr BINARY(32) NOT NULL,
+	PRIMARY KEY (addr ASC)
+);
+
 /* satellite */
 
 DROP TABLE IF EXISTS spendings;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS balances;
+DROP TABLE IF EXISTS renters;
+DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS contracts;
 DROP TABLE IF EXISTS accounts;
 
 CREATE TABLE accounts (
@@ -239,70 +324,6 @@ CREATE TABLE spendings (
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES accounts(email)
 );
-
-DROP TABLE IF EXISTS hosts;
-DROP TABLE IF EXISTS scanhistory;
-DROP TABLE IF EXISTS ipnets;
-
-CREATE TABLE hosts (
-	id                               INT NOT NULL AUTO_INCREMENT,
-	accepting_contracts              BOOL NOT NULL,
-	max_download_batch_size          BIGINT UNSIGNED NOT NULL,
-	max_duration                     BIGINT UNSIGNED NOT NULL,
-	max_revise_batch_size            BIGINT UNSIGNED NOT NULL,
-	net_address                      VARCHAR(255) NOT NULL,
-	remaining_storage                BIGINT UNSIGNED NOT NULL,
-	sector_size                      BIGINT UNSIGNED NOT NULL,
-	total_storage                    BIGINT UNSIGNED NOT NULL,
-	unlock_hash                      VARCHAR(64) NOT NULL,
-	window_size                      BIGINT UNSIGNED NOT NULL,
-	collateral                       VARCHAR(64) NOT NULL,
-	max_collateral                   VARCHAR(64) NOT NULL,
-	base_rpc_price                   VARCHAR(64) NOT NULL,
-	contract_price                   VARCHAR(64) NOT NULL,
-	download_bandwidth_price         VARCHAR(64) NOT NULL,
-	sector_access_price              VARCHAR(64) NOT NULL,
-	storage_price                    VARCHAR(64) NOT NULL,
-	upload_bandwidth_price           VARCHAR(64) NOT NULL,
-	ephemeral_account_expiry         BIGINT NOT NULL,
-	max_ephemeral_account_balance    VARCHAR(64) NOT NULL,
-	revision_number                  BIGINT UNSIGNED NOT NULL,
-	version                          VARCHAR(16) NOT NULL,
-	sia_mux_port                     VARCHAR(8) NOT NULL,
-	first_seen                       BIGINT UNSIGNED NOT NULL,
-	historic_downtime                BIGINT NOT NULL,
-	historic_uptime                  BIGINT NOT NULL,
-	historic_failed_interactions     DOUBLE NOT NULL,
-	historic_successful_interactions DOUBLE NOT NULL,
-	recent_failed_interactions       DOUBLE NOT NULL,
-	recent_successful_interactions   DOUBLE NOT NULL,
-	last_historic_update             BIGINT UNSIGNED NOT NULL,
-	last_ip_net_change               VARCHAR(64) NOT NULL,
-	public_key                       VARCHAR(128) NOT NULL UNIQUE,
-	filtered                         BOOL NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE scanhistory (
-	id         INT NOT NULL AUTO_INCREMENT,
-	public_key VARCHAR(128) NOT NULL,
-	time       VARCHAR(64) NOT NULL,
-	success    BOOL NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (public_key) REFERENCES hosts(public_key)
-);
-
-CREATE TABLE ipnets (
-	id         INT NOT NULL AUTO_INCREMENT,
-	public_key VARCHAR(128) NOT NULL,
-	ip_net     VARCHAR(255) NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (public_key) REFERENCES hosts(public_key)
-);
-
-DROP TABLE IF EXISTS renters;
-DROP TABLE IF EXISTS contracts;
-DROP TABLE IF EXISTS transactions;
 
 CREATE TABLE renters (
 	id                           INT NOT NULL AUTO_INCREMENT,
@@ -393,3 +414,64 @@ CREATE TABLE transactions (
 	PRIMARY KEY (id),
 	FOREIGN KEY (contract_id) REFERENCES contracts(contract_id)
 );
+
+DROP TABLE IF EXISTS scanhistory;
+DROP TABLE IF EXISTS ipnets;
+DROP TABLE IF EXISTS hosts;
+
+CREATE TABLE hosts (
+	id                               INT NOT NULL AUTO_INCREMENT,
+	accepting_contracts              BOOL NOT NULL,
+	max_download_batch_size          BIGINT UNSIGNED NOT NULL,
+	max_duration                     BIGINT UNSIGNED NOT NULL,
+	max_revise_batch_size            BIGINT UNSIGNED NOT NULL,
+	net_address                      VARCHAR(255) NOT NULL,
+	remaining_storage                BIGINT UNSIGNED NOT NULL,
+	sector_size                      BIGINT UNSIGNED NOT NULL,
+	total_storage                    BIGINT UNSIGNED NOT NULL,
+	unlock_hash                      VARCHAR(64) NOT NULL,
+	window_size                      BIGINT UNSIGNED NOT NULL,
+	collateral                       VARCHAR(64) NOT NULL,
+	max_collateral                   VARCHAR(64) NOT NULL,
+	base_rpc_price                   VARCHAR(64) NOT NULL,
+	contract_price                   VARCHAR(64) NOT NULL,
+	download_bandwidth_price         VARCHAR(64) NOT NULL,
+	sector_access_price              VARCHAR(64) NOT NULL,
+	storage_price                    VARCHAR(64) NOT NULL,
+	upload_bandwidth_price           VARCHAR(64) NOT NULL,
+	ephemeral_account_expiry         BIGINT NOT NULL,
+	max_ephemeral_account_balance    VARCHAR(64) NOT NULL,
+	revision_number                  BIGINT UNSIGNED NOT NULL,
+	version                          VARCHAR(16) NOT NULL,
+	sia_mux_port                     VARCHAR(8) NOT NULL,
+	first_seen                       BIGINT UNSIGNED NOT NULL,
+	historic_downtime                BIGINT NOT NULL,
+	historic_uptime                  BIGINT NOT NULL,
+	historic_failed_interactions     DOUBLE NOT NULL,
+	historic_successful_interactions DOUBLE NOT NULL,
+	recent_failed_interactions       DOUBLE NOT NULL,
+	recent_successful_interactions   DOUBLE NOT NULL,
+	last_historic_update             BIGINT UNSIGNED NOT NULL,
+	last_ip_net_change               VARCHAR(64) NOT NULL,
+	public_key                       VARCHAR(128) NOT NULL UNIQUE,
+	filtered                         BOOL NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE scanhistory (
+	id         INT NOT NULL AUTO_INCREMENT,
+	public_key VARCHAR(128) NOT NULL,
+	time       VARCHAR(64) NOT NULL,
+	success    BOOL NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (public_key) REFERENCES hosts(public_key)
+);
+
+CREATE TABLE ipnets (
+	id         INT NOT NULL AUTO_INCREMENT,
+	public_key VARCHAR(128) NOT NULL,
+	ip_net     VARCHAR(255) NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (public_key) REFERENCES hosts(public_key)
+);
+

@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"os"
 	"strconv"
@@ -14,16 +16,11 @@ import (
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/modules/wallet"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/spf13/cobra"
 
-	"gitlab.com/NebulousLabs/encoding"
-	mnemonics "gitlab.com/NebulousLabs/entropy-mnemonics"
-
-	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/modules/wallet"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 
 	"golang.org/x/term"
 )
@@ -70,7 +67,7 @@ be valid. txn may be either JSON, base64, or a file containing either.`,
 		Short: "Perform wallet actions",
 		Long: `Generate a new address, send coins to another wallet, or view info about the wallet.
 Units:
-The smallest unit of siacoins is the hasting. One siacoin is 10^24 hastings. Other supported units are:
+The smallest unit of Siacoins is the Hasting. One Siacoin is 10^24 Hastings. Other supported units are:
   pS (pico,  10^-12 SC)
   nS (nano,  10^-9 SC)
   uS (micro, 10^-6 SC)
@@ -128,18 +125,18 @@ By default the wallet encryption / unlock password is the same as the generated 
 
 	walletSendCmd = &cobra.Command{
 		Use:   "send",
-		Short: "Send siacoins to an address",
-		Long:  "Send siacoins to an address",
+		Short: "Send Siacoins to an address",
+		Long:  "Send Siacoins to an address",
 		// Run field is not set, as the send command itself is not a valid command.
 		// A subcommand must be provided.
 	}
 
 	walletSendSiacoinsCmd = &cobra.Command{
 		Use:   "siacoins [amount] [dest]",
-		Short: "Send siacoins to an address",
-		Long: `Send siacoins to an address. 'dest' must be a 76-byte hexadecimal address.
+		Short: "Send Siacoins to an address",
+		Long: `Send Siacoins to an address. 'dest' must be a 76-byte hexadecimal address.
 'amount' can be specified in units, e.g. 1.23KS. Run 'wallet --help' for a list of units.
-If no unit is supplied, hastings will be assumed.
+If no unit is supplied, Hastings will be assumed.
 A dynamic transaction fee is applied depending on the size of the transaction and how busy the network is.`,
 		Run: wrap(walletsendsiacoinscmd),
 	}
@@ -147,7 +144,7 @@ A dynamic transaction fee is applied depending on the size of the transaction an
 	walletSignCmd = &cobra.Command{
 		Use:   "sign [txn] [tosign]",
 		Short: "Sign a transaction",
-		Long: `Sign a transaction. If siad is running with an unlocked wallet, the
+		Long: `Sign a transaction. If satd is running with an unlocked wallet, the
 /wallet/sign API call will be used. Otherwise, sign will prompt for the wallet
 seed, and the signing key(s) will be regenerated.
 txn may be either JSON, base64, or a file containing either.
@@ -159,8 +156,8 @@ provided, the wallet will fill in every TransactionSignature it has keys for.`,
 
 	walletSweepCmd = &cobra.Command{
 		Use:   "sweep",
-		Short: "Sweep siacoins from a seed.",
-		Long: `Sweep siacoins from a seed. The outputs belonging to the seed
+		Short: "Sweep Siacoins from a seed.",
+		Long: `Sweep Siacoins from a seed. The outputs belonging to the seed
 will be sent to your wallet.`,
 		Run: wrap(walletsweepcmd),
 	}
@@ -168,7 +165,7 @@ will be sent to your wallet.`,
 	walletTransactionsCmd = &cobra.Command{
 		Use:   "transactions",
 		Short: "View transactions",
-		Long:  "View transactions related to addresses spendable by the wallet, providing a net flow of siacoins for each transaction",
+		Long:  "View transactions related to addresses spendable by the wallet, providing a net flow of Siacoins for each transaction",
 		Run:   wrap(wallettransactionscmd),
 	}
 
@@ -192,8 +189,8 @@ const (
 )
 
 // For an unconfirmed Transaction, the TransactionTimestamp field is set to the
-// maximum value of a uint64.
-const unconfirmedTransactionTimestamp = ^uint64(0)
+// maximum value of time.
+var unconfirmedTransactionTimestamp = time.Unix(math.MaxInt64, math.MaxInt64)
 
 // passwordPrompt securely reads a password from stdin.
 func passwordPrompt(prompt string) (pw string, err error) {
@@ -263,7 +260,7 @@ func walletchangepasswordcmd() {
 	fmt.Println("Password changed successfully.")
 }
 
-// walletinitcmd encrypts the wallet with the given password
+// walletinitcmd encrypts the wallet with the given password.
 func walletinitcmd() {
 	var password string
 	var err error
@@ -313,7 +310,7 @@ func walletinitseedcmd() {
 	}
 }
 
-// walletloadseedcmd adds a seed to the wallet's list of seeds
+// walletloadseedcmd adds a seed to the wallet's list of seeds.
 func walletloadseedcmd() {
 	seed, err := passwordPrompt("New seed: ")
 	if err != nil {
@@ -330,7 +327,7 @@ func walletloadseedcmd() {
 	fmt.Println("Added Key")
 }
 
-// walletlockcmd locks the wallet
+// walletlockcmd locks the wallet.
 func walletlockcmd() {
 	err := httpClient.WalletLockPost()
 	if err != nil {
@@ -338,7 +335,7 @@ func walletlockcmd() {
 	}
 }
 
-// walletseedcmd returns the current seed {
+// walletseedcmd returns the current seed.
 func walletseedscmd() {
 	seedInfo, err := httpClient.WalletSeedsGet()
 	if err != nil {
@@ -347,7 +344,7 @@ func walletseedscmd() {
 	fmt.Println("Primary Seed:")
 	fmt.Println(seedInfo.PrimarySeed)
 	if len(seedInfo.AllSeeds) == 1 {
-		// AllSeeds includes the primary seed
+		// AllSeeds includes the primary seed.
 		return
 	}
 	fmt.Println()
@@ -356,36 +353,32 @@ func walletseedscmd() {
 		if seed == seedInfo.PrimarySeed {
 			continue
 		}
-		fmt.Println() // extra newline for readability
+		fmt.Println() // Extra newline for readability.
 		fmt.Println(seed)
 	}
 }
 
-// walletsendsiacoinscmd sends siacoins to a destination address.
+// walletsendsiacoinscmd sends Siacoins to a destination address.
 func walletsendsiacoinscmd(amount, dest string) {
-	hastings, err := types.ParseCurrency(amount)
+	value, err := types.ParseCurrency(amount)
 	if err != nil {
 		die("Could not parse amount:", err)
 	}
-	var value types.Currency
-	if _, err := fmt.Sscan(hastings, &value); err != nil {
-		die("Failed to parse amount", err)
-	}
-	var hash types.UnlockHash
+	var hash types.Address
 	if _, err := fmt.Sscan(dest, &hash); err != nil {
 		die("Failed to parse destination address", err)
 	}
 	_, err = httpClient.WalletSiacoinsPost(value, hash, walletTxnFeeIncluded)
 	if err != nil {
-		die("Could not send siacoins:", err)
+		die("Could not send Siacoins:", err)
 	}
-	fmt.Printf("Sent %s hastings to %s\n", hastings, dest)
+	fmt.Printf("Sent %s Hastings to %s\n", value.ExactString(), dest)
 }
 
 // walletbalancecmd retrieves and displays information about the wallet.
 func walletbalancecmd() {
 	status, err := httpClient.WalletGet()
-	if strings.Contains(err.Error(), api.ErrAPICallNotRecognized.Error()) {
+	if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Wallet:\n  Status: %s\n\n", moduleNotReadyStatus)
 		return
@@ -412,9 +405,9 @@ Unlock the wallet to view balance
 	unconfirmedBalance := status.ConfirmedSiacoinBalance.Add(status.UnconfirmedIncomingSiacoins).Sub(status.UnconfirmedOutgoingSiacoins)
 	var delta string
 	if unconfirmedBalance.Cmp(status.ConfirmedSiacoinBalance) >= 0 {
-		delta = "+" + modules.ConvertCurrency(unconfirmedBalance.Sub(status.ConfirmedSiacoinBalance)).String()
+		delta = "+" + unconfirmedBalance.Sub(status.ConfirmedSiacoinBalance).String()
 	} else {
-		delta = "-" + modules.ConvertCurrency(status.ConfirmedSiacoinBalance.Sub(unconfirmedBalance)).String()
+		delta = "-" + status.ConfirmedSiacoinBalance.Sub(unconfirmedBalance).String()
 	}
 
 	fmt.Printf(`Wallet status:
@@ -424,8 +417,8 @@ Confirmed Balance:   %v
 Unconfirmed Delta:   %v
 Exact:               %v H
 Estimated Fee:       %v / KB
-`, encStatus, status.Height, modules.ConvertCurrency(status.ConfirmedSiacoinBalance), delta,
-		status.ConfirmedSiacoinBalance, modules.ConvertCurrency(fees.Maximum.Mul64(1e3)))
+`, encStatus, status.Height, status.ConfirmedSiacoinBalance, delta,
+		status.ConfirmedSiacoinBalance, fees.Maximum.Mul64(1e3))
 }
 
 // walletbroadcastcmd broadcasts a transaction.
@@ -452,7 +445,7 @@ func walletsweepcmd() {
 	if err != nil {
 		die("Could not sweep seed:", err)
 	}
-	fmt.Printf("Swept %v from seed.\n", modules.ConvertCurrency(swept.Coins))
+	fmt.Printf("Swept %v from seed.\n", swept.Coins)
 }
 
 // walletsigncmd signs a transaction.
@@ -467,15 +460,15 @@ func walletsigncmd(cmd *cobra.Command, args []string) {
 		die("Could not decode transaction:", err)
 	}
 
-	var toSign []crypto.Hash
+	var toSign []types.Hash256
 	for _, arg := range args[1:] {
 		index, err := strconv.ParseUint(arg, 10, 32)
 		if err != nil {
 			die("Invalid signature index", index, "(must be an non-negative integer)")
-		} else if index >= uint64(len(txn.TransactionSignatures)) {
-			die("Invalid signature index", index, "(transaction only has", len(txn.TransactionSignatures), "signatures)")
+		} else if index >= uint64(len(txn.Signatures)) {
+			die("Invalid signature index", index, "(transaction only has", len(txn.Signatures), "signatures)")
 		}
-		toSign = append(toSign, txn.TransactionSignatures[index].ParentID)
+		toSign = append(toSign, txn.Signatures[index].ParentID)
 	}
 
 	// Try API first.
@@ -485,7 +478,7 @@ func walletsigncmd(cmd *cobra.Command, args []string) {
 	} else {
 		// If satd is running, but the wallet is locked, assume the user
 		// wanted to sign with satd.
-		if strings.Contains(err.Error(), smodules.ErrLockedWallet.Error()) {
+		if modules.ContainsError(err, modules.ErrLockedWallet) {
 			die("Signing via API failed: satd is running, but the wallet is locked.")
 		}
 
@@ -494,7 +487,11 @@ func walletsigncmd(cmd *cobra.Command, args []string) {
 	}
 
 	if walletRawTxn {
-		_, err = base64.NewEncoder(base64.StdEncoding, os.Stdout).Write(encoding.Marshal(txn))
+		var buf bytes.Buffer
+		e := types.NewEncoder(&buf)
+		txn.EncodeTo(e)
+		e.Flush()
+		_, err = base64.NewEncoder(base64.StdEncoding, os.Stdout).Write(buf.Bytes())
 	} else {
 		err = json.NewEncoder(os.Stdout).Encode(txn)
 	}
@@ -506,13 +503,13 @@ func walletsigncmd(cmd *cobra.Command, args []string) {
 
 // walletsigncmdoffline is a helper for walletsigncmd that handles signing
 // transactions without satd.
-func walletsigncmdoffline(txn *types.Transaction, toSign []crypto.Hash) {
+func walletsigncmdoffline(txn *types.Transaction, toSign []types.Hash256) {
 	fmt.Println("Enter your wallet seed to generate the signing key(s) now and sign without satd.")
 	seedString, err := passwordPrompt("Seed: ")
 	if err != nil {
 		die("Reading seed failed:", err)
 	}
-	seed, err := smodules.StringToSeed(seedString, mnemonics.English)
+	seed, err := modules.DecodeBIP39Phrase(seedString)
 	if err != nil {
 		die("Invalid seed:", err)
 	}
@@ -535,9 +532,9 @@ func walletsigncmdoffline(txn *types.Transaction, toSign []crypto.Hash) {
 }
 
 // wallettransactionscmd lists all of the transactions related to the wallet,
-// providing a net flow of siacoins for each.
+// providing a net flow of Siacoins for each.
 func wallettransactionscmd() {
-	wtg, err := httpClient.WalletTransactionsGet(types.BlockHeight(walletStartHeight), types.BlockHeight(walletEndHeight))
+	wtg, err := httpClient.WalletTransactionsGet(walletStartHeight, walletEndHeight)
 	if err != nil {
 		die("Could not fetch transaction history:", err)
 	}
@@ -552,13 +549,13 @@ func wallettransactionscmd() {
 		die("Could not compute valued transaction: ", err)
 	}
 	for _, txn := range sts {
-		// Convert the siacoins to a float.
-		incomingSiacoinsFloat, _ := new(big.Rat).SetFrac(txn.ConfirmedIncomingValue.Big(), types.SiacoinPrecision.Big()).Float64()
-		outgoingSiacoinsFloat, _ := new(big.Rat).SetFrac(txn.ConfirmedOutgoingValue.Big(), types.SiacoinPrecision.Big()).Float64()
+		// Convert the Siacoins to a float.
+		incomingSiacoinsFloat, _ := new(big.Rat).SetFrac(txn.ConfirmedIncomingValue.Big(), types.HastingsPerSiacoin.Big()).Float64()
+		outgoingSiacoinsFloat, _ := new(big.Rat).SetFrac(txn.ConfirmedOutgoingValue.Big(), types.HastingsPerSiacoin.Big()).Float64()
 
 		// Print the results.
-		if uint64(txn.ConfirmationTimestamp) != unconfirmedTransactionTimestamp {
-			fmt.Println(time.Unix(int64(txn.ConfirmationTimestamp), 0).Format("2006-01-02 15:04:05-0700"))
+		if !txn.ConfirmationTimestamp.Equal(unconfirmedTransactionTimestamp) {
+			fmt.Println(txn.ConfirmationTimestamp.Format("2006-01-02 15:04:05-0700"))
 		} else {
 			fmt.Printf("             unconfirmed")
 		}

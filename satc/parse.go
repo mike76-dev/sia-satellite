@@ -1,18 +1,21 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math"
 	"math/big"
+	"os"
 	"sort"
-	//"strconv"
 	"strings"
 	"time"
 
-	//"github.com/mike76-dev/sia-satellite/modules"
-
-	//"go.sia.tech/core/types"
+	"go.sia.tech/core/types"
 )
 
 var (
@@ -168,7 +171,7 @@ func yesNo(b bool) string {
 
 // parseTxn decodes a transaction from s, which can be JSON, base64, or a path
 // to a file containing either encoding.
-/*func parseTxn(s string) (types.Transaction, error) {
+func parseTxn(s string) (types.Transaction, error) {
 	// First assume s is a file.
 	txnBytes, err := ioutil.ReadFile(s)
 	if os.IsNotExist(err) {
@@ -189,12 +192,15 @@ func yesNo(b bool) string {
 		if err != nil {
 			return types.Transaction{}, errors.New("argument is not valid JSON, base64, or filepath")
 		}
-		if err := encoding.Unmarshal(bin, &txn); err != nil {
+		buf := bytes.NewBuffer(bin)
+		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(bin))})
+		txn.DecodeFrom(d)
+		if err := d.Err(); err != nil {
 			return types.Transaction{}, errors.New("could not decode binary transaction: " + err.Error())
 		}
 	}
 	return txn, nil
-}*/
+}
 
 // fmtDuration converts a time.Duration into a days,hours,minutes string.
 func fmtDuration(dur time.Duration) string {

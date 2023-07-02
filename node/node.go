@@ -12,11 +12,10 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules/consensus"
 	"github.com/mike76-dev/sia-satellite/modules/gateway"
 	"github.com/mike76-dev/sia-satellite/modules/transactionpool"
+	"github.com/mike76-dev/sia-satellite/modules/wallet"
 	"github.com/mike76-dev/sia-satellite/persist"
 	//"github.com/mike76-dev/sia-satellite/portal"
 	//"github.com/mike76-dev/sia-satellite/satellite"
-
-	//"go.sia.tech/siad/modules/wallet"
 )
 
 // Node represents a satellite node containing all required modules.
@@ -30,7 +29,7 @@ type Node struct {
 	//Portal          modules.Portal
 	//Satellite       modules.Satellite
 	TransactionPool modules.TransactionPool
-	//Wallet          smodules.Wallet
+	Wallet          modules.Wallet
 
 	// The high level directory where all the persistence gets stored for the
 	// modules.
@@ -47,11 +46,11 @@ func (n *Node) Close() (err error) {
 	if n.Satellite != nil {
 		fmt.Println("Closing satellite...")
 		err = modules.ComposeErrors(err, n.Satellite.Close())
-	}
+	}*/
 	if n.Wallet != nil {
 		fmt.Println("Closing wallet...")
 		err = modules.ComposeErrors(err, n.Wallet.Close())
-	}*/
+	}
 	if n.TransactionPool != nil {
 		fmt.Println("Closing transaction pool...")
 		err = modules.ComposeErrors(err, n.TransactionPool.Close())
@@ -128,16 +127,12 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	}
 
 	// Load wallet.
-	/*fmt.Println("Loading wallet...")
-	walletDir := filepath.Join(d, "wallet")
-	if err := os.MkdirAll(walletDir, 0700); err != nil {
-		return nil, errChan
-	}
-	w, err := wallet.New(cs, tp, walletDir)
+	fmt.Println("Loading wallet...")
+	w, err := wallet.New(db, cs, tp, d)
 	if err != nil {
 		errChan <- modules.AddContext(err, "unable to create wallet")
 		return nil, errChan
-	}*/
+	}
 
 	// Load satellite.
 	/*fmt.Println("Loading satellite...")
@@ -177,7 +172,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 		//Portal:          p,
 		//Satellite:       s,
 		TransactionPool: tp,
-		//Wallet:          w,
+		Wallet:          w,
 
 		Dir: d,
 	}, errChan

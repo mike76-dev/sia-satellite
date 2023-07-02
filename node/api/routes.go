@@ -42,14 +42,14 @@ func (api *API) buildHTTPRoutes() {
 	}
 
 	// Transaction pool API Calls.
-	/*if api.tpool != nil {
+	if api.tpool != nil {
 		RegisterRoutesTransactionPool(router, api.tpool)
-	}*/
+	}
 
 	// Wallet API Calls.
-	/*if api.wallet != nil {
+	if api.wallet != nil {
 		RegisterRoutesWallet(router, api.wallet, requiredPassword)
-	}*/
+	}
 
 	// HostDB API Calls.
 	/*if api.satellite != nil {

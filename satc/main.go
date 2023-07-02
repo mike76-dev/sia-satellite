@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	//"math"
+	"math"
 	"os"
 	"reflect"
 	"strings"
@@ -100,8 +100,8 @@ func statuscmd() {
 	}
 
 	// Wallet Info.
-	/*walletStatus, err := httpClient.WalletGet()
-	if strings.Contains(err.Error(), api.ErrAPICallNotRecognized.Error()) {
+	walletStatus, err := httpClient.WalletGet()
+	if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Wallet:\n  Status: %s\n\n", moduleNotReadyStatus)
 	} else if err != nil {
@@ -110,12 +110,12 @@ func statuscmd() {
 		fmt.Printf(`Wallet:
   Status:          unlocked
   Siacoin Balance: %v
-`, modules.ConvertCurrency(walletStatus.ConfirmedSiacoinBalance))
+`, walletStatus.ConfirmedSiacoinBalance)
 	} else {
 		fmt.Printf(`Wallet:
   Status: Locked
 `)
-	}*/
+	}
 
 	// Satellite Info.
 	/*renters, err := httpClient.SatelliteRentersGet()
@@ -194,28 +194,26 @@ func initCmds() *cobra.Command {
 	//root.AddCommand(satelliteCmd)
 	//satelliteCmd.AddCommand(satelliteRentersCmd, satelliteRenterCmd, satelliteBalanceCmd, satelliteContractsCmd)
 
-	//root.AddCommand(walletCmd)
-	//walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangepasswordCmd,
-		//walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd,
-		//walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)
-	//walletInitCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Prompt for a custom password")
-	//walletInitCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet and re-encrypt")
-	//walletInitSeedCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet")
-	//walletInitSeedCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
-	//walletLoadCmd.AddCommand(walletLoadSeedCmd)
-	//walletSendCmd.AddCommand(walletSendSiacoinsCmd)
-	//walletSendSiacoinsCmd.Flags().BoolVarP(&walletTxnFeeIncluded, "fee-included", "", false, "Take the transaction fee out of the balance being submitted instead of the fee being additional")
-	//walletUnlockCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
-	//walletUnlockCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Display interactive password prompt even if SATD_WALLET_PASSWORD is set")
-	//walletBroadcastCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Decode transaction as base64 instead of JSON")
-	//walletSignCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Encode signed transaction as base64 instead of JSON")
-	//walletTransactionsCmd.Flags().Uint64Var(&walletStartHeight, "startheight", 0, " Height of the block where transaction history should begin.")
-	//walletTransactionsCmd.Flags().Uint64Var(&walletEndHeight, "endheight", math.MaxUint64, " Height of the block where transaction history should end.")
+	root.AddCommand(walletCmd)
+	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangepasswordCmd, walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd, walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)
+	walletInitCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Prompt for a custom password")
+	walletInitCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet and re-encrypt")
+	walletInitSeedCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet")
+	walletInitSeedCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
+	walletLoadCmd.AddCommand(walletLoadSeedCmd)
+	walletSendCmd.AddCommand(walletSendSiacoinsCmd)
+	walletSendSiacoinsCmd.Flags().BoolVarP(&walletTxnFeeIncluded, "fee-included", "", false, "Take the transaction fee out of the balance being submitted instead of the fee being additional")
+	walletUnlockCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
+	walletUnlockCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Display interactive password prompt even if SATD_WALLET_PASSWORD is set")
+	walletBroadcastCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Decode transaction as base64 instead of JSON")
+	walletSignCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Encode signed transaction as base64 instead of JSON")
+	walletTransactionsCmd.Flags().Uint64Var(&walletStartHeight, "startheight", 0, " Height of the block where transaction history should begin.")
+	walletTransactionsCmd.Flags().Uint64Var(&walletEndHeight, "endheight", math.MaxUint64, " Height of the block where transaction history should end.")
 
 	return root
 }
 
-// initClient initializes client cmd flags and default values
+// initClient initializes client cmd flags and default values.
 func initClient(root *cobra.Command, verbose *bool, client *client.Client, alertSuppress *bool) {
 	root.PersistentFlags().BoolVarP(verbose, "verbose", "v", false, "Display additional information")
 	root.PersistentFlags().StringVarP(&client.Address, "addr", "a", "localhost:9990", "which host/port to communicate with (i.e. the host/port satd is listening on)")
@@ -224,11 +222,11 @@ func initClient(root *cobra.Command, verbose *bool, client *client.Client, alert
 	root.PersistentFlags().BoolVarP(alertSuppress, "alert-suppress", "s", false, "suppress satc alerts")
 }
 
-// setAPIPasswordIfNotSet sets API password if it was not set
+// setAPIPasswordIfNotSet sets API password if it was not set.
 func setAPIPasswordIfNotSet() {
-	// Check if the API Password is set
+	// Check if the API Password is set.
 	if httpClient.Password == "" {
-		// No password passed in, fetch the API Password
+		// No password passed in, fetch the API Password.
 		pwd := os.Getenv("SATD_API_PASSWORD")
 		if pwd == "" {
 			fmt.Println("Exiting: Error getting API Password")

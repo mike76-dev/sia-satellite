@@ -1,7 +1,6 @@
 package modules
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -9,10 +8,7 @@ import (
 	"math/big"
 	"strings"
 
-	"gitlab.com/NebulousLabs/encoding"
-
 	"go.sia.tech/core/types"
-	stypes "go.sia.tech/siad/types"
 )
 
 // ReadCurrency converts a string to types.Currency.
@@ -38,14 +34,6 @@ func ReadPublicKey(s string) types.PublicKey {
 	var pk types.PublicKey
 	copy(pk[:], b)
 	return pk
-}
-
-// ConvertCurrency converts a siad currency to types.Currency.
-func ConvertCurrency(c stypes.Currency) types.Currency {
-	b := c.Big().Bytes()
-	buf := make([]byte, 16)
-	copy(buf[16 - len(b):], b[:])
-	return types.NewCurrency(binary.BigEndian.Uint64(buf[8:]), binary.BigEndian.Uint64(buf[:8]))
 }
 
 // Float64 converts types.Currency to float64.
@@ -108,28 +96,6 @@ func FilesizeUnits(size uint64) string {
 	sizes := []string{" B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"}
 	i := int(math.Log10(float64(size)) / 3)
 	return fmt.Sprintf("%.*f %s", i, float64(size)/math.Pow10(3*i), sizes[i])
-}
-
-// ConvertToSiad converts a `core` object to `siad`.
-func ConvertToSiad(core types.EncoderTo, siad encoding.SiaUnmarshaler) {
-	var buf bytes.Buffer
-	e := types.NewEncoder(&buf)
-	core.EncodeTo(e)
-	e.Flush()
-	if err := siad.UnmarshalSia(&buf); err != nil {
-		panic(err)
-	}
-}
-
-// ConvertToCore converts a `siad` object to `core`.
-func ConvertToCore(siad encoding.SiaMarshaler, core types.DecoderFrom) {
-	var buf bytes.Buffer
-	siad.MarshalSia(&buf)
-	d := types.NewBufDecoder(buf.Bytes())
-	core.DecodeFrom(d)
-	if d.Err() != nil {
-		panic(d.Err())
-	}
 }
 
 // StorageProofOutputID returns the ID of an output created by a file
