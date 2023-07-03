@@ -193,6 +193,8 @@ DROP TABLE IF EXISTS wt_spo;
 DROP TABLE IF EXISTS wt_uc;
 DROP TABLE IF EXISTS wt_info;
 DROP TABLE IF EXISTS wt_watch;
+DROP TABLE IF EXISTS wt_aux;
+DROP TABLE IF EXISTS wt_keys;
 
 CREATE TABLE wt_txn (
 	id    INT NOT NULL AUTO_INCREMENT,
@@ -237,27 +239,27 @@ CREATE TABLE wt_info (
 	id        INT NOT NULL AUTO_INCREMENT,
 	cc        BINARY(32) NOT NULL,
 	height    BIGINT UNSIGNED NOT NULL,
-	encrypted BINARY(32) NOT NULL,
+	encrypted BLOB NOT NULL,
 	sfpool    VARBINARY(24) NOT NULL,
 	salt      BINARY(32) NOT NULL,
 	progress  BIGINT UNSIGNED NOT NULL,
-	seed      BINARY(32) NOT NULL,
-	pwd       BINARY(32) NOT NULL,
+	seed      BLOB NOT NULL,
+	pwd       BLOB NOT NULL,
 	PRIMARY KEY (id)
 );
 
 CREATE TABLE wt_aux (
 	salt      BINARY(32) NOT NULL,
-	encrypted BINARY(32) NOT NULL,
-	seed      BINARY(32) NOT NULL,
-	PRIMARY KEY (seed)
+	encrypted BLOB NOT NULL,
+	seed      BLOB NOT NULL,
+	PRIMARY KEY (seed(32))
 );
 
 CREATE TABLE wt_keys (
 	salt      BINARY(32) NOT NULL,
-	encrypted BINARY(32) NOT NULL,
-	key       BINARY(32) NOT NULL,
-	PRIMARY KEY (key)
+	encrypted BLOB NOT NULL,
+	skey      BLOB NOT NULL,
+	PRIMARY KEY (skey(32))
 );
 
 CREATE TABLE wt_watch (

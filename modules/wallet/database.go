@@ -99,7 +99,7 @@ func dbReset(tx *sql.Tx) error {
 	_, err = tx.Exec(`
 		REPLACE INTO wt_info (id, cc, height, encrypted, sfpool, salt, progress, seed, pwd)
 		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, modules.ConsensusChangeBeginning, 0, []byte{}, []byte{}, frand.Bytes(len(walletSalt{})), 0, []byte{}, []byte{})
+	`, modules.ConsensusChangeBeginning[:], 0, []byte{}, []byte{}, frand.Bytes(len(walletSalt{})), 0, []byte{}, []byte{})
 	if err != nil {
 		return err
 	}
@@ -461,6 +461,9 @@ func dbGetSiafundPool(tx *sql.Tx) (pool types.Currency, err error) {
 	if err != nil {
 		return types.ZeroCurrency, err
 	}
+	if len(poolBytes) == 0 {
+		return types.ZeroCurrency, nil
+	}
 	d := types.NewDecoder(io.LimitedReader{R: bytes.NewBuffer(poolBytes), N: int64(len(poolBytes))})
 	pool.DecodeFrom(d)
 	return pool, d.Err()
@@ -510,10 +513,14 @@ func dbPutWatchedAddresses(tx *sql.Tx, addrs []types.Address) error {
 
 // dbGetEncryptedVerification returns the encrypted ciphertext.
 func dbGetEncryptedVerification(tx *sql.Tx) ([]byte, error) {
-	encrypted := make([]byte, 32)
+	var encrypted []byte
 	err := tx.QueryRow("SELECT encrypted FROM wt_info WHERE id = 1").Scan(&encrypted)
 	if err != nil {
 		return nil, err
+	}
+	empty := make([]byte, len(encrypted))
+	if bytes.Equal(encrypted, empty) {
+		return nil, nil
 	}
 	return encrypted, nil
 }
@@ -527,21 +534,22 @@ func dbPutEncryptedVerification(tx *sql.Tx, encrypted []byte) error {
 // dbGetPrimarySeed returns the wallet primary seed.
 func dbGetPrimarySeed(tx *sql.Tx) (seed encryptedSeed, err error) {
 	u := make([]byte, 32)
-	e := make([]byte, 32)
-	s := make([]byte, 32)
+	var e, s []byte
 	err = tx.QueryRow("SELECT salt, encrypted, seed FROM wt_info WHERE id = 1").Scan(&u, &e, &s)
 	if err != nil {
 		return
 	}
 	copy(seed.UID[:], u)
-	copy(seed.EncryptionVerification[:], e)
-	copy(seed.Seed[:], s)
+	seed.EncryptionVerification = make([]byte, len(e))
+	copy(seed.EncryptionVerification, e)
+	seed.Seed = make([]byte, len(s))
+	copy(seed.Seed, s)
 	return
 }
 
 // dbPutPrimarySeed saves the wallet primary seed.
 func dbPutPrimarySeed(tx *sql.Tx, seed encryptedSeed) error {
-	_, err := tx.Exec("UPDATE wt_info SET salt = ?, encrypted = ?, seed = ? WHERE id = 1", seed.UID[:], seed.EncryptionVerification[:], seed.Seed[:])
+	_, err := tx.Exec("UPDATE wt_info SET salt = ?, encrypted = ?, seed = ? WHERE id = 1", seed.UID[:], seed.EncryptionVerification, seed.Seed)
 	return err
 }
 
@@ -568,14 +576,15 @@ func dbGetAuxiliarySeeds(tx *sql.Tx) (seeds []encryptedSeed, err error) {
 	for rows.Next() {
 		var seed encryptedSeed
 		u := make([]byte, 32)
-		e := make([]byte, 32)
-		s := make([]byte, 32)
+		var e, s []byte
 		if err := rows.Scan(&u, &e, &s); err != nil {
 			return nil, err
 		}
 		copy(seed.UID[:], u)
-		copy(seed.EncryptionVerification[:], e)
-		copy(seed.Seed[:], s)
+		seed.EncryptionVerification = make([]byte, len(e))
+		copy(seed.EncryptionVerification, e)
+		seed.Seed = make([]byte, len(s))
+		copy(seed.Seed, s)
 		seeds = append(seeds, seed)
 	}
 
@@ -589,7 +598,7 @@ func dbPutAuxiliarySeeds(tx *sql.Tx, seeds []encryptedSeed) error {
 		return err
 	}
 	for _, seed := range seeds {
-		_, err := tx.Exec("INSERT INTO wt_aux (salt, encrypted, seed) VALUES (?, ?, ?)", seed.UID[:], seed.EncryptionVerification[:], seed.Seed[:])
+		_, err := tx.Exec("INSERT INTO wt_aux (salt, encrypted, seed) VALUES (?, ?, ?)", seed.UID[:], seed.EncryptionVerification, seed.Seed)
 		if err != nil {
 			return err
 		}
@@ -599,7 +608,7 @@ func dbPutAuxiliarySeeds(tx *sql.Tx, seeds []encryptedSeed) error {
 
 // dbGetUnseededKeys retrieves the spendable keys.
 func dbGetUnseededKeys(tx *sql.Tx) (keys []encryptedSpendableKey, err error) {
-	rows, err := tx.Query("SELECT salt, encrypted, key FROM wt_keys")
+	rows, err := tx.Query("SELECT salt, encrypted, skey FROM wt_keys")
 	if err != nil {
 		return nil, err
 	}
@@ -608,14 +617,15 @@ func dbGetUnseededKeys(tx *sql.Tx) (keys []encryptedSpendableKey, err error) {
 	for rows.Next() {
 		var sk encryptedSpendableKey
 		s := make([]byte, 32)
-		e := make([]byte, 32)
-		k := make([]byte, 32)
+		var e, k []byte
 		if err := rows.Scan(&s, &e, &k); err != nil {
 			return nil, err
 		}
 		copy(sk.Salt[:], s)
-		copy(sk.EncryptionVerification[:], e)
-		copy(sk.SpendableKey[:], k)
+		sk.EncryptionVerification = make([]byte, len(e))
+		copy(sk.EncryptionVerification, e)
+		sk.SpendableKey = make([]byte, len(k))
+		copy(sk.SpendableKey, k)
 		keys = append(keys, sk)
 	}
 
@@ -629,7 +639,7 @@ func dbPutUnseededKeys(tx *sql.Tx, keys []encryptedSpendableKey) error {
 		return err
 	}
 	for _, key := range keys {
-		_, err := tx.Exec("INSERT INTO wt_keys (salt, encrypted, key) VALUES (?, ?, ?)", key.Salt[:], key.EncryptionVerification[:], key.SpendableKey[:])
+		_, err := tx.Exec("INSERT INTO wt_keys (salt, encrypted, skey) VALUES (?, ?, ?)", key.Salt[:], key.EncryptionVerification, key.SpendableKey)
 		if err != nil {
 			return err
 		}

@@ -5,7 +5,6 @@ import (
 	"math"
 	"os"
 	"reflect"
-	"strings"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
@@ -87,7 +86,7 @@ func statuscmd() {
 
 	// Consensus Info.
 	cg, err := httpClient.ConsensusGet()
-	if strings.Contains(err.Error(), api.ErrAPICallNotRecognized.Error()) {
+	if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Consensus:\n  Status: %s\n\n", moduleNotReadyStatus)
 	} else if err != nil {
@@ -198,6 +197,7 @@ func initCmds() *cobra.Command {
 	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangepasswordCmd, walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd, walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)
 	walletInitCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Prompt for a custom password")
 	walletInitCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet and re-encrypt")
+	walletInitCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
 	walletInitSeedCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet")
 	walletInitSeedCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
 	walletLoadCmd.AddCommand(walletLoadSeedCmd)

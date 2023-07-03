@@ -229,9 +229,16 @@ func RegisterRoutesWallet(router *httprouter.Router, wallet modules.Wallet, requ
 // encryptionKeys enumerates the possible encryption keys that can be derived
 // from an input string.
 func encryptionKeys(seedStr string) (validKeys []modules.WalletKey, seed modules.Seed) {
-	key, err := modules.KeyFromPhrase(seedStr)
+	var err error
+	seed, err = modules.DecodeBIP39Phrase(seedStr)
 	if err == nil {
-		h := blake2b.Sum256(key[:])
+		h := blake2b.Sum256(seed[:])
+		buf := make([]byte, 32 + 8)
+		copy(buf[:32], h[:])
+		binary.LittleEndian.PutUint64(buf[32:], 0)
+		h = blake2b.Sum256(buf)
+		key := types.NewPrivateKeyFromSeed(h[:])
+		h = blake2b.Sum256(key[:])
 		wk := make([]byte, len(h))
 		copy(wk, h[:])
 		validKeys = append(validKeys, modules.WalletKey(wk))
@@ -242,16 +249,12 @@ func encryptionKeys(seedStr string) (validKeys []modules.WalletKey, seed modules
 	copy(buf[:32], h[:])
 	binary.LittleEndian.PutUint64(buf[32:], 0)
 	h = blake2b.Sum256(buf)
-	key = types.NewPrivateKeyFromSeed(h[:])
+	key := types.NewPrivateKeyFromSeed(h[:])
 	h = blake2b.Sum256(key[:])
 	wk := make([]byte, len(h))
 	copy(wk, h[:])
 	validKeys = append(validKeys, modules.WalletKey(wk))
 	frand.Read(h[:])
-	seed, err = modules.DecodeBIP39Phrase(seedStr)
-	if err != nil {
-		return nil, modules.Seed{}
-	}
 	return
 }
 
