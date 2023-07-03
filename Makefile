@@ -8,10 +8,10 @@ else
 endif
 
 ldflags= \
--X "go.sia.tech/siad/build.BinaryName=satd" \
--X "go.sia.tech/siad/build.NodeVersion=0.2.0" \
--X "go.sia.tech/siad/build.GitRevision=${GIT_DIRTY}${GIT_REVISION}" \
--X "go.sia.tech/siad/build.BuildTime=${BUILD_TIME}"
+-X "github.com/mike76-dev/sia-satellite/internal/build.BinaryName=satd" \
+-X "github.com/mike76-dev/sia-satellite/internal/build.NodeVersion=0.2.0" \
+-X "github.com/mike76-dev/sia-satellite/internal/build.GitRevision=${GIT_DIRTY}${GIT_REVISION}" \
+-X "github.com/mike76-dev/sia-satellite/internal/build.BuildTime=${BUILD_TIME}"
 
 # all will build and install release binaries
 all: release
@@ -26,16 +26,16 @@ pkgs = \
 	./node/api/client \
 	./node/api/server \
 	./persist \
-	./portal \
+	#./portal \
 	./satc \
 	./satd \
-	./satellite \
-	./satellite/manager \
-	./satellite/manager/contractor \
-	./satellite/manager/hostdb \
-	./satellite/manager/hostdb/hosttree \
-	./satellite/manager/proto \
-	./satellite/provider \
+	#./satellite \
+	#./satellite/manager \
+	#./satellite/manager/contractor \
+	#./satellite/manager/hostdb \
+	#./satellite/manager/hostdb/hosttree \
+	#./satellite/manager/proto \
+	#./satellite/provider \
 
 # release-pkgs determine which packages are built for release and distribution
 # when running a 'make release' command.
@@ -49,8 +49,8 @@ lockcheckpkgs = \
 	./node/api/server \
 	./satc \
 	./satd \
-	./satellite/manager/hostdb \
-	./satellite/manager/proto \
+	#./satellite/manager/hostdb \
+	#./satellite/manager/proto \
 
 # dependencies list all packages needed to run make commands used to build
 # and lint satc/satd locally and in CI systems.

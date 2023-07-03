@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/persist"
 
 	"go.sia.tech/core/types"
-	"go.sia.tech/siad/persist"
 
 	"lukechampine.com/frand"
 )

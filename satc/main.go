@@ -6,12 +6,11 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/mike76-dev/sia-satellite/internal/build"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/node/api/client"
 	"github.com/spf13/cobra"
-
-	"go.sia.tech/siad/build"
 )
 
 var (

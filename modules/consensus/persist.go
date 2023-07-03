@@ -7,8 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/mike76-dev/sia-satellite/modules"
-
-	"go.sia.tech/siad/persist"
+	"github.com/mike76-dev/sia-satellite/persist"
 )
 
 const (

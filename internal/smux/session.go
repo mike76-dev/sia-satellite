@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/pkg/errors"
-	siasync "go.sia.tech/siad/sync"
 )
 
 const (

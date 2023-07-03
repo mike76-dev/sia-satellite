@@ -7,10 +7,9 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/internal/build"
 	"github.com/mike76-dev/sia-satellite/node/api/server"
 	"github.com/mike76-dev/sia-satellite/persist"
-
-	"go.sia.tech/siad/build"
 )
 
 // tryAutoUnlock will try to automatically unlock the wallet if the

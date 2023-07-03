@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
 	
 	"go.sia.tech/core/types"
-	siasync "go.sia.tech/siad/sync"
 )
 
 const (

@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/persist"
 
 	"go.sia.tech/core/types"
-	"go.sia.tech/siad/persist"
-	"go.sia.tech/siad/sync"
 )
 
 const tpoolSyncRate = time.Minute * 2

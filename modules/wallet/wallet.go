@@ -7,11 +7,11 @@ import (
 	"sort"
 	"sync"
 
+	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/persist"
 
 	"go.sia.tech/core/types"
-	"go.sia.tech/siad/persist"
-	siasync "go.sia.tech/siad/sync"
 )
 
 const (

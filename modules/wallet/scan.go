@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/persist"
 
 	"go.sia.tech/core/types"
-	"go.sia.tech/siad/persist"
 )
 
 const scanMultiplier = 4 // How many more keys to generate after each scan iteration.

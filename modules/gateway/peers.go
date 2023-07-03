@@ -8,10 +8,10 @@ import (
 	"net"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/internal/build"
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"go.sia.tech/core/types"
-	"go.sia.tech/siad/build"
 
 	"lukechampine.com/frand"
 )

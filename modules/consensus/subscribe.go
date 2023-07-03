@@ -4,9 +4,8 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
-
-	"go.sia.tech/siad/sync"
 )
 
 // computeConsensusChangeDiffs computes the ConsensusChangeDiffs for the
