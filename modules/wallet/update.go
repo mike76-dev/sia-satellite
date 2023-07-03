@@ -573,7 +573,7 @@ func (w *Wallet) ReceiveUpdatedUnconfirmedTransactions(diff *modules.Transaction
 		// in w.unconfirmedProcessedTransactions.
 		var newUPT processedTransactionList
 		curr := w.unconfirmedProcessedTransactions.head
-		for curr.next != nil {
+		for curr != nil {
 			_, exists := droppedTransactions[curr.txn.TransactionID]
 			if !exists {
 				// Transaction was not dropped, add it to the new unconfirmed
