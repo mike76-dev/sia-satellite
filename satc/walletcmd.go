@@ -415,7 +415,7 @@ Unlock the wallet to view balance
 Height:              %v
 Confirmed Balance:   %v
 Unconfirmed Delta:   %v
-Exact:               %v H
+Exact:               %v
 Estimated Fee:       %v / KB
 `, encStatus, status.Height, status.ConfirmedSiacoinBalance, delta,
 		status.ConfirmedSiacoinBalance, fees.Maximum.Mul64(1e3))
