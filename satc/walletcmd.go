@@ -55,7 +55,7 @@ be valid. txn may be either JSON, base64, or a file containing either.`,
 		Run: wrap(walletbroadcastcmd),
 	}
 
-	walletChangepasswordCmd = &cobra.Command{
+	walletChangePasswordCmd = &cobra.Command{
 		Use:   "change-password",
 		Short: "Change the wallet password",
 		Long:  "Change the encryption password of the wallet, re-encrypting all keys + seeds kept by the wallet.",
