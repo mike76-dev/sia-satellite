@@ -415,10 +415,10 @@ Unlock the wallet to view balance
 Height:              %v
 Confirmed Balance:   %v
 Unconfirmed Delta:   %v
-Exact:               %v
+Exact:               %v H
 Estimated Fee:       %v / KB
 `, encStatus, status.Height, status.ConfirmedSiacoinBalance, delta,
-		status.ConfirmedSiacoinBalance, fees.Maximum.Mul64(1e3))
+		status.ConfirmedSiacoinBalance.ExactString(), fees.Maximum.Mul64(1e3))
 }
 
 // walletbroadcastcmd broadcasts a transaction.
