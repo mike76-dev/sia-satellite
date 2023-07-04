@@ -20,7 +20,7 @@ type processedTransactionList struct {
 }
 
 // add adds a new modules.ProcessedTransaction to the list.
-func (ptl processedTransactionList) add(pt modules.ProcessedTransaction) {
+func (ptl *processedTransactionList) add(pt modules.ProcessedTransaction) {
 	node := &processedTransactionNode{txn: pt}
 	if ptl.head == nil {
 		ptl.head = node
