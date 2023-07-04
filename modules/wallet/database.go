@@ -149,14 +149,15 @@ func dbForEachSiacoinOutput(tx *sql.Tx, fn func(types.SiacoinOutputID, types.Sia
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
+	outputs := make(map[types.SiacoinOutputID]types.SiacoinOutput)
 	for rows.Next() {
 		var scoid types.SiacoinOutputID
 		var sco types.SiacoinOutput
 		id := make([]byte, 32)
 		scoBytes := make([]byte, 0, 56)
 		if err := rows.Scan(&id, &scoBytes); err != nil {
+			rows.Close()
 			return err
 		}
 		copy(scoid[:], id)
@@ -164,8 +165,14 @@ func dbForEachSiacoinOutput(tx *sql.Tx, fn func(types.SiacoinOutputID, types.Sia
 		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(scoBytes))})
 		sco.DecodeFrom(d)
 		if err := d.Err(); err != nil {
+			rows.Close()
 			return err
 		}
+		outputs[scoid] = sco
+	}
+	rows.Close()
+
+	for scoid, sco := range outputs {
 		fn(scoid, sco)
 	}
 
@@ -194,8 +201,13 @@ func dbForEachSiafundOutput(tx *sql.Tx, fn func(types.SiafundOutputID, types.Sia
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
+	type extendedSiafundOutput struct {
+		output     types.SiafundOutput
+		claimStart types.Currency
+	}
+
+	outputs := make(map[types.SiafundOutputID]extendedSiafundOutput)
 	for rows.Next() {
 		var sfoid types.SiafundOutputID
 		var sfo types.SiafundOutput
@@ -203,6 +215,7 @@ func dbForEachSiafundOutput(tx *sql.Tx, fn func(types.SiafundOutputID, types.Sia
 		id := make([]byte, 32)
 		sfoBytes := make([]byte, 0, 80)
 		if err := rows.Scan(&id, &sfoBytes); err != nil {
+			rows.Close()
 			return err
 		}
 		copy(sfoid[:], id)
@@ -214,9 +227,18 @@ func dbForEachSiafundOutput(tx *sql.Tx, fn func(types.SiafundOutputID, types.Sia
 		sfo.Address.DecodeFrom(d)
 		claimStart.DecodeFrom(d)
 		if err := d.Err(); err != nil {
+			rows.Close()
 			return err
 		}
-		fn(sfoid, sfo, claimStart)
+		outputs[sfoid] = extendedSiafundOutput{
+			output:     sfo,
+			claimStart: claimStart,
+		}
+	}
+	rows.Close()
+
+	for sfoid, esfo := range outputs {
+		fn(sfoid, esfo.output, esfo.claimStart)
 	}
 
 	return nil
