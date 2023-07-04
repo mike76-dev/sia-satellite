@@ -99,6 +99,10 @@ func (w *Wallet) initPersist(dir string) error {
 	w.tg.AfterStop(func() {
 		w.mu.Lock()
 		defer w.mu.Unlock()
+
+		// Wait if we are syncing.
+		for w.syncing {}
+
 		var err error
 		if w.dbRollback {
 			// Rollback txn if necessry.
