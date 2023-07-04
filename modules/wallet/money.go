@@ -173,28 +173,22 @@ func (w *Wallet) managedSendSiacoins(amount, fee types.Currency, dest types.Addr
 		MinerFees:      []types.Currency{fee},
 	}
 
-	toSign, err := w.FundTransaction(&txn, amount.Add(fee))
+	parentTxn, err := w.FundTransaction(&txn, amount.Add(fee))
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to fund transaction:", err)
+		w.ReleaseInputs(txn)
 		return nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
 	cf := FullCoveredFields()
-	err = w.SignTransaction(&txn, toSign, cf)
+	err = w.SignTransaction(&txn, nil, cf)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to sign transaction:", err)
 		w.ReleaseInputs(txn)
 		return nil, modules.AddContext(err, "unable to sign transaction")
 	}
 
-	_, parents, ok := w.tpool.Transaction(txn.ID())
-	if !ok {
-		w.log.Println("ERROR: couldn't load transaction dependencies")
-		w.ReleaseInputs(txn)
-		return nil, errors.New("unable to load transaction parents")
-	}
-
-	txnSet := append(parents, txn)
+	txnSet := append([]types.Transaction{parentTxn}, txn)
 	err = w.tpool.AcceptTransactionSet(txnSet)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - transaction pool rejected transaction:", err)
@@ -255,27 +249,21 @@ func (w *Wallet) SendSiacoinsMulti(outputs []types.SiacoinOutput) (txns []types.
 	for _, sco := range outputs {
 		totalCost = totalCost.Add(sco.Value)
 	}
-	toSign, err := w.FundTransaction(&txn, totalCost)
+	parentTxn, err := w.FundTransaction(&txn, totalCost)
 	if err != nil {
+		w.ReleaseInputs(txn)
 		return nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
 	cf := FullCoveredFields()
-	err = w.SignTransaction(&txn, toSign, cf)
+	err = w.SignTransaction(&txn, nil, cf)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to sign transaction:", err)
 		w.ReleaseInputs(txn)
 		return nil, modules.AddContext(err, "unable to sign transaction")
 	}
 
-	_, parents, ok := w.tpool.Transaction(txn.ID())
-	if !ok {
-		w.log.Println("ERROR: couldn't load transaction dependencies")
-		w.ReleaseInputs(txn)
-		return nil, errors.New("unable to load transaction parents")
-	}
-
-	txnSet := append(parents, txn)
+	txnSet := append([]types.Transaction{parentTxn}, txn)
 	w.log.Println("INFO: attempting to broadcast a multi-send over the network")
 	err = w.tpool.AcceptTransactionSet(txnSet)
 	if err != nil {

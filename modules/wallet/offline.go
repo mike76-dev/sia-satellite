@@ -213,6 +213,22 @@ func (w *Wallet) SignTransaction(txn *types.Transaction, toSign []types.Hash256,
 		return err
 	}
 
+	// Add a signature for each input.
+	for _, input := range txn.SiacoinInputs {
+		key, ok := w.keys[input.UnlockConditions.UnlockHash()]
+		if !ok {
+			return errors.New("cannot sign Siacoin input")
+		}
+		addSignatures(txn, cf, input.UnlockConditions, types.Hash256(input.ParentID), key, consensusHeight)
+	}
+	for _, input := range txn.SiafundInputs {
+		key, ok := w.keys[input.UnlockConditions.UnlockHash()]
+		if !ok {
+			return errors.New("cannot sign Siafund input")
+		}
+		addSignatures(txn, cf, input.UnlockConditions, types.Hash256(input.ParentID), key, consensusHeight)
+	}
+
 	// If toSign is empty, sign all inputs that we have keys for.
 	if len(toSign) == 0 {
 		for _, sci := range txn.SiacoinInputs {
@@ -239,7 +255,7 @@ func (w *Wallet) SignTransaction(txn *types.Transaction, toSign []types.Hash256,
 func SignTransaction(txn *types.Transaction, seed modules.Seed, toSign []types.Hash256, height uint64) error {
 	if len(toSign) == 0 {
 		// Unlike the wallet method, we can't simply "sign all inputs we have
-		// keys for," because without generating all of the keys up front, we
+		// keys for," because without generating all of the keys upfront, we
 		// don't know how many inputs we actually have keys for.
 		return errors.New("toSign cannot be empty")
 	}

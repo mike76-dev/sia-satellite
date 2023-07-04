@@ -545,6 +545,7 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 		}
 		txnFunds = sweptFunds
 
+		var parents []types.Transaction
 		switch {
 		case txnCoins.IsZero() && txnFunds == 0:
 			// If we aren't sweeping any coins or funds, then just return an
@@ -569,10 +570,12 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 				Value:   txnFunds,
 				Address: uc.UnlockHash(),
 			})
-			_, err = w.FundTransaction(&txn, estFee)
+			parentTxn, err := w.FundTransaction(&txn, estFee)
 			if err != nil {
+				w.ReleaseInputs(txn)
 				return types.Currency{}, 0, modules.AddContext(err, "couldn't pay transaction fee on swept funds")
 			}
+			parents = append(parents, parentTxn)
 
 		case !txnCoins.IsZero() && txnFunds != 0:
 			// If we're sweeping both coins and funds, add a Siacoin output and a
@@ -609,11 +612,6 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 		w.mu.RUnlock()
 
 		// Append transaction to txnSet.
-		_, parents, ok := w.tpool.Transaction(txn.ID())
-		if !ok {
-			w.ReleaseInputs(txn)
-			return types.ZeroCurrency, 0, errors.New("unable to load transaction parents")
-		}
 		txnSet := append(parents, txn)
 
 		// Submit the transactions.

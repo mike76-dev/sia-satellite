@@ -133,7 +133,7 @@ func (c *Client) WalletSiacoinsMultiPost(outputs []types.SiacoinOutput) (wsp api
 // single address.
 func (c *Client) WalletSiacoinsPost(amount types.Currency, destination types.Address, feeIncluded bool) (wsp api.WalletSiacoinsPOST, err error) {
 	values := url.Values{}
-	values.Set("amount", amount.String())
+	values.Set("amount", amount.ExactString())
 	values.Set("destination", destination.String())
 	values.Set("feeIncluded", strconv.FormatBool(feeIncluded))
 	err = c.post("/wallet/siacoins", values.Encode(), &wsp)

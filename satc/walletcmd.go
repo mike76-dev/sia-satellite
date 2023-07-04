@@ -365,7 +365,7 @@ func walletsendsiacoinscmd(amount, dest string) {
 		die("Could not parse amount:", err)
 	}
 	var hash types.Address
-	if _, err := fmt.Sscan(dest, &hash); err != nil {
+	if err := hash.UnmarshalText([]byte(dest)); err != nil {
 		die("Failed to parse destination address", err)
 	}
 	_, err = httpClient.WalletSiacoinsPost(value, hash, walletTxnFeeIncluded)

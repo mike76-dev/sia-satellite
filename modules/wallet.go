@@ -123,7 +123,7 @@ type (
 		// amount to the provided transaction. A change output is also added,
 		// if necessary. The inputs will not be available to future calls to
 		// FundTransaction unless ReleaseInputs is called.
-		FundTransaction(txn *types.Transaction, amount types.Currency) ([]types.Hash256, error)
+		FundTransaction(txn *types.Transaction, amount types.Currency) (types.Transaction, error)
 
 		// ReleaseInputs is a helper function that releases the inputs of txn
 		// for use in other transactions. It should only be called on
