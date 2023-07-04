@@ -105,7 +105,9 @@ type Wallet struct {
 	// If dbRollback is set, then when the database syncs it will perform a
 	// rollback instead of a commit. For safety reasons, the db will close and
 	// the wallet will close if a rollback is performed.
+	// Syncing flag indicates if the database syncing is currently going on.
 	dbRollback bool
+	syncing    bool
 	dbTx       *sql.Tx
 
 	log *persist.Logger

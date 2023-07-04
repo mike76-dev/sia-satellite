@@ -46,6 +46,15 @@ func (w *Wallet) threadedDBUpdate() {
 // syncDB commits the current global transaction and immediately begins a
 // new one. It must be called with a write-lock.
 func (w *Wallet) syncDB() error {
+	// Check if we are not syncing already.
+	if w.syncing {
+		return nil
+	}
+	w.syncing = true
+	defer func() {
+		w.syncing = false
+	}()
+
 	// If the rollback flag is set, it means that somewhere in the middle of an
 	// atomic update there  was a failure, and that failure needs to be rolled
 	// back. An error will be returned.
