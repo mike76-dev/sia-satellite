@@ -5,47 +5,6 @@ import (
 	siad "go.sia.tech/siad/modules"
 )
 
-// HostAverages contains the host network averages from HostDB.
-type HostAverages struct {
-	NumHosts               uint64         `json:"numhosts"`
-	Duration               uint64         `json:"height"`
-	StoragePrice           types.Currency `json:"storageprice"`
-	Collateral             types.Currency `json:"collateral"`
-	DownloadBandwidthPrice types.Currency `json:"downloadprice"`
-	UploadBandwidthPrice   types.Currency `json:"uploadprice"`
-	ContractPrice          types.Currency `json:"contractprice"`
-	BaseRPCPrice           types.Currency `json:"baserpcprice"`
-	SectorAccessPrice      types.Currency `json:"sectoraccessprice"`
-}
-
-// userBalance holds the current balance as well as
-// the data on the chosen payment scheme.
-type UserBalance struct {
-	IsUser     bool    `json:"isuser"`
-	Subscribed bool    `json:"subscribed"`
-	Balance    float64 `json:"balance"`
-	Locked     float64 `json:"locked"`
-	Currency   string  `json:"currency"`
-	SCRate     float64 `json:"scrate"`
-	StripeID   string  `json:"stripeid"`
-}
-
-// UserSpendings contains the spendings in the current and the
-// previous months.
-type UserSpendings struct {
-	CurrentLocked   float64 `json:"currentlocked"`
-	CurrentUsed     float64 `json:"currentused"`
-	CurrentOverhead float64 `json:"currentoverhead"`
-	PrevLocked      float64 `json:"prevlocked"`
-	PrevUsed        float64 `json:"prevused"`
-	PrevOverhead    float64 `json:"prevoverhead"`
-	SCRate          float64 `json:"scrate"`
-	CurrentFormed   uint64  `json:"currentformed"`
-	CurrentRenewed  uint64  `json:"currentrenewed"`
-	PrevFormed      uint64  `json:"prevformed"`
-	PrevRenewed     uint64  `json:"prevrenewed"`
-}
-
 // CreditData contains the information about any running promotion.
 type CreditData struct {
 	Amount    float64 `json:"amount"`
@@ -137,20 +96,6 @@ type Satellite interface {
 
 	// RetrieveSpendings retrieves the user's spendings.
 	RetrieveSpendings(string, string) (*UserSpendings, error)
-}
-
-// Manager implements the methods necessary to communicate with the
-// hosts.
-type Manager interface {
-	siad.Alerter
-
-	// Close safely shuts down the manager.
-	Close() error
-
-	// PriceEstimation estimates the cost in siacoins of performing various
-	// storage and data operations. The estimation will be done using the provided
-	// allowance. The final allowance used will be returned.
-	PriceEstimation(Allowance) (float64, Allowance, error)
 }
 
 // Provider implements the methods necessary to communicate with the

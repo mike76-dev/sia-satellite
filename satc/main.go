@@ -186,6 +186,9 @@ func initCmds() *cobra.Command {
 	//hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
 	//hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
 
+	root.AddCommand(managerCmd)
+	managerCmd.AddCommand(managerRateCmd)
+
 	//root.AddCommand(portalCmd)
 	//portalCmd.AddCommand(portalSetCmd)
 

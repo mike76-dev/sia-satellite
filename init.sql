@@ -267,6 +267,17 @@ CREATE TABLE wt_watch (
 	PRIMARY KEY (addr ASC)
 );
 
+/* manager */
+
+DROP TABLE IF EXISTS mg_timestamp;
+
+CREATE TABLE mg_timestamp (
+	id     INT NOT NULL AUTO_INCREMENT,
+	height BIGINT UNSIGNED NOT NULL,
+	time   BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (id)
+);
+
 /* satellite */
 
 DROP TABLE IF EXISTS spendings;

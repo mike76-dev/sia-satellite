@@ -61,14 +61,14 @@ func (api *API) buildHTTPRoutes() {
 		router.POST("/hostdb/filtermode", RequirePassword(api.hostdbFilterModeHandlerPOST, requiredPassword))
 	}*/
 
-	// Satellite API Calls.
-	/*if api.satellite != nil {
-		router.GET("/satellite/renters", RequirePassword(api.satelliteRentersHandlerGET, requiredPassword))
-		router.GET("/satellite/renter/:publickey", RequirePassword(api.satelliteRenterHandlerGET, requiredPassword))
+	// Manager API Calls.
+	if api.manager != nil {
+		router.GET("/manager/rate/:currency", api.managerRateHandlerGET)
+		/*router.GET("/satellite/renter/:publickey", RequirePassword(api.satelliteRenterHandlerGET, requiredPassword))
 		router.GET("/satellite/balance/:publickey", RequirePassword(api.satelliteBalanceHandlerGET, requiredPassword))
 		router.GET("/satellite/contracts", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))
-		router.GET("/satellite/contracts/:publickey", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))
-	}*/
+		router.GET("/satellite/contracts/:publickey", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))*/
+	}
 
 	// Portal API Calls.
 	/*if api.portal != nil {

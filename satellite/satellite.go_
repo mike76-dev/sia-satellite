@@ -53,8 +53,6 @@ type Satellite struct {
 	// ACID fields - these fields need to be updated in serial, ACID transactions.
 	publicKey types.SiaPublicKey
 	secretKey crypto.SecretKey
-	exchRates map[string]float64
-	scusdRate float64
 
 	// Block heights at the start of the current and the previous months.
 	currentMonth blockHeightTimestamp
@@ -427,53 +425,6 @@ func (s *Satellite) WalletSeed() (seed smodules.Seed, err error) {
 // from, if any.
 func (s *Satellite) RenewedFrom(fcid types.FileContractID) types.FileContractID {
 	return s.m.RenewedFrom(fcid)
-}
-
-// ProcessConsensusChange updates the blockheight timestamps.
-func (s *Satellite) ProcessConsensusChange(cc smodules.ConsensusChange) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Process the applied blocks till the first found in the following month.
-	currentMonth := time.Unix(int64(s.currentMonth.Timestamp), 0).Month()
-	for _, block := range cc.AppliedBlocks {
-		newMonth := time.Unix(int64(block.Timestamp), 0).Month()
-		if newMonth != currentMonth {
-			s.prevMonth = s.currentMonth
-			s.currentMonth = blockHeightTimestamp{
-				BlockHeight: cc.BlockHeight,
-				Timestamp:   uint64(block.Timestamp),
-			}
-			err := s.saveSync()
-			if err != nil {
-				s.log.Println("ERROR: couldn't save satellite")
-			}
-
-			// Move the current spendings of each renter to the previous ones.
-			renters := s.Renters()
-			for _, renter := range renters {
-				us, err := s.getSpendings(renter.Email)
-				if err == nil {
-					us.PrevLocked = us.CurrentLocked
-					us.PrevUsed = us.CurrentUsed
-					us.PrevOverhead = us.CurrentOverhead
-					us.CurrentLocked = 0
-					us.CurrentUsed = 0
-					us.CurrentOverhead = 0
-					us.PrevFormed = us.CurrentFormed
-					us.PrevRenewed = us.CurrentRenewed
-					us.CurrentFormed = 0
-					us.CurrentRenewed = 0
-					err = s.updateSpendings(renter.Email, *us)
-					if err != nil {
-						s.log.Println("ERROR: couldn't update spendings")
-					}
-				}
-			}
-
-			break
-		}
-	}
 }
 
 // DeleteRenter deletes the renter data from the memory.

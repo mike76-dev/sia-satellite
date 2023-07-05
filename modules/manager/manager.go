@@ -3,28 +3,32 @@ package manager
 
 import (
 	"database/sql"
-	"fmt"
-	"os"
-	"path/filepath"
+	"errors"
+	//"fmt"
 	"sync"
+	"time"
 
+	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
-	"github.com/mike76-dev/sia-satellite/satellite/manager/contractor"
-	"github.com/mike76-dev/sia-satellite/satellite/manager/hostdb"
+	"github.com/mike76-dev/sia-satellite/persist"
+	//"github.com/mike76-dev/sia-satellite/satellite/manager/contractor"
+	//"github.com/mike76-dev/sia-satellite/satellite/manager/hostdb"
 
-	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/siamux"
+	//"go.sia.tech/core/types"
+)
 
-	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/persist"
-	siasync "go.sia.tech/siad/sync"
-	"go.sia.tech/siad/types"
+var (
+	// Nil dependency errors.
+	errNilDB      = errors.New("manager cannot use a nil database")
+	errNilCS      = errors.New("manager cannot use a nil state")
+	errNilTpool   = errors.New("manager cannot use a nil transaction pool")
+	errNilWallet  = errors.New("manager cannot use a nil wallet")
+	errNilGateway = errors.New("manager cannot use nil gateway")
 )
 
 // A hostContractor negotiates, revises, renews, and provides access to file
 // contracts.
-type hostContractor interface {
+/*type hostContractor interface {
 	smodules.Alerter
 
 	// SetAllowance sets the amount of money the contractor is allowed to
@@ -123,144 +127,130 @@ type hostContractor interface {
 
 	// DeleteRenter deletes the renter data from the memory.
 	DeleteRenter(string)
+}*/
+
+// blockTimestamp combines the block height and the time.
+type blockTimestamp struct {
+	BlockHeight uint64
+	Timestamp   time.Time
 }
 
 // A Manager contains the information necessary to communicate with the
 // hosts.
 type Manager struct {
 	// Dependencies.
-	cs             smodules.ConsensusSet
 	db             *sql.DB
-	hostContractor hostContractor
-	hostDB         modules.HostDB
-	tpool          smodules.TransactionPool
+	cs             modules.ConsensusSet
+	//hostContractor hostContractor
+	//hostDB         modules.HostDB
+	tpool          modules.TransactionPool
 
 	// Atomic properties.
-	hostAverages        modules.HostAverages
-	lastEstimationHosts []smodules.HostDBEntry
+	//hostAverages        modules.HostAverages
+	exchRates map[string]float64
+	scusdRate float64
+
+	// Block heights at the start of the current and the previous months.
+	currentMonth blockTimestamp
+	prevMonth    blockTimestamp
+
+	// A global DB transaction.
+	dbTx    *sql.Tx
+	syncing bool
 
 	// Utilities.
 	log           *persist.Logger
 	mu            sync.RWMutex
-	persist       persistence
-	persistDir    string
-	threads       siasync.ThreadGroup
-	staticAlerter *smodules.GenericAlerter
+	tg            siasync.ThreadGroup
+	staticAlerter *modules.GenericAlerter
 }
 
 // New returns an initialized Manager.
-func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, db *sql.DB, mux *siamux.SiaMux, persistDir string) (*Manager, <-chan error) {
+func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, dir string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
-	var err error
+
+	// Check that all the dependencies were provided.
+	if db == nil {
+		errChan <- errNilDB
+		return nil, errChan
+	}
+	if cs == nil {
+		errChan <- errNilCS
+		return nil, errChan
+	}
+	if g == nil {
+		errChan <- errNilGateway
+		return nil, errChan
+	}
+	if tpool == nil {
+		errChan <- errNilTpool
+		return nil, errChan
+	}
+	if wallet == nil {
+		errChan <- errNilWallet
+		return nil, errChan
+	}
 
 	// Create the HostDB object.
-	hdb, errChanHDB := hostdb.New(g, cs, tpool, db, mux, persistDir)
+	/*hdb, errChanHDB := hostdb.New(g, cs, tpool, db, mux, persistDir)
 	if err := smodules.PeekErr(errChanHDB); err != nil {
 		errChan <- err
 		return nil, errChan
-	}
+	}*/
 
 	// Create the Contractor.
-	hc, errChanContractor := contractor.New(cs, wallet, tpool, hdb, db, persistDir)
+	/*hc, errChanContractor := contractor.New(cs, wallet, tpool, hdb, db, persistDir)
 	if err := smodules.PeekErr(errChanContractor); err != nil {
 		errChan <- err
 		return nil, errChan
-	}
+	}*/
 
 	// Create the Manager object.
 	m := &Manager{
 		cs:             cs,
 		db:             db,
-		hostContractor: hc,
-		hostDB:         hdb,
-		persistDir:     persistDir,
-		staticAlerter:  smodules.NewAlerter("manager"),
+		//hostContractor: hc,
+		//hostDB:         hdb,
 		tpool:          tpool,
+
+		exchRates: make(map[string]float64),
+
+		staticAlerter:  modules.NewAlerter("manager"),
 	}
 
 	// Call stop in the event of a partial startup.
 	defer func() {
-		if err = smodules.PeekErr(errChan); err != nil {
-			errChan <- errors.Compose(m.threads.Stop(), err)
+		if err := modules.PeekErr(errChan); err != nil {
+			errChan <- modules.ComposeErrors(m.tg.Stop(), err)
 		}
 	}()
 
-	// Create the logger.
-	m.log, err = persist.NewFileLogger(filepath.Join(persistDir, logFile))
+	// Initialize the Manager's persistence.
+	err := m.initPersist(dir)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
 	}
-	// Establish the closing of the logger.
-	m.threads.AfterStop(func() {
-		err := m.log.Close()
-		if err != nil {
-			// The logger may or may not be working here, so use a Println
-			// instead.
-			fmt.Println("Failed to close the manager logger:", err)
-		}
-	})
-	m.log.Println("INFO: manager created, started logging")
-
-	// Load the manager persistence.
-	if loadErr := m.load(); loadErr != nil && !os.IsNotExist(loadErr) {
-		errChan <- errors.AddContext(loadErr, "unable to load manager")
-		return nil, errChan
-	}
-
-	// Spawn the thread to periodically save the manager.
-	go m.threadedSaveLoop()
-
-	// Make sure that the manager saves on shutdown.
-	m.threads.AfterStop(func() {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		err := m.saveSync()
-		if err != nil {
-			m.log.Println("ERROR: Unable to save manager:", err)
-		}
-	})
-
-	// Spawn a thread to calculate the host network averages.
-	go m.threadedCalculateAverages()
-
-	// Subscribe to the consensus set in a separate goroutine.
-	go func() {
-		defer close(errChan)
-		if err := m.threads.Add(); err != nil {
-			errChan <- err
-			return
-		}
-		defer m.threads.Done()
-		err := cs.ConsensusSetSubscribe(m, smodules.ConsensusChangeRecent, m.threads.StopChan())
-		if err != nil {
-			errChan <- err
-		}
-	}()
-
-	// Unsubscribe on shutdown.
-	m.threads.AfterStop(func() {
-		cs.Unsubscribe(m)
-	})
 
 	return m, errChan
 }
 
 // ActiveHosts returns an array of hostDB's active hosts.
-func (m *Manager) ActiveHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.ActiveHosts() }
+//func (m *Manager) ActiveHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.ActiveHosts() }
 
 // AllHosts returns an array of all hosts.
-func (m *Manager) AllHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.AllHosts() }
+//func (m *Manager) AllHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.AllHosts() }
 
 // Close shuts down the manager.
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return errors.Compose(m.threads.Stop(), m.hostDB.Close(), m.hostContractor.Close(), m.saveSync())
+	return m.tg.Stop()
+	//return errors.Compose(m.threads.Stop(), m.hostDB.Close(), m.hostContractor.Close(), m.saveSync())
 }
 
 // Filter returns the hostdb's filterMode and filteredHosts.
-func (m *Manager) Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error) {
+/*func (m *Manager) Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error) {
 	var fm smodules.FilterMode
 	hosts := make(map[string]types.SiaPublicKey)
 	if err := m.threads.Add(); err != nil {
@@ -272,10 +262,10 @@ func (m *Manager) Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, 
 		return fm, hosts, netAddresses, errors.AddContext(err, "error getting hostdb filter:")
 	}
 	return fm, hosts, netAddresses, nil
-}
+}*/
 
 // SetFilterMode sets the hostdb filter mode.
-func (m *Manager) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPublicKey, netAddresses []string) error {
+/*func (m *Manager) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPublicKey, netAddresses []string) error {
 	if err := m.threads.Add(); err != nil {
 		return err
 	}
@@ -287,76 +277,69 @@ func (m *Manager) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPublicK
 	}
 
 	return nil
-}
+}*/
 
 // Host returns the host associated with the given public key.
-func (m *Manager) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, error) {
+/*func (m *Manager) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, error) {
 	return m.hostDB.Host(spk)
-}
+}*/
 
 // InitialScanComplete returns a boolean indicating if the initial scan of the
 // hostdb is completed.
-func (m *Manager) InitialScanComplete() (bool, types.BlockHeight, error) { return m.hostDB.InitialScanComplete() }
+//func (m *Manager) InitialScanComplete() (bool, types.BlockHeight, error) { return m.hostDB.InitialScanComplete() }
 
 // ScoreBreakdown returns the score breakdown of the specific host.
-func (m *Manager) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) {
+/*func (m *Manager) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) {
 	return m.hostDB.ScoreBreakdown(e)
-}
+}*/
 
 // EstimateHostScore returns the estimated host score.
-func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a modules.Allowance) (smodules.HostScoreBreakdown, error) {
+/*func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a modules.Allowance) (smodules.HostScoreBreakdown, error) {
 	return m.hostDB.EstimateHostScore(e, a)
-}
+}*/
 
 // RandomHosts picks up to the specified number of random hosts from the
 // hostdb sorted by weight.
-func (m *Manager) RandomHosts(n uint64, a modules.Allowance) ([]smodules.HostDBEntry, error) {
+/*func (m *Manager) RandomHosts(n uint64, a modules.Allowance) ([]smodules.HostDBEntry, error) {
 	return m.hostDB.RandomHostsWithLimits(int(n), nil, nil, a)
-}
+}*/
 
 // GetAverages retrieves the host network averages from HostDB.
-func (m *Manager) GetAverages() modules.HostAverages {
+/*func (m *Manager) GetAverages() modules.HostAverages {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.hostAverages
-}
+}*/
 
 // Contracts returns the hostContractor's contracts.
-func (m *Manager) Contracts() []modules.RenterContract {
+/*func (m *Manager) Contracts() []modules.RenterContract {
 	return m.hostContractor.Contracts()
-}
+}*/
 
 // ContractsByRenter returns the contracts belonging to a specific renter.
-func (m *Manager) ContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+/*func (m *Manager) ContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
 	return m.hostContractor.ContractsByRenter(rpk)
-}
+}*/
 
 // RefreshedContract calls hostContractor.RefreshedContract
-func (m *Manager) RefreshedContract(fcid types.FileContractID) bool {
+/*func (m *Manager) RefreshedContract(fcid types.FileContractID) bool {
 	return m.hostContractor.RefreshedContract(fcid)
-}
+}*/
 
 // OldContracts calls hostContractor.OldContracts expired.
-func (m *Manager) OldContracts() []modules.RenterContract {
+/*func (m *Manager) OldContracts() []modules.RenterContract {
 	return m.hostContractor.OldContracts()
-}
+}*/
 
 // OldContractsByRenter returns the old contracts of a specific renter.
-func (m *Manager) OldContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+/*func (m *Manager) OldContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
 	return m.hostContractor.OldContractsByRenter(rpk)
-}
-
-// ProcessConsensusChange processes the consensus change.
-func (m *Manager) ProcessConsensusChange(cc smodules.ConsensusChange) {
-	m.mu.Lock()
-	m.lastEstimationHosts = []smodules.HostDBEntry{}
-	m.mu.Unlock()
-}
+}*/
 
 // PriceEstimation estimates the cost in siacoins of forming contracts with
 // the hosts. The estimation will be done using the provided allowance.
 // The final allowance used will be returned.
-func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules.Allowance, error) {
+/*func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules.Allowance, error) {
 	if err := m.threads.Add(); err != nil {
 		return 0, modules.Allowance{}, err
 	}
@@ -540,11 +523,11 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	m.mu.Unlock()
 
 	return cost / h, allowance, nil
-}
+}*/
 
 // ContractPriceEstimation estimates the cost in siacoins of forming a contract
 // with the given host.
-func (m *Manager) ContractPriceEstimation(hpk types.SiaPublicKey, endHeight types.BlockHeight, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (types.Currency, float64, error) {
+/*func (m *Manager) ContractPriceEstimation(hpk types.SiaPublicKey, endHeight types.BlockHeight, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (types.Currency, float64, error) {
 	if err := m.threads.Add(); err != nil {
 		return types.ZeroCurrency, 0, err
 	}
@@ -626,75 +609,70 @@ func (m *Manager) ContractPriceEstimation(hpk types.SiaPublicKey, endHeight type
 	h, _ := types.SiacoinPrecision.Float64()
 
 	return funding, cost / h, nil
-}
+}*/
 
 // SetAllowance calls hostContractor.SetAllowance.
-func (m *Manager) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) error {
+/*func (m *Manager) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) error {
 	return m.hostContractor.SetAllowance(rpk, a)
-}
+}*/
 
 // GetRenter calls hostContractor.GetRenter.
-func (m *Manager) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
+/*func (m *Manager) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
 	return m.hostContractor.GetRenter(rpk)
-}
+}*/
 
 // CreateNewRenter calls hostContractor.CreateNewRenter.
-func (m *Manager) CreateNewRenter(email string, pk types.SiaPublicKey) {
+/*func (m *Manager) CreateNewRenter(email string, pk types.SiaPublicKey) {
 	m.hostContractor.CreateNewRenter(email, pk)
-}
+}*/
 
 // FormContracts calls hostContractor.FormContracts.
-func (m *Manager) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey) ([]modules.RenterContract, error) {
+/*func (m *Manager) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey) ([]modules.RenterContract, error) {
 	return m.hostContractor.FormContracts(rpk, rsk)
-}
+}*/
 
 // RenewContracts calls hostContractor.RenewContracts.
-func (m *Manager) RenewContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, contracts []types.FileContractID) ([]modules.RenterContract, error) {
+/*func (m *Manager) RenewContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, contracts []types.FileContractID) ([]modules.RenterContract, error) {
 	return m.hostContractor.RenewContracts(rpk, rsk, contracts)
-}
+}*/
 
 // Renters calls hostContractor.Renters.
-func (m *Manager) Renters() []modules.Renter {
+/*func (m *Manager) Renters() []modules.Renter {
 	return m.hostContractor.Renters()
-}
+}*/
 
-// SetSatellite sets the satellite dependency of the contractor.
-func (m *Manager) SetSatellite(fl modules.FundLocker) {
-	m.hostContractor.SetSatellite(fl)
-}
-	
 // UpdateContract updates the contract with the new revision.
-func (m *Manager) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
+/*func (m *Manager) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	return m.hostContractor.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
-}
+}*/
 
 // RenewedFrom returns the ID of the contract the given contract was renewed
 // from, if any.
-func (m *Manager) RenewedFrom(fcid types.FileContractID) types.FileContractID {
+/*func (m *Manager) RenewedFrom(fcid types.FileContractID) types.FileContractID {
 	return m.hostContractor.RenewedFrom(fcid)
-}
+}*/
 
 // DeleteRenter deletes the renter data from the memory.
-func (m *Manager) DeleteRenter(email string) {
+/*func (m *Manager) DeleteRenter(email string) {
 	m.hostContractor.DeleteRenter(email)
-}
+}*/
 
 // Contract calls hostContractor.Contract.
-func (m *Manager) Contract(fcid types.FileContractID) (modules.RenterContract, bool) {
+/*func (m *Manager) Contract(fcid types.FileContractID) (modules.RenterContract, bool) {
 	return m.hostContractor.Contract(fcid)
-}
+}*/
 
 // FormContract calls hostContractor.FormContract.
-func (m *Manager) FormContract(s *modules.RPCSession, pk, rpk, hpk types.SiaPublicKey, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
+/*func (m *Manager) FormContract(s *modules.RPCSession, pk, rpk, hpk types.SiaPublicKey, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
 	return m.hostContractor.FormContract(s, pk, rpk, hpk, endHeight, funding)
-}
+}*/
 
 // RenewContract calls hostContractor.RenewContract.
-func (m *Manager) RenewContract(s *modules.RPCSession, pk types.SiaPublicKey, contract modules.RenterContract, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
+/*func (m *Manager) RenewContract(s *modules.RPCSession, pk types.SiaPublicKey, contract modules.RenterContract, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
 	return m.hostContractor.RenewContract(s, pk, contract, endHeight, funding)
-}
+}*/
 
 // UpdateRenterSettings calls hostContractor.UpdateRenterSettings.
-func (m *Manager) UpdateRenterSettings(rpk types.SiaPublicKey, settings modules.RenterSettings, sk crypto.SecretKey) error {
+/*func (m *Manager) UpdateRenterSettings(rpk types.SiaPublicKey, settings modules.RenterSettings, sk crypto.SecretKey) error {
 	return m.hostContractor.UpdateRenterSettings(rpk, settings, sk)
-}
+}*/

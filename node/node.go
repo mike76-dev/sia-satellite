@@ -11,11 +11,11 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/consensus"
 	"github.com/mike76-dev/sia-satellite/modules/gateway"
+	"github.com/mike76-dev/sia-satellite/modules/manager"
 	"github.com/mike76-dev/sia-satellite/modules/transactionpool"
 	"github.com/mike76-dev/sia-satellite/modules/wallet"
 	"github.com/mike76-dev/sia-satellite/persist"
 	//"github.com/mike76-dev/sia-satellite/portal"
-	//"github.com/mike76-dev/sia-satellite/satellite"
 )
 
 // Node represents a satellite node containing all required modules.
@@ -26,8 +26,8 @@ type Node struct {
 	// The modules of the node.
 	ConsensusSet    modules.ConsensusSet
 	Gateway         modules.Gateway
+	Manager         modules.Manager
 	//Portal          modules.Portal
-	//Satellite       modules.Satellite
 	TransactionPool modules.TransactionPool
 	Wallet          modules.Wallet
 
@@ -42,11 +42,11 @@ func (n *Node) Close() (err error) {
 	/*if n.Portal != nil {
 		fmt.Println("Closing portal...")
 		err = modules.ComposeErrors(err, n.Portal.Close())
-	}
-	if n.Satellite != nil {
-		fmt.Println("Closing satellite...")
-		err = modules.ComposeErrors(err, n.Satellite.Close())
 	}*/
+	if n.Manager != nil {
+		fmt.Println("Closing manager...")
+		err = modules.ComposeErrors(err, n.Manager.Close())
+	}
 	if n.Wallet != nil {
 		fmt.Println("Closing wallet...")
 		err = modules.ComposeErrors(err, n.Wallet.Close())
@@ -134,17 +134,13 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 		return nil, errChan
 	}
 
-	// Load satellite.
-	/*fmt.Println("Loading satellite...")
-	satDir := filepath.Join(d, "satellite")
-	if err := os.MkdirAll(satDir, 0700); err != nil {
+	// Load manager.
+	fmt.Println("Loading manager...")
+	m, errChanM := manager.New(db, cs, g, tp, w, d)
+	if err := modules.PeekErr(errChanM); err != nil {
+		errChan <- modules.AddContext(err, "unable to create manager")
 		return nil, errChan
 	}
-	s, errChanS := satellite.New(cs, g, tp, w, db, config.SatelliteAddr, satDir)
-	if err := modules.PeekErr(errChanS); err != nil {
-		errChan <- modules.AddContext(err, "unable to create satellite")
-		return nil, errChan
-	}*/
 
 	// Load portal.
 	/*fmt.Println("Loading portal...")
@@ -169,8 +165,8 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 
 		ConsensusSet:    cs,
 		Gateway:         g,
+		Manager:         m,
 		//Portal:          p,
-		//Satellite:       s,
 		TransactionPool: tp,
 		Wallet:          w,
 
