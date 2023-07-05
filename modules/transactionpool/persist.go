@@ -100,7 +100,7 @@ func (tp *TransactionPool) initPersist(dir string) error {
 		}
 	})
 
-	// Spin up the thread that occasionally syncrhonizes the database.
+	// Spin up the thread that occasionally synchronizes the database.
 	go tp.threadedRegularSync()
 
 	// Get the recent consensus change.
