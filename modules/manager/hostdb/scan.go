@@ -5,21 +5,20 @@ package hostdb
 // settings of the hosts.
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"net"
 	"sort"
 	"time"
 
-	"github.com/mike76-dev/sia-satellite/satellite/manager/hostdb/hosttree"
+	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/modules/manager/hostdb/hosttree"
+	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
 
-	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/fastrand"
-	"gitlab.com/NebulousLabs/siamux"
-	"gitlab.com/NebulousLabs/siamux/mux"
+	rhpv2 "go.sia.tech/core/rhp/v2"
+	rhpv3 "go.sia.tech/core/rhp/v3"
 
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"lukechampine.com/frand"
 )
 
 const (
@@ -35,11 +34,13 @@ func equalIPNets(ipNetsA, ipNetsB []string) bool {
 	if len(ipNetsA) != len(ipNetsB) {
 		return false
 	}
+
 	// Create a map of all the subnets in ipNetsA.
 	mapNetsA := make(map[string]struct{})
 	for _, subnet := range ipNetsA {
 		mapNetsA[subnet] = struct{}{}
 	}
+
 	// Make sure that all the subnets from ipNetsB are in the map.
 	for _, subnet := range ipNetsB {
 		if _, exists := mapNetsA[subnet]; !exists {
@@ -47,43 +48,6 @@ func equalIPNets(ipNetsA, ipNetsB []string) bool {
 		}
 	}
 	return true
-}
-
-// feeChangeSignificant determines if the difference between two transaction
-// fees is significant enough to warrant rebuilding the hosttree.
-func feeChangeSignificant(oldTxnFees, newTxnFees types.Currency) bool {
-	maxChange := oldTxnFees.MulFloat(txnFeesUpdateRatio)
-	return newTxnFees.Cmp(oldTxnFees.Sub(maxChange)) <= 0 || newTxnFees.Cmp(oldTxnFees.Add(maxChange)) >= 0
-}
-
-// managedUpdateTxnFees checks if the txnFees have changed significantly since
-// the last time they were updated and updates them if necessary.
-func (hdb *HostDB) managedUpdateTxnFees() {
-	// Get the old txnFees from the hostdb.
-	hdb.mu.RLock()
-	allowance := hdb.allowance
-	oldTxnFees := hdb.txnFees
-	hdb.mu.RUnlock()
-
-	// Get the new fees from the tpool.
-	_, newTxnFees := hdb.staticTpool.FeeEstimation()
-
-	// If the change is not significant we are done.
-	if !feeChangeSignificant(oldTxnFees, newTxnFees) {
-		// hdb.staticLog.Printf("No need to update txnFees oldFees %v newFees %v\n", oldTxnFees.HumanString(), newTxnFees.HumanString())
-		return
-	}
-	// Update the txnFees.
-	hdb.mu.Lock()
-	hdb.txnFees = newTxnFees
-	hdb.mu.Unlock()
-	// Recompute the host weight function.
-	hwf := hdb.managedCalculateHostWeightFn(allowance)
-	// Set the weight function.
-	if err := hdb.managedSetWeightFunction(hwf); err != nil {
-		hdb.staticLog.Println("CRITICAL: failed to set the new weight function", err)
-	}
-	// hdb.staticLog.Println("Updated the hostdb txnFees to", newTxnFees.HumanString())
 }
 
 // queueScan will add a host to the queue to be scanned. The host will be added
@@ -101,7 +65,7 @@ func (hdb *HostDB) queueScan(entry modules.HostDBEntry) {
 	hdb.scanList = append(hdb.scanList, entry)
 	if len(hdb.scanList) > 1 {
 		i := len(hdb.scanList) - 1
-		j := fastrand.Intn(i)
+		j := frand.Intn(i)
 		hdb.scanList[i], hdb.scanList[j] = hdb.scanList[j], hdb.scanList[i]
 	}
 	// Check if any thread is currently emptying the waitlist. If not, spawn a
@@ -155,7 +119,6 @@ func (hdb *HostDB) queueScan(entry modules.HostDBEntry) {
 			entry := hdb.scanList[0]
 			hdb.scanList = hdb.scanList[1:]
 			delete(hdb.scanMap, entry.PublicKey.String())
-			//scansRemaining := len(hdb.scanList)
 
 			// Grab the most recent entry for this host.
 			recentEntry, exists := hdb.staticHostTree.Select(entry.PublicKey)
@@ -166,7 +129,6 @@ func (hdb *HostDB) queueScan(entry modules.HostDBEntry) {
 			// Try to send this entry to an existing idle worker (non-blocking).
 			select {
 			case scanPool <- entry:
-				//hdb.staticLog.Debugf("Sending host %v for scan, %v hosts remain\n", entry.PublicKey.String(), scansRemaining)
 				hdb.mu.Unlock()
 				continue
 			default:
@@ -191,7 +153,6 @@ func (hdb *HostDB) queueScan(entry modules.HostDBEntry) {
 			hdb.mu.Unlock()
 
 			// Block while waiting for an opening in the scan pool.
-			//hdb.staticLog.Debugf("Sending host %v for scan, %v hosts remain\n", entry.PublicKey.String(), scansRemaining)
 			select {
 			case scanPool <- entry:
 				continue
@@ -206,7 +167,7 @@ func (hdb *HostDB) queueScan(entry modules.HostDBEntry) {
 //
 // CAUTION: This function will automatically add multiple entries to a new host
 // to give that host some base uptime. This makes this function co-dependent
-// with the host weight functions. Adjustment of the host weight functions need
+// with the host score functions. Adjustment of the host score functions need
 // to keep this function in mind, and vice-versa.
 func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 	// If the scan failed because we don't have Internet access, toss out this update.
@@ -217,7 +178,7 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 	// Grab the host from the host tree, and update it with the new settings.
 	newEntry, exists := hdb.staticHostTree.Select(entry.PublicKey)
 	if exists {
-		newEntry.HostExternalSettings = entry.HostExternalSettings
+		newEntry.HostSettings = entry.HostSettings
 		newEntry.IPNets = entry.IPNets
 		newEntry.LastIPNetChange = entry.LastIPNetChange
 	} else {
@@ -238,8 +199,8 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 		// Add two scans to the scan history. Two are needed because the scans
 		// are forward looking, but we want this first scan to represent as
 		// much as one week of uptime or downtime.
-		earliestStartTime := time.Now().Add(time.Hour * 2 * 24 * -1)                                                   // Permit up two days starting uptime or downtime.
-		suggestedStartTime := time.Now().Add(time.Minute * 10 * time.Duration(hdb.blockHeight-entry.FirstSeen+1) * -1) // Add one to the FirstSeen in case FirstSeen is this block, guarantees incrementing order.
+		earliestStartTime := time.Now().Add(time.Hour * 2 * 24 * -1) // Permit up two days starting uptime or downtime.
+		suggestedStartTime := time.Now().Add(time.Minute * 10 * time.Duration(hdb.blockHeight - entry.FirstSeen + 1) * -1) // Add one to the FirstSeen in case FirstSeen is this block, guarantees incrementing order.
 		if suggestedStartTime.Before(earliestStartTime) {
 			suggestedStartTime = earliestStartTime
 		}
@@ -304,22 +265,18 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 		newEntry.ScanHistory = newEntry.ScanHistory[1:]
 	}
 
-	// Add the updated entry
+	// Add the updated entry.
 	if !exists {
-		// Insert into Hosttrees
+		// Insert into Hosttrees.
 		err := hdb.insert(newEntry)
 		if err != nil {
 			hdb.staticLog.Println("ERROR: unable to insert entry which is thought to be new:", err)
-		} else {
-			//hdb.staticLog.Printf("Adding host %v to the hostdb. Net error: %v\n", newEntry.PublicKey.String(), netErr)
 		}
 	} else {
-		// Modify hosttrees
+		// Modify hosttrees.
 		err := hdb.modify(newEntry)
 		if err != nil {
 			hdb.staticLog.Println("ERROR: unable to modify entry which is thought to exist:", err)
-		} else {
-			//hdb.staticLog.Printf("Adding host %v to the hostdb. Net error: %v\n", newEntry.PublicKey.String(), netErr)
 		}
 	}
 	if err := hdb.updateHost(newEntry); err != nil {
@@ -336,10 +293,11 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 // fail to resolve a hostname, the problem is not related to us.
 func (hdb *HostDB) staticLookupIPNets(address modules.NetAddress) (ipNets []string, err error) {
 	// Lookup the IP addresses of the host.
-	addresses, err := hdb.resolver.LookupIP(address.Host())
+	addresses, err := net.LookupIP(address.Host())
 	if err != nil {
 		return nil, err
 	}
+
 	// Get the subnets of the addresses.
 	for _, ip := range addresses {
 		// Set the filterRange according to the type of IP address.
@@ -367,26 +325,30 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 	// Request settings from the queued host entry.
 	netAddr := entry.NetAddress
 	pubKey := entry.PublicKey
-	//hdb.staticLog.Printf("Scanning host %v at %v\n", pubKey, netAddr)
 
 	// Resolve the host's used subnets and update the timestamp if they
 	// changed. We only update the timestamp if resolving the ipNets was
 	// successful.
-	ipNets, err := hdb.staticLookupIPNets(netAddr)
+	ipNets, err := hdb.staticLookupIPNets(modules.NetAddress(netAddr))
 	if err == nil && !equalIPNets(ipNets, entry.IPNets) {
 		entry.IPNets = ipNets
 		entry.LastIPNetChange = time.Now()
 	}
 	if err != nil {
-		hdb.staticLog.Println("managedScanHost: failed to look up IP nets", err)
+		hdb.staticLog.Println("ERROR: managedScanHost: failed to look up IP nets", err)
 	}
 
 	// Update historic interactions of entry if necessary.
 	hdb.mu.Lock()
 	updateHostHistoricInteractions(&entry, hdb.blockHeight)
+
+	// We don't want to override the NetAddress during a scan so we need to
+	// retrieve the most recent NetAddress from the tree first.
+	oldEntry, exists := hdb.staticHostTree.Select(entry.PublicKey)
 	hdb.mu.Unlock()
 
-	var settings modules.HostExternalSettings
+	var settings rhpv2.HostSettings
+	var pt rhpv3.HostPriceTable
 	var latency time.Duration
 	err = func() error {
 		timeout := hostRequestTimeout
@@ -407,74 +369,54 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 		}
 		hdb.mu.RUnlock()
 
-		dialer := &net.Dialer{
-			Cancel:  hdb.tg.StopChan(),
-			Timeout: timeout,
-		}
-		start := time.Now()
-		conn, err := dialer.Dial("tcp", string(netAddr))
-		latency = time.Since(start)
-		if err != nil {
-			return err
-		}
-		// Create go routine that will close the channel if the hostdb shuts
-		// down or when this method returns as signalled by closing the
-		// connCloseChan channel.
+		// Create a context and set up its cancelling.
+		ctx, cancel := context.WithTimeout(context.Background(), timeout + hostScanDeadline)
 		connCloseChan := make(chan struct{})
 		go func() {
 			select {
 			case <-hdb.tg.StopChan():
 			case <-connCloseChan:
 			}
-			conn.Close()
+			cancel()
 		}()
 		defer close(connCloseChan)
-		conn.SetDeadline(time.Now().Add(hostScanDeadline))
 
-		// Try to talk to the host using RHP2. If the host does not respond to
-		// the RHP2 request, consider the scan a failure.
-		s, _, err := modules.NewRenterSession(conn, pubKey)
-		if err != nil {
-			return errors.AddContext(err, "could not open RHP2 session")
-		}
-		defer s.WriteRequest(modules.RPCLoopExit, nil) // make sure we close cleanly
-		if err := s.WriteRequest(modules.RPCLoopSettings, nil); err != nil {
-			return errors.AddContext(err, "could not write the loop settings request in the RHP2 check")
-		}
-		var resp modules.LoopSettingsResponse
-		if err := s.ReadResponse(&resp, maxSettingsLen); err != nil {
-			return errors.AddContext(err, "could not read the settings response")
-		}
-		err = json.Unmarshal(resp.Settings, &settings)
-		if err != nil {
-			return errors.AddContext(err, "could not unmarshal the settings response")
-		}
-
-		// Try opening a connection to the siamux, this is a very lightweight
-		// way of checking that RHP3 is supported.
-		siamuxAddr := settings.SiaMuxAddress()
-		_, err = fetchPriceTable(hdb.staticMux, siamuxAddr, timeout, modules.SiaPKToMuxPK(entry.PublicKey))
-		if err != nil {
-			hdb.staticLog.Printf("%v siamux ping not successful: %v\n", entry.PublicKey, err)
+		// Initiate RHP2 protocol.
+		start := time.Now()
+		err := proto.WithTransportV2(ctx, netAddr, pubKey, func(t *rhpv2.Transport) error {
+			var err error
+			settings, err = proto.RPCSettings(t)
 			return err
+		})
+		latency = time.Since(start)
+		if err != nil {
+			return modules.AddContext(err, "could not fetch host settings")
+		}
+
+		// Initiate RHP3 protocol.
+		if exists {
+			settings.NetAddress = oldEntry.NetAddress
+		}
+		err = proto.WithTransportV3(ctx, settings.SiamuxAddr(), pubKey, func (t *rhpv3.Transport) error {
+			var err error
+			pt, err = proto.RPCPriceTable(t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
+				return nil, nil
+			})
+			return err
+		})
+		if err != nil {
+			return modules.AddContext(err, "could not fetch host price table")
 		}
 		return nil
 	}()
 	if err != nil {
-		hdb.staticLog.Printf("Scan of host at %v failed: %v\n", pubKey, err)
+		hdb.staticLog.Printf("INFO: scan of host at %v failed: %v\n", pubKey, err)
 	} else {
-		entry.HostExternalSettings = settings
+		entry.HostSettings = settings
+		entry.PriceTable = pt
 	}
 	success := err == nil
 
-	hdb.mu.Lock()
-	defer hdb.mu.Unlock()
-	// We don't want to override the NetAddress during a scan so we need to
-	// retrieve the most recent NetAddress from the tree first.
-	oldEntry, exists := hdb.staticHostTree.Select(entry.PublicKey)
-	if exists {
-		entry.NetAddress = oldEntry.NetAddress
-	}
 	// Update the host tree to have a new entry, including the new error. Then
 	// delete the entry from the scan map as the scan has been successful.
 	hdb.updateEntry(entry, err)
@@ -538,6 +480,7 @@ func (hdb *HostDB) threadedProbeHosts(scanPool <-chan modules.HostDBEntry) {
 func (hdb *HostDB) threadedScan() {
 	err := hdb.tg.Add()
 	if err != nil {
+		hdb.staticLog.Println("ERROR: couldn't start hostdb threadgroup:", err)
 		return
 	}
 	defer hdb.tg.Done()
@@ -574,6 +517,11 @@ func (hdb *HostDB) threadedScan() {
 	hdb.mu.Lock()
 	// Set the flag to indicate that the initial scan is complete.
 	hdb.initialScanComplete = true
+	err = hdb.updateState()
+	if err != nil {
+		hdb.staticLog.Println("ERROR: couldn't save hostdb state:", err)
+		return
+	}
 	// Copy the known contracts to avoid having to lock the hdb later.
 	knownContracts := make(map[string][]contractInfo)
 	for k, cis := range hdb.knownContracts {
@@ -584,10 +532,6 @@ func (hdb *HostDB) threadedScan() {
 	hdb.mu.Unlock()
 
 	for {
-		// Before we start a new iteration of the scanloop we check if the
-		// txnFees need to be updated.
-		hdb.managedUpdateTxnFees()
-
 		// Set up a scan for the hostCheckupQuantity most valuable hosts in the
 		// hostdb. Hosts that fail their scans will be docked significantly,
 		// pushing them further back in the hierarchy, ensuring that for the
@@ -619,7 +563,7 @@ func (hdb *HostDB) threadedScan() {
 		}
 
 		// Queue the scans for each host.
-		hdb.staticLog.Println("Performing scan on", len(onlineHosts), "online hosts and", len(offlineHosts), "offline hosts and", len(knownHosts), "known hosts.")
+		hdb.staticLog.Println("INFO: performing scan on", len(onlineHosts), "online hosts and", len(offlineHosts), "offline hosts and", len(knownHosts), "known hosts.")
 		hdb.mu.Lock()
 		for _, host := range knownHosts {
 			hdb.queueScan(host)
@@ -637,7 +581,7 @@ func (hdb *HostDB) threadedScan() {
 		// while the randomness prevents the scanning from always happening at
 		// the same time of day or week.
 		sleepRange := uint64(maxScanSleep - minScanSleep)
-		sleepTime := minScanSleep + time.Duration(fastrand.Uint64n(sleepRange))
+		sleepTime := minScanSleep + time.Duration(frand.Uint64n(sleepRange))
 
 		// Sleep until it's time for the next scan cycle.
 		select {
@@ -646,46 +590,4 @@ func (hdb *HostDB) threadedScan() {
 		case <-time.After(sleepTime):
 		}
 	}
-}
-
-// fetchPriceTable fetches a price table from a host without paying. This means
-// the price table is only useful for scoring the host and can't be used. This
-// uses an ephemeral stream which is a special type of stream that doesn't leak
-// TCP connections. Otherwise we would end up with one TCP connection for every
-// host in the network after scanning the whole network.
-func fetchPriceTable(siamux *siamux.SiaMux, hostAddr string, timeout time.Duration, hpk mux.ED25519PublicKey) (_ *modules.RPCPriceTable, err error) {
-	stream, err := siamux.NewEphemeralStream(modules.HostSiaMuxSubscriberName, hostAddr, timeout, hpk)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to create ephemeral stream")
-	}
-	defer func() {
-		err = errors.Compose(err, stream.Close())
-	}()
-
-	// Set a deadline on the stream.
-	err = stream.SetDeadline(time.Now().Add(hostScanDeadline))
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to set stream deadline")
-	}
-
-	// Initiate the RPC.
-	err = modules.RPCWrite(stream, modules.RPCUpdatePriceTable)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to write price table RPC specifier")
-	}
-
-	// Receive the price table response.
-	var update modules.RPCUpdatePriceTableResponse
-	err = modules.RPCRead(stream, &update)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to read price table response")
-	}
-
-	// Unmarshal the price table.
-	var pt modules.RPCPriceTable
-	err = json.Unmarshal(update.PriceTableJSON, &pt)
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to unmarshal price table")
-	}
-	return &pt, nil
 }

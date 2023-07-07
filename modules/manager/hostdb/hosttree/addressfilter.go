@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"go.sia.tech/siad/modules"
+	"github.com/mike76-dev/sia-satellite/modules"
 )
 
 const (
@@ -20,14 +20,12 @@ const (
 // avoid selecting hosts from the same region.
 type Filter struct {
 	filter   map[string]struct{}
-	resolver modules.Resolver
 }
 
 // NewFilter creates a new addressFilter object.
-func NewFilter(resolver modules.Resolver) *Filter {
+func NewFilter() *Filter {
 	return &Filter{
-		filter:   make(map[string]struct{}),
-		resolver: resolver,
+		filter: make(map[string]struct{}),
 	}
 }
 
@@ -39,7 +37,7 @@ func NewFilter(resolver modules.Resolver) *Filter {
 func (af *Filter) Add(host modules.NetAddress) {
 	// Translate the hostname to one or multiple IPs. If the argument is an IP
 	// address LookupIP will just return that IP.
-	addresses, err := af.resolver.LookupIP(host.Host())
+	addresses, err := net.LookupIP(host.Host())
 	if err != nil {
 		return
 	}
@@ -69,7 +67,7 @@ func (af *Filter) Add(host modules.NetAddress) {
 func (af *Filter) Filtered(host modules.NetAddress) bool {
 	// Translate the hostname to one or multiple IPs. If the argument is an IP
 	// address LookupIP will just return that IP.
-	addresses, err := af.resolver.LookupIP(host.Host())
+	addresses, err := net.LookupIP(host.Host())
 	if err != nil {
 		return true
 	}

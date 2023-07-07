@@ -1,15 +1,17 @@
 package hosttree
 
 import (
-	"log"
+	"encoding/binary"
+	"errors"
 	"sort"
 	"sync"
 
-	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/fastrand"
+	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/persist"
 
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
+
+	"lukechampine.com/frand"
 )
 
 var (
@@ -23,33 +25,30 @@ var (
 )
 
 type (
-	// WeightFunc is a function used to weight a given HostDBEntry in the tree.
-	WeightFunc func(modules.HostDBEntry) ScoreBreakdown
+	// ScoreFunc is a function used to score a given HostDBEntry in the tree.
+	ScoreFunc func(modules.HostDBEntry) ScoreBreakdown
 
 	// HostTree is used to store and select host database entries. Each HostTree
-	// is initialized with a weighting func that is able to assign a weight to
-	// each entry. The entries can then be selected at random, weighted by the
-	// weight func.
+	// is initialized with a scoring func that is able to assign a score to
+	// each entry. The entries can then be selected at random, scored by the
+	// score func.
 	HostTree struct {
 		root *node
 
 		// hosts is a map of public keys to nodes.
 		hosts map[string]*node
 
-		// resolver is the Resolver that is used by the hosttree to resolve
-		// hostnames to IP addresses.
-		resolver modules.Resolver
+		// scoreFn calculates the score of a hostEntry.
+		scoreFn ScoreFunc
 
-		// weightFn calculates the weight of a hostEntry.
-		weightFn WeightFunc
-
-		mu sync.Mutex
+		log *persist.Logger
+		mu  sync.Mutex
 	}
 
 	// hostEntry is an entry in the host tree.
 	hostEntry struct {
 		modules.HostDBEntry
-		weight types.Currency
+		score types.Currency
 	}
 
 	// node is a node in the tree.
@@ -58,36 +57,39 @@ type (
 		left   *node
 		right  *node
 
-		count int  // cumulative count of this node and all children.
+		count int  // Cumulative count of this node and all children.
 		taken bool // `taken` indicates whether there is an active host at this node or not.
 
-		weight types.Currency
-		entry  *hostEntry
+		score types.Currency
+		entry *hostEntry
+
+		log *persist.Logger
 	}
 )
 
 // createNode creates a new node using the provided `parent` and `entry`.
-func createNode(parent *node, entry *hostEntry) *node {
+func createNode(parent *node, entry *hostEntry, log *persist.Logger) *node {
 	return &node{
 		parent: parent,
-		weight: entry.weight,
+		score:  entry.score,
 		count:  1,
 
 		taken: true,
 		entry: entry,
+
+		log: log,
 	}
 }
 
-// New creates a new HostTree given a weight function and a resolver
-// for hostnames.
-func New(wf WeightFunc, resolver modules.Resolver) *HostTree {
+// New creates a new HostTree given a score function.
+func New(sf ScoreFunc, log *persist.Logger) *HostTree {
 	return &HostTree{
 		hosts: make(map[string]*node),
 		root: &node{
 			count: 1,
 		},
-		resolver: resolver,
-		weightFn: wf,
+		scoreFn: sf,
+		log:     log,
 	}
 }
 
@@ -100,12 +102,12 @@ func (n *node) recursiveInsert(entry *hostEntry) (nodesAdded int, newnode *node)
 	if n.parent == nil && n.left == nil && n.right == nil && !n.taken {
 		n.entry = entry
 		n.taken = true
-		n.weight = entry.weight
+		n.score = entry.score
 		newnode = n
 		return
 	}
 
-	n.weight = n.weight.Add(entry.weight)
+	n.score = n.score.Add(entry.score)
 
 	// If the current node is empty, add the entry but don't increase the
 	// count.
@@ -116,13 +118,13 @@ func (n *node) recursiveInsert(entry *hostEntry) (nodesAdded int, newnode *node)
 		return
 	}
 
-	// Insert the element into the lest populated side.
+	// Insert the element into the least populated side.
 	if n.left == nil {
-		n.left = createNode(n, entry)
+		n.left = createNode(n, entry, n.log)
 		nodesAdded = 1
 		newnode = n.left
 	} else if n.right == nil {
-		n.right = createNode(n, entry)
+		n.right = createNode(n, entry, n.log)
 		nodesAdded = 1
 		newnode = n.right
 	} else if n.left.count <= n.right.count {
@@ -135,29 +137,29 @@ func (n *node) recursiveInsert(entry *hostEntry) (nodesAdded int, newnode *node)
 	return
 }
 
-// nodeAtWeight grabs an element in the tree that appears at the given weight.
-// Though the tree has an arbitrary sorting, a sufficiently random weight will
+// nodeAtScore grabs an element in the tree that appears at the given score.
+// Though the tree has an arbitrary sorting, a sufficiently random score will
 // pull a random element. The tree is searched through in a post-ordered way.
-func (n *node) nodeAtWeight(weight types.Currency) *node {
-	// Sanity check - weight must be less than the total weight of the tree.
-	if weight.Cmp(n.weight) > 0 {
-		log.Println("CRITICAL: Node weight corruption")
+func (n *node) nodeAtScore(score types.Currency) *node {
+	// Sanity check - score must be less than the total score of the tree.
+	if score.Cmp(n.score) > 0 {
+		n.log.Println("CRITICAL: node score corruption")
 		return nil
 	}
 
 	// Check if the left or right child should be returned.
 	if n.left != nil {
-		if weight.Cmp(n.left.weight) < 0 {
-			return n.left.nodeAtWeight(weight)
+		if score.Cmp(n.left.score) < 0 {
+			return n.left.nodeAtScore(score)
 		}
-		weight = weight.Sub(n.left.weight) // Search from the 0th index of the right side.
+		score = score.Sub(n.left.score) // Search from the 0th index of the right side.
 	}
-	if n.right != nil && weight.Cmp(n.right.weight) < 0 {
-		return n.right.nodeAtWeight(weight)
+	if n.right != nil && score.Cmp(n.right.score) < 0 {
+		return n.right.nodeAtScore(score)
 	}
 
 	if !n.taken {
-		log.Println("CRITICAL: Node tree structure corruption")
+		n.log.Println("CRITICAL: node tree structure corruption")
 		return nil
 	}
 
@@ -168,21 +170,21 @@ func (n *node) nodeAtWeight(weight types.Currency) *node {
 // remove takes a node and removes it from the tree by climbing through the
 // list of parents. remove does not delete nodes.
 func (n *node) remove() {
-	n.weight = n.weight.Sub(n.entry.weight)
+	n.score = n.score.Sub(n.entry.score)
 	n.taken = false
 	current := n.parent
 	for current != nil {
-		current.weight = current.weight.Sub(n.entry.weight)
+		current.score = current.score.Sub(n.entry.score)
 		current = current.parent
 	}
 }
 
 // Host returns the address of the HostEntry.
 func (he *hostEntry) Host() string {
-	return he.NetAddress.Host()
+	return modules.NetAddress(he.NetAddress).Host()
 }
 
-// All returns all of the hosts in the host tree, sorted by weight.
+// All returns all of the hosts in the host tree, sorted by score.
 func (ht *HostTree) All() []modules.HostDBEntry {
 	ht.mu.Lock()
 	defer ht.mu.Unlock()
@@ -198,7 +200,7 @@ func (ht *HostTree) Insert(hdbe modules.HostDBEntry) error {
 }
 
 // Remove removes the host with the public key provided by `pk`.
-func (ht *HostTree) Remove(pk types.SiaPublicKey) error {
+func (ht *HostTree) Remove(pk types.PublicKey) error {
 	ht.mu.Lock()
 	defer ht.mu.Unlock()
 
@@ -227,7 +229,7 @@ func (ht *HostTree) Modify(hdbe modules.HostDBEntry) error {
 
 	entry := &hostEntry{
 		HostDBEntry: hdbe,
-		weight:      ht.weightFn(hdbe).Score(),
+		score:       ht.scoreFn(hdbe).Score(),
 	}
 
 	_, node = ht.root.recursiveInsert(entry)
@@ -237,7 +239,7 @@ func (ht *HostTree) Modify(hdbe modules.HostDBEntry) error {
 }
 
 // SetFiltered updates a host entry filtered field.
-func (ht *HostTree) SetFiltered(pubKey types.SiaPublicKey, filtered bool) error {
+func (ht *HostTree) SetFiltered(pubKey types.PublicKey, filtered bool) error {
 	entry, ok := ht.Select(pubKey)
 	if !ok {
 		return ErrNoSuchHost
@@ -246,9 +248,9 @@ func (ht *HostTree) SetFiltered(pubKey types.SiaPublicKey, filtered bool) error 
 	return ht.Modify(entry)
 }
 
-// SetWeightFunction resets the HostTree and assigns it a new weight
+// SetScoreFunction resets the HostTree and assigns it a new score
 // function. This resets the tree and reinserts all the hosts.
-func (ht *HostTree) SetWeightFunction(wf WeightFunc) error {
+func (ht *HostTree) SetScoreFunction(sf ScoreFunc) error {
 	ht.mu.Lock()
 	defer ht.mu.Unlock()
 
@@ -261,8 +263,8 @@ func (ht *HostTree) SetWeightFunction(wf WeightFunc) error {
 		count: 1,
 	}
 
-	// Assign the new weight function.
-	ht.weightFn = wf
+	// Assign the new score function.
+	ht.scoreFn = sf
 
 	// Reinsert all the hosts. To prevent the host tree from having a
 	// catastrophic failure in the event of an error early on, we tally up all
@@ -270,18 +272,18 @@ func (ht *HostTree) SetWeightFunction(wf WeightFunc) error {
 	var insertErrs error
 	for _, hdbe := range allHosts {
 		if err := ht.insert(hdbe); err != nil {
-			insertErrs = errors.Compose(err, insertErrs)
+			insertErrs = modules.ComposeErrors(err, insertErrs)
 		}
 	}
 	return insertErrs
 }
 
 // Select returns the host with the provided public key, should the host exist.
-func (ht *HostTree) Select(spk types.SiaPublicKey) (modules.HostDBEntry, bool) {
+func (ht *HostTree) Select(pk types.PublicKey) (modules.HostDBEntry, bool) {
 	ht.mu.Lock()
 	defer ht.mu.Unlock()
 
-	node, exists := ht.hosts[spk.String()]
+	node, exists := ht.hosts[pk.String()]
 	if !exists {
 		return modules.HostDBEntry{}, false
 	}
@@ -290,7 +292,7 @@ func (ht *HostTree) Select(spk types.SiaPublicKey) (modules.HostDBEntry, bool) {
 
 // SelectRandom grabs a random n hosts from the tree. There will be no repeats,
 // but the length of the slice returned may be less than n, and may even be
-// zero.  The hosts that are returned first have the higher priority.
+// zero. The hosts that are returned first have the higher priority.
 //
 // Hosts passed to 'blacklist' will not be considered; pass `nil` if no
 // blacklist is desired. 'addressBlacklist' is similar to 'blacklist' but
@@ -304,14 +306,14 @@ func (ht *HostTree) Select(spk types.SiaPublicKey) (modules.HostDBEntry, bool) {
 // system should always have scores greater than 1 unless the host is
 // intentionally being given a low score to indicate that the host should not be
 // used.
-func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.SiaPublicKey) []modules.HostDBEntry {
+func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.PublicKey) []modules.HostDBEntry {
 	ht.mu.Lock()
 	defer ht.mu.Unlock()
 
 	var removedEntries []*hostEntry
 
 	// Create a filter.
-	filter := NewFilter(ht.resolver)
+	filter := NewFilter()
 
 	// Add the hosts from the addressBlacklist to the filter.
 	for _, pubkey := range addressBlacklist {
@@ -320,8 +322,9 @@ func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.SiaP
 			continue
 		}
 		// Add the node to the addressFilter.
-		filter.Add(node.entry.NetAddress)
+		filter.Add(modules.NetAddress(node.entry.NetAddress))
 	}
+
 	// Remove hosts we want to blacklist from the tree but remember them to make
 	// sure we can insert them later.
 	for _, pubkey := range blacklist {
@@ -329,6 +332,7 @@ func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.SiaP
 		if !exists {
 			continue
 		}
+
 		// Remove the host from the tree.
 		node.remove()
 		delete(ht.hosts, pubkey.String())
@@ -340,22 +344,26 @@ func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.SiaP
 	var hosts []modules.HostDBEntry
 
 	for len(hosts) < n && len(ht.hosts) > 0 {
-		randWeight := fastrand.BigIntn(ht.root.weight.Big())
-		node := ht.root.nodeAtWeight(types.NewCurrency(randWeight))
-		weightOne := types.NewCurrency64(1)
+		randScoreBig := frand.BigIntn(ht.root.score.Big())
+		b := randScoreBig.Bytes()
+		buf := make([]byte, 16)
+		copy(buf[16 - len(b):], b[:])
+		randScore := types.NewCurrency(binary.BigEndian.Uint64(buf[8:]), binary.BigEndian.Uint64(buf[:8]))
+		node := ht.root.nodeAtScore(randScore)
+		scoreOne := types.NewCurrency64(1)
 
 		if node.entry.AcceptingContracts &&
 			len(node.entry.ScanHistory) > 0 &&
-			node.entry.ScanHistory[len(node.entry.ScanHistory)-1].Success &&
-			!filter.Filtered(node.entry.NetAddress) &&
-			node.entry.weight.Cmp(weightOne) > 0 {
+			node.entry.ScanHistory[len(node.entry.ScanHistory) - 1].Success &&
+			!filter.Filtered(modules.NetAddress(node.entry.NetAddress)) &&
+			node.entry.score.Cmp(scoreOne) > 0 {
 			// The host must be online and accepting contracts to be returned
 			// by the random function. It also has to pass the addressFilter
 			// check.
 			hosts = append(hosts, node.entry.HostDBEntry)
 
 			// If the host passed the filter, we add it to the filter.
-			filter.Add(node.entry.NetAddress)
+			filter.Add(modules.NetAddress(node.entry.NetAddress))
 		}
 
 		removedEntries = append(removedEntries, node.entry)
@@ -371,13 +379,13 @@ func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.SiaP
 	return hosts
 }
 
-// all returns all of the hosts in the host tree, sorted by weight.
+// all returns all of the hosts in the host tree, sorted by score.
 func (ht *HostTree) all() []modules.HostDBEntry {
 	he := make([]hostEntry, 0, len(ht.hosts))
 	for _, node := range ht.hosts {
 		he = append(he, *node.entry)
 	}
-	sort.Sort(byWeight(he))
+	sort.Sort(byScore(he))
 
 	entries := make([]modules.HostDBEntry, 0, len(he))
 	for _, entry := range he {
@@ -391,7 +399,7 @@ func (ht *HostTree) all() []modules.HostDBEntry {
 func (ht *HostTree) insert(hdbe modules.HostDBEntry) error {
 	entry := &hostEntry{
 		HostDBEntry: hdbe,
-		weight:      ht.weightFn(hdbe).Score(),
+		score:       ht.scoreFn(hdbe).Score(),
 	}
 
 	if _, exists := ht.hosts[entry.PublicKey.String()]; exists {

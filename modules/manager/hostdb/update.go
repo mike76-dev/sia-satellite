@@ -3,8 +3,9 @@ package hostdb
 import (
 	"time"
 
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"github.com/mike76-dev/sia-satellite/modules"
+
+	"go.sia.tech/core/types"
 )
 
 // findHostAnnouncements returns a list of the host announcements found within
@@ -13,7 +14,7 @@ import (
 func findHostAnnouncements(b types.Block) (announcements []modules.HostDBEntry) {
 	for _, t := range b.Transactions {
 		// the HostAnnouncement must be prefaced by the standard host
-		// announcement string
+		// announcement string.
 		for _, arb := range t.ArbitraryData {
 			addr, pubKey, err := modules.DecodeAnnouncement(arb)
 			if err != nil {
@@ -22,7 +23,7 @@ func findHostAnnouncements(b types.Block) (announcements []modules.HostDBEntry) 
 
 			// Add the announcement to the slice being returned.
 			var host modules.HostDBEntry
-			host.NetAddress = addr
+			host.NetAddress = string(addr)
 			host.PublicKey = pubKey
 			announcements = append(announcements, host)
 		}
@@ -35,12 +36,12 @@ func findHostAnnouncements(b types.Block) (announcements []modules.HostDBEntry) 
 // will be put into the list of active hosts.
 func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 	// Remove garbage hosts and local hosts.
-	if err := host.NetAddress.IsValid(); err != nil {
+	if err := modules.NetAddress(host.NetAddress).IsValid(); err != nil {
 		hdb.staticLog.Printf("WARN: host '%v' has an invalid NetAddress: %v\n", host.NetAddress, err)
 		return
 	}
 	// Ignore all local hosts announced through the blockchain.
-	if host.NetAddress.IsLocal() {
+	if modules.NetAddress(host.NetAddress).IsLocal() {
 		return
 	}
 
@@ -57,22 +58,26 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 		if oldEntry.FirstSeen == 0 {
 			oldEntry.FirstSeen = hdb.blockHeight
 		}
+		oldEntry.LastAnnouncement = hdb.blockHeight
+
 		// Resolve the host's used subnets and update the timestamp if they
 		// changed. We only update the timestamp if resolving the ipNets was
 		// successful.
-		ipNets, err := hdb.staticLookupIPNets(oldEntry.NetAddress)
+		ipNets, err := hdb.staticLookupIPNets(modules.NetAddress(oldEntry.NetAddress))
 		if err == nil && !equalIPNets(ipNets, oldEntry.IPNets) {
 			oldEntry.IPNets = ipNets
 			oldEntry.LastIPNetChange = time.Now()
 		}
-		// Modify hosttree
+
+		// Modify hosttree.
 		err = hdb.modify(oldEntry)
 		if err != nil {
 			hdb.staticLog.Println("ERROR: unable to modify host entry of host tree after a blockchain scan:", err)
 		}
 	} else {
 		host.FirstSeen = hdb.blockHeight
-		// Insert into hosttree
+
+		// Insert into hosttree.
 		err := hdb.insert(host)
 		if err != nil {
 			hdb.staticLog.Println("ERROR: unable to insert host entry into host tree after a blockchain scan:", err)
@@ -102,11 +107,14 @@ func (hdb *HostDB) ProcessConsensusChange(cc modules.ConsensusChange) {
 	// Add hosts announced in blocks that were applied.
 	for _, block := range cc.AppliedBlocks {
 		for _, host := range findHostAnnouncements(block) {
-			// hdb.staticLog.Println("Found a host in a host announcement:", host.NetAddress, host.PublicKey)
 			hdb.insertBlockchainHost(host)
 		}
 	}
 
 	hdb.synced = cc.Synced
 	hdb.lastChange = cc.ID
+	err := hdb.updateState()
+	if err != nil {
+		hdb.staticLog.Println("ERROR: unable to save hostdb state:", err)
+	}
 }

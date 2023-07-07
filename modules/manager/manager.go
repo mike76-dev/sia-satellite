@@ -10,9 +10,9 @@ import (
 
 	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/modules/manager/hostdb"
 	"github.com/mike76-dev/sia-satellite/persist"
 	//"github.com/mike76-dev/sia-satellite/satellite/manager/contractor"
-	//"github.com/mike76-dev/sia-satellite/satellite/manager/hostdb"
 
 	//"go.sia.tech/core/types"
 )
@@ -142,7 +142,7 @@ type Manager struct {
 	db             *sql.DB
 	cs             modules.ConsensusSet
 	//hostContractor hostContractor
-	//hostDB         modules.HostDB
+	hostDB         modules.HostDB
 	tpool          modules.TransactionPool
 
 	// Atomic properties.
@@ -192,11 +192,11 @@ func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.T
 	}
 
 	// Create the HostDB object.
-	/*hdb, errChanHDB := hostdb.New(g, cs, tpool, db, mux, persistDir)
-	if err := smodules.PeekErr(errChanHDB); err != nil {
+	hdb, errChanHDB := hostdb.New(db, g, cs, dir)
+	if err := modules.PeekErr(errChanHDB); err != nil {
 		errChan <- err
 		return nil, errChan
-	}*/
+	}
 
 	// Create the Contractor.
 	/*hc, errChanContractor := contractor.New(cs, wallet, tpool, hdb, db, persistDir)
@@ -210,7 +210,7 @@ func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.T
 		cs:             cs,
 		db:             db,
 		//hostContractor: hc,
-		//hostDB:         hdb,
+		hostDB:         hdb,
 		tpool:          tpool,
 
 		exchRates: make(map[string]float64),
@@ -221,7 +221,7 @@ func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.T
 	// Call stop in the event of a partial startup.
 	defer func() {
 		if err := modules.PeekErr(errChan); err != nil {
-			errChan <- modules.ComposeErrors(m.tg.Stop(), err)
+			errChan <- modules.ComposeErrors(m.tg.Stop(), m.hostDB.Close(), err)
 		}
 	}()
 
@@ -245,7 +245,7 @@ func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.T
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.tg.Stop()
+	return modules.ComposeErrors(m.tg.Stop(), m.hostDB.Close())
 	//return errors.Compose(m.threads.Stop(), m.hostDB.Close(), m.hostContractor.Close(), m.saveSync())
 }
 

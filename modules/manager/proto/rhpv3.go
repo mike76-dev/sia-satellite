@@ -2,16 +2,15 @@ package proto
 
 import (
 	"encoding/json"
-	"fmt"
-	"math"
+	//"fmt"
+	//"math"
 	"time"
 
-	"github.com/mike76-dev/sia-satellite/modules"
+	//"github.com/mike76-dev/sia-satellite/modules"
 
-	rhpv2 "go.sia.tech/core/rhp/v2"
+	//rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
-	siad "go.sia.tech/siad/types"
 )
 
 // PriceTablePaymentFunc is a function that can be passed in to RPCPriceTable.
@@ -73,7 +72,7 @@ func processPayment(s *rhpv3.Stream, payment rhpv3.PaymentMethod) error {
 }
 
 // RPCRenewContract negotiates a contract renewal with the host.
-func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, renterKey types.PrivateKey, hostPK types.PublicKey, hostAddress, renterAddress types.Address, finalRevTxn types.Transaction, funding, newCollateral types.Currency, endHeight uint64) (_ rhpv2.ContractRevision, _ []types.Transaction, _ types.Transaction, _ []types.Transaction, err error) {
+/*func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, renterKey types.PrivateKey, hostPK types.PublicKey, hostAddress, renterAddress types.Address, finalRevTxn types.Transaction, funding, newCollateral types.Currency, endHeight uint64) (_ rhpv2.ContractRevision, _ []types.Transaction, _ types.Transaction, _ []types.Transaction, err error) {
 	s, err := t.DialStream()
 	if err != nil {
 		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
@@ -235,11 +234,11 @@ func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, renterK
 	revisionTxn.TransactionSignatures = append(revisionTxn.TransactionSignatures, hostSigs.RevisionSignature)
 
 	return revisionTxn, nil
-}
+}*/
 
 // RPCRenewOldContract negotiates a contract renewal with the host using
 // the new Renter-Satellite protocol.
-func RPCRenewOldContract(ss *modules.RPCSession, t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet []types.Transaction, renterPK types.SiaPublicKey, hostPK types.SiaPublicKey, finalRevTxn types.Transaction, height types.BlockHeight) (types.Transaction, error) {
+/*func RPCRenewOldContract(ss *modules.RPCSession, t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet []types.Transaction, renterPK types.SiaPublicKey, hostPK types.SiaPublicKey, finalRevTxn types.Transaction, height types.BlockHeight) (types.Transaction, error) {
 	s := t.DialStream()
 	defer s.Close()
 	s.SetDeadline(time.Now().Add(5 * time.Minute))
@@ -387,10 +386,10 @@ func RPCRenewOldContract(ss *modules.RPCSession, t *rhpv3.Transport, txnBuilder 
 	revisionTxn.TransactionSignatures = append(revisionTxn.TransactionSignatures, hostSigs.RevisionSignature)
 
 	return revisionTxn, nil
-}
+}*/
 
 // RPCLatestRevision fetches the latest revision from the host.
-func RPCLatestRevision(t *rhpv3.Transport, contractID core.FileContractID) (core.FileContractRevision, error) {
+func RPCLatestRevision(t *rhpv3.Transport, contractID types.FileContractID) (types.FileContractRevision, error) {
 	s := t.DialStream()
 	defer s.Close()
 
@@ -401,17 +400,17 @@ func RPCLatestRevision(t *rhpv3.Transport, contractID core.FileContractID) (core
 	var resp rhpv3.RPCLatestRevisionResponse
 	pt := rhpv3.HostPriceTable{}
 	if err := s.WriteRequest(rhpv3.RPCLatestRevisionID, &req); err != nil {
-		return core.FileContractRevision{}, err
+		return types.FileContractRevision{}, err
 	} else if err := s.ReadResponse(&resp, 4096); err != nil {
-		return core.FileContractRevision{}, err
+		return types.FileContractRevision{}, err
 	} else if err := s.WriteResponse(&pt.UID); err != nil {
-		return core.FileContractRevision{}, err
+		return types.FileContractRevision{}, err
 	}
 	return resp.Revision, nil
 }
 
 // prepareRenewal prepares the final revision and a new contract.
-func prepareRenewal(txnBuilder transactionBuilder, rev types.FileContractRevision, hostAddress, renterAddress types.Address, renterFunds, newCollateral types.Currency, pt rhpv3.HostPriceTable, endHeight uint64) ([]types.Transaction, error) {
+/*func prepareRenewal(txnBuilder transactionBuilder, rev types.FileContractRevision, hostAddress, renterAddress types.Address, renterFunds, newCollateral types.Currency, pt rhpv3.HostPriceTable, endHeight uint64) ([]types.Transaction, error) {
 	// Create the final revision from the provided revision.
 	finalRevision := rev
 	finalRevision.MissedProofOutputs = finalRevision.ValidProofOutputs
@@ -447,4 +446,4 @@ func prepareRenewal(txnBuilder transactionBuilder, rev types.FileContractRevisio
 
 	txn, parents := txnBuilder.View()
 	return append(modules.ConvertToCore(up), append(modules.ConvertToCore(parents), modules.ConvertToCore(txn))), nil
-}
+}*/
