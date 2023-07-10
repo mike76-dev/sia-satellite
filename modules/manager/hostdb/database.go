@@ -126,8 +126,10 @@ func (hdb *HostDB) updateHost(host modules.HostDBEntry) error {
 	encodeHostEntry(&host, e)
 	e.Flush()
 	_, err := hdb.db.Exec(`
-		REPLACE INTO hdb_hosts (public_key, filtered, bytes)
-		VALUES (?, ?, ?)
+		INSERT INTO hdb_hosts (public_key, filtered, bytes)
+		VALUES (?, ?, ?) AS new
+		ON DUPLICATE KEY UPDATE public_key = new.public_key,
+		filtered = new.filtered, bytes = new.bytes
 	`, host.PublicKey[:], host.Filtered, buf.Bytes())
 	if err != nil {
 		return modules.AddContext(err, "couldn't save host")
@@ -414,5 +416,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 		}
 	}
 
-	hdb.loadingComplete = true
+	if hdb.initialScanComplete {
+		hdb.loadingComplete = true
+	}
 }

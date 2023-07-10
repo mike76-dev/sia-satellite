@@ -74,6 +74,12 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 		if err != nil {
 			hdb.staticLog.Println("ERROR: unable to modify host entry of host tree after a blockchain scan:", err)
 		}
+
+		// Update the database.
+		err = hdb.updateHost(oldEntry)
+		if err != nil {
+			hdb.staticLog.Println("ERROR: unable to update host entry in the database:", err)
+		}
 	} else {
 		host.FirstSeen = hdb.blockHeight
 
@@ -82,12 +88,12 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 		if err != nil {
 			hdb.staticLog.Println("ERROR: unable to insert host entry into host tree after a blockchain scan:", err)
 		}
-	}
 
-	// Update the database.
-	err := hdb.updateHost(host)
-	if err != nil {
-		hdb.staticLog.Println("ERROR: unable to insert host entry into database:", err)
+		// Update the database.
+		err = hdb.updateHost(host)
+		if err != nil {
+			hdb.staticLog.Println("ERROR: unable to insert host entry into database:", err)
+		}
 	}
 
 	// Add the host to the scan queue.

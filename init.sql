@@ -270,11 +270,18 @@ CREATE TABLE wt_watch (
 /* manager */
 
 DROP TABLE IF EXISTS mg_timestamp;
+DROP TABLE IF EXISTS mg_averages;
 
 CREATE TABLE mg_timestamp (
 	id     INT NOT NULL AUTO_INCREMENT,
 	height BIGINT UNSIGNED NOT NULL,
 	time   BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE mg_averages (
+	id    INT NOT NULL AUTO_INCREMENT,
+	bytes BLOB NOT NULL,
 	PRIMARY KEY (id)
 );
 
@@ -289,21 +296,28 @@ DROP TABLE IF EXISTS hdb_contracts;
 DROP TABLE IF EXISTS hdb_info;
 
 CREATE TABLE hdb_hosts (
-	public_key BINARY(32) NOT NULL,
+	id         INT NOT NULL AUTO_INCREMENT,
+	public_key BINARY(32) NOT NULL UNIQUE,
 	filtered   BOOL NOT NULL,
 	bytes      BLOB NOT NULL,
-	PRIMARY KEY (public_key)
+	PRIMARY KEY (id)
 );
 
 CREATE TABLE hdb_scanhistory (
+	id         INT NOT NULL AUTO_INCREMENT,
 	public_key BINARY(32) NOT NULL,
 	time       BIGINT UNSIGNED NOT NULL,
-	success    BOOL NOT NULL
+	success    BOOL NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (public_key) REFERENCES hdb_hosts(public_key)
 );
 
 CREATE TABLE hdb_ipnets (
+	id         INT NOT NULL AUTO_INCREMENT,
 	public_key BINARY(32) NOT NULL,
-	ip_net     VARCHAR(255) NOT NULL
+	ip_net     VARCHAR(255) NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (public_key) REFERENCES hdb_hosts(public_key)
 );
 
 CREATE TABLE hdb_fdomains (
