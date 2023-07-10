@@ -52,18 +52,19 @@ func (api *API) buildHTTPRoutes() {
 	}
 
 	// HostDB API Calls.
-	/*if api.satellite != nil {
+	if api.manager != nil {
 		router.GET("/hostdb", api.hostdbHandler)
 		router.GET("/hostdb/active", api.hostdbActiveHandler)
 		router.GET("/hostdb/all", api.hostdbAllHandler)
 		router.GET("/hostdb/hosts/:pubkey", api.hostdbHostsHandler)
 		router.GET("/hostdb/filtermode", api.hostdbFilterModeHandlerGET)
 		router.POST("/hostdb/filtermode", RequirePassword(api.hostdbFilterModeHandlerPOST, requiredPassword))
-	}*/
+	}
 
 	// Manager API Calls.
 	if api.manager != nil {
 		router.GET("/manager/rate/:currency", api.managerRateHandlerGET)
+		router.GET("/manager/averages/:currency", api.managerAveragesHandlerGET)
 		/*router.GET("/satellite/renter/:publickey", RequirePassword(api.satelliteRenterHandlerGET, requiredPassword))
 		router.GET("/satellite/balance/:publickey", RequirePassword(api.satelliteBalanceHandlerGET, requiredPassword))
 		router.GET("/satellite/contracts", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))

@@ -1,4 +1,3 @@
-// manager package is the host-facing part of the satellite module.
 package manager
 
 import (
@@ -14,7 +13,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/persist"
 	//"github.com/mike76-dev/sia-satellite/satellite/manager/contractor"
 
-	//"go.sia.tech/core/types"
+	"go.sia.tech/core/types"
 )
 
 var (
@@ -146,9 +145,9 @@ type Manager struct {
 	tpool          modules.TransactionPool
 
 	// Atomic properties.
-	//hostAverages        modules.HostAverages
-	exchRates map[string]float64
-	scusdRate float64
+	hostAverages modules.HostAverages
+	exchRates    map[string]float64
+	scusdRate    float64
 
 	// Block heights at the start of the current and the previous months.
 	currentMonth blockTimestamp
@@ -236,10 +235,10 @@ func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.T
 }
 
 // ActiveHosts returns an array of hostDB's active hosts.
-//func (m *Manager) ActiveHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.ActiveHosts() }
+func (m *Manager) ActiveHosts() ([]modules.HostDBEntry, error) { return m.hostDB.ActiveHosts() }
 
 // AllHosts returns an array of all hosts.
-//func (m *Manager) AllHosts() ([]smodules.HostDBEntry, error) { return m.hostDB.AllHosts() }
+func (m *Manager) AllHosts() ([]modules.HostDBEntry, error) { return m.hostDB.AllHosts() }
 
 // Close shuts down the manager.
 func (m *Manager) Close() error {
@@ -250,26 +249,26 @@ func (m *Manager) Close() error {
 }
 
 // Filter returns the hostdb's filterMode and filteredHosts.
-/*func (m *Manager) Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error) {
-	var fm smodules.FilterMode
-	hosts := make(map[string]types.SiaPublicKey)
-	if err := m.threads.Add(); err != nil {
+func (m *Manager) Filter() (modules.FilterMode, map[string]types.PublicKey, []string, error) {
+	var fm modules.FilterMode
+	hosts := make(map[string]types.PublicKey)
+	if err := m.tg.Add(); err != nil {
 		return fm, hosts, nil, err
 	}
-	defer m.threads.Done()
+	defer m.tg.Done()
 	fm, hosts, netAddresses, err := m.hostDB.Filter()
 	if err != nil {
-		return fm, hosts, netAddresses, errors.AddContext(err, "error getting hostdb filter:")
+		return fm, hosts, netAddresses, modules.AddContext(err, "error getting hostdb filter:")
 	}
 	return fm, hosts, netAddresses, nil
-}*/
+}
 
 // SetFilterMode sets the hostdb filter mode.
-/*func (m *Manager) SetFilterMode(lm smodules.FilterMode, hosts []types.SiaPublicKey, netAddresses []string) error {
-	if err := m.threads.Add(); err != nil {
+func (m *Manager) SetFilterMode(lm modules.FilterMode, hosts []types.PublicKey, netAddresses []string) error {
+	if err := m.tg.Add(); err != nil {
 		return err
 	}
-	defer m.threads.Done()
+	defer m.tg.Done()
 
 	// Set list mode filter for the hostdb.
 	if err := m.hostDB.SetFilterMode(lm, hosts, netAddresses); err != nil {
@@ -277,21 +276,21 @@ func (m *Manager) Close() error {
 	}
 
 	return nil
-}*/
+}
 
 // Host returns the host associated with the given public key.
-/*func (m *Manager) Host(spk types.SiaPublicKey) (smodules.HostDBEntry, bool, error) {
-	return m.hostDB.Host(spk)
-}*/
+func (m *Manager) Host(pk types.PublicKey) (modules.HostDBEntry, bool, error) {
+	return m.hostDB.Host(pk)
+}
 
 // InitialScanComplete returns a boolean indicating if the initial scan of the
 // hostdb is completed.
-//func (m *Manager) InitialScanComplete() (bool, types.BlockHeight, error) { return m.hostDB.InitialScanComplete() }
+func (m *Manager) InitialScanComplete() (bool, uint64, error) { return m.hostDB.InitialScanComplete() }
 
 // ScoreBreakdown returns the score breakdown of the specific host.
-/*func (m *Manager) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBreakdown, error) {
+func (m *Manager) ScoreBreakdown(e modules.HostDBEntry) (modules.HostScoreBreakdown, error) {
 	return m.hostDB.ScoreBreakdown(e)
-}*/
+}
 
 // EstimateHostScore returns the estimated host score.
 /*func (m *Manager) EstimateHostScore(e smodules.HostDBEntry, a modules.Allowance) (smodules.HostScoreBreakdown, error) {
@@ -305,11 +304,11 @@ func (m *Manager) Close() error {
 }*/
 
 // GetAverages retrieves the host network averages from HostDB.
-/*func (m *Manager) GetAverages() modules.HostAverages {
+func (m *Manager) GetAverages() modules.HostAverages {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.hostAverages
-}*/
+}
 
 // Contracts returns the hostContractor's contracts.
 /*func (m *Manager) Contracts() []modules.RenterContract {

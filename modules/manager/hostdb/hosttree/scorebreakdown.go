@@ -28,7 +28,9 @@ type HostAdjustments struct {
 // HostScoreBreakdown converts a HostAdjustments object into a
 // modules.HostScoreBreakdown.
 func (h HostAdjustments) HostScoreBreakdown() modules.HostScoreBreakdown {
+	score := h.Score()
 	return modules.HostScoreBreakdown{
+		Score:            score,
 		Age:              h.AgeAdjustment,
 		Collateral:       h.CollateralAdjustment,
 		Interactions:     h.InteractionAdjustment,

@@ -182,12 +182,13 @@ func initCmds() *cobra.Command {
 	gatewayCmd.AddCommand(gatewayAddressCmd, gatewayBlocklistCmd, gatewayConnectCmd, gatewayDisconnectCmd, gatewayListCmd)
 	gatewayBlocklistCmd.AddCommand(gatewayBlocklistAppendCmd, gatewayBlocklistClearCmd, gatewayBlocklistRemoveCmd, gatewayBlocklistSetCmd)
 
-	//root.AddCommand(hostdbCmd)
-	//hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
-	//hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
+	root.AddCommand(hostdbCmd)
+	hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
+	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
 
 	root.AddCommand(managerCmd)
 	managerCmd.AddCommand(managerRateCmd)
+	managerCmd.AddCommand(managerAveragesCmd)
 
 	//root.AddCommand(portalCmd)
 	//portalCmd.AddCommand(portalSetCmd)

@@ -2,11 +2,9 @@ package modules
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
-	"strings"
 
 	"go.sia.tech/core/types"
 )
@@ -24,21 +22,9 @@ func ReadCurrency(s string) types.Currency {
 	return types.NewCurrency(i.Uint64(), new(big.Int).Rsh(i, 64).Uint64())
 }
 
-// ReadPublicKey converts a string to types.PublicKey.
-func ReadPublicKey(s string) types.PublicKey {
-	s = strings.TrimPrefix(s, "ed25519:")
-	b, err := hex.DecodeString(s)
-	if err != nil || len(b) != 32 {
-		return types.PublicKey{}
-	}
-	var pk types.PublicKey
-	copy(pk[:], b)
-	return pk
-}
-
 // Float64 converts types.Currency to float64.
 func Float64(c types.Currency) float64 {
-	f, _ := new(big.Rat).SetFrac(c.Big(), big.NewInt(1)).Float64()
+	f, _ := new(big.Rat).SetInt(c.Big()).Float64()
 	return f
 }
 
@@ -47,7 +33,7 @@ func FromFloat(f float64) types.Currency {
 	if f < 0 {
 		return types.ZeroCurrency
 	}
-	h := new(big.Rat).SetFrac(types.HastingsPerSiacoin.Big(), big.NewInt(1))
+	h := new(big.Rat).SetInt(types.HastingsPerSiacoin.Big())
 	r := new(big.Rat).Mul(h, new(big.Rat).SetFloat64(f))
 	nBuf := make([]byte, 16)
 	n := r.Num().Bytes()
@@ -55,6 +41,22 @@ func FromFloat(f float64) types.Currency {
 	num := types.NewCurrency(binary.BigEndian.Uint64(nBuf[8:]), binary.BigEndian.Uint64(nBuf[:8]))
 	dBuf := make([]byte, 16)
 	d := r.Denom().Bytes()
+	copy(dBuf[16 - len(d):], d[:])
+	denom := types.NewCurrency(binary.BigEndian.Uint64(dBuf[8:]), binary.BigEndian.Uint64(dBuf[:8]))
+	return num.Div(denom)
+}
+
+// MulFloat multiplies a types.Currency by a float64 value.
+func MulFloat(c types.Currency, f float64) types.Currency {
+	x := new(big.Rat).SetInt(c.Big())
+	y := new(big.Rat).SetFloat64(f)
+	x = x.Mul(x, y)
+	nBuf := make([]byte, 16)
+	n := x.Num().Bytes()
+	copy(nBuf[16 - len(n):], n[:])
+	num := types.NewCurrency(binary.BigEndian.Uint64(nBuf[8:]), binary.BigEndian.Uint64(nBuf[:8]))
+	dBuf := make([]byte, 16)
+	d := x.Denom().Bytes()
 	copy(dBuf[16 - len(d):], d[:])
 	denom := types.NewCurrency(binary.BigEndian.Uint64(dBuf[8:]), binary.BigEndian.Uint64(dBuf[:8]))
 	return num.Div(denom)

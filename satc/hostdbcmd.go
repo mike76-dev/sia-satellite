@@ -58,17 +58,14 @@ var (
 func printScoreBreakdown(info *api.HostdbHostsGET) {
 	fmt.Println("\n  Score Breakdown:")
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "\t\tAge:\t %.3f\n", info.ScoreBreakdown.AgeAdjustment)
-	fmt.Fprintf(w, "\t\tBase Price:\t %.3f\n", info.ScoreBreakdown.BasePriceAdjustment)
-	fmt.Fprintf(w, "\t\tBurn:\t %.3f\n", info.ScoreBreakdown.BurnAdjustment)
-	fmt.Fprintf(w, "\t\tCollateral:\t %.3f\n", info.ScoreBreakdown.CollateralAdjustment / 1e96)
-	fmt.Fprintf(w, "\t\tDuration:\t %.3f\n", info.ScoreBreakdown.DurationAdjustment)
-	fmt.Fprintf(w, "\t\tInteraction:\t %.3f\n", info.ScoreBreakdown.InteractionAdjustment)
-	fmt.Fprintf(w, "\t\tPrice:\t %.3f\n", info.ScoreBreakdown.PriceAdjustment * 1e24)
-	fmt.Fprintf(w, "\t\tStorage:\t %.3f\n", info.ScoreBreakdown.StorageRemainingAdjustment)
-	fmt.Fprintf(w, "\t\tUptime:\t %.3f\n", info.ScoreBreakdown.UptimeAdjustment)
-	fmt.Fprintf(w, "\t\tVersion:\t %.3f\n", info.ScoreBreakdown.VersionAdjustment)
-	fmt.Fprintf(w, "\t\tConversion Rate:\t %.3f\n", info.ScoreBreakdown.ConversionRate)
+	fmt.Fprintf(w, "\t\tAge:\t %.3f\n", info.ScoreBreakdown.Age)
+	fmt.Fprintf(w, "\t\tCollateral:\t %.3f\n", info.ScoreBreakdown.Collateral)
+	fmt.Fprintf(w, "\t\tInteraction:\t %.3f\n", info.ScoreBreakdown.Interactions)
+	fmt.Fprintf(w, "\t\tStorage:\t %.3f\n", info.ScoreBreakdown.StorageRemaining)
+	fmt.Fprintf(w, "\t\tUptime:\t %.3f\n", info.ScoreBreakdown.Uptime)
+	fmt.Fprintf(w, "\t\tVersion:\t %.3f\n", info.ScoreBreakdown.Version)
+	fmt.Fprintf(w, "\t\tPrice:\t %.3f\n", info.ScoreBreakdown.Prices)
+	fmt.Fprintf(w, "\t\tTotal Score:\t %v\n", info.ScoreBreakdown.Score.ExactString())
 	if err := w.Flush(); err != nil {
 		die("failed to flush writer")
 	}
@@ -79,7 +76,7 @@ func printScoreBreakdown(info *api.HostdbHostsGET) {
 func hostdbcmd() {
 	if !verbose {
 		info, err := httpClient.HostDbActiveGet()
-		if strings.Contains(err.Error(), api.ErrAPICallNotRecognized.Error()) {
+		if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
 			// Assume module is not loaded if status command is not recognized.
 			fmt.Printf("HostDB:\n  Status: %s\n\n", moduleNotReadyStatus)
 			return
@@ -355,8 +352,7 @@ func hostdbsetfiltermodecmd(cmd *cobra.Command, args []string) {
 		filterModeStr = args[0]
 
 		for _, arg := range args[1:] {
-			if strings.HasPrefix(arg, "ed25519") {
-				host = modules.ReadPublicKey(arg)
+			if strings.HasPrefix(arg, "ed25519") && host.UnmarshalText([]byte(arg)) == nil {
 				hosts = append(hosts, host)
 			} else {
 				netAddresses = append(netAddresses, arg)
@@ -380,7 +376,10 @@ func hostdbsetfiltermodecmd(cmd *cobra.Command, args []string) {
 // hostdbviewcmd is the handler for the command `satc hostdb view`.
 // shows detailed information about a host in the hostdb.
 func hostdbviewcmd(pubkey string) {
-	publicKey := modules.ReadPublicKey(pubkey)
+	var publicKey types.PublicKey
+	if err := publicKey.UnmarshalText([]byte(pubkey)); err != nil {
+		die("Could not unmarshal public key:", err)
+	}
 	info, err := httpClient.HostDbHostsGet(publicKey)
 	if err != nil {
 		die("Could not fetch provided host:", err)
@@ -390,7 +389,7 @@ func hostdbviewcmd(pubkey string) {
 	fmt.Println("  Public Key:               ", info.Entry.PublicKeyString)
 	fmt.Println("  Version:                  ", info.Entry.Version)
 	fmt.Println("  Block First Seen:         ", info.Entry.FirstSeen)
-	fmt.Println("  Absolute Score:           ", info.ScoreBreakdown.Score)
+	fmt.Println("  Absolute Score:           ", info.ScoreBreakdown.Score.ExactString())
 	fmt.Println("  Filtered:                 ", info.Entry.Filtered)
 	fmt.Println("  NetAddress:               ", info.Entry.NetAddress)
 	fmt.Println("  Last IP Net Change:       ", info.Entry.LastIPNetChange)

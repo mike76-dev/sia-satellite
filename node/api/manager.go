@@ -6,9 +6,7 @@ import (
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
-	//"github.com/mike76-dev/sia-satellite/modules"
-
-	//"go.sia.tech/core/types"
+	"github.com/mike76-dev/sia-satellite/modules"
 )
 
 type (
@@ -17,17 +15,22 @@ type (
 		Currency string  `json:"currency"`
 		Rate     float64 `json:"rate"`
 	}
+
+	// HostAverages contains the host network averages.
+	HostAverages struct {
+		modules.HostAverages
+		Rate float64
+	}
 )
 
 // managerRateHandlerGET handles the API call to /manager/rate.
 func (api *API) managerRateHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
-	currency := ps.ByName("currency")
+	currency := strings.ToUpper(ps.ByName("currency"))
 	if currency == "" {
 		WriteError(w, Error{"currency not specified"}, http.StatusBadRequest)
 		return
 	}
 
-	currency = strings.ToUpper(currency)
 	var rate float64
 	var err error
 	if currency == "SC" {
@@ -51,4 +54,26 @@ func (api *API) managerRateHandlerGET(w http.ResponseWriter, _ *http.Request, ps
 	}
 
 	WriteJSON(w, er)
+}
+
+// managerAveragesHandlerGET handles the API call to /manager/averages.
+func (api *API) managerAveragesHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
+	currency := strings.ToUpper(ps.ByName("currency"))
+	if currency == "" {
+		currency = "SC"
+	}
+
+	rate := float64(1.0)
+	var err error
+	if currency != "SC" {
+		rate, err = api.manager.GetExchangeRate(currency)
+		if err != nil {
+			WriteError(w, Error{fmt.Sprintf("couldn't get exchange rate: %v", err)}, http.StatusInternalServerError)
+			return
+		}
+	}
+
+	ha := HostAverages{api.manager.GetAverages(), rate}
+
+	WriteJSON(w, ha)
 }

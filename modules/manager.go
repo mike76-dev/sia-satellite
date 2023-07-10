@@ -11,15 +11,41 @@ import (
 
 // HostAverages contains the host network averages from HostDB.
 type HostAverages struct {
-	NumHosts               uint64
-	Duration               uint64
-	StoragePrice           types.Currency
-	Collateral             types.Currency
-	DownloadBandwidthPrice types.Currency
-	UploadBandwidthPrice   types.Currency
-	ContractPrice          types.Currency
-	BaseRPCPrice           types.Currency
-	SectorAccessPrice      types.Currency
+	NumHosts               uint64         `json:"numhosts"`
+	Duration               uint64         `json:"duration"`
+	StoragePrice           types.Currency `json:"storageprice"`
+	Collateral             types.Currency `json:"collateral"`
+	DownloadBandwidthPrice types.Currency `json:"downloadbandwidthprice"`
+	UploadBandwidthPrice   types.Currency `json:"uploadbandwidthprice"`
+	ContractPrice          types.Currency `json:"contractprice"`
+	BaseRPCPrice           types.Currency `json:"baserpcprice"`
+	SectorAccessPrice      types.Currency `json:"sectoraccessprice"`
+}
+
+// EncodeTo implements types.EncoderTo.
+func (ha *HostAverages) EncodeTo (e *types.Encoder) {
+	e.WriteUint64(ha.NumHosts)
+	e.WriteUint64(ha.Duration)
+	ha.StoragePrice.EncodeTo(e)
+	ha.Collateral.EncodeTo(e)
+	ha.DownloadBandwidthPrice.EncodeTo(e)
+	ha.UploadBandwidthPrice.EncodeTo(e)
+	ha.ContractPrice.EncodeTo(e)
+	ha.BaseRPCPrice.EncodeTo(e)
+	ha.SectorAccessPrice.EncodeTo(e)
+}
+
+// DecodeFrom implements types.DecoderFrom.
+func (ha *HostAverages) DecodeFrom (d *types.Decoder) {
+	ha.NumHosts = d.ReadUint64()
+	ha.Duration = d.ReadUint64()
+	ha.StoragePrice.DecodeFrom(d)
+	ha.Collateral.DecodeFrom(d)
+	ha.DownloadBandwidthPrice.DecodeFrom(d)
+	ha.UploadBandwidthPrice.DecodeFrom(d)
+	ha.ContractPrice.DecodeFrom(d)
+	ha.BaseRPCPrice.DecodeFrom(d)
+	ha.SectorAccessPrice.DecodeFrom(d)
 }
 
 // UserBalance holds the current balance as well as
@@ -52,13 +78,14 @@ type UserSpendings struct {
 
 // HostScoreBreakdown breaks down the host scores.
 type HostScoreBreakdown struct {
-	Age              float64
-	Collateral       float64
-	Interactions     float64
-	StorageRemaining float64
-	Uptime           float64
-	Version          float64
-	Prices           float64
+	Score            types.Currency `json:"score"`
+	Age              float64        `json:"agescore"`
+	Collateral       float64        `json:"collateralscore"`
+	Interactions     float64        `json:"interactionscore"`
+	StorageRemaining float64        `json:"storageremainingscore"`
+	Uptime           float64        `json:"uptimescore"`
+	Version          float64        `json:"versionscore"`
+	Prices           float64        `json:"pricescore"`
 }
 
 // A HostDBEntry represents one host entry in the Manager's host DB. It
@@ -246,19 +273,44 @@ type HostDB interface {
 type Manager interface {
 	Alerter
 
+	// ActiveHosts returns an array of HostDB's active hosts.
+	ActiveHosts() ([]HostDBEntry, error)
+
+	// AllHosts returns an array of all hosts.
+	AllHosts() ([]HostDBEntry, error)
+
 	// Close safely shuts down the manager.
 	Close() error
+
+	// Filter returns the HostDB's filterMode and filteredHosts.
+	Filter() (FilterMode, map[string]types.PublicKey, []string, error)
+
+	// GetAverages retrieves the host network averages.
+	GetAverages() HostAverages
+
+	// GetExchangeRate returns the exchange rate of a given currency.
+	GetExchangeRate(string) (float64, error)
 
 	// GetSiacoinRate calculates the SC price in a given currency.
 	GetSiacoinRate(string) (float64, error)
 
-	// GetExchangeRate returns the exchange rate of a given currency.
-	GetExchangeRate(string) (float64, error)
+	// Host returns the host associated with the given public key.
+	Host(types.PublicKey) (HostDBEntry, bool, error)
+
+	// InitialScanComplete returns a boolean indicating if the initial scan of the
+	// HostDB is completed.
+	InitialScanComplete() (bool, uint64, error)
 
 	// PriceEstimation estimates the cost in siacoins of performing various
 	// storage and data operations. The estimation will be done using the provided
 	// allowance. The final allowance used will be returned.
 	//PriceEstimation(Allowance) (float64, Allowance, error)
+
+	// ScoreBreakdown returns the score breakdown of the specific host.
+	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
+
+	// SetFilterMode sets the HostDB's filter mode.
+	SetFilterMode(FilterMode, []types.PublicKey, []string) error
 }
 
 // MaintenanceSpending is a helper struct that contains a breakdown of costs

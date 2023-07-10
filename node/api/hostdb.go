@@ -61,7 +61,7 @@ type (
 
 // hostdbHandler handles the API call asking for the status of HostDB.
 func (api *API) hostdbHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	isc, bh, err := api.satellite.InitialScanComplete()
+	isc, bh, err := api.manager.InitialScanComplete()
 	if err != nil {
 		WriteError(w, Error{"Failed to get initial scan status: " + err.Error()}, http.StatusInternalServerError)
 		return
@@ -76,7 +76,7 @@ func (api *API) hostdbHandler(w http.ResponseWriter, _ *http.Request, _ httprout
 // hosts.
 func (api *API) hostdbActiveHandler(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	var numHosts uint64
-	hosts, err := api.satellite.ActiveHosts()
+	hosts, err := api.manager.ActiveHosts()
 	if err != nil {
 		WriteError(w, Error{"unable to get active hosts: " + err.Error()}, http.StatusBadRequest)
 		return
@@ -116,7 +116,7 @@ func (api *API) hostdbActiveHandler(w http.ResponseWriter, req *http.Request, _ 
 // hostdbAllHandler handles the API call asking for the list of all hosts.
 func (api *API) hostdbAllHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	// Get the set of all hosts and convert them into extended hosts.
-	hosts, err := api.satellite.AllHosts()
+	hosts, err := api.manager.AllHosts()
 	if err != nil {
 		WriteError(w, Error{"unable to get all hosts: " + err.Error()}, http.StatusBadRequest)
 		return
@@ -137,9 +137,13 @@ func (api *API) hostdbAllHandler(w http.ResponseWriter, _ *http.Request, _ httpr
 // hostdbHostsHandler handles the API call asking for a specific host,
 // returning detailed information about that host.
 func (api *API) hostdbHostsHandler(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
-	pk := modules.ReadPublicKey(ps.ByName("pubkey"))
+	var pk types.PublicKey
+	if err := pk.UnmarshalText([]byte(ps.ByName("pubkey"))); err != nil {
+		WriteError(w, Error{"unable to unmarshal public key: " + err.Error()}, http.StatusBadRequest)
+		return
+	}
 
-	entry, exists, err := api.satellite.Host(pk)
+	entry, exists, err := api.manager.Host(pk)
 	if err != nil {
 		WriteError(w, Error{"unable to get host: " + err.Error()}, http.StatusBadRequest)
 		return
@@ -148,7 +152,7 @@ func (api *API) hostdbHostsHandler(w http.ResponseWriter, _ *http.Request, ps ht
 		WriteError(w, Error{"requested host does not exist"}, http.StatusBadRequest)
 		return
 	}
-	breakdown, err := api.satellite.ScoreBreakdown(entry)
+	breakdown, err := api.manager.ScoreBreakdown(entry)
 	if err != nil {
 		WriteError(w, Error{"error calculating score breakdown: " + err.Error()}, http.StatusInternalServerError)
 		return
@@ -168,13 +172,13 @@ func (api *API) hostdbHostsHandler(w http.ResponseWriter, _ *http.Request, ps ht
 // hostdbFilterModeHandlerGET handles the API call to get the hostdb's filter
 // mode.
 func (api *API) hostdbFilterModeHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	// Get FilterMode
-	fm, hostMap, netAddresses, err := api.satellite.Filter()
+	// Get FilterMode.
+	fm, hostMap, netAddresses, err := api.manager.Filter()
 	if err != nil {
 		WriteError(w, Error{"unable to get filter mode: " + err.Error()}, http.StatusBadRequest)
 		return
 	}
-	// Build Slice of PubKeys
+	// Build Slice of PubKeys.
 	var hosts []string
 	for key := range hostMap {
 		hosts = append(hosts, key)
@@ -189,7 +193,7 @@ func (api *API) hostdbFilterModeHandlerGET(w http.ResponseWriter, _ *http.Reques
 // hostdbFilterModeHandlerPOST handles the API call to set the hostdb's filter
 // mode.
 func (api *API) hostdbFilterModeHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// Parse parameters
+	// Parse parameters.
 	var params HostdbFilterModePOST
 	err := json.NewDecoder(req.Body).Decode(&params)
 	if err != nil {
@@ -203,8 +207,8 @@ func (api *API) hostdbFilterModeHandlerPOST(w http.ResponseWriter, req *http.Req
 		return
 	}
 
-	// Set list mode
-	if err := api.satellite.SetFilterMode(fm, params.Hosts, params.NetAddresses); err != nil {
+	// Set list mode.
+	if err := api.manager.SetFilterMode(fm, params.Hosts, params.NetAddresses); err != nil {
 		WriteError(w, Error{"failed to set the list mode: " + err.Error()}, http.StatusBadRequest)
 		return
 	}

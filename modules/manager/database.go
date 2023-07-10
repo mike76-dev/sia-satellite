@@ -1,9 +1,15 @@
 package manager
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
+	"io"
 	"time"
+
+	"github.com/mike76-dev/sia-satellite/modules"
+
+	"go.sia.tech/core/types"
 )
 
 // dbGetBlockTimestamps retrieves the block timestamps from the database.
@@ -53,6 +59,36 @@ func dbPutBlockTimestamps(tx *sql.Tx, curr blockTimestamp, prev blockTimestamp) 
 		REPLACE INTO mg_timestamp (id, height, time)
 		VALUES (2, ?, ?)
 	`, prev.BlockHeight, pt)
+
+	return err
+}
+
+// dbGetAverages retrieves the host network averages from the database.
+func dbGetAverages(tx *sql.Tx) (avg modules.HostAverages, err error) {
+	var avgBytes []byte
+	err = tx.QueryRow("SELECT bytes FROM mg_averages WHERE id = 1").Scan(&avgBytes)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nil
+		}
+		return
+	}
+
+	d := types.NewDecoder(io.LimitedReader{R: bytes.NewBuffer(avgBytes), N: int64(len(avgBytes))})
+	avg.DecodeFrom(d)
+	err = d.Err()
+
+	return
+}
+
+// dbPutAverages retrieves the host network averages from the database.
+func dbPutAverages(tx *sql.Tx, avg modules.HostAverages) error {
+	var buf bytes.Buffer
+	e := types.NewEncoder(&buf)
+	avg.EncodeTo(e)
+	e.Flush()
+
+	_, err := tx.Exec("REPLACE INTO mg_averages (id, bytes) VALUES (1, ?)", buf.Bytes())
 
 	return err
 }

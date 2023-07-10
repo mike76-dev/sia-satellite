@@ -29,7 +29,7 @@ var (
 )
 
 // capAverages checks if the host settings exceed the sane values.
-/*func capAverages(entry smodules.HostDBEntry) bool {
+func capAverages(entry modules.HostDBEntry) bool {
 	if entry.StoragePrice.Cmp(saneStoragePrice) > 0 {
 		return true
 	}
@@ -52,10 +52,10 @@ var (
 		return true
 	}
 	return false
-}*/
+}
 
 // calculateAverages calculates the host network averages from HostDB.
-/*func (m *Manager) calculateAverages() {
+func (m *Manager) calculateAverages() {
 	// Skip calculating if HostDB is not done loading the hosts.
 	if !m.hostDB.LoadingComplete() {
 		return
@@ -82,7 +82,7 @@ var (
 		if capAverages(entry) {
 			continue
 		}
-		m.hostAverages.Duration = types.BlockHeight(uint64(m.hostAverages.Duration) + uint64(entry.MaxDuration))
+		m.hostAverages.Duration = m.hostAverages.Duration + entry.MaxDuration
 		m.hostAverages.StoragePrice = m.hostAverages.StoragePrice.Add(entry.StoragePrice)
 		m.hostAverages.Collateral = m.hostAverages.Collateral.Add(entry.Collateral)
 		m.hostAverages.DownloadBandwidthPrice = m.hostAverages.DownloadBandwidthPrice.Add(entry.DownloadBandwidthPrice)
@@ -101,7 +101,7 @@ var (
 	}
 
 	// Divide by the number of hosts.
-	m.hostAverages.Duration = types.BlockHeight(uint64(m.hostAverages.Duration) / numHosts)
+	m.hostAverages.Duration = m.hostAverages.Duration / numHosts
 	m.hostAverages.StoragePrice = m.hostAverages.StoragePrice.Div64(numHosts)
 	m.hostAverages.Collateral = m.hostAverages.Collateral.Div64(numHosts)
 	m.hostAverages.DownloadBandwidthPrice = m.hostAverages.DownloadBandwidthPrice.Div64(numHosts)
@@ -110,27 +110,32 @@ var (
 	m.hostAverages.BaseRPCPrice = m.hostAverages.BaseRPCPrice.Div64(numHosts)
 	m.hostAverages.SectorAccessPrice = m.hostAverages.SectorAccessPrice.Div64(numHosts)
 
+	// Save to disk.
+	if err := dbPutAverages(m.dbTx, m.hostAverages); err != nil {
+		m.log.Println("ERROR: couldn't save network averages:", err)
+	}
+
 	return
-}*/
+}
 
 // threadedCalculateAverages performs the calculation with set intervals.
-/*func (m *Manager) threadedCalculateAverages() {
-	if err := m.threads.Add(); err != nil {
+func (m *Manager) threadedCalculateAverages() {
+	if err := m.tg.Add(); err != nil {
 		return
 	}
-	defer m.threads.Done()
+	defer m.tg.Done()
 
 	m.calculateAverages()
 
 	for {
 		select {
-		case <-m.threads.StopChan():
+		case <-m.tg.StopChan():
 			return
 		case <-time.After(calculateAveragesInterval):
 		}
 		m.calculateAverages()
 	}
-}*/
+}
 
 // fetchExchangeRates retrieves the fiat currency exchange rates.
 func (m *Manager) fetchExchangeRates() {

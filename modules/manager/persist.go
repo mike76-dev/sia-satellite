@@ -97,12 +97,16 @@ func (m *Manager) initPersist(dir string) error {
 	if err != nil {
 		return modules.AddContext(err, "couldn't load block timestamps")
 	}
+	m.hostAverages, err = dbGetAverages(m.dbTx)
+	if err != nil {
+		return modules.AddContext(err, "couldn't load network averages")
+	}
 
 	// Spin up the thread that occasionally synchronizes the database.
 	go m.threadedRegularSync()
 
 	// Spawn a thread to calculate the host network averages.
-	//go m.threadedCalculateAverages() TODO
+	go m.threadedCalculateAverages()
 
 	// Spawn the threads to fetch the exchange rates.
 	go m.threadedFetchExchangeRates()
