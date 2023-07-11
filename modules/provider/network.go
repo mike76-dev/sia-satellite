@@ -7,53 +7,14 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/fastrand"
-
+	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/curve25519"
 
-	core "go.sia.tech/core/types"
-	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
+
+	"lukechampine.com/frand"
 )
-
-// defaultConnectionDeadline is the default read and write deadline which is set
-// on a connection. This ensures it times out if I/O exceeds this deadline.
-const defaultConnectionDeadline = 5 * time.Minute
-
-// rpcRatelimit prevents someone from spamming the provider connections,
-// causing it to spin up enough goroutines to crash.
-const rpcRatelimit = time.Millisecond * 50
-
-// requestContractsSpecifier is used when a renter requests the list of their
-// active contracts.
-var requestContractsSpecifier = types.NewSpecifier("RequestContracts")
-
-// formContractsSpecifier is used when a renter requests to form a number of
-// contracts on their behalf.
-var formContractsSpecifier = types.NewSpecifier("FormContracts")
-
-// renewContractsSpecifier is used when a renter requests to renew a set of
-// contracts.
-var renewContractsSpecifier = types.NewSpecifier("RenewContracts")
-
-// updateRevisionSpecifier is used when a renter submits a new revision.
-var updateRevisionSpecifier = types.NewSpecifier("UpdateRevision")
-
-// formContractSpecifier is used to form a single contract using the new
-// Renter-Satellite protocol.
-var formContractSpecifier = types.NewSpecifier("FormContract")
-
-// renewContractSpecifier is used to renew a contract using the new
-// Renter-Satellite protocol.
-var renewContractSpecifier = types.NewSpecifier("RenewContract")
-
-// getSettingsSpecifier is used to request the renter's opt-in settings.
-var getSettingsSpecifier = types.NewSpecifier("GetSettings")
-
-// updateSettingsSpecifier is used to update the renter's opt-in settings.
-var updateSettingsSpecifier = types.NewSpecifier("UpdateSettings")
 
 // threadedUpdateHostname periodically runs 'managedLearnHostname', which
 // checks if the Satellite's hostname has changed.
@@ -64,7 +25,7 @@ func (p *Provider) threadedUpdateHostname(closeChan chan struct{}) {
 		// Wait 30 minutes to check again. We want the Satellite to be always
 		// accessible by the renters.
 		select {
-		case <-p.threads.StopChan():
+		case <-p.tg.StopChan():
 			return
 		case <-time.After(time.Minute * 30):
 			continue
@@ -81,13 +42,13 @@ func (p *Provider) managedLearnHostname() {
 	p.mu.RUnlock()
 
 	// Use the gateway to get the external ip.
-	hostname, err := p.g.DiscoverAddress(p.threads.StopChan())
+	hostname, err := p.g.DiscoverAddress(p.tg.StopChan())
 	if err != nil {
 		p.log.Println("WARN: failed to discover external IP")
 		return
 	}
 
-	autoAddress := smodules.NetAddress(net.JoinHostPort(hostname.String(), satPort))
+	autoAddress := modules.NetAddress(net.JoinHostPort(hostname.String(), satPort))
 	if err := autoAddress.IsValid(); err != nil {
 		p.log.Printf("WARN: discovered hostname %q is invalid: %v", autoAddress, err)
 		return
@@ -99,10 +60,10 @@ func (p *Provider) managedLearnHostname() {
 
 	p.mu.Lock()
 	p.autoAddress = autoAddress
-	err = p.saveSync()
+	err = p.save()
 	p.mu.Unlock()
 	if err != nil {
-		p.log.Println(err)
+		p.log.Println("ERROR: couldn't save provider:", err)
 	}
 
 	// TODO inform the renters that the Satellite address has changed.
@@ -116,9 +77,10 @@ func (p *Provider) initNetworking(address string) (err error) {
 	if err != nil {
 		return err
 	}
+
 	// Automatically close the listener when p.threads.Stop() is called.
 	threadedListenerClosedChan := make(chan struct{})
-	p.threads.OnStop(func() {
+	p.tg.OnStop(func() {
 		err := p.listener.Close()
 		if err != nil {
 			p.log.Println("WARN: closing the listener failed:", err)
@@ -141,22 +103,22 @@ func (p *Provider) initNetworking(address string) (err error) {
 		// Add this function to the threadgroup, so that the logger will not
 		// disappear before port closing can be registered to the threadgroup
 		// OnStop functions.
-		err := p.threads.Add()
+		err := p.tg.Add()
 		if err != nil {
 			// If this goroutine is not run before shutdown starts, this
 			// codeblock is reachable.
 			return
 		}
-		defer p.threads.Done()
+		defer p.tg.Done()
 
 		err = p.g.ForwardPort(port)
 		if err != nil {
-			p.log.Println("ERROR: failed to forward port:", err)
+			p.log.Println(err)
 		}
 
 		threadedUpdateHostnameClosedChan := make(chan struct{})
 		go p.threadedUpdateHostname(threadedUpdateHostnameClosedChan)
-		p.threads.OnStop(func() {
+		p.tg.OnStop(func() {
 			<-threadedUpdateHostnameClosedChan
 		})
 	}()
@@ -184,7 +146,7 @@ func (p *Provider) threadedListen(closeChan chan struct{}) {
 
 		// Soft-sleep to ratelimit the number of incoming connections.
 		select {
-		case <-p.threads.StopChan():
+		case <-p.tg.StopChan():
 		case <-time.After(rpcRatelimit):
 		}
 	}
@@ -193,11 +155,11 @@ func (p *Provider) threadedListen(closeChan chan struct{}) {
 // threadedHandleConn handles an incoming connection to the provider,
 // typically an RPC.
 func (p *Provider) threadedHandleConn(conn net.Conn) {
-	err := p.threads.Add()
+	err := p.tg.Add()
 	if err != nil {
 		return
 	}
-	defer p.threads.Done()
+	defer p.tg.Done()
 
 	// Close the conn on provider.Close or when the method terminates, whichever
 	// comes first.
@@ -205,7 +167,7 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	defer close(connCloseChan)
 	go func() {
 		select {
-		case <-p.threads.StopChan():
+		case <-p.tg.StopChan():
 		case <-connCloseChan:
 		}
 		conn.Close()
@@ -219,8 +181,8 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		return
 	}
 
-	e := core.NewEncoder(conn)
-	d := core.NewDecoder(io.LimitedReader{R: conn, N: 1024})
+	e := types.NewEncoder(conn)
+	d := types.NewDecoder(io.LimitedReader{R: conn, N: 1024})
 
 	// Read renter's half of key exchange.
 	var req loopKeyExchangeRequest
@@ -248,9 +210,16 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	}
 
 	// Generate a session key, sign it, and derive the shared secret.
-	xsk, xpk := crypto.GenerateX25519KeyPair()
-	pubkeySig := crypto.SignHash(crypto.HashAll(req.PublicKey, xpk), p.satellite.SecretKey())
-	cipherKey := crypto.DeriveSharedSecret(xsk, req.PublicKey)
+	var xsk, xpk [32]byte
+	frand.Read(xsk[:])
+	curve25519.ScalarBaseMult(&xpk, &xsk)
+	h := types.NewHasher()
+	h.E.Write(req.PublicKey[:])
+	h.E.Write(xpk[:])
+	pubkeySig := p.secretKey.SignHash(h.Sum())
+	var dst [32]byte
+	curve25519.ScalarMult(&dst, &xsk, &req.PublicKey)
+	cipherKey := blake2b.Sum256(dst[:])
 
 	// Send our half of the key exchange.
 	resp := loopKeyExchangeResponse{
@@ -276,19 +245,20 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		Conn: conn,
 		Aead: aead,
 	}
-	fastrand.Read(s.Challenge[:])
+	frand.Read(s.Challenge[:])
 
 	// Send encrypted challenge.
-	challengeReq := smodules.LoopChallengeRequest{
+	challengeReq := loopChallengeRequest{
 		Challenge: s.Challenge,
 	}
-	if err := smodules.WriteRPCMessage(conn, aead, challengeReq); err != nil {
+	if err := s.WriteResponse(&challengeReq); err != nil {
 		p.log.Println("ERROR: could not send challenge:", err)
 		return
 	}
 
 	// Read the request specifier.
-	id, err := smodules.ReadRPCID(conn, aead)
+	var id types.Specifier
+	err = s.ReadResponse(&id, modules.MinMessageSize)
 	if err != nil {
 		p.log.Println("ERROR: could not read request specifier:", err)
 		return
@@ -296,45 +266,45 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 
 	switch id {
 	case requestContractsSpecifier:
-		err = p.managedRequestContracts(s)
+		/*err = p.managedRequestContracts(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCRequestContracts failed: "), err)
-		}
+		}*/
 	case formContractsSpecifier:
-		err = p.managedFormContracts(s)
+		/*err = p.managedFormContracts(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCFormContracts failed: "), err)
-		}
+		}*/
 	case renewContractsSpecifier:
-		err = p.managedRenewContracts(s)
+		/*err = p.managedRenewContracts(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCRenewContracts failed: "), err)
-		}
+		}*/
 	case updateRevisionSpecifier:
-		err = p.managedUpdateRevision(s)
+		/*err = p.managedUpdateRevision(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCUpdateRevision failed: "), err)
-		}
+		}*/
 	case formContractSpecifier:
-		err = p.managedFormContract(s)
+		/*err = p.managedFormContract(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCFormContract failed: "), err)
-		}
+		}*/
 	case renewContractSpecifier:
-		err = p.managedRenewContract(s)
+		/*err = p.managedRenewContract(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCRenewContract failed: "), err)
-		}
+		}*/
 	case getSettingsSpecifier:
-		err = p.managedGetSettings(s)
+		/*err = p.managedGetSettings(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCGetSettings failed: "), err)
-		}
+		}*/
 	case updateSettingsSpecifier:
-		err = p.managedUpdateSettings(s)
+		/*err = p.managedUpdateSettings(s)
 		if err != nil {
 			err = errors.Extend(errors.New("incoming RPCUpdateSettings failed: "), err)
-		}
+		}*/
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
 	}

@@ -91,12 +91,13 @@ type (
 	// API encapsulates a collection of modules and implements a http.Handler
 	// to access their methods.
 	API struct {
-		cs      modules.ConsensusSet
-		gateway modules.Gateway
+		cs       modules.ConsensusSet
+		gateway  modules.Gateway
 		//portal            modules.Portal
-		manager modules.Manager
-		tpool   modules.TransactionPool
-		wallet  modules.Wallet
+		manager  modules.Manager
+		provider modules.Provider
+		tpool    modules.TransactionPool
+		wallet   modules.Wallet
 
 		router   http.Handler
 		routerMu sync.RWMutex
@@ -116,16 +117,17 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetModules allows for replacing the modules in the API at runtime.
-func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet, tp modules.TransactionPool, w modules.Wallet, m modules.Manager) {
+func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet, m modules.Manager, p modules.Provider, tp modules.TransactionPool, w modules.Wallet) {
 	if api.modulesSet {
 		log.Fatal("can't call SetModules more than once")
 	}
-	api.cs      = cs
-	api.gateway = g
+	api.cs         = cs
+	api.gateway    = g
 	//api.portal = p
-	api.manager = m
-	api.tpool   = tp
-	api.wallet  = w
+	api.manager    = m
+	api.provider   = p
+	api.tpool      = tp
+	api.wallet     = w
 	api.modulesSet = true
 	api.buildHTTPRoutes()
 }
@@ -133,14 +135,15 @@ func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet, tp module
 // New creates a new API. The API will require authentication using HTTP basic
 // auth for certain endpoints if the supplied password is not the empty string.
 // Usernames are ignored for authentication.
-func New(requiredUserAgent string, requiredPassword string, g modules.Gateway, cs modules.ConsensusSet, tp modules.TransactionPool, w modules.Wallet, m modules.Manager) *API {
+func New(requiredUserAgent string, requiredPassword string, g modules.Gateway, cs modules.ConsensusSet, m modules.Manager, p modules.Provider, tp modules.TransactionPool, w modules.Wallet) *API {
 	api := &API{
-		cs:      cs,
-		gateway: g,
+		cs:       cs,
+		gateway:  g,
 		//portal:            p,
-		manager: m,
-		tpool:   tp,
-		wallet:  w,
+		manager:  m,
+		provider: p,
+		tpool:    tp,
+		wallet:   w,
 
 		requiredUserAgent: requiredUserAgent,
 		requiredPassword:  requiredPassword,

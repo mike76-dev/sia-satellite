@@ -267,6 +267,18 @@ CREATE TABLE wt_watch (
 	PRIMARY KEY (addr ASC)
 );
 
+/* provider */
+
+DROP TABLE IF EXISTS pr_info;
+
+CREATE TABLE pr_info (
+	id         INT NOT NULL AUTO_INCREMENT,
+	public_key BINARY(32) NOT NULL,
+	secret_key BINARY(64) NOT NULL,
+	address    VARCHAR(64) NOT NULL,
+	PRIMARY KEY (id)
+);
+
 /* manager */
 
 DROP TABLE IF EXISTS mg_timestamp;

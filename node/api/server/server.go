@@ -151,7 +151,7 @@ func NewAsync(config *persist.SatdConfig, apiPassword string, dbPassword string,
 		}
 
 		// Create the api for the server.
-		api := api.New(config.UserAgent, apiPassword, nil, nil, nil, nil, nil)
+		api := api.New(config.UserAgent, apiPassword, nil, nil, nil, nil, nil, nil)
 		srv := &Server{
 			api: api,
 			apiServer: &http.Server{
@@ -207,7 +207,7 @@ func NewAsync(config *persist.SatdConfig, apiPassword string, dbPassword string,
 
 		// Server wasn't shut down. Replace modules.
 		srv.node = n
-		api.SetModules(n.Gateway, n.ConsensusSet, n.TransactionPool, n.Wallet, n.Manager)
+		api.SetModules(n.Gateway, n.ConsensusSet, n.Manager, n.Provider, n.TransactionPool, n.Wallet)
 		return srv, nil
 	}()
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules/consensus"
 	"github.com/mike76-dev/sia-satellite/modules/gateway"
 	"github.com/mike76-dev/sia-satellite/modules/manager"
+	"github.com/mike76-dev/sia-satellite/modules/provider"
 	"github.com/mike76-dev/sia-satellite/modules/transactionpool"
 	"github.com/mike76-dev/sia-satellite/modules/wallet"
 	"github.com/mike76-dev/sia-satellite/persist"
@@ -28,6 +29,7 @@ type Node struct {
 	Gateway         modules.Gateway
 	Manager         modules.Manager
 	//Portal          modules.Portal
+	Provider        modules.Provider
 	TransactionPool modules.TransactionPool
 	Wallet          modules.Wallet
 
@@ -43,6 +45,10 @@ func (n *Node) Close() (err error) {
 		fmt.Println("Closing portal...")
 		err = modules.ComposeErrors(err, n.Portal.Close())
 	}*/
+	if n.Provider != nil {
+		fmt.Println("Closing provider...")
+		err = modules.ComposeErrors(err, n.Provider.Close())
+	}
 	if n.Manager != nil {
 		fmt.Println("Closing manager...")
 		err = modules.ComposeErrors(err, n.Manager.Close())
@@ -142,13 +148,21 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 		return nil, errChan
 	}
 
+	// Load provider.
+	fmt.Println("Loading provider...")
+	p, errChanP := provider.New(db, g, m, config.SatelliteAddr, d)
+	if err := modules.PeekErr(errChanP); err != nil {
+		errChan <- modules.AddContext(err, "unable to create provider")
+		return nil, errChan
+	}
+
 	// Load portal.
 	/*fmt.Println("Loading portal...")
 	portalDir := filepath.Join(d, "portal")
 	if err := os.MkdirAll(portalDir, 0700); err != nil {
 		return nil, errChan
 	}
-	p, err := portal.New(config, s, db, portalDir)
+	pt, err := portal.New(config, s, db, portalDir)
 	if err != nil {
 		errChan <- modules.AddContext(err, "unable to create portal")
 		return nil, errChan
@@ -166,7 +180,8 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 		ConsensusSet:    cs,
 		Gateway:         g,
 		Manager:         m,
-		//Portal:          p,
+		//Portal:          pt,
+		Provider:        p,
 		TransactionPool: tp,
 		Wallet:          w,
 

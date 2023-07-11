@@ -13,10 +13,10 @@ import (
 	"lukechampine.com/frand"
 )
 
-// minMessageSize is the minimum size of an RPC message. If an encoded message
+// MinMessageSize is the minimum size of an RPC message. If an encoded message
 // would be smaller than minMessageSize, the sender MAY pad it with random data.
 // This hinders traffic analysis by obscuring the true sizes of messages.
-const minMessageSize = 4096
+const MinMessageSize = 4096
 
 // RequestBody is the common interface type for the renter requests.
 type RequestBody interface {
@@ -33,8 +33,8 @@ type RPCSession struct {
 
 // readMessage reads an encrypted message from the renter.
 func (s *RPCSession) readMessage(message RequestBody, maxLen uint64) error {
-	if maxLen < minMessageSize {
-		maxLen = minMessageSize
+	if maxLen < MinMessageSize {
+		maxLen = MinMessageSize
 	}
 	d := types.NewDecoder(io.LimitedReader{R: s.Conn, N: int64(8 + maxLen)})
 	msgSize := d.ReadUint64()
@@ -68,7 +68,7 @@ func (s *RPCSession) writeMessage(message RequestBody) error {
 	frand.Read(nonce)
 
 	var buf bytes.Buffer
-	buf.Grow(minMessageSize)
+	buf.Grow(MinMessageSize)
 	e := types.NewEncoder(&buf)
 	e.WritePrefix(0) // Placeholder.
 	e.Write(nonce)
@@ -77,8 +77,8 @@ func (s *RPCSession) writeMessage(message RequestBody) error {
 
 	// Overwrite message length.
 	msgSize := buf.Len() + s.Aead.Overhead()
-	if msgSize < minMessageSize {
-		msgSize = minMessageSize
+	if msgSize < MinMessageSize {
+		msgSize = MinMessageSize
 	}
 	buf.Grow(s.Aead.Overhead())
 	msg := buf.Bytes()[:msgSize]
@@ -140,7 +140,7 @@ type RPCResponse struct {
 	data RequestBody
 }
 
-// EncodeTo implements types.ProtocolObject.
+// EncodeTo implements types.EncoderTo.
 func (resp *RPCResponse) EncodeTo(e *types.Encoder) {
 	e.WriteBool(resp.err != nil)
 	if resp.err != nil {
@@ -152,7 +152,7 @@ func (resp *RPCResponse) EncodeTo(e *types.Encoder) {
 	}
 }
 
-// DecodeFrom implements types.ProtocolObject.
+// DecodeFrom implements types.DecoderFrom.
 func (resp *RPCResponse) DecodeFrom(d *types.Decoder) {
 	if d.ReadBool() {
 		resp.err = new(RPCError)
@@ -174,14 +174,14 @@ func (e *RPCError) Error() string {
 	return e.Description
 }
 
-// EncodeTo implements types.ProtocolObject.
+// EncodeTo implements types.EncoderTo.
 func (re *RPCError) EncodeTo(e *types.Encoder) {
 	e.Write(re.Type[:])
 	e.WriteBytes(re.Data)
 	e.WriteString(re.Description)
 }
 
-// DecodeFrom implements types.ProtocolObject.
+// DecodeFrom implements types.DecoderFrom.
 func (re *RPCError) DecodeFrom(d *types.Decoder) {
 	re.Type.DecodeFrom(d)
 	re.Data = d.ReadBytes()

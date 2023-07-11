@@ -1,6 +1,6 @@
 package provider
 
-import "go.sia.tech/siad/modules"
+import "github.com/mike76-dev/sia-satellite/modules"
 
 // Alerts implements the modules.Alerter interface for the provider.
 func (p *Provider) Alerts() (crit, err, warn, info []modules.Alert) {
