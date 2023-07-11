@@ -1,6 +1,6 @@
 package contractor
 
-import "go.sia.tech/siad/modules"
+import "github.com/mike76-dev/sia-satellite/modules"
 
 // Alerts implements the modules.Alerter interface for the contractor. It returns
 // all alerts of the contractor.

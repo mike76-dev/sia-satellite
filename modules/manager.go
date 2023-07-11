@@ -338,6 +338,18 @@ func (x MaintenanceSpending) Sum() types.Currency {
 	return x.AccountBalanceCost.Add(x.FundAccountCost).Add(x.UpdatePriceTableCost)
 }
 
+// SpendingDetails is a helper struct that contains a breakdown of where exactly
+// the money was spent. The MaintenanceSpending field is an aggregate of costs
+// spent on RHP3 maintenance, this includes updating the price table, syncing
+// the account balance, etc.
+type SpendingDetails struct {
+	DownloadSpending    types.Currency
+	FundAccountSpending types.Currency
+	MaintenanceSpending MaintenanceSpending
+	StorageSpending     types.Currency
+	UploadSpending      types.Currency
+}
+
 // ContractUtility contains metrics internal to the contractor that reflect the
 // utility of a given contract.
 type ContractUtility struct {
@@ -470,4 +482,133 @@ var DefaultAllowance = Allowance{
 // contractor.
 func (a Allowance) Active() bool {
 	return a.Period != 0
+}
+
+// EncodeTo implements types.EncoderTo.
+func (a *Allowance) EncodeTo(e *types.Encoder) {
+	a.Funds.EncodeTo(e)
+	e.WriteUint64(a.Hosts)
+	e.WriteUint64(a.Period)
+	e.WriteUint64(a.RenewWindow)
+	e.WriteUint64(a.ExpectedStorage)
+	e.WriteUint64(a.ExpectedUpload)
+	e.WriteUint64(a.ExpectedDownload)
+	e.WriteUint64(a.MinShards)
+	e.WriteUint64(a.TotalShards)
+	a.MaxRPCPrice.EncodeTo(e)
+	a.MaxContractPrice.EncodeTo(e)
+	a.MaxDownloadBandwidthPrice.EncodeTo(e)
+	a.MaxSectorAccessPrice.EncodeTo(e)
+	a.MaxStoragePrice.EncodeTo(e)
+	a.MaxUploadBandwidthPrice.EncodeTo(e)
+	a.MinMaxCollateral.EncodeTo(e)
+	e.WriteUint64(a.BlockHeightLeeway)
+}
+
+// DecodeFrom implements types.DecoderFrom.
+func (a *Allowance) DecodeFrom(d *types.Decoder) {
+	a.Funds.DecodeFrom(d)
+	a.Hosts = d.ReadUint64()
+	a.Period = d.ReadUint64()
+	a.RenewWindow = d.ReadUint64()
+	a.ExpectedStorage = d.ReadUint64()
+	a.ExpectedUpload = d.ReadUint64()
+	a.ExpectedDownload = d.ReadUint64()
+	a.MinShards = d.ReadUint64()
+	a.TotalShards = d.ReadUint64()
+	a.MaxRPCPrice.DecodeFrom(d)
+	a.MaxContractPrice.DecodeFrom(d)
+	a.MaxDownloadBandwidthPrice.DecodeFrom(d)
+	a.MaxSectorAccessPrice.DecodeFrom(d)
+	a.MaxStoragePrice.DecodeFrom(d)
+	a.MaxUploadBandwidthPrice.DecodeFrom(d)
+	a.MinMaxCollateral.DecodeFrom(d)
+	a.BlockHeightLeeway = d.ReadUint64()
+}
+
+// ContractWatchStatus provides information about the status of a contract in
+// the manager's watchdog.
+type ContractWatchStatus struct {
+	Archived                  bool
+	FormationSweepHeight      uint64
+	ContractFound             bool
+	LatestRevisionFound       uint64
+	StorageProofFoundAtHeight uint64
+	DoubleSpendHeight         uint64
+	WindowStart               uint64
+	WindowEnd                 uint64
+}
+
+// RenterSpending contains the metrics about how much the renter has
+// spent during the current billing period.
+type RenterSpending struct {
+	// ContractFees are the sum of all fees in the contract. This means it
+	// includes the ContractFee, TxnFee and SiafundFee
+	ContractFees types.Currency
+	// DownloadSpending is the money currently spent on downloads.
+	DownloadSpending types.Currency
+	// FundAccountSpending is the money used to fund an ephemeral account on the
+	// host.
+	FundAccountSpending types.Currency
+	// MaintenanceSpending is the money spent on maintenance tasks in support of
+	// the RHP3 protocol, this includes updating the price table as well as
+	// syncing the ephemeral account balance.
+	MaintenanceSpending MaintenanceSpending
+	// StorageSpending is the money currently spent on storage.
+	StorageSpending types.Currency
+	// ContractSpending is the total amount of money that the renter has put
+	// into contracts, whether it's locked and the renter gets that money
+	// back or whether it's spent and the renter won't get the money back.
+	TotalAllocated types.Currency
+	// UploadSpending is the money currently spent on uploads.
+	UploadSpending types.Currency
+	// Unspent is locked-away, unspent money.
+	Unspent types.Currency
+	// WithheldFunds are the funds from the previous period that are tied up
+	// in contracts and have not been released yet
+	WithheldFunds types.Currency
+	// ReleaseBlock is the block at which the WithheldFunds should be
+	// released to the renter, based on worst case.
+	// Contract End Height + Host Window Size + Maturity Delay
+	ReleaseBlock uint64
+	// PreviousSpending is the total spend funds from old contracts
+	// that are not included in the current period spending
+	PreviousSpending types.Currency
+}
+
+// SpendingBreakdown provides a breakdown of a few fields in the
+// RenterSpending.
+func (rs RenterSpending) SpendingBreakdown() (totalSpent, unspentAllocated, unspentUnallocated types.Currency) {
+	totalSpent = rs.ContractFees.Add(rs.UploadSpending).
+		Add(rs.DownloadSpending).Add(rs.StorageSpending)
+	// Calculate unspent allocated.
+	if rs.TotalAllocated.Cmp(totalSpent) >= 0 {
+		unspentAllocated = rs.TotalAllocated.Sub(totalSpent)
+	}
+	// Calculate unspent unallocated.
+	if rs.Unspent.Cmp(unspentAllocated) >= 0 {
+		unspentUnallocated = rs.Unspent.Sub(unspentAllocated)
+	}
+	return totalSpent, unspentAllocated, unspentUnallocated
+}
+
+// RenterSettings keep the opt-in settings of the renter.
+type RenterSettings struct {
+	AutoRenewContracts bool `json:"autorenew"`
+}
+
+// Renter holds the data related to the specific renter.
+type Renter struct {
+	Allowance     Allowance
+	CurrentPeriod uint64
+	PublicKey     types.PublicKey
+	Email         string // Link to the user account.
+	Settings      RenterSettings
+	PrivateKey    types.PrivateKey
+}
+
+// contractEndHeight returns the height at which the renter's contracts
+// end.
+func (r *Renter) ContractEndHeight() uint64 {
+	return r.CurrentPeriod + r.Allowance.Period + r.Allowance.RenewWindow
 }

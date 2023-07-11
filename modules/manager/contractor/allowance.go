@@ -6,7 +6,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 var (
@@ -50,7 +50,7 @@ var (
 //
 // NOTE: At this time, transaction fees are not counted towards the allowance.
 // This means the contractor may spend more than allowance.Funds.
-func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) error {
+func (c *Contractor) SetAllowance(rpk types.PublicKey, a modules.Allowance) error {
 	if reflect.DeepEqual(a, modules.Allowance{}) {
 		return c.managedCancelAllowance(rpk)
 	}
@@ -78,7 +78,7 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 
 	// Check if we know this renter.
 	c.mu.RLock()
-	renter, exists := c.renters[rpk.String()]
+	renter, exists := c.renters[rpk]
 	c.mu.RUnlock()
 	if !exists {
 		return ErrRenterNotFound
@@ -87,7 +87,7 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 	if reflect.DeepEqual(a, renter.Allowance) {
 		return nil
 	}
-	c.log.Printf("INFO: setting allowance for %v to %v\n", rpk.String(), a)
+	c.log.Printf("INFO: setting allowance for %v\n", rpk)
 
 	// Set the current period if the existing allowance is empty.
 	//
@@ -117,11 +117,11 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 		unlockContracts = true
 	}
 	renter.Allowance = a
-	c.renters[rpk.String()] = renter
+	c.renters[rpk] = renter
 	c.mu.Unlock()
 	err := c.UpdateRenter(renter)
 	if err != nil {
-		c.log.Println("Unable to update renter after setting allowance:", err)
+		c.log.Println("ERROR: unable to update renter after setting allowance:", err)
 	}
 
 	// Cycle through all contracts and unlock them again since they might have
@@ -135,7 +135,7 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 			}
 			utility := contract.Utility()
 			utility.Locked = false
-			err := c.callUpdateUtility(contract, utility, false)
+			err := c.managedUpdateContractUtility(contract, utility)
 			c.staticContracts.Return(contract)
 			if err != nil {
 				return err
@@ -156,16 +156,16 @@ func (c *Contractor) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) e
 }
 
 // managedCancelAllowance handles the special case where the allowance is empty.
-func (c *Contractor) managedCancelAllowance(rpk types.SiaPublicKey) error {
+func (c *Contractor) managedCancelAllowance(rpk types.PublicKey) error {
 	// Check if we know this renter.
 	c.mu.RLock()
-	renter, exists := c.renters[rpk.String()]
+	renter, exists := c.renters[rpk]
 	c.mu.RUnlock()
 	if !exists {
 		return ErrRenterNotFound
 	}
 
-	c.log.Println("INFO: canceling allowance of", rpk.String())
+	c.log.Printf("INFO: canceling allowance of %v\n", rpk)
 
 	// First need to mark all active contracts.
 	ids := c.staticContracts.IDs(rpk)
@@ -187,14 +187,14 @@ func (c *Contractor) managedCancelAllowance(rpk types.SiaPublicKey) error {
 	c.mu.Lock()
 	renter.Allowance = modules.Allowance{}
 	renter.CurrentPeriod = 0
-	c.renters[rpk.String()] = renter
+	c.renters[rpk] = renter
 	c.mu.Unlock()
 	err := c.UpdateRenter(renter)
 	if err != nil {
 		return err
 	}
 
-	// Cycle through all contracts and mark them as !goodForRenew and !goodForUpload
+	// Cycle through all contracts and mark them as !goodForRenew and !goodForUpload.
 	ids = c.staticContracts.IDs(rpk)
 	for _, id := range ids {
 		contract, exists := c.staticContracts.Acquire(id)
@@ -205,7 +205,7 @@ func (c *Contractor) managedCancelAllowance(rpk types.SiaPublicKey) error {
 		utility.GoodForRenew = false
 		utility.GoodForUpload = false
 		utility.Locked = true
-		err := c.callUpdateUtility(contract, utility, false)
+		err := c.managedUpdateContractUtility(contract, utility)
 		c.staticContracts.Return(contract)
 		if err != nil {
 			return err

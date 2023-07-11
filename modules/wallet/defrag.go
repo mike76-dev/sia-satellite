@@ -90,7 +90,7 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 
 	// Sign all of the inputs to the parent transaction.
 	for _, sci := range parentTxn.SiacoinInputs {
-		addSignatures(&parentTxn, FullCoveredFields(), sci.UnlockConditions, types.Hash256(sci.ParentID), w.keys[sci.UnlockConditions.UnlockHash()], consensusHeight)
+		addSignatures(&parentTxn, modules.FullCoveredFields(), sci.UnlockConditions, types.Hash256(sci.ParentID), w.keys[sci.UnlockConditions.UnlockHash()], consensusHeight)
 	}
 
 	// Create the defrag transaction.
@@ -119,7 +119,7 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 		}},
 		MinerFees: []types.Currency{fee},
 	}
-	addSignatures(&txn, FullCoveredFields(), parentUnlockConditions, types.Hash256(parentTxn.SiacoinOutputID(0)), w.keys[parentUnlockConditions.UnlockHash()], consensusHeight)
+	addSignatures(&txn, modules.FullCoveredFields(), parentUnlockConditions, types.Hash256(parentTxn.SiacoinOutputID(0)), w.keys[parentUnlockConditions.UnlockHash()], consensusHeight)
 
 	// Mark all outputs that were spent as spent.
 	for _, scoid := range spentScoids {

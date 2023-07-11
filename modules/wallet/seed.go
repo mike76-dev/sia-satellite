@@ -593,11 +593,11 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 		// Add signatures for all coins and funds.
 		for _, output := range txnSiacoinOutputs {
 			sk := generateSpendableKey(seed, output.seedIndex)
-			addSignatures(&txn, FullCoveredFields(), sk.UnlockConditions, types.Hash256(output.id), sk, height)
+			addSignatures(&txn, modules.FullCoveredFields(), sk.UnlockConditions, types.Hash256(output.id), sk, height)
 		}
 		for _, sfo := range txnSiafundOutputs {
 			sk := generateSpendableKey(seed, sfo.seedIndex)
-			addSignatures(&txn, FullCoveredFields(), sk.UnlockConditions, types.Hash256(sfo.id), sk, height)
+			addSignatures(&txn, modules.FullCoveredFields(), sk.UnlockConditions, types.Hash256(sfo.id), sk, height)
 		}
 		// Usually, all the inputs will come from swept outputs. However, there is
 		// an edge case in which inputs will be added from the wallet. To cover
@@ -606,7 +606,7 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 		w.mu.RLock()
 		for _, input := range txn.SiacoinInputs {
 			if key, ok := w.keys[input.UnlockConditions.UnlockHash()]; ok {
-				addSignatures(&txn, FullCoveredFields(), input.UnlockConditions, types.Hash256(input.ParentID), key, height)
+				addSignatures(&txn, modules.FullCoveredFields(), input.UnlockConditions, types.Hash256(input.ParentID), key, height)
 			}
 		}
 		w.mu.RUnlock()

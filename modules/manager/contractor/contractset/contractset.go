@@ -1,13 +1,13 @@
-package proto
+package contractset
 
 import (
 	"database/sql"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/persist"
 
 	"go.sia.tech/core/types"
-	"go.sia.tech/siad/persist"
 )
 
 // A ContractSet provides access to a set of contracts. Its purpose is to
@@ -33,6 +33,7 @@ func (cs *ContractSet) Acquire(id types.FileContractID) (*FileContract, bool) {
 		return nil, false
 	}
 	fileContract.revisionMu.Lock()
+
 	// We need to check if the contract is still in the map or if it has been
 	// deleted in the meantime.
 	cs.mu.Lock()
@@ -53,7 +54,7 @@ func (cs *ContractSet) Delete(c *FileContract) {
 	_, ok := cs.contracts[c.header.ID()]
 	if !ok {
 		cs.mu.Unlock()
-		cs.log.Println("CRITICAL: Delete called on already deleted contract")
+		cs.log.Println("CRITICAL: delete called on already deleted contract")
 		return
 	}
 	id := c.header.ID()
@@ -99,7 +100,7 @@ func (cs *ContractSet) Return(c *FileContract) {
 	_, ok := cs.contracts[c.header.ID()]
 	if !ok {
 		cs.mu.Unlock()
-		cs.log.Println("CRITICAL: No contract with that key")
+		cs.log.Println("CRITICAL: no contract with that key")
 	}
 	cs.mu.Unlock()
 	c.revisionMu.Unlock()
@@ -124,8 +125,8 @@ func (cs *ContractSet) ViewAll() []modules.RenterContract {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	contracts := make([]modules.RenterContract, 0, len(cs.contracts))
-	for _, fileContract := range cs.contracts {
-		contracts = append(contracts, fileContract.Metadata())
+	for _, fc := range cs.contracts {
+		contracts = append(contracts, fc.Metadata())
 	}
 	return contracts
 }

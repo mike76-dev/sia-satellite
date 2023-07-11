@@ -1,17 +1,32 @@
-package proto
+package contractset
 
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	"gitlab.com/NebulousLabs/encoding"
-
 	"go.sia.tech/core/types"
-	smodules "go.sia.tech/siad/modules"
 )
+
+// A revisionNumberMismatchError occurs if the host reports a different revision
+// number than expected.
+type revisionNumberMismatchError struct {
+	ours, theirs uint64
+}
+
+func (e *revisionNumberMismatchError) Error() string {
+	return fmt.Sprintf("our revision number (%v) does not match the host's (%v); the host may be acting maliciously", e.ours, e.theirs)
+}
+
+// IsRevisionMismatch returns true if err was caused by the host reporting a
+// different revision number than expected.
+func IsRevisionMismatch(err error) bool {
+	_, ok := err.(*revisionNumberMismatchError)
+	return ok
+}
 
 // contractHeader holds all the information about a contract apart from the
 // sector roots themselves.
@@ -50,7 +65,7 @@ func (h *contractHeader) validate() error {
 
 // copyTransaction creates a deep copy of the txn struct.
 func (h *contractHeader) copyTransaction() (txn types.Transaction) {
-	encoding.Unmarshal(encoding.Marshal(h.Transaction), &txn)
+	txn = modules.CopyTransaction(h.Transaction)
 	return
 }
 
@@ -66,24 +81,28 @@ func (h *contractHeader) ID() types.FileContractID {
 
 // RenterPublicKey returns the renter's public key from the last contract
 // revision.
-func (h *contractHeader) RenterPublicKey() types.PublicKey {
-	return h.LastRevision().UnlockConditions.PublicKeys[0].Key
+func (h *contractHeader) RenterPublicKey() (rpk types.PublicKey) {
+	copy(rpk[:], h.LastRevision().UnlockConditions.PublicKeys[0].Key)
+	return
 }
 
 // HostPublicKey returns the host's public key from the last contract revision.
-func (h *contractHeader) HostPublicKey() types.PublicKey {
-	return h.LastRevision().UnlockConditions.PublicKeys[1].Key
+func (h *contractHeader) HostPublicKey() (hpk types.PublicKey) {
+	copy(hpk[:], h.LastRevision().UnlockConditions.PublicKeys[1].Key)
+	return
 }
 
 // RenterFunds returns the remaining renter funds as per the last contract
 // revision.
 func (h *contractHeader) RenterFunds() types.Currency {
-	return h.LastRevision().ValidRenterPayout()
+	rev := h.LastRevision()
+	return rev.ValidRenterPayout()
 }
 
 // EndHeight returns the block height of the last constract revision.
 func (h *contractHeader) EndHeight() uint64 {
-	return h.LastRevision().EndHeight()
+	rev := h.LastRevision()
+	return rev.EndHeight()
 }
 
 // A FileContract contains the most recent revision transaction negotiated
@@ -97,6 +116,50 @@ type FileContract struct {
 	// revisionMu, it is still necessary to lock mu when modifying fields
 	// of the FileContract.
 	revisionMu sync.Mutex
+}
+
+// EncodeTo implements types.EncoderTo.
+func (c *FileContract) EncodeTo(e *types.Encoder) {
+	c.header.Transaction.EncodeTo(e)
+	e.WriteUint64(c.header.StartHeight)
+	c.header.DownloadSpending.EncodeTo(e)
+	c.header.FundAccountSpending.EncodeTo(e)
+	c.header.MaintenanceSpending.AccountBalanceCost.EncodeTo(e)
+	c.header.MaintenanceSpending.FundAccountCost.EncodeTo(e)
+	c.header.MaintenanceSpending.UpdatePriceTableCost.EncodeTo(e)
+	c.header.StorageSpending.EncodeTo(e)
+	c.header.UploadSpending.EncodeTo(e)
+	c.header.TotalCost.EncodeTo(e)
+	c.header.ContractFee.EncodeTo(e)
+	c.header.TxnFee.EncodeTo(e)
+	c.header.SiafundFee.EncodeTo(e)
+	e.WriteBool(c.header.Utility.GoodForUpload)
+	e.WriteBool(c.header.Utility.GoodForRenew)
+	e.WriteBool(c.header.Utility.BadContract)
+	e.WriteUint64(c.header.Utility.LastOOSErr)
+	e.WriteBool(c.header.Utility.Locked)
+}
+
+// DecodeFrom implements types.DecoderFrom.
+func (c *FileContract) DecodeFrom(d *types.Decoder) {
+	c.header.Transaction.DecodeFrom(d)
+	c.header.StartHeight = d.ReadUint64()
+	c.header.DownloadSpending.DecodeFrom(d)
+	c.header.FundAccountSpending.DecodeFrom(d)
+	c.header.MaintenanceSpending.AccountBalanceCost.DecodeFrom(d)
+	c.header.MaintenanceSpending.FundAccountCost.DecodeFrom(d)
+	c.header.MaintenanceSpending.UpdatePriceTableCost.DecodeFrom(d)
+	c.header.StorageSpending.DecodeFrom(d)
+	c.header.UploadSpending.DecodeFrom(d)
+	c.header.TotalCost.DecodeFrom(d)
+	c.header.ContractFee.DecodeFrom(d)
+	c.header.TxnFee.DecodeFrom(d)
+	c.header.SiafundFee.DecodeFrom(d)
+	c.header.Utility.GoodForUpload = d.ReadBool()
+	c.header.Utility.GoodForRenew = d.ReadBool()
+	c.header.Utility.BadContract = d.ReadBool()
+	c.header.Utility.LastOOSErr = d.ReadUint64()
+	c.header.Utility.Locked = d.ReadBool()
 }
 
 // CommitPaymentIntent will commit the intent to pay a host for an rpc by
@@ -159,7 +222,7 @@ func (c *FileContract) RecordPaymentIntent(rev types.FileContractRevision, amoun
 
 	newHeader := c.header
 	newHeader.Transaction.FileContractRevisions = []types.FileContractRevision{rev}
-	newHeader.Transaction.TransactionSignatures = nil
+	newHeader.Transaction.Signatures = nil
 	newHeader.FundAccountSpending = newHeader.FundAccountSpending.Add(details.FundAccountSpending)
 	newHeader.MaintenanceSpending = newHeader.MaintenanceSpending.Add(details.MaintenanceSpending)
 
@@ -254,9 +317,9 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 
 	// Our current revision should always be signed. If it isn't, we have no
 	// choice but to accept the host's revision.
-	if len(c.header.Transaction.TransactionSignatures) == 0 {
+	if len(c.header.Transaction.Signatures) == 0 {
 		c.header.Transaction.FileContractRevisions = []types.FileContractRevision{rev}
-		c.header.Transaction.TransactionSignatures = sigs
+		c.header.Transaction.Signatures = sigs
 		return nil
 	}
 
@@ -269,7 +332,7 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 		// the revision reported by the host. So, to ensure things are
 		// consistent, we blindly overwrite our revision with the host's.
 		c.header.Transaction.FileContractRevisions[0] = rev
-		c.header.Transaction.TransactionSignatures = sigs
+		c.header.Transaction.Signatures = sigs
 		return nil
 	}
 
@@ -288,7 +351,7 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 	// claiming. Worst case, certain contract metadata (e.g. UploadSpending)
 	// will be incorrect.
 	c.header.Transaction.FileContractRevisions[0] = rev
-	c.header.Transaction.TransactionSignatures = sigs
+	c.header.Transaction.Signatures = sigs
 
 	return c.saveContract(types.PublicKey{})
 }
@@ -324,7 +387,7 @@ func (cs *ContractSet) managedInsertContract(h contractHeader, rpk types.PublicK
 	// Check if this contract already exists in the set.
 	cs.mu.Lock()
 	if _, exists := cs.contracts[fc.header.ID()]; exists {
-		cs.log.Println("CRITICAL: Trying to overwrite existing contract")
+		cs.log.Println("CRITICAL: trying to overwrite existing contract")
 	}
 
 	cs.contracts[fc.header.ID()] = fc
@@ -339,7 +402,7 @@ func (cs *ContractSet) InsertContract(revisionTxn types.Transaction, startHeight
 	header := contractHeader{
 		Transaction: revisionTxn,
 		StartHeight: startHeight,
-		TotalCost:   funding,
+		TotalCost:   totalCost,
 		ContractFee: contractFee,
 		TxnFee:      txnFee,
 		SiafundFee:  siafundFee,

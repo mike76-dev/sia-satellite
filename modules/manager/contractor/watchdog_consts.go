@@ -1,9 +1,7 @@
 package contractor
 
 import (
-	"go.sia.tech/siad/types"
-
-	"gitlab.com/NebulousLabs/errors"
+	"errors"
 )
 
 const (
@@ -16,7 +14,7 @@ const (
 var (
 	// waitTime is the number of blocks the watchdog will wait to see a
 	// pendingContract onchain before double-spending it.
-	waitTime = types.BlockHeight(288)
+	waitTime = uint64(288)
 )
 
 var (

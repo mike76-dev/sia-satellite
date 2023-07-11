@@ -1,8 +1,9 @@
 package contractor
 
 import (
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"github.com/mike76-dev/sia-satellite/modules"
+
+	"go.sia.tech/core/types"
 )
 
 // managedArchiveContracts will figure out which contracts are no longer needed
@@ -18,7 +19,7 @@ func (c *Contractor) managedArchiveContracts() {
 	var expired []types.FileContractID
 	for _, contract := range c.staticContracts.ViewAll() {
 		// Check map of renewedTo in case renew code was interrupted before
-		// archiving old contract
+		// archiving old contract.
 		c.mu.RLock()
 		_, renewed := c.renewedTo[contract.ID]
 		c.mu.RUnlock()
@@ -30,16 +31,11 @@ func (c *Contractor) managedArchiveContracts() {
 		}
 	}
 
-	// Save.
-	c.mu.Lock()
-	c.save()
-	c.mu.Unlock()
-
 	// Delete all the expired contracts from the contract set.
 	for _, id := range expired {
 		if fc, ok := c.staticContracts.Acquire(id); ok {
 			c.staticContracts.Delete(fc)
-			c.UnlockBalance(fc.Metadata().ID)
+			//c.UnlockBalance(fc.Metadata().ID) TODO
 		}
 	}
 }
@@ -51,7 +47,7 @@ func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
 
 	c.blockHeight = cc.InitialHeight()
 	for _, block := range cc.AppliedBlocks {
-		if block.ID() != types.GenesisID {
+		if block.ID() != modules.GenesisID {
 			c.blockHeight++
 		}
 	}
@@ -66,7 +62,7 @@ func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
 			c.renters[key] = renter
 			err := c.UpdateRenter(renter)
 			if err != nil {
-				c.log.Println("Unable to update renter:", err)
+				c.log.Println("ERROR: unable to update renter:", err)
 			}
 		}
 	}
@@ -85,6 +81,7 @@ func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
 	} else if synced && !cc.Synced {
 		c.synced = make(chan struct{})
 	}
+
 	// Let the watchdog take any necessary actions and update its state. We do
 	// this before persisting the contractor so that the watchdog is up-to-date on
 	// reboot. Otherwise it is possible that e.g. that the watchdog thinks a
@@ -95,9 +92,9 @@ func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
 	}
 
 	c.lastChange = cc.ID
-	err := c.save()
+	err := c.updateState()
 	if err != nil {
-		c.log.Println("Unable to save while processing a consensus change:", err)
+		c.log.Println("ERROR: unable to save while processing a consensus change:", err)
 	}
 	c.mu.Unlock()
 

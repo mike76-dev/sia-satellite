@@ -217,7 +217,7 @@ func (w *Wallet) FundTransaction(txn *types.Transaction, amount types.Currency) 
 
 	// Sign all of the inputs to the transaction.
 	for _, sci := range parentTxn.SiacoinInputs {
-		addSignatures(&parentTxn, FullCoveredFields(), sci.UnlockConditions, types.Hash256(sci.ParentID), w.keys[sci.UnlockConditions.UnlockHash()], consensusHeight)
+		addSignatures(&parentTxn, modules.FullCoveredFields(), sci.UnlockConditions, types.Hash256(sci.ParentID), w.keys[sci.UnlockConditions.UnlockHash()], consensusHeight)
 	}
 
 	// Mark the parent output as spent. Must be done after the transaction is
@@ -276,4 +276,24 @@ func (w *Wallet) ReleaseInputs(txn types.Transaction) {
 			dbDeleteSpentOutput(w.dbTx, types.Hash256(sci.ParentID))
 		}
 	}
+}
+
+// MarkWalletInputs scans a transaction and infers which inputs belong to this
+// wallet. This allows those inputs to be signed.
+func (w *Wallet) MarkWalletInputs(txn types.Transaction) (toSign []types.Hash256) {
+	for _, sci := range txn.SiacoinInputs {
+		unlockHash := sci.UnlockConditions.UnlockHash()
+		if w.managedCanSpendUnlockHash(unlockHash) {
+			toSign = append(toSign, types.Hash256(sci.ParentID))
+		}
+	}
+
+	for _, sfi := range txn.SiafundInputs {
+		unlockHash := sfi.UnlockConditions.UnlockHash()
+		if w.managedCanSpendUnlockHash(unlockHash) {
+			toSign = append(toSign, types.Hash256(sfi.ParentID))
+		}
+	}
+
+	return
 }

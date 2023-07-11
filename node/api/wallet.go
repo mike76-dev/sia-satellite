@@ -10,7 +10,6 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/modules"
-	"github.com/mike76-dev/sia-satellite/modules/wallet"
 
 	"go.sia.tech/core/types"
 
@@ -809,7 +808,7 @@ func walletSignHandler(wt modules.Wallet, w http.ResponseWriter, req *http.Reque
 		WriteError(w, Error{"invalid parameters: " + err.Error()}, http.StatusBadRequest)
 		return
 	}
-	err = wt.SignTransaction(&params.Transaction, params.ToSign, wallet.FullCoveredFields())
+	err = wt.SignTransaction(&params.Transaction, params.ToSign, modules.FullCoveredFields())
 	if err != nil {
 		WriteError(w, Error{"failed to sign transaction: " + err.Error()}, http.StatusBadRequest)
 		return

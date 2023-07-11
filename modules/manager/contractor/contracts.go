@@ -1,20 +1,19 @@
 package contractor
 
 import (
-	"github.com/mike76-dev/sia-satellite/satellite/manager/proto"
+	"errors"
+
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/modules/manager/contractor/contractset"
 
-	"gitlab.com/NebulousLabs/errors"
-
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 // managedCancelContract cancels a contract by setting its utility fields to
 // false and locking the utilities. The contract can still be used for
 // downloads after this but it won't be used for uploads or renewals.
-func (c *Contractor) managedCancelContract(cid types.FileContractID) error {
-	return c.managedAcquireAndUpdateContractUtility(cid, smodules.ContractUtility{
+func (c *Contractor) managedCancelContract(id types.FileContractID) error {
+	return c.managedAcquireAndUpdateContractUtility(id, modules.ContractUtility{
 		GoodForRenew:  false,
 		GoodForUpload: false,
 		Locked:        true,
@@ -22,10 +21,10 @@ func (c *Contractor) managedCancelContract(cid types.FileContractID) error {
 }
 
 // managedContractUtility returns the ContractUtility for a contract with a given id.
-func (c *Contractor) managedContractUtility(id types.FileContractID) (smodules.ContractUtility, bool) {
+func (c *Contractor) managedContractUtility(id types.FileContractID) (modules.ContractUtility, bool) {
 	rc, exists := c.staticContracts.View(id)
 	if !exists {
-		return smodules.ContractUtility{}, false
+		return modules.ContractUtility{}, false
 	}
 	return rc.Utility, true
 }
@@ -64,7 +63,7 @@ func (c *Contractor) updatePubKeysToContractIDMap(contracts []modules.RenterCont
 	// the pubKeysToContractID map.
 	for pk, fcid := range uniqueGFU {
 		if c.pubKeysToContractID[pk] != fcid {
-			c.log.Critical("Contractor is not correctly mapping from pubkey to contract id, missing GFU contracts")
+			c.log.Critical("contractor is not correctly mapping from pubkey to contract id, missing GFU contracts")
 		}
 	}
 }
@@ -84,12 +83,12 @@ func (c *Contractor) tryAddContractToPubKeysMap(newContract modules.RenterContra
 	}
 	pk := newContract.RenterPublicKey.String() + newContract.HostPublicKey.String()
 
-	// If there is not existing contract in the map for this pubkey, add it.
+	// If there is no existing contract in the map for this pubkey, add it.
 	_, exists = c.pubKeysToContractID[pk]
 	if exists {
 		// Sanity check - the contractor should not have multiple contract tips for the
 		// same contract.
-		c.log.Critical("Contractor has multiple contracts that don't form a renewedTo line for the same host and the same renter")
+		c.log.Critical("contractor has multiple contracts that don't form a renewedTo line for the same host and the same renter")
 	}
 	c.pubKeysToContractID[pk] = newContract.ID
 }
@@ -112,22 +111,22 @@ func (c *Contractor) Contracts() []modules.RenterContract {
 }
 
 // ContractsByRenter returns the contracts belonging to a specific renter.
-func (c *Contractor) ContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+func (c *Contractor) ContractsByRenter(rpk types.PublicKey) []modules.RenterContract {
 	return c.staticContracts.ByRenter(rpk)
 }
 
 // OldContractsByRenter returns the old contracts of a specific renter.
-func (c *Contractor) OldContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
+func (c *Contractor) OldContractsByRenter(rpk types.PublicKey) []modules.RenterContract {
 	return c.staticContracts.OldByRenter(rpk)
 }
 
 // ContractUtility returns the utility fields for the given contract.
-func (c *Contractor) ContractUtility(rpk, hpk types.SiaPublicKey) (smodules.ContractUtility, bool) {
+func (c *Contractor) ContractUtility(rpk, hpk types.PublicKey) (modules.ContractUtility, bool) {
 	c.mu.RLock()
 	id, ok := c.pubKeysToContractID[rpk.String() + hpk.String()]
 	c.mu.RUnlock()
 	if !ok {
-		return smodules.ContractUtility{}, false
+		return modules.ContractUtility{}, false
 	}
 	return c.managedContractUtility(id)
 }
@@ -154,11 +153,11 @@ func (c *Contractor) OldContracts() []modules.RenterContract {
 }
 
 // managedMarkContractBad marks an already acquired SafeContract as bad.
-func (c *Contractor) managedMarkContractBad(fc *proto.FileContract) error {
+func (c *Contractor) managedMarkContractBad(fc *contractset.FileContract) error {
 	u := fc.Utility()
 	u.GoodForUpload = false
 	u.GoodForRenew = false
 	u.BadContract = true
-	err := c.callUpdateUtility(fc, u, false)
-	return errors.AddContext(err, "unable to mark contract as bad")
+	err := c.managedUpdateContractUtility(fc, u)
+	return modules.AddContext(err, "unable to mark contract as bad")
 }

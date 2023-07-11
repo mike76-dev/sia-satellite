@@ -11,27 +11,6 @@ import (
 	"lukechampine.com/frand"
 )
 
-// RenterSettings keep the opt-in settings of the renter.
-type RenterSettings struct {
-	AutoRenewContracts bool `json:"autorenew"`
-}
-
-// Renter holds the data related to the specific renter.
-type Renter struct {
-	Allowance     Allowance        `json:"allowance"`
-	CurrentPeriod uint64           `json:"currentperiod"`
-	PublicKey     types.PublicKey  `json:"publickey"`
-	Email         string           `json:"email"` // Link to the user account.
-	Settings      RenterSettings   `json:"settings"`
-	PrivateKey    types.PrivateKey `json:"privatekey"`
-}
-
-// contractEndHeight returns the height at which the renter's contracts
-// end.
-func (r *Renter) ContractEndHeight() uint64 {
-	return r.CurrentPeriod + r.Allowance.Period + r.Allowance.RenewWindow
-}
-
 // DeriveRenterSeed derives a seed to be used by the renter for accessing the
 // file contracts.
 // NOTE: The seed returned by this function should be wiped once it's no longer
@@ -73,16 +52,4 @@ type ContractParams struct {
 	Collateral     types.Currency
 	PublicKey      types.PublicKey
 	SecretKey      types.PrivateKey
-}
-
-// SpendingDetails is a helper struct that contains a breakdown of where exactly
-// the money was spent. The MaintenanceSpending field is an aggregate of costs
-// spent on RHP3 maintenance, this includes updating the price table, syncing
-// the account balance, etc.
-type SpendingDetails struct {
-	DownloadSpending    types.Currency
-	FundAccountSpending types.Currency
-	MaintenanceSpending MaintenanceSpending
-	StorageSpending     types.Currency
-	UploadSpending      types.Currency
 }

@@ -125,6 +125,10 @@ type (
 		// FundTransaction unless ReleaseInputs is called.
 		FundTransaction(txn *types.Transaction, amount types.Currency) (types.Transaction, error)
 
+		// MarkWalletInputs scans a transaction and infers which inputs belong
+		// to this wallet. This allows those inputs to be signed.
+		MarkWalletInputs(txn types.Transaction) ([]types.Hash256)
+
 		// ReleaseInputs is a helper function that releases the inputs of txn
 		// for use in other transactions. It should only be called on
 		// transactions that are invalid or will never be broadcast.

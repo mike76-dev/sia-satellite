@@ -1,13 +1,14 @@
 package contractor
 
 import (
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"github.com/mike76-dev/sia-satellite/modules"
+
+	"go.sia.tech/core/types"
 )
 
 // IsOffline indicates whether a contract's host should be considered offline,
 // based on its scan metrics.
-func (c *Contractor) IsOffline(pk types.SiaPublicKey) bool {
+func (c *Contractor) IsOffline(pk types.PublicKey) bool {
 	host, ok, err := c.hdb.Host(pk)
 	if !ok || err != nil {
 		// No host or error, assume offline.

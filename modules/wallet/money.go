@@ -180,7 +180,7 @@ func (w *Wallet) managedSendSiacoins(amount, fee types.Currency, dest types.Addr
 		return nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
-	cf := FullCoveredFields()
+	cf := modules.FullCoveredFields()
 	err = w.SignTransaction(&txn, nil, cf)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to sign transaction:", err)
@@ -255,7 +255,7 @@ func (w *Wallet) SendSiacoinsMulti(outputs []types.SiacoinOutput) (txns []types.
 		return nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
-	cf := FullCoveredFields()
+	cf := modules.FullCoveredFields()
 	err = w.SignTransaction(&txn, nil, cf)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to sign transaction:", err)

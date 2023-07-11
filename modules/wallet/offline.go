@@ -152,47 +152,6 @@ func (w *Wallet) AddUnlockConditions(uc types.UnlockConditions) error {
 	return dbPutUnlockConditions(w.dbTx, uc)
 }
 
-// ExplicitCoveredFields returns a CoveredFields that covers all elements
-// present in txn.
-func ExplicitCoveredFields(txn types.Transaction) (cf types.CoveredFields) {
-	for i := range txn.SiacoinInputs {
-		cf.SiacoinInputs = append(cf.SiacoinInputs, uint64(i))
-	}
-	for i := range txn.SiacoinOutputs {
-		cf.SiacoinOutputs = append(cf.SiacoinOutputs, uint64(i))
-	}
-	for i := range txn.FileContracts {
-		cf.FileContracts = append(cf.FileContracts, uint64(i))
-	}
-	for i := range txn.FileContractRevisions {
-		cf.FileContractRevisions = append(cf.FileContractRevisions, uint64(i))
-	}
-	for i := range txn.StorageProofs {
-		cf.StorageProofs = append(cf.StorageProofs, uint64(i))
-	}
-	for i := range txn.SiafundInputs {
-		cf.SiafundInputs = append(cf.SiafundInputs, uint64(i))
-	}
-	for i := range txn.SiafundOutputs {
-		cf.SiafundOutputs = append(cf.SiafundOutputs, uint64(i))
-	}
-	for i := range txn.MinerFees {
-		cf.MinerFees = append(cf.MinerFees, uint64(i))
-	}
-	for i := range txn.ArbitraryData {
-		cf.ArbitraryData = append(cf.ArbitraryData, uint64(i))
-	}
-	for i := range txn.Signatures {
-		cf.Signatures = append(cf.Signatures, uint64(i))
-	}
-	return
-}
-
-// FullCoveredFields returns a CoveredFields that covers the whole transaction.
-func FullCoveredFields() types.CoveredFields {
-	return types.CoveredFields{WholeTransaction: true,}
-}
-
 // SignTransaction signs txn using secret keys known to the wallet. The
 // transaction should be complete with the exception of the Signature fields
 // of each TransactionSignature referenced by toSign. For convenience, if
@@ -268,11 +227,11 @@ func SignTransaction(txn *types.Transaction, seed modules.Seed, toSign []types.H
 			keys[sk.UnlockConditions.UnlockHash()] = sk
 		}
 		keyIndex += keysPerBatch
-		if err := signTransaction(txn, keys, toSign, FullCoveredFields(), height); err == nil {
+		if err := signTransaction(txn, keys, toSign, modules.FullCoveredFields(), height); err == nil {
 			return nil
 		}
 	}
-	return signTransaction(txn, keys, toSign, FullCoveredFields(), height)
+	return signTransaction(txn, keys, toSign, modules.FullCoveredFields(), height)
 }
 
 // signTransaction signs the specified inputs of txn using the specified keys.

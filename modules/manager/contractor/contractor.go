@@ -2,25 +2,22 @@ package contractor
 
 import (
 	"database/sql"
-	"os"
+	"errors"
+	"fmt"
 	"path/filepath"
-	"strings"
+	//"strings"
 	"sync"
 
+	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
-	"github.com/mike76-dev/sia-satellite/satellite/manager/proto"
+	"github.com/mike76-dev/sia-satellite/modules/manager/contractor/contractset"
+	"github.com/mike76-dev/sia-satellite/persist"
 
-	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/threadgroup"
-
-	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/persist"
-	siasync "go.sia.tech/siad/sync"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 var (
+	errNilDB     = errors.New("cannot create contractor with nil database")
 	errNilCS     = errors.New("cannot create contractor with nil consensus set")
 	errNilHDB    = errors.New("cannot create contractor with nil HostDB")
 	errNilTpool  = errors.New("cannot create contractor with nil transaction pool")
@@ -34,29 +31,27 @@ var (
 // contracts.
 type Contractor struct {
 	// Dependencies.
-	cs            smodules.ConsensusSet
+	cs            modules.ConsensusSet
 	db            *sql.DB
 	hdb           modules.HostDB
-	satellite     modules.FundLocker
 	log           *persist.Logger
 	mu            sync.RWMutex
-	persistDir    string
-	staticAlerter *smodules.GenericAlerter
-	tg            threadgroup.ThreadGroup
-	tpool         smodules.TransactionPool
-	wallet        smodules.Wallet
+	staticAlerter *modules.GenericAlerter
+	tg            siasync.ThreadGroup
+	tpool         modules.TransactionPool
+	wallet        modules.Wallet
 
 	// Only one thread should be performing contract maintenance at a time.
 	interruptMaintenance chan struct{}
 	maintenanceLock      siasync.TryMutex
 
-	blockHeight   types.BlockHeight
+	blockHeight   uint64
 	synced        chan struct{}
-	lastChange    smodules.ConsensusChangeID
+	lastChange    modules.ConsensusChangeID
 
-	renters       map[string]modules.Renter
+	renters       map[types.PublicKey]modules.Renter
 
-	numFailedRenews map[types.FileContractID]types.BlockHeight
+	numFailedRenews map[types.FileContractID]uint64
 	renewing        map[types.FileContractID]bool // Prevent revising during renewal.
 
 	// pubKeysToContractID is a map of renter and host pubkeys to the latest contract ID
@@ -68,8 +63,8 @@ type Contractor struct {
 	// renewedTo links the old contract's ID to the new contract's ID
 	// doubleSpentContracts keep track of all contracts that were double spent by
 	// either the renter or host.
-	staticContracts      *proto.ContractSet
-	doubleSpentContracts map[types.FileContractID]types.BlockHeight
+	staticContracts      *contractset.ContractSet
+	doubleSpentContracts map[types.FileContractID]uint64
 	renewedFrom          map[types.FileContractID]types.FileContractID
 	renewedTo            map[types.FileContractID]types.FileContractID
 
@@ -77,10 +72,10 @@ type Contractor struct {
 }
 
 // Allowance returns the current allowance of the renter specified.
-func (c *Contractor) Allowance(rpk types.SiaPublicKey) modules.Allowance {
+func (c *Contractor) Allowance(rpk types.PublicKey) modules.Allowance {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	renter, exists := c.renters[rpk.String()]
+	renter, exists := c.renters[rpk]
 	if !exists {
 		return modules.Allowance{}
 	}
@@ -89,21 +84,20 @@ func (c *Contractor) Allowance(rpk types.SiaPublicKey) modules.Allowance {
 
 // PeriodSpending returns the amount spent by the renter on contracts during
 // the current billing period.
-func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.ContractorSpending, error) {
+func (c *Contractor) PeriodSpending(rpk types.PublicKey) (modules.RenterSpending, error) {
 	// Check if we know this renter.
-	key := rpk.String()
 	c.mu.RLock()
-	renter, exists := c.renters[key]
+	renter, exists := c.renters[rpk]
 	c.mu.RUnlock()
 	if !exists {
-		return smodules.ContractorSpending{}, ErrRenterNotFound
+		return modules.RenterSpending{}, ErrRenterNotFound
 	}
 
 	allContracts := c.staticContracts.ByRenter(rpk)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var spending smodules.ContractorSpending
+	var spending modules.RenterSpending
 	for _, contract := range allContracts {
 		// Don't count double-spent contracts.
 		if _, doubleSpent := c.doubleSpentContracts[contract.ID]; doubleSpent {
@@ -116,7 +110,6 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 		spending.ContractFees = spending.ContractFees.Add(contract.SiafundFee)
 		// Calculate TotalAllocated.
 		spending.TotalAllocated = spending.TotalAllocated.Add(contract.TotalCost)
-		spending.ContractSpendingDeprecated = spending.TotalAllocated
 		// Calculate Spending.
 		spending.DownloadSpending = spending.DownloadSpending.Add(contract.DownloadSpending)
 		spending.FundAccountSpending = spending.FundAccountSpending.Add(contract.FundAccountSpending)
@@ -133,7 +126,7 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 			c.log.Println("ERROR: contract has no known renter associated with it:", contract.ID)
 			continue
 		}
-		if r.PublicKey.String() != rpk.String() {
+		if r.PublicKey != rpk {
 			continue
 		}
 		// Don't count double-spent contracts.
@@ -156,12 +149,12 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 			spending.MaintenanceSpending = spending.MaintenanceSpending.Add(contract.MaintenanceSpending)
 			spending.UploadSpending = spending.UploadSpending.Add(contract.UploadSpending)
 			spending.StorageSpending = spending.StorageSpending.Add(contract.StorageSpending)
-		} else if err != nil && exist && contract.EndHeight + host.WindowSize + types.MaturityDelay > c.blockHeight {
+		} else if err != nil && exist && contract.EndHeight + host.WindowSize + modules.MaturityDelay > c.blockHeight {
 			// Calculate funds that are being withheld in contracts.
 			spending.WithheldFunds = spending.WithheldFunds.Add(contract.RenterFunds)
 			// Record the largest window size for worst case when reporting the spending.
-			if contract.EndHeight + host.WindowSize + types.MaturityDelay >= spending.ReleaseBlock {
-				spending.ReleaseBlock = contract.EndHeight + host.WindowSize + types.MaturityDelay
+			if contract.EndHeight + host.WindowSize + modules.MaturityDelay >= spending.ReleaseBlock {
+				spending.ReleaseBlock = contract.EndHeight + host.WindowSize + modules.MaturityDelay
 			}
 			// Calculate Previous spending.
 			spending.PreviousSpending = spending.PreviousSpending.Add(contract.ContractFee).Add(contract.TxnFee).Add(contract.SiafundFee).Add(contract.DownloadSpending).Add(contract.UploadSpending).Add(contract.StorageSpending).Add(contract.FundAccountSpending).Add(contract.MaintenanceSpending.Sum())
@@ -187,12 +180,12 @@ func (c *Contractor) PeriodSpending(rpk types.SiaPublicKey) (smodules.Contractor
 
 // CurrentPeriod returns the height at which the current allowance period
 // of the renter began.
-func (c *Contractor) CurrentPeriod(rpk types.SiaPublicKey) types.BlockHeight {
+func (c *Contractor) CurrentPeriod(rpk types.PublicKey) uint64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	renter, exists := c.renters[rpk.String()]
+	renter, exists := c.renters[rpk]
 	if !exists {
-		return types.BlockHeight(0)
+		return 0
 	}
 	return renter.CurrentPeriod
 }
@@ -220,7 +213,7 @@ func (c *Contractor) RefreshedContract(fcid types.FileContractID) bool {
 	// Grab the contract to check its end height.
 	contract, ok := c.staticContracts.OldContract(fcid)
 	if !ok {
-		c.log.Println("Contract not found in oldContracts, despite there being a renewal to the contract")
+		c.log.Println("ERROR: contract not found in oldContracts, despite there being a renewal to the contract")
 		return false
 	}
 
@@ -229,7 +222,7 @@ func (c *Contractor) RefreshedContract(fcid types.FileContractID) bool {
 	if !ok {
 		newContract, ok = c.staticContracts.OldContract(newFCID)
 		if !ok {
-			c.log.Println("Contract was not found in the database, despite their being another contract that claims to have renewed to it.")
+			c.log.Println("ERROR: contract was not found in the database, despite their being another contract that claims to have renewed to it.")
 			return false
 		}
 	}
@@ -252,10 +245,14 @@ func (c *Contractor) Close() error {
 }
 
 // New returns a new Contractor.
-func New(cs smodules.ConsensusSet, wallet smodules.Wallet, tpool smodules.TransactionPool, hdb modules.HostDB, db *sql.DB, persistDir string) (*Contractor, <-chan error) {
+func New(db *sql.DB, cs modules.ConsensusSet, tpool modules.TransactionPool, wallet modules.Wallet, hdb modules.HostDB, dir string) (*Contractor, <-chan error) {
 	errChan := make(chan error, 1)
 	defer close(errChan)
 	// Check for nil inputs.
+	if db == nil {
+		errChan <- errNilDB
+		return nil, errChan
+	}
 	if cs == nil {
 		errChan <- errNilCS
 		return nil, errChan
@@ -273,27 +270,21 @@ func New(cs smodules.ConsensusSet, wallet smodules.Wallet, tpool smodules.Transa
 		return nil, errChan
 	}
 
-	// Create the persist directory if it does not yet exist.
-	if err := os.MkdirAll(persistDir, 0700); err != nil {
-		errChan <- err
-		return nil, errChan
-	}
-
 	// Create the logger.
-	logger, err := persist.NewFileLogger(filepath.Join(persistDir, "contractor.log"))
+	logger, err := persist.NewFileLogger(filepath.Join(dir, "contractor.log"))
 	if err != nil {
 		errChan <- err
 		return nil, errChan
 	}
 	// Create the contract set.
-	contractSet, err := proto.NewContractSet(db, logger, cs.Height())
+	contractSet, err := contractset.NewContractSet(db, logger, cs.Height())
 	if err != nil {
 		errChan <- err
 		return nil, errChan
 	}
 
 	// Handle blocking startup.
-	c, err := contractorBlockingStartup(cs, wallet, tpool, hdb, persistDir, contractSet, db, logger)
+	c, err := contractorBlockingStartup(db, cs, tpool, wallet, hdb, contractSet, logger)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
@@ -317,25 +308,24 @@ func New(cs smodules.ConsensusSet, wallet smodules.Wallet, tpool smodules.Transa
 }
 
 // contractorBlockingStartup handles the blocking portion of New.
-func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp smodules.TransactionPool, hdb modules.HostDB, persistDir string, contractSet *proto.ContractSet, db *sql.DB, l *persist.Logger) (*Contractor, error) {
+func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, tp modules.TransactionPool, w modules.Wallet, hdb modules.HostDB, contractSet *contractset.ContractSet, l *persist.Logger) (*Contractor, error) {
 	// Create the Contractor object.
 	c := &Contractor{
-		staticAlerter: smodules.NewAlerter("contractor"),
-		cs:            cs,
+		staticAlerter: modules.NewAlerter("contractor"),
 		db:            db,
+		cs:            cs,
 		hdb:           hdb,
 		log:           l,
-		persistDir:    persistDir,
 		tpool:         tp,
 		wallet:        w,
 
 		interruptMaintenance: make(chan struct{}),
 		synced:               make(chan struct{}),
 
-		renters:              make(map[string]modules.Renter),
+		renters:              make(map[types.PublicKey]modules.Renter),
 
 		staticContracts:      contractSet,
-		doubleSpentContracts: make(map[types.FileContractID]types.BlockHeight),
+		doubleSpentContracts: make(map[types.FileContractID]uint64),
 		renewing:             make(map[types.FileContractID]bool),
 		renewedFrom:          make(map[types.FileContractID]types.FileContractID),
 		renewedTo:            make(map[types.FileContractID]types.FileContractID),
@@ -343,19 +333,15 @@ func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp s
 	c.staticWatchdog = newWatchdog(c)
 
 	// Close the logger upon shutdown.
-	err := c.tg.AfterStop(func() error {
+	c.tg.AfterStop(func() {
 		if err := c.log.Close(); err != nil {
-			return errors.AddContext(err, "failed to close the contractor logger")
+			fmt.Println("ERROR: failed to close the contractor logger")
 		}
-		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
 
 	// Load the prior persistence structures.
-	err = c.load()
-	if err != nil && !os.IsNotExist(err) {
+	err := c.load()
+	if err != nil {
 		return nil, err
 	}
 
@@ -366,13 +352,9 @@ func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp s
 	c.managedUpdatePubKeysToContractIDMap()
 
 	// Unsubscribe from the consensus set upon shutdown.
-	err = c.tg.OnStop(func() error {
+	c.tg.OnStop(func() {
 		cs.Unsubscribe(c)
-		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
 
 	// We may have resubscribed. Save now so that we don't lose our work.
 	c.mu.Lock()
@@ -386,15 +368,15 @@ func contractorBlockingStartup(cs smodules.ConsensusSet, w smodules.Wallet, tp s
 }
 
 // contractorAsyncStartup handles the async portion of New.
-func contractorAsyncStartup(c *Contractor, cs smodules.ConsensusSet) error {
+func contractorAsyncStartup(c *Contractor, cs modules.ConsensusSet) error {
 	err := cs.ConsensusSetSubscribe(c, c.lastChange, c.tg.StopChan())
-	if errors.Contains(err, smodules.ErrInvalidConsensusChangeID) {
+	if modules.ContainsError(err, modules.ErrInvalidConsensusChangeID) {
 		// Reset the contractor consensus variables and try rescanning.
 		c.blockHeight = 0
-		c.lastChange = smodules.ConsensusChangeBeginning
+		c.lastChange = modules.ConsensusChangeBeginning
 		err = cs.ConsensusSetSubscribe(c, c.lastChange, c.tg.StopChan())
 	}
-	if err != nil && strings.Contains(err.Error(), threadgroup.ErrStopped.Error()) {
+	if modules.ContainsError(err, siasync.ErrStopped) {
 		return nil
 	}
 	if err != nil {
@@ -416,9 +398,9 @@ func (c *Contractor) managedSynced() bool {
 }
 
 // GetRenter returns the renter with the specified public key.
-func (c *Contractor) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
+func (c *Contractor) GetRenter(rpk types.PublicKey) (modules.Renter, error) {
 	c.mu.RLock()
-	renter, exists := c.renters[rpk.String()]
+	renter, exists := c.renters[rpk]
 	c.mu.RUnlock()
 	if !exists {
 		return modules.Renter{}, ErrRenterNotFound
@@ -427,12 +409,12 @@ func (c *Contractor) GetRenter(rpk types.SiaPublicKey) (modules.Renter, error) {
 }
 
 // CreateNewRenter inserts a new renter into the map.
-func (c *Contractor) CreateNewRenter(email string, pk types.SiaPublicKey) {
+func (c *Contractor) CreateNewRenter(email string, rpk types.PublicKey) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.renters[pk.String()] = modules.Renter{
+	c.renters[rpk] = modules.Renter{
 		Email:     email,
-		PublicKey: pk,
+		PublicKey: rpk,
 	}
 }
 
@@ -447,13 +429,8 @@ func (c *Contractor) Renters() []modules.Renter {
 	return renters
 }
 
-// SetSatellite sets the satellite dependency.
-func (c *Contractor) SetSatellite(fl modules.FundLocker) {
-	c.satellite = fl
-}
-
 // UnlockBalance unlocks the renter funds after the contract ends.
-func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
+/*func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 	contract, exists := c.staticContracts.View(fcid)
 	if !exists {
 		contract, exists = c.staticContracts.OldContract(fcid)
@@ -482,7 +459,7 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 	if err != nil {
 		c.log.Println("ERROR: unable to unlock funds:", err)
 	}
-}
+}*/
 
 // UpdateContract updates the contract with the new revision.
 func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
@@ -524,15 +501,15 @@ func (c *Contractor) Contract(fcid types.FileContractID) (modules.RenterContract
 }
 
 // UpdateRenterSettings updates the renter's opt-in settings.
-func (c *Contractor) UpdateRenterSettings(rpk types.SiaPublicKey, settings modules.RenterSettings, sk crypto.SecretKey) error {
+func (c *Contractor) UpdateRenterSettings(rpk types.PublicKey, settings modules.RenterSettings, sk types.PrivateKey) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	renter, exists := c.renters[rpk.String()]
+	renter, exists := c.renters[rpk]
 	if !exists {
 		return ErrRenterNotFound
 	}
 	renter.Settings = settings
-	copy(renter.PrivateKey[:], sk[:])
-	c.renters[rpk.String()] = renter
+	renter.PrivateKey = sk
+	c.renters[rpk] = renter
 	return c.UpdateRenter(renter)
 }
