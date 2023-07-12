@@ -207,7 +207,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Create an allowance.
 	a := modules.DefaultAllowance
-	a.Funds = modules.FromFloat(data.Estimation / scRate)
+	a.Funds = modules.FromFloat(data.Estimation)
 	a.Hosts = data.Hosts
 	a.Period = uint64(data.Duration * float64(modules.BlocksPerWeek))
 	a.ExpectedStorage = uint64(data.Storage * (1 << 30))

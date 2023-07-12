@@ -8,6 +8,20 @@ import (
 	"lukechampine.com/frand"
 )
 
+// SatelliteOverhead determines how much extra a renter is charged for
+// using the service. This should include any payment processing fees.
+const SatelliteOverhead = 1.1
+
+var (
+	// MaxRPCPrice is how much the Satellite is willing to pay
+	// for a single RPC call.
+	MaxRPCPrice = types.HastingsPerSiacoin.Div64(1e6)
+
+	// MaxSectorAccessPrice is how much the Satellite is willing
+	// to pay to download a single sector.
+	MaxSectorAccessPrice = types.HastingsPerSiacoin.Div64(1e5)
+)
+
 // DeriveRenterSeed derives a seed to be used by the renter for accessing the
 // file contracts.
 // NOTE: The seed returned by this function should be wiped once it's no longer

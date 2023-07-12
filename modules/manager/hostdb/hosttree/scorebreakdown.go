@@ -53,7 +53,7 @@ func (h HostAdjustments) Score() types.Currency {
 		h.UptimeAdjustment *
 		h.VersionAdjustment
 
-	score := modules.FromFloat(penalty).Div(types.HastingsPerSiacoin)
+	score := modules.FromFloat(penalty)
 	if score.IsZero() {
 		// A score of zero is problematic for for the host tree.
 		return types.NewCurrency64(1)

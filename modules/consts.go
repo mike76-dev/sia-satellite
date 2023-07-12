@@ -9,10 +9,6 @@ import (
 
 var numGenesisSiacoins types.Currency
 
-// SatelliteOverhead determines how much extra a renter is charged for
-// using the service. This should include any payment processing fees.
-const SatelliteOverhead = 1.1
-
 // BytesPerTerabyte is how many bytes are there in one TiB.
 const BytesPerTerabyte = 1024 * 1024 * 1024 * 1024
 
@@ -69,14 +65,6 @@ const (
 )
 
 var (
-	// MaxRPCPrice is how much the Satellite is willing to pay
-	// for a single RPC call.
-	MaxRPCPrice = types.HastingsPerSiacoin.Div64(1e7)
-
-	// MaxSectorAccessPrice is how much the Satellite is willing
-	// to pay to download a single sector.
-	MaxSectorAccessPrice = types.HastingsPerSiacoin.Div64(1e6)
-
 	// BlockBytesPerMonthTerabyte is the conversion rate between block-bytes and month-TB.
 	BlockBytesPerMonthTerabyte = types.NewCurrency64(BytesPerTerabyte).Mul64(BlocksPerMonth)
 )
