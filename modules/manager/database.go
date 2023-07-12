@@ -92,3 +92,112 @@ func dbPutAverages(tx *sql.Tx, avg modules.HostAverages) error {
 
 	return err
 }
+
+// GetBalance retrieves the balance information on the account.
+// An empty struct is returned when there is no data.
+func (m *Manager) GetBalance(email string) (*modules.UserBalance, error) {
+	var sub bool
+	var b, l float64
+	var c, id string
+	err := m.db.QueryRow(`
+		SELECT subscribed, sc_balance, sc_locked, currency, stripe_id
+		FROM mg_balances WHERE email = ?
+	`, email).Scan(&sub, &b, &l, &c, &id)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	scRate, err := m.GetSiacoinRate(c)
+	if err != nil {
+		return nil, err
+	}
+
+	ub := &modules.UserBalance{
+		IsUser:     !errors.Is(err, sql.ErrNoRows),
+		Subscribed: sub,
+		Balance:    b,
+		Locked:     l,
+		Currency:   c,
+		StripeID:   id,
+		SCRate:     scRate,
+	}
+
+	return ub, nil
+}
+
+// UpdateBalance updates the balance information on the account.
+func (m *Manager) UpdateBalance(email string, ub *modules.UserBalance) error {
+	_, err := m.db.Exec(`
+		REPLACE INTO mg_balances
+		(email, subscribed, sc_balance, sc_locked, currency, stripe_id)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID)
+
+	return err
+}
+
+// getSpendings retrieves the user's spendings.
+func (m *Manager) getSpendings(email string) (*modules.UserSpendings, error) {
+	var currLocked, currUsed, currOverhead float64
+	var prevLocked, prevUsed, prevOverhead float64
+	var currFormed, currRenewed, prevFormed, prevRenewed uint64
+
+	err := m.db.QueryRow(`
+		SELECT current_locked, current_used, current_overhead,
+			prev_locked, prev_used, prev_overhead,
+			current_formed, current_renewed,
+			prev_formed, prev_renewed
+		FROM mg_spendings
+		WHERE email = ?`, email).Scan(&currLocked, &currUsed, &currOverhead, &prevLocked, &prevUsed, &prevOverhead, &currFormed, &currRenewed, &prevFormed, &prevRenewed)
+
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+
+	us := &modules.UserSpendings{
+		CurrentLocked:   currLocked,
+		CurrentUsed:     currUsed,
+		CurrentOverhead: currOverhead,
+		PrevLocked:      prevLocked,
+		PrevUsed:        prevUsed,
+		PrevOverhead:    prevOverhead,
+		CurrentFormed:   currFormed,
+		CurrentRenewed:  currRenewed,
+		PrevFormed:      prevFormed,
+		PrevRenewed:     prevRenewed,
+	}
+
+	return us, nil
+}
+
+// updateSpendings updates the user's spendings.
+func (m *Manager) updateSpendings(email string, us modules.UserSpendings) error {
+	_, err := m.db.Exec(`
+		REPLACE INTO mg_spendings
+		(email, current_locked, current_used, current_overhead,
+		prev_locked, prev_used, prev_overhead,
+		current_formed, current_renewed,
+		prev_formed, prev_renewed)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead, us.CurrentFormed, us.CurrentRenewed, us.PrevFormed, us.PrevRenewed)
+
+	return err
+}
+
+// IncrementStats increments the number of formed or renewed contracts.
+func (m *Manager) IncrementStats(email string, renewed bool) (err error) {
+	if renewed {
+		_, err = m.db.Exec(`
+			UPDATE mg_spendings
+			SET current_renewed = current_renewed + 1
+			WHERE email = ?
+		`, email)
+	} else {
+		_, err = m.db.Exec(`
+			UPDATE mg_spendings
+			SET current_formed = current_formed + 1
+			WHERE email = ?
+		`, email)
+	}
+	return
+}

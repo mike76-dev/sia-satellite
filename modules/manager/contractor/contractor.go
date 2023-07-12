@@ -17,11 +17,12 @@ import (
 )
 
 var (
-	errNilDB     = errors.New("cannot create contractor with nil database")
-	errNilCS     = errors.New("cannot create contractor with nil consensus set")
-	errNilHDB    = errors.New("cannot create contractor with nil HostDB")
-	errNilTpool  = errors.New("cannot create contractor with nil transaction pool")
-	errNilWallet = errors.New("cannot create contractor with nil wallet")
+	errNilDB      = errors.New("cannot create contractor with nil database")
+	errNilCS      = errors.New("cannot create contractor with nil consensus set")
+	errNilHDB     = errors.New("cannot create contractor with nil HostDB")
+	errNilManager = errors.New("cannot create contractor with nil manager")
+	errNilTpool   = errors.New("cannot create contractor with nil transaction pool")
+	errNilWallet  = errors.New("cannot create contractor with nil wallet")
 
 	errHostNotFound     = errors.New("host not found")
 	errContractNotFound = errors.New("contract not found")
@@ -32,6 +33,7 @@ var (
 type Contractor struct {
 	// Dependencies.
 	cs            modules.ConsensusSet
+	m             modules.Manager
 	db            *sql.DB
 	hdb           modules.HostDB
 	log           *persist.Logger
@@ -245,7 +247,7 @@ func (c *Contractor) Close() error {
 }
 
 // New returns a new Contractor.
-func New(db *sql.DB, cs modules.ConsensusSet, tpool modules.TransactionPool, wallet modules.Wallet, hdb modules.HostDB, dir string) (*Contractor, <-chan error) {
+func New(db *sql.DB, cs modules.ConsensusSet, m modules.Manager, tpool modules.TransactionPool, wallet modules.Wallet, hdb modules.HostDB, dir string) (*Contractor, <-chan error) {
 	errChan := make(chan error, 1)
 	defer close(errChan)
 	// Check for nil inputs.
@@ -255,6 +257,10 @@ func New(db *sql.DB, cs modules.ConsensusSet, tpool modules.TransactionPool, wal
 	}
 	if cs == nil {
 		errChan <- errNilCS
+		return nil, errChan
+	}
+	if m == nil {
+		errChan <- errNilManager
 		return nil, errChan
 	}
 	if wallet == nil {
@@ -284,7 +290,7 @@ func New(db *sql.DB, cs modules.ConsensusSet, tpool modules.TransactionPool, wal
 	}
 
 	// Handle blocking startup.
-	c, err := contractorBlockingStartup(db, cs, tpool, wallet, hdb, contractSet, logger)
+	c, err := contractorBlockingStartup(db, cs, m, tpool, wallet, hdb, contractSet, logger)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
@@ -308,7 +314,7 @@ func New(db *sql.DB, cs modules.ConsensusSet, tpool modules.TransactionPool, wal
 }
 
 // contractorBlockingStartup handles the blocking portion of New.
-func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, tp modules.TransactionPool, w modules.Wallet, hdb modules.HostDB, contractSet *contractset.ContractSet, l *persist.Logger) (*Contractor, error) {
+func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Manager, tp modules.TransactionPool, w modules.Wallet, hdb modules.HostDB, contractSet *contractset.ContractSet, l *persist.Logger) (*Contractor, error) {
 	// Create the Contractor object.
 	c := &Contractor{
 		staticAlerter: modules.NewAlerter("contractor"),
@@ -316,6 +322,7 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, tp modules.T
 		cs:            cs,
 		hdb:           hdb,
 		log:           l,
+		m:             m,
 		tpool:         tp,
 		wallet:        w,
 
@@ -430,7 +437,7 @@ func (c *Contractor) Renters() []modules.Renter {
 }
 
 // UnlockBalance unlocks the renter funds after the contract ends.
-/*func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
+func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 	contract, exists := c.staticContracts.View(fcid)
 	if !exists {
 		contract, exists = c.staticContracts.OldContract(fcid)
@@ -449,17 +456,17 @@ func (c *Contractor) Renters() []modules.Renter {
 	}
 
 	revision := contract.Transaction.FileContractRevisions[0]
-	payout, _ := revision.NewValidProofOutputs[0].Value.Float64()
-	cost, _ := contract.TotalCost.Float64()
-	hastings, _ := types.SiacoinPrecision.Float64()
+	payout := modules.Float64(revision.ValidProofOutputs[0].Value)
+	cost := modules.Float64(contract.TotalCost)
+	hastings := modules.Float64(types.HastingsPerSiacoin)
 	amount := payout / hastings
 	total := cost / hastings
 
-	err = c.satellite.UnlockSiacoins(renter.Email, amount, total, contract.StartHeight)
+	err = c.m.UnlockSiacoins(renter.Email, amount, total, contract.StartHeight)
 	if err != nil {
 		c.log.Println("ERROR: unable to unlock funds:", err)
 	}
-}*/
+}
 
 // UpdateContract updates the contract with the new revision.
 func (c *Contractor) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {

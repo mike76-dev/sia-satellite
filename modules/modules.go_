@@ -5,12 +5,6 @@ import (
 	siad "go.sia.tech/siad/modules"
 )
 
-// CreditData contains the information about any running promotion.
-type CreditData struct {
-	Amount    float64 `json:"amount"`
-	Remaining uint64  `json:"remaining"`
-}
-
 // Satellite implements the methods necessary to communicate both with the
 // renters and the hosts.
 type Satellite interface {
@@ -25,9 +19,6 @@ type Satellite interface {
 
 	// Close safely shuts down the satellite.
 	Close() error
-
-	// DeleteRenter deletes the renter data from the memory.
-	DeleteRenter(string)
 
 	// EstimateHostScore will return the score for a host with the provided
 	// settings, assuming perfect age and uptime adjustments.
@@ -50,28 +41,8 @@ type Satellite interface {
 	// hostdb's weighting algorithm.
 	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
 
-	// RandomHosts picks up to the specified number of random hosts from the
-	// hostdb sorted by weight.
-	RandomHosts(uint64, Allowance) ([]HostDBEntry, error)
-
-	// PublicKey returns the satellite's public key.
-	PublicKey() types.PublicKey
-
-	// SecretKey returns the satellite's secret key.
-	SecretKey() types.PrivateKey
-
-	// FeeEstimation returns the minimum and the maximum estimated fees for
-	// a transaction.
-	FeeEstimation() (min, max types.Currency)
-
-	// GetWalletSeed returns the wallet seed.
-	GetWalletSeed() ([]byte, error)
-
 	// GetRenter returns the renter by the public key.
 	GetRenter(types.PublicKey) (Renter, error)
-
-	// Renters retrieves the list of renters.
-	Renters() []Renter
 
 	// GetBalance retrieves the balance information on the account.
 	GetBalance(string) (*UserBalance, error)
@@ -79,59 +50,8 @@ type Satellite interface {
 	// Contracts returns storage contracts.
 	Contracts() []RenterContract
 
-	// ContractsByRenter returns storage contracts filtered by the renter.
-	ContractsByRenter(types.PublicKey) []RenterContract
-
-	// RefreshedContract returns a bool indicating if the contract was refreshed.
-	RefreshedContract(types.FileContractID) bool
-
 	// OldContracts returns the contracts that have expired.
 	OldContracts() []RenterContract
-
-	// OldContractsByRenter returns expired contracts filtered by the renter.
-	OldContractsByRenter(types.PublicKey) []RenterContract
-
-	// RetrieveSpendings retrieves the user's spendings.
-	RetrieveSpendings(string, string) (*UserSpendings, error)
-}
-
-// Provider implements the methods necessary to communicate with the
-// renters.
-type Provider interface {
-	siad.Alerter
-
-	// Close safely shuts down the provider.
-	Close() error
-}
-
-// Portal implements the portal server.
-type Portal interface {
-	siad.Alerter
-
-	// Close safely shuts down the portal.
-	Close() error
-
-	// GetCredits retrieves the credits data.
-	GetCredits() CreditData
-
-	// SetCredits updates the credit data.
-	SetCredits(CreditData)
-}
-
-// FundLocker is the minimal interface needed to lock and unlock funds.
-type FundLocker interface {
-	// LockSiacoins moves a part of the balance to "locked".
-	LockSiacoins(string, float64) error
-
-	// UnlockSiacoins moves a part of the amount from "locked" to "available",
-	// while the other part (fees and other spent funds) is "burned".
-	UnlockSiacoins(string, float64, float64, uint64) error
-
-	// GetBalance retrieves the balance information on the account.
-	GetBalance(string) (*UserBalance, error)
-
-	// IncrementStats increments the number of formed or renewed contracts.
-	IncrementStats(string, bool) error
 }
 
 // ContractFormer is the minimal interface to be used by Provider.
@@ -147,7 +67,6 @@ type ContractFormer interface {
 	OldContractsByRenter(types.PublicKey) []RenterContract
 	WalletSeed() ([]byte, error)
 	RenewedFrom(types.FileContractID) types.FileContractID
-	BlockHeight() uint64
 	FormContract(*RPCSession, types.PublicKey, types.PublicKey, types.PublicKey, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
 	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
 	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error

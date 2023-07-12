@@ -279,8 +279,24 @@ type Manager interface {
 	// AllHosts returns an array of all hosts.
 	AllHosts() ([]HostDBEntry, error)
 
+	// BlockHeight returns the current block height.
+	BlockHeight() uint64
+
 	// Close safely shuts down the manager.
 	Close() error
+
+	// ContractsByRenter returns storage contracts filtered by the renter.
+	ContractsByRenter(types.PublicKey) []RenterContract
+
+	// CreateNewRenter inserts a new renter into the map.
+	CreateNewRenter(string, types.PublicKey)
+
+	// DeleteRenter deletes the renter data from the memory.
+	DeleteRenter(string)
+
+	// FeeEstimation returns the minimum and the maximum estimated fees for
+	// a transaction.
+	FeeEstimation() (min, max types.Currency)
 
 	// Filter returns the HostDB's filterMode and filteredHosts.
 	Filter() (FilterMode, map[string]types.PublicKey, []string, error)
@@ -288,29 +304,64 @@ type Manager interface {
 	// GetAverages retrieves the host network averages.
 	GetAverages() HostAverages
 
+	// GetBalance retrieves the balance information on the account.
+	GetBalance(string) (*UserBalance, error)
+
 	// GetExchangeRate returns the exchange rate of a given currency.
 	GetExchangeRate(string) (float64, error)
 
 	// GetSiacoinRate calculates the SC price in a given currency.
 	GetSiacoinRate(string) (float64, error)
 
+	// GetWalletSeed returns the wallet seed.
+	GetWalletSeed() (Seed, error)
+
 	// Host returns the host associated with the given public key.
 	Host(types.PublicKey) (HostDBEntry, bool, error)
+
+	// IncrementStats increments the number of formed or renewed contracts.
+	IncrementStats(string, bool) error
 
 	// InitialScanComplete returns a boolean indicating if the initial scan of the
 	// HostDB is completed.
 	InitialScanComplete() (bool, uint64, error)
+
+	// LockSiacoins moves a part of the balance to "locked".
+	LockSiacoins(string, float64) error
+
+	// OldContractsByRenter returns expired contracts filtered by the renter.
+	OldContractsByRenter(types.PublicKey) []RenterContract
 
 	// PriceEstimation estimates the cost in siacoins of performing various
 	// storage and data operations. The estimation will be done using the provided
 	// allowance. The final allowance used will be returned.
 	//PriceEstimation(Allowance) (float64, Allowance, error)
 
+	// RandomHosts picks up to the specified number of random hosts from the
+	// hostdb sorted by weight.
+	RandomHosts(uint64, Allowance) ([]HostDBEntry, error)
+
+	// RefreshedContract returns a bool indicating if the contract was refreshed.
+	RefreshedContract(types.FileContractID) bool
+
+	// Renters retrieves the list of renters.
+	Renters() []Renter
+
+	// RetrieveSpendings retrieves the user's spendings.
+	RetrieveSpendings(string, string) (*UserSpendings, error)
+
 	// ScoreBreakdown returns the score breakdown of the specific host.
 	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
 
 	// SetFilterMode sets the HostDB's filter mode.
 	SetFilterMode(FilterMode, []types.PublicKey, []string) error
+
+	// UnlockSiacoins moves a part of the amount from "locked" to "available",
+	// while the other part (fees and other spent funds) is "burned".
+	UnlockSiacoins(string, float64, float64, uint64) error
+
+	// UpdateBalance updates the balance information on the account.
+	UpdateBalance(email string, ub *UserBalance) error
 }
 
 // MaintenanceSpending is a helper struct that contains a breakdown of costs

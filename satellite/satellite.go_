@@ -1,231 +1,8 @@
-// satellite package declares the satellite module, which listens for
-// renter connections and contacts hosts on the renter's behalf.
-package satellite
-
-import (
-	"database/sql"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
-	"time"
-
-	"github.com/mike76-dev/sia-satellite/satellite/manager"
-	"github.com/mike76-dev/sia-satellite/satellite/provider"
-	"github.com/mike76-dev/sia-satellite/modules"
-
-	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/siamux"
-
-	"go.sia.tech/siad/crypto"
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/persist"
-	siasync "go.sia.tech/siad/sync"
-	"go.sia.tech/siad/types"
-)
-
-var (
-	// Nil dependency errors.
-	errNilDB      = errors.New("satellite cannot use a nil database")
-	errNilSMux    = errors.New("satellite cannot use a nil siamux")
-	errNilCS      = errors.New("satellite cannot use a nil state")
-	errNilTpool   = errors.New("satellite cannot use a nil transaction pool")
-	errNilWallet  = errors.New("satellite cannot use a nil wallet")
-	errNilGateway = errors.New("satellite cannot use nil gateway")
-)
-
-// blockHeightTimestamp combines the block height and the time.
-type blockHeightTimestamp struct {
-	BlockHeight types.BlockHeight `json:"blockheight"`
-	Timestamp   uint64            `json:"timestamp"`
-}
-
-// A Satellite contains the information necessary to communicate both with
-// the renters and with the hosts.
-type Satellite struct {
-	// Dependencies.
-	db     *sql.DB
-	cs     smodules.ConsensusSet
-	g      smodules.Gateway
-	tpool  smodules.TransactionPool
-	wallet smodules.Wallet
-
-	// Block heights at the start of the current and the previous months.
-	currentMonth blockHeightTimestamp
-	prevMonth    blockHeightTimestamp
-
-	// Submodules.
-	m *manager.Manager
-	p *provider.Provider
-
-	// Utilities.
-	log           *persist.Logger
-	mu            sync.RWMutex
-	persist       persistence
-	persistDir    string
-	threads       siasync.ThreadGroup
-	staticAlerter *smodules.GenericAlerter
-}
-
-// New returns an initialized Satellite.
-func New(cs smodules.ConsensusSet, g smodules.Gateway, tpool smodules.TransactionPool, wallet smodules.Wallet, db *sql.DB, mux *siamux.SiaMux, satelliteAddr string, persistDir string) (*Satellite, <-chan error) {
-	errChan := make(chan error, 1)
-	defer close(errChan)
-
-	// Check that all the dependencies were provided.
-	if db == nil {
-		errChan <- errNilDB
-		return nil, errChan
-	}
-	if mux == nil {
-		errChan <- errNilSMux
-		return nil, errChan
-	}
-	if cs == nil {
-		errChan <- errNilCS
-		return nil, errChan
-	}
-	if g == nil {
-		errChan <- errNilGateway
-		return nil, errChan
-	}
-	if tpool == nil {
-		errChan <- errNilTpool
-		return nil, errChan
-	}
-	if wallet == nil {
-		errChan <- errNilWallet
-		return nil, errChan
-	}
-
-	// Create the perist directory if it does not yet exist.
-	err := os.MkdirAll(persistDir, 0700)
-	if err != nil {
-		errChan <- err
-		return nil, errChan
-	}
-
-	// Create the manager.
-	m, errChanM := manager.New(cs, g, tpool, wallet, db, mux, persistDir)
-	if err = smodules.PeekErr(errChanM); err != nil {
-		errChan <- errors.AddContext(err, "unable to create manager")
-		return nil, errChan
-	}
-
-	// Create the provider.
-	p, errChanP := provider.New(g, satelliteAddr, persistDir)
-	if err = smodules.PeekErr(errChanP); err != nil {
-		errChan <- errors.AddContext(err, "unable to create provider")
-		return nil, errChan 
-	}
-
-	// Create the satellite object.
-	s := &Satellite{
-		cs:     cs,
-		g:      g,
-		tpool:  tpool,
-		wallet: wallet,
-
-		exchRates: make(map[string]float64),
-
-		db: db,
-		m:  m,
-		p:  p,
-
-		persistDir:    persistDir,
-		staticAlerter: smodules.NewAlerter("satellite"),
-	}
-	p.SetSatellite(s)
-	m.SetSatellite(s)
-
-	// Call stop in the event of a partial startup.
-	defer func() {
-		if err = smodules.PeekErr(errChan); err != nil {
-			errChan <- errors.Compose(s.threads.Stop(), err)
-		}
-	}()
-
-	// Create the logger.
-	s.log, err = persist.NewFileLogger(filepath.Join(s.persistDir, logFile))
-	if err != nil {
-		errChan <- err
-		return nil, errChan
-	}
-	// Establish the closing of the logger.
-	s.threads.AfterStop(func() {
-		err := s.log.Close()
-		if err != nil {
-			// The logger may or may not be working here, so use a Println
-			// instead.
-			fmt.Println("Failed to close the satellite logger:", err)
-		}
-	})
-	s.log.Println("INFO: satellite created, started logging")
-
-	// Load the satellite persistence.
-	if loadErr := s.load(); loadErr != nil && !os.IsNotExist(loadErr) {
-		errChan <- errors.AddContext(loadErr, "unable to load satellite")
-		return nil, errChan
-	}
-
-	// Make sure that the satellite saves on shutdown.
-	s.threads.AfterStop(func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		err := s.saveSync()
-		if err != nil {
-			s.log.Println("ERROR: Unable to save satellite:", err)
-		}
-	})
-
-	// Spawn the threads to fetch the exchange rates.
-	go s.threadedFetchExchangeRates()
-	go s.threadedFetchSCUSDRate()
-
-	// Unsubscribe from the consensus set upon shutdown.
-	s.threads.AfterStop(func() {
-		cs.Unsubscribe(s)
-	})
-
-	// Subscribe to the consensus set in a separate goroutine.
-	go func() {
-		if err := s.threads.Add(); err != nil {
-			errChan <- err
-			return
-		}
-		defer s.threads.Done()
-		err := cs.ConsensusSetSubscribe(s, smodules.ConsensusChangeRecent, s.threads.StopChan())
-		if err != nil {
-			errChan <- err
-		}
-	}()
-
-	return s, errChan
-}
-
 // ActiveHosts calls Manager.ActiveHosts.
 func (s *Satellite) ActiveHosts() ([]smodules.HostDBEntry, error) { return s.m.ActiveHosts() }
 
 // AllHosts calls Manager.AllHosts.
 func (s *Satellite) AllHosts() ([]smodules.HostDBEntry, error) { return s.m.AllHosts() }
-
-// Close shuts down the satellite.
-func (s *Satellite) Close() error {
-	var errP, errM, err error
-
-	// Close the provider.
-	errP = s.p.Close()
-
-	// Close the manager.
-	errM = s.m.Close()
-
-	if err = s.threads.Stop(); err != nil {
-		return errors.Compose(errP, errM, err)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.saveSync()
-}
 
 // Filter calls Manager.Filter.
 func (s *Satellite) Filter() (smodules.FilterMode, map[string]types.SiaPublicKey, []string, error) { return s.m.Filter() }
@@ -245,22 +22,6 @@ func (s *Satellite) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBr
 // EstimateHostScore calls Manager.EstimateHostScore.
 func (s *Satellite) EstimateHostScore(e smodules.HostDBEntry, a modules.Allowance) (smodules.HostScoreBreakdown, error) { return s.m.EstimateHostScore(e, a) }
 
-// RandomHosts calls Manager.RandomHosts.
-func (s *Satellite) RandomHosts(n uint64, a modules.Allowance) ([]smodules.HostDBEntry, error) { return s.m.RandomHosts(n, a) }
-
-// GetAverages calls Manager.GetAverages.
-func (s *Satellite) GetAverages() modules.HostAverages { return s.m.GetAverages() }
-
-// FeeEstimation returns the minimum and the maximum estimated fees for
-// a transaction.
-func (s *Satellite) FeeEstimation() (min, max types.Currency) { return s.tpool.FeeEstimation() }
-
-// GetWalletSeed returns the wallet seed.
-func (s *Satellite) GetWalletSeed() (seed smodules.Seed, err error) {
-	seed, _, err = s.wallet.PrimarySeed()
-	return
-}
-
 // UserExists returns true if the renter's public key is found in the
 // database. An error is returned as well.
 func (s *Satellite) UserExists(rpk types.SiaPublicKey) (exists bool, err error) {
@@ -271,11 +32,6 @@ func (s *Satellite) UserExists(rpk types.SiaPublicKey) (exists bool, err error) 
 	}
 	exists = count > 0
 	return
-}
-
-// CreateNewRenter calls Manager.CreateNewRenter.
-func (s *Satellite) CreateNewRenter(email string, pk types.SiaPublicKey) {
-	s.m.CreateNewRenter(email, pk)
 }
 
 // GetRenter calls Manager.GetRenter.
@@ -350,11 +106,6 @@ func (s *Satellite) OldContracts() []modules.RenterContract {
 // OldsContractsByRenter calls Manager.OldContractsByRenter.
 func (s *Satellite) OldContractsByRenter(rpk types.SiaPublicKey) []modules.RenterContract {
 	return s.m.OldContractsByRenter(rpk)
-}
-
-// BlockHeight returns the current block height.
-func (s *Satellite) BlockHeight() types.BlockHeight {
-	return s.cs.Height()
 }
 
 // RenewContracts tries to renew the given set of contracts and returns them.

@@ -98,7 +98,7 @@ func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request
 
 	// Retrieve the balance information from the database.
 	var ub *modules.UserBalance
-	if ub, err = api.portal.satellite.GetBalance(email); err != nil {
+	if ub, err = api.portal.manager.GetBalance(email); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
@@ -115,7 +115,7 @@ func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request
 func (api *portalAPI) averagesHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Get the currency parameter and check it.
 	currency := req.FormValue("currency")
-	scRate, err := api.portal.satellite.GetSiacoinRate(currency)
+	scRate, err := api.portal.manager.GetSiacoinRate(currency)
 	if err != nil {
 		writeError(w,
 			Error{
@@ -126,7 +126,7 @@ func (api *portalAPI) averagesHandlerGET(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Convert the averages into human-readable values.
-	sha := convertHostAverages(api.portal.satellite.GetAverages(), scRate)
+	sha := convertHostAverages(api.portal.manager.GetAverages(), scRate)
 
 	writeJSON(w, sha)
 }
@@ -184,7 +184,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	// Calculate the exchange rate.
-	scRate, err := api.portal.satellite.GetSiacoinRate(data.Currency)
+	scRate, err := api.portal.manager.GetSiacoinRate(data.Currency)
 	if err != nil {
 		writeError(w,
 			Error{
@@ -223,7 +223,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	a.MaxDownloadBandwidthPrice = modules.FromFloat(data.MaxDownloadPrice / scRate)
 
 	// Pick random hosts.
-	hosts, err := api.portal.satellite.RandomHosts(a.Hosts, a)
+	hosts, err := api.portal.manager.RandomHosts(a.Hosts, a)
 	if err != nil {
 		api.portal.log.Println("ERROR: could not get random hosts", err)
 		writeError(w,
@@ -280,7 +280,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Add the cost of paying the transaction fees and then double the contract
 	// costs to account for renewing a full set of contracts.
-	_, feePerByte := api.portal.satellite.FeeEstimation()
+	_, feePerByte := api.portal.manager.FeeEstimation()
 	txnsFees := feePerByte.Mul64(modules.EstimatedFileContractTransactionSetSize).Mul64(uint64(a.Hosts))
 	totalContractCost = totalContractCost.Add(txnsFees)
 	totalContractCost = totalContractCost.Mul64(2)
@@ -294,7 +294,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	taxableAmount = taxableAmount.Add(totalStorageCost)
 	taxableAmount = taxableAmount.Add(totalUploadCost)
 	taxableAmount = taxableAmount.Add(totalCollateral)
-	siafundFee := modules.Tax(taxableAmount)
+	siafundFee := modules.Tax(api.portal.manager.BlockHeight(), taxableAmount)
 	totalPayout := taxableAmount.Add(siafundFee)
 
 	// Increase estimates by a factor of safety to account for host churn and
@@ -351,7 +351,7 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 
 	// Retrieve the account balance.
 	var ub *modules.UserBalance
-	if ub, err = api.portal.satellite.GetBalance(email); err != nil {
+	if ub, err = api.portal.manager.GetBalance(email); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
@@ -372,7 +372,7 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	}
 
 	// Generate the seed and wipe it after use.
-	walletSeed, err := api.portal.satellite.GetWalletSeed()
+	walletSeed, err := api.portal.manager.GetWalletSeed()
 	if err != nil {
 		api.portal.log.Printf("ERROR: error retrieving wallet seed: %v\n", err)
 		writeError(w,
@@ -391,7 +391,8 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 
 // keyHandlerGET handles the GET /dashboard/key requests.
 func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	writeJSON(w, struct{Key string `json:"key"`}{Key: api.portal.satellite.PublicKey().String()})
+	key := api.portal.provider.PublicKey()
+	writeJSON(w, struct{Key string `json:"key"`}{Key: hex.EncodeToString(key[:])})
 }
 
 // contractsHandlerGet handles the GET /dashboard/contracts requests.
@@ -422,7 +423,7 @@ func (api *portalAPI) contractsHandlerGET(w http.ResponseWriter, req *http.Reque
 
 	// Get the renter.
 	var renter modules.Renter
-	renters := api.portal.satellite.Renters()
+	renters := api.portal.manager.Renters()
 	for _, r := range renters {
 		if r.Email == email {
 			renter = r
@@ -439,15 +440,15 @@ func (api *portalAPI) contractsHandlerGET(w http.ResponseWriter, req *http.Reque
 // getContracts filters the satellite contracts by the given parameters.
 func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []renterContract {
 	var rc []renterContract
-	currentBlockHeight := api.portal.satellite.BlockHeight()
+	currentBlockHeight := api.portal.manager.BlockHeight()
 
 	if current {
-		contracts := api.portal.satellite.ContractsByRenter(renter.PublicKey)
+		contracts := api.portal.manager.ContractsByRenter(renter.PublicKey)
 		for _, c := range contracts {
 			// Fetch host address.
 			cp := types.ZeroCurrency
 			var netAddress string
-			hdbe, exists, _ := api.portal.satellite.Host(c.HostPublicKey)
+			hdbe, exists, _ := api.portal.manager.Host(c.HostPublicKey)
 			if exists {
 				netAddress = hdbe.NetAddress
 				cp = hdbe.ContractPrice
@@ -481,7 +482,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			}
 
 			// Determine contract status.
-			refreshed := api.portal.satellite.RefreshedContract(c.ID)
+			refreshed := api.portal.manager.RefreshedContract(c.ID)
 			active := c.Utility.GoodForUpload && c.Utility.GoodForRenew && !refreshed
 			passive := !c.Utility.GoodForUpload && c.Utility.GoodForRenew && !refreshed
 			disabledContract := !active && !passive && !refreshed
@@ -508,7 +509,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 
 	// Process old contracts.
 	if old {
-		contracts := api.portal.satellite.OldContractsByRenter(renter.PublicKey)
+		contracts := api.portal.manager.OldContractsByRenter(renter.PublicKey)
 		for _, c := range contracts {
 			var size uint64
 			if len(c.Transaction.FileContractRevisions) != 0 {
@@ -518,7 +519,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			// Fetch host address.
 			cp := types.ZeroCurrency
 			var netAddress string
-			hdbe, exists, _ := api.portal.satellite.Host(c.HostPublicKey)
+			hdbe, exists, _ := api.portal.manager.Host(c.HostPublicKey)
 			if exists {
 				netAddress = hdbe.NetAddress
 				cp = hdbe.ContractPrice
@@ -552,7 +553,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			}
 
 			// Determine contract status.
-			refreshed := api.portal.satellite.RefreshedContract(c.ID)
+			refreshed := api.portal.manager.RefreshedContract(c.ID)
 			endHeightInPast := c.EndHeight < currentBlockHeight || c.StartHeight < renter.CurrentPeriod
 			expiredContract := endHeightInPast && !refreshed
 			expiredRefreshed := endHeightInPast && refreshed
@@ -581,7 +582,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 
 // blockHeightHandlerGET handles the GET /dashboard/blockheight requests.
 func (api *portalAPI) blockHeightHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	writeJSON(w, struct{Height uint64 `json:"height"`}{Height: uint64(api.portal.satellite.BlockHeight())})
+	writeJSON(w, struct{Height uint64 `json:"height"`}{Height: api.portal.manager.BlockHeight()})
 }
 
 // spendingsHandlerGET handles the GET /dashboard/spendings requests.
@@ -599,7 +600,7 @@ func (api *portalAPI) spendingsHandlerGET(w http.ResponseWriter, req *http.Reque
 		currency = "USD"
 	}
 	var us *modules.UserSpendings
-	if us, err = api.portal.satellite.RetrieveSpendings(email, currency); err != nil {
+	if us, err = api.portal.manager.RetrieveSpendings(email, currency); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
@@ -623,7 +624,7 @@ func (api *portalAPI) settingsHandlerGET(w http.ResponseWriter, req *http.Reques
 
 	// Get the renter.
 	var renter modules.Renter
-	renters := api.portal.satellite.Renters()
+	renters := api.portal.manager.Renters()
 	for _, r := range renters {
 		if r.Email == email {
 			renter = r

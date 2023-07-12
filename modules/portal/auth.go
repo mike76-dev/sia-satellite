@@ -755,7 +755,7 @@ func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request,
 	}
 
 	// Remove renter from the memory.
-	api.portal.satellite.DeleteRenter(email)
+	api.portal.manager.DeleteRenter(email)
 
 	writeSuccess(w)
 }
@@ -828,5 +828,5 @@ func (p *Portal) creditAccount(email string) error {
 
 	// Decrease the remaining credits and save.
 	p.credits.Remaining--
-	return p.saveSync()
+	return p.saveCredits()
 }

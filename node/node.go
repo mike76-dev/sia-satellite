@@ -12,11 +12,11 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules/consensus"
 	"github.com/mike76-dev/sia-satellite/modules/gateway"
 	"github.com/mike76-dev/sia-satellite/modules/manager"
+	"github.com/mike76-dev/sia-satellite/modules/portal"
 	"github.com/mike76-dev/sia-satellite/modules/provider"
 	"github.com/mike76-dev/sia-satellite/modules/transactionpool"
 	"github.com/mike76-dev/sia-satellite/modules/wallet"
 	"github.com/mike76-dev/sia-satellite/persist"
-	//"github.com/mike76-dev/sia-satellite/portal"
 )
 
 // Node represents a satellite node containing all required modules.
@@ -28,7 +28,7 @@ type Node struct {
 	ConsensusSet    modules.ConsensusSet
 	Gateway         modules.Gateway
 	Manager         modules.Manager
-	//Portal          modules.Portal
+	Portal          modules.Portal
 	Provider        modules.Provider
 	TransactionPool modules.TransactionPool
 	Wallet          modules.Wallet
@@ -41,10 +41,10 @@ type Node struct {
 // Close will call close on every module within the node, combining and
 // returning the errors.
 func (n *Node) Close() (err error) {
-	/*if n.Portal != nil {
+	if n.Portal != nil {
 		fmt.Println("Closing portal...")
 		err = modules.ComposeErrors(err, n.Portal.Close())
-	}*/
+	}
 	if n.Provider != nil {
 		fmt.Println("Closing provider...")
 		err = modules.ComposeErrors(err, n.Provider.Close())
@@ -157,16 +157,12 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	}
 
 	// Load portal.
-	/*fmt.Println("Loading portal...")
-	portalDir := filepath.Join(d, "portal")
-	if err := os.MkdirAll(portalDir, 0700); err != nil {
-		return nil, errChan
-	}
-	pt, err := portal.New(config, s, db, portalDir)
+	fmt.Println("Loading portal...")
+	pt, err := portal.New(config, db, m, p, d)
 	if err != nil {
 		errChan <- modules.AddContext(err, "unable to create portal")
 		return nil, errChan
-	}*/
+	}
 
 	// Setup complete.
 	fmt.Printf("API is now available, synchronous startup completed in %.3f seconds\n", time.Since(loadStartTime).Seconds())
@@ -180,7 +176,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 		ConsensusSet:    cs,
 		Gateway:         g,
 		Manager:         m,
-		//Portal:          pt,
+		Portal:          pt,
 		Provider:        p,
 		TransactionPool: tp,
 		Wallet:          w,

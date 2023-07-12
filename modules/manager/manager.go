@@ -140,6 +140,7 @@ type Manager struct {
 	hostContractor hostContractor
 	hostDB         modules.HostDB
 	tpool          modules.TransactionPool
+	wallet         modules.Wallet
 
 	// Atomic properties.
 	hostAverages modules.HostAverages
@@ -194,25 +195,26 @@ func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.T
 		return nil, errChan
 	}
 
-	// Create the Contractor.
-	hc, errChanContractor := contractor.New(db, cs, tpool, wallet, hdb, dir)
-	if err := modules.PeekErr(errChanContractor); err != nil {
-		errChan <- err
-		return nil, errChan
-	}
-
 	// Create the Manager object.
 	m := &Manager{
 		cs:             cs,
 		db:             db,
-		hostContractor: hc,
 		hostDB:         hdb,
 		tpool:          tpool,
+		wallet:         wallet,
 
 		exchRates: make(map[string]float64),
 
 		staticAlerter:  modules.NewAlerter("manager"),
 	}
+
+	// Create the Contractor.
+	hc, errChanContractor := contractor.New(db, cs, m, tpool, wallet, hdb, dir)
+	if err := modules.PeekErr(errChanContractor); err != nil {
+		errChan <- err
+		return nil, errChan
+	}
+	m.hostContractor = hc
 
 	// Call stop in the event of a partial startup.
 	defer func() {
@@ -670,4 +672,142 @@ func (m *Manager) Contract(fcid types.FileContractID) (modules.RenterContract, b
 // UpdateRenterSettings calls hostContractor.UpdateRenterSettings.
 func (m *Manager) UpdateRenterSettings(rpk types.PublicKey, settings modules.RenterSettings, sk types.PrivateKey) error {
 	return m.hostContractor.UpdateRenterSettings(rpk, settings, sk)
+}
+
+// LockSiacoins locks the specified amount of Siacoins in the user balance.
+func (m *Manager) LockSiacoins(email string, amount float64) error {
+	// Sanity check.
+	if amount <= 0 {
+		return errors.New("wrong amount")
+	}
+
+	// Retrieve the user balance.
+	ub, err := m.GetBalance(email)
+	if err != nil {
+		return err
+	}
+
+	// Include the Satellite fee.
+	amountWithFee := amount * modules.SatelliteOverhead
+	if amountWithFee > ub.Balance {
+		m.log.Println("WARN: trying to lock more than the available balance")
+		amountWithFee = ub.Balance
+	}
+
+	// Calculate the new balance.
+	ub.Locked += amount
+	ub.Balance -= amountWithFee
+
+	// Save the new balance.
+	err = m.UpdateBalance(email, ub)
+	if err != nil {
+		return err
+	}
+
+	// Update the spendings.
+	us, err := m.getSpendings(email)
+	if err != nil {
+		return err
+	}
+	us.CurrentLocked += amount
+	us.CurrentOverhead += amountWithFee - amount
+
+	return m.updateSpendings(email, *us)
+}
+
+// UnlockSiacoins unlocks the specified amount of Siacoins in the user balance.
+func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uint64) error {
+	// Sanity check.
+	if amount <= 0 || total <= 0 || amount > total {
+		return errors.New("wrong amount")
+	}
+
+	// Retrieve the user balance.
+	ub, err := m.GetBalance(email)
+	if err != nil {
+		return err
+	}
+
+	// Include the Satellite fee.
+	totalWithFee := total * modules.SatelliteOverhead
+
+	// Calculate the new balance.
+	unlocked := amount
+	burned := totalWithFee - amount
+	if totalWithFee > ub.Locked {
+		m.log.Println("WARN: trying to unlock more than the locked balance")
+		if burned < ub.Locked {
+			unlocked = ub.Locked - burned
+		} else {
+			burned = ub.Locked
+			unlocked = 0
+		}
+	}
+	ub.Locked -= (unlocked + burned)
+	ub.Balance += unlocked
+
+	// Save the new balance.
+	err = m.UpdateBalance(email, ub)
+	if err != nil {
+		return err
+	}
+
+	// Update the spendings.
+	m.mu.Lock()
+	prevMonth := m.prevMonth.BlockHeight
+	currentMonth := m.currentMonth.BlockHeight
+	m.mu.Unlock()
+	if height < prevMonth {
+		// Spending outside the reporting period.
+		return nil
+	}
+	us, err := m.getSpendings(email)
+	if err != nil {
+		return err
+	}
+	if height < currentMonth {
+		us.PrevLocked -= (unlocked + burned)
+		us.PrevUsed += burned
+	} else {
+		us.CurrentLocked -= (unlocked + burned)
+		us.CurrentUsed += burned
+	}
+
+	return m.updateSpendings(email, *us)
+}
+
+// RetrieveSpendings retrieves the user's spendings in the given currency.
+func (m *Manager) RetrieveSpendings(email string, currency string) (*modules.UserSpendings, error) {
+	// Get exchange rate.
+	scRate, err := m.GetSiacoinRate(currency)
+	if err != nil {
+		return nil, err
+	}
+	if scRate == 0 {
+		return nil, errors.New("couldn't get exchange rate")
+	}
+
+	// Get user spendings.
+	us, err := m.getSpendings(email)
+	if err != nil {
+		return nil, err
+	}
+	us.SCRate = scRate
+
+	return us, nil
+}
+
+// BlockHeight returns the current block height.
+func (m *Manager) BlockHeight() uint64 {
+	return m.cs.Height()
+}
+
+// FeeEstimation returns the minimum and the maximum estimated fees for
+// a transaction.
+func (m *Manager) FeeEstimation() (min, max types.Currency) { return m.tpool.FeeEstimation() }
+
+// GetWalletSeed returns the wallet seed.
+func (m *Manager) GetWalletSeed() (seed modules.Seed, err error) {
+	seed, _, err = m.wallet.PrimarySeed()
+	return
 }

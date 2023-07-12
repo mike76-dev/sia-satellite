@@ -255,9 +255,9 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 			}
 
 			// Move the current spendings of each renter to the previous ones.
-			/*renters := s.Renters()
+			renters := m.Renters()
 			for _, renter := range renters {
-				us, err := s.getSpendings(renter.Email)
+				us, err := m.getSpendings(renter.Email)
 				if err == nil {
 					us.PrevLocked = us.CurrentLocked
 					us.PrevUsed = us.CurrentUsed
@@ -269,12 +269,12 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					us.PrevRenewed = us.CurrentRenewed
 					us.CurrentFormed = 0
 					us.CurrentRenewed = 0
-					err = s.updateSpendings(renter.Email, *us)
+					err = m.updateSpendings(renter.Email, *us)
 					if err != nil {
-						s.log.Println("ERROR: couldn't update spendings")
+						m.log.Println("ERROR: couldn't update spendings")
 					}
 				}
-			}*/
+			}
 
 			m.syncDB()
 			break

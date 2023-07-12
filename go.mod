@@ -3,10 +3,12 @@ module github.com/mike76-dev/sia-satellite
 go 1.18
 
 require (
+	github.com/dchest/threefish v0.0.0-20120919164726-3ecf4c494abf
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.7.0
+	github.com/stripe/stripe-go/v74 v74.25.0
 	gitlab.com/NebulousLabs/go-upnp v0.0.0-20211002182029-11da932010b6
 	gitlab.com/NebulousLabs/log v0.0.0-20210609172545-77f6775350e2
 	gitlab.com/NebulousLabs/merkletree v0.0.0-20200118113624-07fbf710afc4

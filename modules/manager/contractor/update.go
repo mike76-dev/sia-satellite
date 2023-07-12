@@ -35,7 +35,7 @@ func (c *Contractor) managedArchiveContracts() {
 	for _, id := range expired {
 		if fc, ok := c.staticContracts.Acquire(id); ok {
 			c.staticContracts.Delete(fc)
-			//c.UnlockBalance(fc.Metadata().ID) TODO
+			c.UnlockBalance(fc.Metadata().ID)
 		}
 	}
 }

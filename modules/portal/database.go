@@ -1,8 +1,8 @@
 package portal
 
 import (
+	"bytes"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"runtime"
 	"time"
@@ -12,7 +12,6 @@ import (
 	"go.sia.tech/core/types"
 
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/crypto/ed25519"
 
 	"lukechampine.com/frand"
 )
@@ -34,7 +33,7 @@ const (
 // address.
 func (p *Portal) userExists(email string) (bool, error) {
 	var count int
-	err := p.db.QueryRow("SELECT COUNT(*) FROM accounts WHERE email = ?", email).Scan(&count)
+	err := p.db.QueryRow("SELECT COUNT(*) FROM pt_accounts WHERE email = ?", email).Scan(&count)
 	return count > 0, err
 }
 
@@ -42,14 +41,15 @@ func (p *Portal) userExists(email string) (bool, error) {
 // is not empty, it also checks if the password matches the one
 // in the database.
 func (p *Portal) isVerified(email, password string) (verified bool, ok bool, err error) {
-	pwHash := ""
+	pwHash := make([]byte, 32)
 	if password != "" {
-		pwHash = passwordHash(password)
+		pwh := passwordHash(password)
+		copy(pwHash, pwh[:])
 	}
-	var ph string
+	ph := make([]byte, 32)
 	var v bool
-	err = p.db.QueryRow("SELECT password_hash, verified FROM accounts WHERE email = ?", email).Scan(&ph, &v)
-	return v, (ph == pwHash), err
+	err = p.db.QueryRow("SELECT password_hash, verified FROM pt_accounts WHERE email = ?", email).Scan(&ph, &v)
+	return v, bytes.Equal(ph, pwHash), err
 }
 
 // updateAccount updates the user account in the database.
@@ -67,27 +67,27 @@ func (p *Portal) updateAccount(email, password string, verified bool) error {
 		}
 		pwHash := passwordHash(password)
 		_, err := p.db.Exec(`
-			INSERT INTO accounts (email, password_hash, verified, created, nonce)
-			VALUES (?, ?, ?, ?, ?)`, email, pwHash, false, time.Now().Unix(), "")
+			INSERT INTO pt_accounts (email, password_hash, verified, time, nonce)
+			VALUES (?, ?, ?, ?, ?)`, email, pwHash[:], false, time.Now().Unix(), []byte{})
 		return err
 	}
 
 	// An entry found, update it.
 	if password == "" {
-		_, err := p.db.Exec("UPDATE accounts SET verified = ? WHERE email = ?", verified, email)
+		_, err := p.db.Exec("UPDATE pt_accounts SET verified = ? WHERE email = ?", verified, email)
 		return err
 	}
 	pwHash := passwordHash(password)
-	_, err = p.db.Exec("UPDATE accounts SET password_hash = ?, verified = ? WHERE email = ?", pwHash, verified, email)
+	_, err = p.db.Exec("UPDATE pt_accounts SET password_hash = ?, verified = ? WHERE email = ?", pwHash[:], verified, email)
 	return err
 }
 
 // passwordHash implements the Argon2id hashing mechanism.
-func passwordHash(password string) string {
+func passwordHash(password string) (pwh types.Hash256) {
 	t := uint8(runtime.NumCPU())
 	hash := argon2.IDKey([]byte(password), []byte(argon2Salt), 1, 64 * 1024, t, 32)
-	defer fastrand.Read(hash[:])
-	return hex.EncodeToString(hash)
+	copy(pwh[:], hash)
+	return
 }
 
 // threadedPruneUnverifiedAccounts deletes unverified user accounts
@@ -95,23 +95,23 @@ func passwordHash(password string) string {
 func (p *Portal) threadedPruneUnverifiedAccounts() {
 	for {
 		select {
-		case <-p.threads.StopChan():
+		case <-p.tg.StopChan():
 			return
 		case <-time.After(pruneUnverifiedAccountsFrequency):
 		}
 
 		func() {
-			err := p.threads.Add()
+			err := p.tg.Add()
 			if err != nil {
 				return
 			}
-			defer p.threads.Done()
+			defer p.tg.Done()
 
 			p.mu.Lock()
 			defer p.mu.Unlock()
 
 			now := time.Now().Unix()
-			_, err = p.db.Exec("DELETE FROM accounts WHERE verified = FALSE AND created < ?", now - pruneUnverifiedAccountsThreshold.Milliseconds() / 1000)
+			_, err = p.db.Exec("DELETE FROM pt_accounts WHERE verified = FALSE AND time < ?", now - pruneUnverifiedAccountsThreshold.Milliseconds() / 1000)
 			if err != nil {
 				p.log.Printf("ERROR: error querying database: %v\n", err)
 			}
@@ -125,45 +125,26 @@ func (p *Portal) deleteAccount(email string) error {
 	var err error
 
 	// Search for the renter public key.
-	var pk string
-	err = p.db.QueryRow("SELECT public_key FROM renters WHERE email = ?", email).Scan(&pk)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	pk := make([]byte, 32)
+	err = p.db.QueryRow("SELECT public_key FROM ctr_renters WHERE email = ?", email).Scan(&pk)
+	if err != nil {
 		return err
 	}
 
-	// Delete contracts and transactions.
-	if err == nil {
-		var fcid string
-		rows, err := p.db.Query(`
-			SELECT contract_id
-			FROM transactions
-			WHERE uc_renter_pk = ?
-		`, pk)
-		errs = append(errs, err)
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				err = rows.Scan(&fcid)
-				if err == nil {
-					_, err = p.db.Exec("DELETE FROM transactions WHERE contract_id = ?", fcid)
-					errs = append(errs, err)
-					_, err = p.db.Exec("DELETE FROM contracts WHERE contract_id = ?", fcid)
-					errs = append(errs, err)
-				}
-			}
-		}
-	}
+	// Delete contracts.
+	_, err = p.db.Exec("DELETE FROM ctr_contracts WHERE renter_pk = ?", pk)
+	errs = append(errs, err)
 
 	// Delete from other tables.
-	_, err = p.db.Exec("DELETE FROM renters WHERE email = ?", email)
+	_, err = p.db.Exec("DELETE FROM ctr_renters WHERE email = ?", email)
 	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM spendings WHERE email = ?", email)
+	_, err = p.db.Exec("DELETE FROM mg_spendings WHERE email = ?", email)
 	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM payments WHERE email = ?", email)
+	_, err = p.db.Exec("DELETE FROM pt_payments WHERE email = ?", email)
 	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM balances WHERE email = ?", email)
+	_, err = p.db.Exec("DELETE FROM mg_balances WHERE email = ?", email)
 	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM accounts WHERE email = ?", email)
+	_, err = p.db.Exec("DELETE FROM mg_accounts WHERE email = ?", email)
 	errs = append(errs, err)
 
 	return modules.ComposeErrors(errs...)
@@ -172,7 +153,7 @@ func (p *Portal) deleteAccount(email string) error {
 // putPayment inserts a payment into the database.
 func (p *Portal) putPayment(email string, amount float64, currency string) error {
 	// Convert the amount to SC.
-	rate, err := p.satellite.GetSiacoinRate(currency)
+	rate, err := p.manager.GetSiacoinRate(currency)
 	if err != nil {
 		return err
 	}
@@ -184,7 +165,7 @@ func (p *Portal) putPayment(email string, amount float64, currency string) error
 	amountSC := amount / rate
 	timestamp := time.Now().Unix()
 	_, err = p.db.Exec(`
-		INSERT INTO payments (email, amount, currency, amount_sc, made_at)
+		INSERT INTO pt_payments (email, amount, currency, amount_sc, made_at)
 		VALUES (?, ?, ?, ?, ?)`, email, amount, currency, amountSC, timestamp)
 
 	return err
@@ -196,7 +177,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	if id == "" || currency == "" || amount == 0 {
 		return errors.New("one or more empty parameters provided")
 	}
-	rate, err := p.satellite.GetSiacoinRate(currency)
+	rate, err := p.manager.GetSiacoinRate(currency)
 	if err != nil {
 		return err
 	}
@@ -210,8 +191,8 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	var b, l float64
 	var c string
 	err = p.db.QueryRow(`
-		SELECT email, subscribed, balance, locked, currency
-		FROM balances WHERE stripe_id = ?
+		SELECT email, subscribed, sc_balance, sc_locked, currency
+		FROM mg_balances WHERE stripe_id = ?
 	`, id).Scan(&email, &s, &b, &l, &c)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -248,8 +229,8 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	}
 	if ub.Currency == "" {
 		// New renter, need to create a new record.
-		seed, err := p.satellite.GetWalletSeed()
-		defer frand.Read(seed)
+		seed, err := p.manager.GetWalletSeed()
+		defer frand.Read(seed[:])
 		if err != nil {
 			return err
 		}
@@ -267,7 +248,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	ub.Balance += amount / rate
 
 	// Update the balances table.
-	err = p.satellite.UpdateBalance(email, ub)
+	err = p.manager.UpdateBalance(email, ub)
 
 	return err
 }
@@ -276,7 +257,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 // history.
 func (p *Portal) getPayments(email string) ([]userPayment, error) {
 	rows, err := p.db.Query(`
-		SELECT amount, currency, amount_sc, made_at FROM payments
+		SELECT amount, currency, amount_sc, made_at FROM pt_payments
 		WHERE email = ?
 	`, email)
 	if err != nil {
@@ -301,38 +282,141 @@ func (p *Portal) getPayments(email string) ([]userPayment, error) {
 // createNewRenter creates a new renter record in the database.
 func (p *Portal) createNewRenter(email string, pk types.PublicKey) error {
 	_, err := p.db.Exec(`
-		INSERT INTO renters (email, public_key, current_period, funds, hosts,
-			period, renew_window, expected_storage, expected_upload,
-			expected_download, min_shards, total_shards, max_rpc_price,
-			max_contract_price, max_download_bandwidth_price,
-			max_sector_access_price, max_storage_price,
-			max_upload_bandwidth_price, min_max_collateral, blockheight_leeway,
-			private_key, auto_renew_contracts)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, email, pk.String(), 0, "", 0, 0, 0, 0, 0, 0, 0, 0, "", "", "", "", "", "", "", 0, "", false)
+		INSERT INTO ctr_renters
+		(email, public_key, current_period, allowance,
+		private_key, auto_renew_contracts)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, email, pk[:], 0, []byte{}, []byte{}, false)
 	if err != nil {
 		return err
 	}
-	p.satellite.CreateNewRenter(email, pk)
+	p.manager.CreateNewRenter(email, pk)
 
 	return nil
 }
 
 // saveNonce updates a user account with the nonce value.
 func (p* Portal) saveNonce(email string, nonce []byte) error {
-	_, err := p.db.Exec("UPDATE accounts SET nonce = ? WHERE email = ?", hex.EncodeToString(nonce), email)
+	_, err := p.db.Exec("UPDATE pt_accounts SET nonce = ? WHERE email = ?", nonce, email)
 	return err
 }
 
 // verifyNonce verifies the nonce value against the user account.
 func (p* Portal) verifyNonce(email string, nonce []byte) (bool, error) {
-	var n string
-	err := p.db.QueryRow("SELECT nonce FROM accounts WHERE email = ?", email).Scan(&n)
+	n := make([]byte, 16)
+	err := p.db.QueryRow("SELECT nonce FROM pt_accounts WHERE email = ?", email).Scan(&n)
 	if err != nil {
 		return false, err
 	}
 
-	ns := hex.EncodeToString(nonce)
-	
-	return ns == n, nil
+	return bytes.Equal(n, nonce), nil
+}
+
+// saveStats updates the authentication stats in the database.
+func (p* Portal) saveStats() error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		p.log.Println("ERROR: couldn't save auth stats:", err)
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM pt_stats")
+	if err != nil {
+		p.log.Println("ERROR: couldn't clear auth stats:", err)
+		tx.Rollback()
+		return err
+	}
+
+	for ip, entry := range p.authStats {
+		_, err = tx.Exec(`
+			INSERT INTO pt_stats
+			(remote_host, login_last, login_count, verify_last,
+			verify_count, reset_last, reset_count)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, ip, entry.FailedLogins.LastAttempt, entry.FailedLogins.Count, entry.Verifications.LastAttempt, entry.Verifications.Count, entry.PasswordResets.LastAttempt, entry.PasswordResets.Count)
+		if err != nil {
+			p.log.Println("ERROR: couldn't save auth stats:", err)
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// loadStats loads the authentication stats from the database.
+func (p* Portal) loadStats() error {
+	rows, err := p.db.Query(`
+		SELECT remote_host, login_last, login_count, verify_last,
+		verify_count, reset_last, reset_count
+		FROM pt_stats
+	`)
+	if err != nil {
+		p.log.Println("ERROR: couldn't load auth stats:", err)
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ip string
+		var ll, lc, vl, vc, rl, rc int64
+		if err := rows.Scan(&ip, &ll, &lc, &vl, &vc, &rl, &rc); err != nil {
+			p.log.Println("ERROR: couldn't load auth stats:", err)
+			return err
+		}
+		p.authStats[ip] = authenticationStats{
+			RemoteHost: ip,
+			FailedLogins: authAttempts{
+				LastAttempt: ll,
+				Count:       lc,
+			},
+			Verifications: authAttempts{
+				LastAttempt: vl,
+				Count:       vc,
+			},
+			PasswordResets: authAttempts{
+				LastAttempt: rl,
+				Count:       rc,
+			},
+		}
+	}
+
+	return nil
+}
+
+// saveCredits updates the promotion data in the database.
+func (p* Portal) saveCredits() error {
+	_, err := p.db.Exec(`
+		REPLACE INTO pt_credits (id, amount, remaining)
+		VALUES (1, ?, ?)
+	`, p.credits.Amount, p.credits.Remaining)
+	if err != nil {
+		p.log.Println("ERROR: couldn't save credit data:", err)
+		return err
+	}
+
+	return nil
+}
+
+// loadCredits loads the promotion data from the database.
+func (p* Portal) loadCredits() error {
+	var a float64
+	var r uint64
+	err := p.db.QueryRow(`
+		SELECT amount, remaining
+		FROM pt_credits
+		WHERE id = 1
+	`).Scan(&a, &r)
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		p.log.Println("ERROR: couldn't load credit data:", err)
+		return err
+	}
+
+	p.credits.Amount = a
+	p.credits.Remaining = r
+
+	return nil
 }

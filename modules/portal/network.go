@@ -60,7 +60,7 @@ func (api *portalAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.routerMu.RUnlock()
 }
 
-// buildHttpRoutes sets up and returns an * httprouter.Router connected
+// buildHttpRoutes sets up and returns an httprouter.Router connected
 // to the given api.
 func (api *portalAPI) buildHTTPRoutes() {
 	router := httprouter.New()

@@ -24,7 +24,7 @@ type item struct {
 }
 
 // calculateOrderAmount returns the amount to charge the user from.
-func (p *Portal) calculateOrderAmount(id string) (int64, string, error) {
+func calculateOrderAmount(id string) (int64, string, error) {
 	if len(id) < 4 {
 		return 0, "", errors.New("wrong item length")
 	}
@@ -48,7 +48,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Retrieve account balance.
-	ub, cErr := api.portal.satellite.GetBalance(email)
+	ub, cErr := api.portal.manager.GetBalance(email)
 	if cErr != nil {
 		api.portal.log.Println("ERROR: Could not fetch account balance:", cErr)
 		writeError(w,
@@ -90,7 +90,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 		// Update the database record.
 		ub.IsUser = true
 		ub.StripeID = cust.ID
-		cErr = api.portal.satellite.UpdateBalance(email, ub)
+		cErr = api.portal.manager.UpdateBalance(email, ub)
 		if cErr != nil {
 			api.portal.log.Println("ERROR: Could not update balance:", cErr)
 			writeError(w,
@@ -119,7 +119,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 
 	// Create a PaymentIntent with amount and currency.
 	id := data.Items[0].ID
-	amount, currency, pErr := api.portal.calculateOrderAmount(id)
+	amount, currency, pErr := calculateOrderAmount(id)
 	if pErr != nil {
 		api.portal.log.Println("ERROR: couldn't read pending payment:", pErr)
 		writeError(w,

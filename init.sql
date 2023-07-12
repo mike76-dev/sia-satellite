@@ -279,10 +279,58 @@ CREATE TABLE pr_info (
 	PRIMARY KEY (id)
 );
 
+/* portal */
+
+DROP TABLE IF EXISTS pt_payments;
+DROP TABLE IF EXISTS pt_accounts;
+DROP TABLE IF EXISTS pt_stats;
+DROP TABLE IF EXISTS pt_credits;
+
+CREATE TABLE pt_accounts (
+	id            INT NOT NULL AUTO_INCREMENT,
+	email         VARCHAR(64) NOT NULL UNIQUE,
+	password_hash BINARY(32) NOT NULL,
+	verified      BOOL NOT NULL,
+	time          BIGINT UNSIGNED NOT NULL,
+	nonce         BINARY(16) NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE pt_payments (
+	id        INT NOT NULL AUTO_INCREMENT,
+	email     VARCHAR(64) NOT NULL,
+	amount    DOUBLE NOT NULL,
+	currency  VARCHAR(8) NOT NULL,
+	amount_sc DOUBLE NOT NULL,
+	made_at   INT NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (email) REFERENCES pt_accounts(email)
+);
+
+CREATE TABLE pt_stats (
+	remote_host  VARCHAR(64) NOT NULL,
+	login_last   BIGINT NOT NULL,
+	login_count  BIGINT NOT NULL,
+	verify_last  BIGINT NOT NULL,
+	verify_count BIGINT NOT NULL,
+	reset_last   BIGINT NOT NULL,
+	reset_count  BIGINT NOT NULL,
+	PRIMARY KEY (remote_host)
+);
+
+CREATE TABLE pt_credits (
+	id        INT NOT NULL AUTO_INCREMENT,
+	amount    DOUBLE NOT NULL,
+	remaining BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (id)
+);
+
 /* manager */
 
 DROP TABLE IF EXISTS mg_timestamp;
 DROP TABLE IF EXISTS mg_averages;
+DROP TABLE IF EXISTS mg_spendings;
+DROP TABLE IF EXISTS mg_balances;
 
 CREATE TABLE mg_timestamp (
 	id     INT NOT NULL AUTO_INCREMENT,
@@ -297,18 +345,31 @@ CREATE TABLE mg_averages (
 	PRIMARY KEY (id)
 );
 
-/* portal */
+CREATE TABLE mg_spendings (
+	email            VARCHAR(64) NOT NULL,
+	current_locked   DOUBLE NOT NULL,
+	current_used     DOUBLE NOT NULL,
+	current_overhead DOUBLE NOT NULL,
+	prev_locked      DOUBLE NOT NULL,
+	prev_used        DOUBLE NOT NULL,
+	prev_overhead    DOUBLE NOT NULL,
+	current_formed   BIGINT UNSIGNED NOT NULL,
+	current_renewed  BIGINT UNSIGNED NOT NULL,
+	prev_formed      BIGINT UNSIGNED NOT NULL,
+	prev_renewed     BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (email),
+	FOREIGN KEY (email) REFERENCES pt_accounts(email)
+);
 
-DROP TABLE IF EXISTS pt_accounts;
-
-CREATE TABLE pt_accounts (
-	id            INT NOT NULL AUTO_INCREMENT,
-	email         VARCHAR(64) NOT NULL UNIQUE,
-	password_hash BINARY(32) NOT NULL,
-	verified      BOOL NOT NULL,
-	time          BIGINT UNSIGNED NOT NULL,
-	nonce         BINARY(16) NOT NULL,
-	PRIMARY KEY (id)
+CREATE TABLE mg_balances (
+	email      VARCHAR(64) NOT NULL,
+	subscribed BOOL NOT NULL,
+	sc_balance DOUBLE NOT NULL,
+	sc_locked  DOUBLE NOT NULL,
+	currency   VARCHAR(8) NOT NULL,
+	stripe_id  VARCHAR(32) NOT NULL,
+	PRIMARY KEY (email),
+	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );
 
 /* hostdb */
@@ -420,48 +481,3 @@ CREATE TABLE ctr_watchdog (
 	PRIMARY KEY (id)
 );
 
-/* satellite */
-
-DROP TABLE IF EXISTS spendings;
-DROP TABLE IF EXISTS payments;
-DROP TABLE IF EXISTS balances;
-
-CREATE TABLE balances (
-	id         INT NOT NULL AUTO_INCREMENT,
-	email      VARCHAR(64) NOT NULL UNIQUE,
-	subscribed BOOL NOT NULL,
-	balance    DOUBLE NOT NULL,
-	locked     DOUBLE NOT NULL,
-	currency   VARCHAR(8) NOT NULL,
-	stripe_id  VARCHAR(32) NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (email) REFERENCES accounts(email)
-);
-
-CREATE TABLE payments (
-	id        INT NOT NULL AUTO_INCREMENT,
-	email     VARCHAR(64) NOT NULL,
-	amount    DOUBLE NOT NULL,
-	currency  VARCHAR(8) NOT NULL,
-	amount_sc DOUBLE NOT NULL,
-	made_at   INT NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (email) REFERENCES accounts(email)
-);
-
-CREATE TABLE spendings (
-	id               INT NOT NULL AUTO_INCREMENT,
-	email            VARCHAR(64) NOT NULL UNIQUE,
-	current_locked   DOUBLE NOT NULL,
-	current_used     DOUBLE NOT NULL,
-	current_overhead DOUBLE NOT NULL,
-	prev_locked      DOUBLE NOT NULL,
-	prev_used        DOUBLE NOT NULL,
-	prev_overhead    DOUBLE NOT NULL,
-	current_formed   BIGINT UNSIGNED NOT NULL,
-	current_renewed  BIGINT UNSIGNED NOT NULL,
-	prev_formed      BIGINT UNSIGNED NOT NULL,
-	prev_renewed     BIGINT UNSIGNED NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (email) REFERENCES accounts(email)
-);

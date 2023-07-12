@@ -34,17 +34,17 @@ const (
 type (
 	// authAttempts keeps track of specific authentication activities.
 	authAttempts struct {
-		LastAttempt  int64 `json:"last"`
-		Count        int64 `json:"count"`
+		LastAttempt  int64
+		Count        int64
 	}
 
 	// authenticationStats is the summary of authentication attempts
 	// from a single IP address.
 	authenticationStats struct {
-		RemoteHost       string        `json:"host"`
-		FailedLogins     *authAttempts `json:"loginfail"`
-		Verifications    *authAttempts `json:"verification"`
-		PasswordResets   *authAttempts `json:"reset"`
+		RemoteHost       string
+		FailedLogins     authAttempts
+		Verifications    authAttempts
+		PasswordResets   authAttempts
 	}
 )
 
@@ -53,17 +53,17 @@ type (
 func (p *Portal) threadedPruneAuthStats() {
 	for {
 		select {
-		case <-p.threads.StopChan():
+		case <-p.tg.StopChan():
 			return
 		case <-time.After(authStatsCheckFrequency):
 		}
 
 		func() {
-			err := p.threads.Add()
+			err := p.tg.Add()
 			if err != nil {
 				return
 			}
-			defer p.threads.Done()
+			defer p.tg.Done()
 
 			p.mu.Lock()
 			defer p.mu.Unlock()
@@ -87,15 +87,17 @@ func (p *Portal) threadedPruneAuthStats() {
 				}
 
 				// Check if the counters need to be reset.
+				stats := p.authStats[entry.RemoteHost]
 				if fl > authStatsCountResetThreshold.Seconds() {
-					p.authStats[entry.RemoteHost].FailedLogins.Count = 0
+					stats.FailedLogins.Count = 0
 				}
 				if vr > authStatsCountResetThreshold.Seconds() {
-					p.authStats[entry.RemoteHost].Verifications.Count = 0
+					stats.Verifications.Count = 0
 				}
 				if pr > authStatsCountResetThreshold.Seconds() {
-					p.authStats[entry.RemoteHost].PasswordResets.Count = 0
+					stats.PasswordResets.Count = 0
 				}
+				p.authStats[entry.RemoteHost] = stats
 			}
 		}()
 	}
@@ -107,38 +109,40 @@ func (p *Portal) checkAndUpdateVerifications(host string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	as, ok := p.authStats[host]
+	stats, ok := p.authStats[host]
 
 	// No such IP in the map yet.
 	if !ok {
 		p.authStats[host] = authenticationStats{
 			RemoteHost: host,
-			FailedLogins: &authAttempts{},
-			Verifications: &authAttempts{
+			FailedLogins: authAttempts{},
+			Verifications: authAttempts{
 				LastAttempt: time.Now().Unix(),
 				Count: 1,
 			},
-			PasswordResets: &authAttempts{},
+			PasswordResets: authAttempts{},
 		}
 		return nil
 	}
 
 	// IP exists but no verification requests yet.
-	if (as.Verifications.Count == 0) {
-		p.authStats[host].Verifications.LastAttempt = time.Now().Unix()
-		p.authStats[host].Verifications.Count = 1
+	if (stats.Verifications.Count == 0) {
+		stats.Verifications.LastAttempt = time.Now().Unix()
+		stats.Verifications.Count = 1
+		p.authStats[host] = stats
 		return nil
 	}
 
 	// Check for abuse.
-	p.authStats[host].Verifications.LastAttempt = time.Now().Unix()
-	p.authStats[host].Verifications.Count++
-	span := time.Now().Unix() - as.Verifications.LastAttempt
+	stats.Verifications.LastAttempt = time.Now().Unix()
+	stats.Verifications.Count++
+	span := time.Now().Unix() - stats.Verifications.LastAttempt
 	if span == 0 {
 		span = 1 // To avoid division by zero.
 	}
+	p.authStats[host] = stats
 
-	if float64(as.Verifications.Count) / float64(span) > maxVerifications {
+	if float64(stats.Verifications.Count) / float64(span) > maxVerifications {
 		return errors.New("too many verification requests from " + host)
 	}
 
@@ -151,38 +155,40 @@ func (p *Portal) checkAndUpdateFailedLogins(host string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	as, ok := p.authStats[host]
+	stats, ok := p.authStats[host]
 
 	// No such IP in the map yet.
 	if !ok {
 		p.authStats[host] = authenticationStats{
 			RemoteHost: host,
-			FailedLogins: &authAttempts{
+			FailedLogins: authAttempts{
 				LastAttempt: time.Now().Unix(),
 				Count: 1,
 			},
-			Verifications: &authAttempts{},
-			PasswordResets: &authAttempts{},
+			Verifications: authAttempts{},
+			PasswordResets: authAttempts{},
 		}
 		return nil
 	}
 
 	// IP exists but no failed logins yet.
-	if (as.FailedLogins.Count == 0) {
-		p.authStats[host].FailedLogins.LastAttempt = time.Now().Unix()
-		p.authStats[host].FailedLogins.Count = 1
+	if (stats.FailedLogins.Count == 0) {
+		stats.FailedLogins.LastAttempt = time.Now().Unix()
+		stats.FailedLogins.Count = 1
+		p.authStats[host] = stats
 		return nil
 	}
 
 	// Check for abuse.
-	p.authStats[host].FailedLogins.LastAttempt = time.Now().Unix()
-	p.authStats[host].FailedLogins.Count++
-	span := time.Now().Unix() - as.FailedLogins.LastAttempt
+	stats.FailedLogins.LastAttempt = time.Now().Unix()
+	stats.FailedLogins.Count++
+	span := time.Now().Unix() - stats.FailedLogins.LastAttempt
 	if span == 0 {
 		span = 1 // To avoid division by zero.
 	}
+	p.authStats[host] = stats
 
-	if float64(as.FailedLogins.Count) / float64(span) > maxFailedLogins {
+	if float64(stats.FailedLogins.Count) / float64(span) > maxFailedLogins {
 		return errors.New("too many failed logins from " + host)
 	}
 
@@ -195,15 +201,15 @@ func (p *Portal) checkAndUpdatePasswordResets(host string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	as, ok := p.authStats[host]
+	stats, ok := p.authStats[host]
 
 	// No such IP in the map yet.
 	if !ok {
 		p.authStats[host] = authenticationStats{
 			RemoteHost: host,
-			FailedLogins: &authAttempts{},
-			Verifications: &authAttempts{},
-			PasswordResets: &authAttempts{
+			FailedLogins: authAttempts{},
+			Verifications: authAttempts{},
+			PasswordResets: authAttempts{
 				LastAttempt: time.Now().Unix(),
 				Count: 1,
 			},
@@ -212,21 +218,23 @@ func (p *Portal) checkAndUpdatePasswordResets(host string) error {
 	}
 
 	// IP exists but no password resets yet.
-	if (as.PasswordResets.Count == 0) {
-		p.authStats[host].PasswordResets.LastAttempt = time.Now().Unix()
-		p.authStats[host].PasswordResets.Count = 1
+	if (stats.PasswordResets.Count == 0) {
+		stats.PasswordResets.LastAttempt = time.Now().Unix()
+		stats.PasswordResets.Count = 1
+		p.authStats[host] = stats
 		return nil
 	}
 
 	// Check for abuse.
-	p.authStats[host].PasswordResets.LastAttempt = time.Now().Unix()
-	p.authStats[host].PasswordResets.Count++
-	span := time.Now().Unix() - as.PasswordResets.LastAttempt
+	stats.PasswordResets.LastAttempt = time.Now().Unix()
+	stats.PasswordResets.Count++
+	span := time.Now().Unix() - stats.PasswordResets.LastAttempt
 	if span == 0 {
 		span = 1 // To avoid division by zero.
 	}
+	p.authStats[host] = stats
 
-	if float64(as.PasswordResets.Count) / float64(span) > maxPasswordResets {
+	if float64(stats.PasswordResets.Count) / float64(span) > maxPasswordResets {
 		return errors.New("too many password reset requests from " + host)
 	}
 
