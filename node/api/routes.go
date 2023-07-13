@@ -72,10 +72,10 @@ func (api *API) buildHTTPRoutes() {
 	}
 
 	// Portal API Calls.
-	/*if api.portal != nil {
+	if api.portal != nil {
 		router.GET("/portal/credits", RequirePassword(api.portalCreditsHandlerGET, requiredPassword))
 		router.POST("/portal/credits", RequirePassword(api.portalCreditsHandlerPOST, requiredPassword))
-	}*/
+	}
 
 	// Apply UserAgent middleware and return the Router.
 	api.routerMu.Lock()

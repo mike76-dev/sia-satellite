@@ -190,8 +190,8 @@ func initCmds() *cobra.Command {
 	managerCmd.AddCommand(managerRateCmd)
 	managerCmd.AddCommand(managerAveragesCmd)
 
-	//root.AddCommand(portalCmd)
-	//portalCmd.AddCommand(portalSetCmd)
+	root.AddCommand(portalCmd)
+	portalCmd.AddCommand(portalSetCmd)
 
 	//root.AddCommand(satelliteCmd)
 	//satelliteCmd.AddCommand(satelliteRentersCmd, satelliteRenterCmd, satelliteBalanceCmd, satelliteContractsCmd)
