@@ -287,6 +287,9 @@ type Manager interface {
 	// Close safely shuts down the manager.
 	Close() error
 
+	// Contracts returns storage contracts.
+	Contracts() []RenterContract
+
 	// ContractsByRenter returns storage contracts filtered by the renter.
 	ContractsByRenter(types.PublicKey) []RenterContract
 
@@ -312,6 +315,9 @@ type Manager interface {
 	// GetExchangeRate returns the exchange rate of a given currency.
 	GetExchangeRate(string) (float64, error)
 
+	// GetRenter returns the renter by the public key.
+	GetRenter(types.PublicKey) (Renter, error)
+
 	// GetSiacoinRate calculates the SC price in a given currency.
 	GetSiacoinRate(string) (float64, error)
 
@@ -330,6 +336,9 @@ type Manager interface {
 
 	// LockSiacoins moves a part of the balance to "locked".
 	LockSiacoins(string, float64) error
+
+	// OldContracts returns the contracts that have expired.
+	OldContracts() []RenterContract
 
 	// OldContractsByRenter returns expired contracts filtered by the renter.
 	OldContractsByRenter(types.PublicKey) []RenterContract

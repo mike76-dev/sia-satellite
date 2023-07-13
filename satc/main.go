@@ -115,20 +115,20 @@ func statuscmd() {
 `)
 	}
 
-	// Satellite Info.
-	/*renters, err := httpClient.SatelliteRentersGet()
+	// Manager Info.
+	renters, err := httpClient.ManagerRentersGet()
 	if err != nil {
 		die(err)
 	}
-	contracts, err := httpClient.SatelliteContractsGet("")
+	contracts, err := httpClient.ManagerContractsGet("")
 	if err != nil {
 		die(err)
 	}
 
-	fmt.Printf(`Satellite:
+	fmt.Printf(`Manager:
   Renters:          %v
   Active Contracts: %v
-`, len(renters.Renters), len(contracts.ActiveContracts))*/
+`, len(renters.Renters), len(contracts.ActiveContracts))
 }
 
 func main() {
@@ -189,12 +189,10 @@ func initCmds() *cobra.Command {
 	root.AddCommand(managerCmd)
 	managerCmd.AddCommand(managerRateCmd)
 	managerCmd.AddCommand(managerAveragesCmd)
+	managerCmd.AddCommand(managerRentersCmd, managerRenterCmd, managerBalanceCmd, managerContractsCmd)
 
 	root.AddCommand(portalCmd)
 	portalCmd.AddCommand(portalSetCmd)
-
-	//root.AddCommand(satelliteCmd)
-	//satelliteCmd.AddCommand(satelliteRentersCmd, satelliteRenterCmd, satelliteBalanceCmd, satelliteContractsCmd)
 
 	root.AddCommand(walletCmd)
 	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangePasswordCmd, walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd, walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)

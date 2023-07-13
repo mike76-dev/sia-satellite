@@ -65,10 +65,11 @@ func (api *API) buildHTTPRoutes() {
 	if api.manager != nil {
 		router.GET("/manager/rate/:currency", api.managerRateHandlerGET)
 		router.GET("/manager/averages/:currency", api.managerAveragesHandlerGET)
-		/*router.GET("/satellite/renter/:publickey", RequirePassword(api.satelliteRenterHandlerGET, requiredPassword))
-		router.GET("/satellite/balance/:publickey", RequirePassword(api.satelliteBalanceHandlerGET, requiredPassword))
-		router.GET("/satellite/contracts", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))
-		router.GET("/satellite/contracts/:publickey", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))*/
+		router.GET("/manager/renters", RequirePassword(api.managerRentersHandlerGET, requiredPassword))
+		router.GET("/manager/renter/:publickey", RequirePassword(api.managerRenterHandlerGET, requiredPassword))
+		router.GET("/manager/balance/:publickey", RequirePassword(api.managerBalanceHandlerGET, requiredPassword))
+		router.GET("/manager/contracts", RequirePassword(api.managerContractsHandlerGET, requiredPassword))
+		router.GET("/manager/contracts/:publickey", RequirePassword(api.managerContractsHandlerGET, requiredPassword))
 	}
 
 	// Portal API Calls.

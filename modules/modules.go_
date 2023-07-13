@@ -41,17 +41,8 @@ type Satellite interface {
 	// hostdb's weighting algorithm.
 	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
 
-	// GetRenter returns the renter by the public key.
-	GetRenter(types.PublicKey) (Renter, error)
-
 	// GetBalance retrieves the balance information on the account.
 	GetBalance(string) (*UserBalance, error)
-
-	// Contracts returns storage contracts.
-	Contracts() []RenterContract
-
-	// OldContracts returns the contracts that have expired.
-	OldContracts() []RenterContract
 }
 
 // ContractFormer is the minimal interface to be used by Provider.
