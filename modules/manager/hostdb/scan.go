@@ -178,7 +178,7 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 	// Grab the host from the host tree, and update it with the new settings.
 	newEntry, exists := hdb.staticHostTree.Select(entry.PublicKey)
 	if exists {
-		newEntry.HostSettings = entry.HostSettings
+		newEntry.Settings = entry.Settings
 		newEntry.IPNets = entry.IPNets
 		newEntry.LastIPNetChange = entry.LastIPNetChange
 	} else {
@@ -323,7 +323,7 @@ func (hdb *HostDB) staticLookupIPNets(address modules.NetAddress) (ipNets []stri
 // uptime and updating to the host's preferences.
 func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 	// Request settings from the queued host entry.
-	netAddr := entry.NetAddress
+	netAddr := entry.Settings.NetAddress
 	pubKey := entry.PublicKey
 
 	// Resolve the host's used subnets and update the timestamp if they
@@ -395,7 +395,7 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 
 		// Initiate RHP3 protocol.
 		if exists {
-			settings.NetAddress = oldEntry.NetAddress
+			settings.NetAddress = oldEntry.Settings.NetAddress
 		}
 		err = proto.WithTransportV3(ctx, settings.SiamuxAddr(), pubKey, func (t *rhpv3.Transport) error {
 			var err error
@@ -412,7 +412,7 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 	if err != nil {
 		hdb.staticLog.Printf("INFO: scan of host at %v failed: %v\n", pubKey, err)
 	} else {
-		entry.HostSettings = settings
+		entry.Settings = settings
 		entry.PriceTable = pt
 	}
 	success := err == nil

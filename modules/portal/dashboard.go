@@ -248,11 +248,11 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	var totalUploadCost types.Currency
 	var totalCollateral types.Currency
 	for _, host := range hosts {
-		totalContractCost = totalContractCost.Add(host.ContractPrice)
-		totalDownloadCost = totalDownloadCost.Add(host.DownloadBandwidthPrice)
-		totalStorageCost = totalStorageCost.Add(host.StoragePrice)
-		totalUploadCost = totalUploadCost.Add(host.UploadBandwidthPrice)
-		totalCollateral = totalCollateral.Add(host.Collateral)
+		totalContractCost = totalContractCost.Add(host.Settings.ContractPrice)
+		totalDownloadCost = totalDownloadCost.Add(host.Settings.DownloadBandwidthPrice)
+		totalStorageCost = totalStorageCost.Add(host.Settings.StoragePrice)
+		totalUploadCost = totalUploadCost.Add(host.Settings.UploadBandwidthPrice)
+		totalCollateral = totalCollateral.Add(host.Settings.Collateral)
 	}
 
 	// Account for the expected data size and duration.
@@ -450,8 +450,8 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			var netAddress string
 			hdbe, exists, _ := api.portal.manager.Host(c.HostPublicKey)
 			if exists {
-				netAddress = hdbe.NetAddress
-				cp = hdbe.ContractPrice
+				netAddress = hdbe.Settings.NetAddress
+				cp = hdbe.Settings.ContractPrice
 			}
 
 			// Build the contract.
@@ -468,7 +468,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 				GoodForUpload:       c.Utility.GoodForUpload,
 				GoodForRenew:        c.Utility.GoodForRenew,
 				HostPublicKey:       c.HostPublicKey.String(),
-				HostVersion:         hdbe.Version,
+				HostVersion:         hdbe.Settings.Version,
 				ID:                  c.ID.String(),
 				NetAddress:          netAddress,
 				MaintenanceSpending: maintenanceSpending.String(),
@@ -521,8 +521,8 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			var netAddress string
 			hdbe, exists, _ := api.portal.manager.Host(c.HostPublicKey)
 			if exists {
-				netAddress = hdbe.NetAddress
-				cp = hdbe.ContractPrice
+				netAddress = hdbe.Settings.NetAddress
+				cp = hdbe.Settings.ContractPrice
 			}
 
 			// Build the contract.
@@ -539,7 +539,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 				GoodForUpload:       c.Utility.GoodForUpload,
 				GoodForRenew:        c.Utility.GoodForRenew,
 				HostPublicKey:       c.HostPublicKey.String(),
-				HostVersion:         hdbe.Version,
+				HostVersion:         hdbe.Settings.Version,
 				ID:                  c.ID.String(),
 				NetAddress:          netAddress,
 				MaintenanceSpending: maintenanceSpending.String(),

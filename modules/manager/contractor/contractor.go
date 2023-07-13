@@ -151,12 +151,12 @@ func (c *Contractor) PeriodSpending(rpk types.PublicKey) (modules.RenterSpending
 			spending.MaintenanceSpending = spending.MaintenanceSpending.Add(contract.MaintenanceSpending)
 			spending.UploadSpending = spending.UploadSpending.Add(contract.UploadSpending)
 			spending.StorageSpending = spending.StorageSpending.Add(contract.StorageSpending)
-		} else if err != nil && exist && contract.EndHeight + host.WindowSize + modules.MaturityDelay > c.blockHeight {
+		} else if err != nil && exist && contract.EndHeight + host.Settings.WindowSize + modules.MaturityDelay > c.blockHeight {
 			// Calculate funds that are being withheld in contracts.
 			spending.WithheldFunds = spending.WithheldFunds.Add(contract.RenterFunds)
 			// Record the largest window size for worst case when reporting the spending.
-			if contract.EndHeight + host.WindowSize + modules.MaturityDelay >= spending.ReleaseBlock {
-				spending.ReleaseBlock = contract.EndHeight + host.WindowSize + modules.MaturityDelay
+			if contract.EndHeight + host.Settings.WindowSize + modules.MaturityDelay >= spending.ReleaseBlock {
+				spending.ReleaseBlock = contract.EndHeight + host.Settings.WindowSize + modules.MaturityDelay
 			}
 			// Calculate Previous spending.
 			spending.PreviousSpending = spending.PreviousSpending.Add(contract.ContractFee).Add(contract.TxnFee).Add(contract.SiafundFee).Add(contract.DownloadSpending).Add(contract.UploadSpending).Add(contract.StorageSpending).Add(contract.FundAccountSpending).Add(contract.MaintenanceSpending.Sum())

@@ -181,7 +181,7 @@ func (n *node) remove() {
 
 // Host returns the address of the HostEntry.
 func (he *hostEntry) Host() string {
-	return modules.NetAddress(he.NetAddress).Host()
+	return modules.NetAddress(he.Settings.NetAddress).Host()
 }
 
 // All returns all of the hosts in the host tree, sorted by score.
@@ -322,7 +322,7 @@ func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.Publ
 			continue
 		}
 		// Add the node to the addressFilter.
-		filter.Add(modules.NetAddress(node.entry.NetAddress))
+		filter.Add(modules.NetAddress(node.entry.Settings.NetAddress))
 	}
 
 	// Remove hosts we want to blacklist from the tree but remember them to make
@@ -352,10 +352,10 @@ func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.Publ
 		node := ht.root.nodeAtScore(randScore)
 		scoreOne := types.NewCurrency64(1)
 
-		if node.entry.AcceptingContracts &&
+		if node.entry.Settings.AcceptingContracts &&
 			len(node.entry.ScanHistory) > 0 &&
 			node.entry.ScanHistory[len(node.entry.ScanHistory) - 1].Success &&
-			!filter.Filtered(modules.NetAddress(node.entry.NetAddress)) &&
+			!filter.Filtered(modules.NetAddress(node.entry.Settings.NetAddress)) &&
 			node.entry.score.Cmp(scoreOne) > 0 {
 			// The host must be online and accepting contracts to be returned
 			// by the random function. It also has to pass the addressFilter
@@ -363,7 +363,7 @@ func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.Publ
 			hosts = append(hosts, node.entry.HostDBEntry)
 
 			// If the host passed the filter, we add it to the filter.
-			filter.Add(modules.NetAddress(node.entry.NetAddress))
+			filter.Add(modules.NetAddress(node.entry.Settings.NetAddress))
 		}
 
 		removedEntries = append(removedEntries, node.entry)

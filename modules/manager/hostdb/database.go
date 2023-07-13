@@ -406,7 +406,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 
 		err := hdb.insert(host)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: could not insert host into hosttree while loading:", host.NetAddress)
+			hdb.staticLog.Println("ERROR: could not insert host into hosttree while loading:", host.Settings.NetAddress)
 		}
 		hdb.mu.Unlock()
 

@@ -258,9 +258,9 @@ func (c *Contractor) sufficientFundsCheck(contract modules.RenterContract, host 
 	// Contract should not be used for uploading if the contract does
 	// not have enough money remaining to perform the upload.
 	blockBytes := types.NewCurrency64(modules.SectorSize * period)
-	sectorStoragePrice := host.StoragePrice.Mul(blockBytes)
-	sectorUploadBandwidthPrice := host.UploadBandwidthPrice.Mul64(modules.SectorSize)
-	sectorDownloadBandwidthPrice := host.DownloadBandwidthPrice.Mul64(modules.SectorSize)
+	sectorStoragePrice := host.Settings.StoragePrice.Mul(blockBytes)
+	sectorUploadBandwidthPrice := host.Settings.UploadBandwidthPrice.Mul64(modules.SectorSize)
+	sectorDownloadBandwidthPrice := host.Settings.DownloadBandwidthPrice.Mul64(modules.SectorSize)
 	sectorBandwidthPrice := sectorUploadBandwidthPrice.Add(sectorDownloadBandwidthPrice)
 	sectorPrice := sectorStoragePrice.Add(sectorBandwidthPrice)
 	percentRemaining, _ := big.NewRat(0, 1).SetFrac(contract.RenterFunds.Big(), contract.TotalCost.Big()).Float64()

@@ -23,7 +23,7 @@ func findHostAnnouncements(b types.Block) (announcements []modules.HostDBEntry) 
 
 			// Add the announcement to the slice being returned.
 			var host modules.HostDBEntry
-			host.NetAddress = string(addr)
+			host.Settings.NetAddress = string(addr)
 			host.PublicKey = pubKey
 			announcements = append(announcements, host)
 		}
@@ -36,12 +36,12 @@ func findHostAnnouncements(b types.Block) (announcements []modules.HostDBEntry) 
 // will be put into the list of active hosts.
 func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 	// Remove garbage hosts and local hosts.
-	if err := modules.NetAddress(host.NetAddress).IsValid(); err != nil {
-		hdb.staticLog.Printf("WARN: host '%v' has an invalid NetAddress: %v\n", host.NetAddress, err)
+	if err := modules.NetAddress(host.Settings.NetAddress).IsValid(); err != nil {
+		hdb.staticLog.Printf("WARN: host '%v' has an invalid NetAddress: %v\n", host.Settings.NetAddress, err)
 		return
 	}
 	// Ignore all local hosts announced through the blockchain.
-	if modules.NetAddress(host.NetAddress).IsLocal() {
+	if modules.NetAddress(host.Settings.NetAddress).IsLocal() {
 		return
 	}
 
@@ -54,7 +54,7 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 		// the first seen value has been set to zero (no hosts actually have a
 		// first seen height of zero, but due to rescans hosts can end up with
 		// a zero-value FirstSeen field.
-		oldEntry.NetAddress = host.NetAddress
+		oldEntry.Settings.NetAddress = host.Settings.NetAddress
 		if oldEntry.FirstSeen == 0 {
 			oldEntry.FirstSeen = hdb.blockHeight
 		}
@@ -63,7 +63,7 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 		// Resolve the host's used subnets and update the timestamp if they
 		// changed. We only update the timestamp if resolving the ipNets was
 		// successful.
-		ipNets, err := hdb.staticLookupIPNets(modules.NetAddress(oldEntry.NetAddress))
+		ipNets, err := hdb.staticLookupIPNets(modules.NetAddress(oldEntry.Settings.NetAddress))
 		if err == nil && !equalIPNets(ipNets, oldEntry.IPNets) {
 			oldEntry.IPNets = ipNets
 			oldEntry.LastIPNetChange = time.Now()

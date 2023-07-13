@@ -70,28 +70,28 @@ func (hdb *HostDB) RandomHostsWithAllowance(n int, blacklist, addressBlacklist [
 // limitsExceeded checks if the host falls out of the limits set
 // in the allowance.
 func limitsExceeded(host modules.HostDBEntry, allowance modules.Allowance) bool {
-	if host.MaxDuration < allowance.Period {
+	if host.Settings.MaxDuration < allowance.Period {
 		return true
 	}
-	if !allowance.MaxRPCPrice.IsZero() && host.BaseRPCPrice.Cmp(allowance.MaxRPCPrice) > 0 {
+	if !allowance.MaxRPCPrice.IsZero() && host.Settings.BaseRPCPrice.Cmp(allowance.MaxRPCPrice) > 0 {
 		return true
 	}
-	if !allowance.MaxContractPrice.IsZero() && host.ContractPrice.Cmp(allowance.MaxContractPrice) > 0 {
+	if !allowance.MaxContractPrice.IsZero() && host.Settings.ContractPrice.Cmp(allowance.MaxContractPrice) > 0 {
 		return true
 	}
-	if !allowance.MaxDownloadBandwidthPrice.IsZero() && host.DownloadBandwidthPrice.Cmp(allowance.MaxDownloadBandwidthPrice) > 0 {
+	if !allowance.MaxDownloadBandwidthPrice.IsZero() && host.Settings.DownloadBandwidthPrice.Cmp(allowance.MaxDownloadBandwidthPrice) > 0 {
 		return true
 	}
-	if !allowance.MaxSectorAccessPrice.IsZero() && host.SectorAccessPrice.Cmp(allowance.MaxSectorAccessPrice) > 0 {
+	if !allowance.MaxSectorAccessPrice.IsZero() && host.Settings.SectorAccessPrice.Cmp(allowance.MaxSectorAccessPrice) > 0 {
 		return true
 	}
-	if !allowance.MaxStoragePrice.IsZero() && host.StoragePrice.Cmp(allowance.MaxStoragePrice) > 0 {
+	if !allowance.MaxStoragePrice.IsZero() && host.Settings.StoragePrice.Cmp(allowance.MaxStoragePrice) > 0 {
 		return true
 	}
-	if !allowance.MaxUploadBandwidthPrice.IsZero() && host.UploadBandwidthPrice.Cmp(allowance.MaxUploadBandwidthPrice) > 0 {
+	if !allowance.MaxUploadBandwidthPrice.IsZero() && host.Settings.UploadBandwidthPrice.Cmp(allowance.MaxUploadBandwidthPrice) > 0 {
 		return true
 	}
-	if !allowance.MinMaxCollateral.IsZero() && host.MaxCollateral.Cmp(allowance.MinMaxCollateral) < 0 {
+	if !allowance.MinMaxCollateral.IsZero() && host.Settings.MaxCollateral.Cmp(allowance.MinMaxCollateral) < 0 {
 		return true
 	}
 	return false

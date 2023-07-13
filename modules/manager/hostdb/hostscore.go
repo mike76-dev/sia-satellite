@@ -17,7 +17,7 @@ import (
 // scoring. Since we don't know whether rhpv2 or rhpv3 are used, we return the
 // bigger one for a pesimistic score.
 func contractPriceForScore(he modules.HostDBEntry) types.Currency {
-	cp := he.ContractPrice
+	cp := he.Settings.ContractPrice
 	if cp.Cmp(he.PriceTable.ContractPrice) > 0 {
 		cp = he.PriceTable.ContractPrice
 	}
@@ -69,7 +69,7 @@ func hostPeriodCostForScore(a modules.Allowance, he modules.HostDBEntry) types.C
 	storagePerHost := uint64(float64(a.ExpectedStorage * a.TotalShards / a.MinShards) / float64(a.Hosts))
 
 	// Compute the individual costs.
-	hostCollateral := rhpv2.ContractFormationCollateral(a.Period, storagePerHost, he.HostSettings)
+	hostCollateral := rhpv2.ContractFormationCollateral(a.Period, storagePerHost, he.Settings)
 	hostContractPrice := contractPriceForScore(he)
 	hostUploadCost := uploadCostForScore(a, he, uploadPerHost)
 	hostDownloadCost := downloadCostForScore(he, downloadPerHost)
@@ -175,7 +175,7 @@ func (hdb *HostDB) storageRemainingScore(allowance modules.Allowance, entry modu
 	// hostExpectedStorage is the amount of storage that we expect to be able to
 	// store on this host overall, which should include the stored data that is
 	// already on the host.
-	hostExpectedStorage := (float64(entry.RemainingStorage) * 0.25) + storedData
+	hostExpectedStorage := (float64(entry.Settings.RemainingStorage) * 0.25) + storedData
 
 	// The score for the host is the square of the amount of storage we
 	// expected divided by the amount of storage we want. If we expect to be
@@ -239,7 +239,7 @@ func (hdb *HostDB) collateralScore(allowance modules.Allowance, entry modules.Ho
 	}
 
 	// Ignore hosts which have set their max collateral to 0.
-	if entry.MaxCollateral.IsZero() || entry.Collateral.IsZero() {
+	if entry.Settings.MaxCollateral.IsZero() || entry.Settings.Collateral.IsZero() {
 		return 0
 	}
 
@@ -248,8 +248,8 @@ func (hdb *HostDB) collateralScore(allowance modules.Allowance, entry modules.Ho
 	storage := allowance.ExpectedStorage * allowance.TotalShards / allowance.MinShards
 
 	// Calculate the expected collateral.
-	expectedCollateral := entry.Collateral.Mul64(storage).Mul64(duration)
-	expectedCollateralMax := entry.MaxCollateral.Div64(2) // 2x buffer - renter may end up storing extra data.
+	expectedCollateral := entry.Settings.Collateral.Mul64(storage).Mul64(duration)
+	expectedCollateralMax := entry.Settings.MaxCollateral.Div64(2) // 2x buffer - renter may end up storing extra data.
 	if expectedCollateral.Cmp(expectedCollateralMax) > 0 {
 		expectedCollateral = expectedCollateralMax
 	}
@@ -364,7 +364,7 @@ func (hdb *HostDB) versionScore(entry modules.HostDBEntry) float64 {
 	}
 	weight := 1.0
 	for _, v := range versions {
-		if build.VersionCmp(entry.Version, v.version) < 0 {
+		if build.VersionCmp(entry.Settings.Version, v.version) < 0 {
 			weight *= v.penalty
 		}
 	}

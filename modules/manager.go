@@ -91,47 +91,49 @@ type HostScoreBreakdown struct {
 // A HostDBEntry represents one host entry in the Manager's host DB. It
 // aggregates the host's external settings and metrics with its public key.
 type HostDBEntry struct {
-	rhpv2.HostSettings
-	PriceTable rhpv3.HostPriceTable
+	// Need to wrap rhpv2.HostSettings in a separate named field due to
+	// issues with JSON encoding.
+	Settings   rhpv2.HostSettings   `json:"settings"`
+	PriceTable rhpv3.HostPriceTable `json:"pricetable"`
 
 	// FirstSeen is the first block height at which this host was announced.
-	FirstSeen uint64
+	FirstSeen uint64 `json:"firstseen"`
 
 	// LastAnnouncement is the last block height at which this host was announced.
-	LastAnnouncement uint64
+	LastAnnouncement uint64 `json:"lastannouncement"`
 
 	// Measurements that have been taken on the host. The most recent
 	// measurements are kept in full detail, historic ones are compressed into
 	// the historic values.
-	HistoricDowntime time.Duration
-	HistoricUptime   time.Duration
-	ScanHistory      HostDBScans
+	HistoricDowntime time.Duration `json:"historicdowntime"`
+	HistoricUptime   time.Duration `json:"historicuptime"`
+	ScanHistory      HostDBScans   `json:"scanhistory"`
 
 	// Measurements that are taken whenever we interact with a host.
-	HistoricFailedInteractions     float64
-	HistoricSuccessfulInteractions float64
-	RecentFailedInteractions       float64
-	RecentSuccessfulInteractions   float64
+	HistoricFailedInteractions     float64 `json:"historicfailedinteractions"`
+	HistoricSuccessfulInteractions float64 `json:"historicsuccessfulinteractions"`
+	RecentFailedInteractions       float64 `json:"recentfailedinteractions"`
+	RecentSuccessfulInteractions   float64 `json:"recentsuccessfulinteractions"`
 
-	LastHistoricUpdate uint64
+	LastHistoricUpdate uint64 `json:"lasthistoricupdate"`
 
 	// Measurements related to the IP subnet mask.
-	IPNets          []string
-	LastIPNetChange time.Time
+	IPNets          []string  `json:"ipnets"`
+	LastIPNetChange time.Time `json:"lastipnetchange"`
 
 	// The public key of the host, stored separately to minimize risk of certain
 	// MitM based vulnerabilities.
-	PublicKey types.PublicKey
+	PublicKey types.PublicKey `json:"publickey"`
 
 	// Filtered says whether or not a HostDBEntry is being filtered out of the
 	// filtered hosttree due to the filter mode of the hosttree.
-	Filtered bool
+	Filtered bool `json:"filtered"`
 }
 
 // HostDBScan represents a single scan event.
 type HostDBScan struct {
-	Timestamp time.Time
-	Success   bool
+	Timestamp time.Time `json:"timestamp"`
+	Success   bool      `json:"success"`
 }
 
 // HostDBScans represents a sortable slice of scans.

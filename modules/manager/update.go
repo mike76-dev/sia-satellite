@@ -30,25 +30,25 @@ var (
 
 // capAverages checks if the host settings exceed the sane values.
 func capAverages(entry modules.HostDBEntry) bool {
-	if entry.StoragePrice.Cmp(saneStoragePrice) > 0 {
+	if entry.Settings.StoragePrice.Cmp(saneStoragePrice) > 0 {
 		return true
 	}
-	if entry.Collateral.Cmp(saneCollateral) > 0 {
+	if entry.Settings.Collateral.Cmp(saneCollateral) > 0 {
 		return true
 	}
-	if entry.UploadBandwidthPrice.Cmp(saneUploadPrice) > 0 {
+	if entry.Settings.UploadBandwidthPrice.Cmp(saneUploadPrice) > 0 {
 		return true
 	}
-	if entry.DownloadBandwidthPrice.Cmp(saneDownloadPrice) > 0 {
+	if entry.Settings.DownloadBandwidthPrice.Cmp(saneDownloadPrice) > 0 {
 		return true
 	}
-	if entry.ContractPrice.Cmp(saneContractPrice) > 0 {
+	if entry.Settings.ContractPrice.Cmp(saneContractPrice) > 0 {
 		return true
 	}
-	if entry.BaseRPCPrice.Cmp(saneBaseRPCPrice) > 0 {
+	if entry.Settings.BaseRPCPrice.Cmp(saneBaseRPCPrice) > 0 {
 		return true
 	}
-	if entry.SectorAccessPrice.Cmp(saneSectorAccessPrice) > 0 {
+	if entry.Settings.SectorAccessPrice.Cmp(saneSectorAccessPrice) > 0 {
 		return true
 	}
 	return false
@@ -82,14 +82,14 @@ func (m *Manager) calculateAverages() {
 		if capAverages(entry) {
 			continue
 		}
-		m.hostAverages.Duration = m.hostAverages.Duration + entry.MaxDuration
-		m.hostAverages.StoragePrice = m.hostAverages.StoragePrice.Add(entry.StoragePrice)
-		m.hostAverages.Collateral = m.hostAverages.Collateral.Add(entry.Collateral)
-		m.hostAverages.DownloadBandwidthPrice = m.hostAverages.DownloadBandwidthPrice.Add(entry.DownloadBandwidthPrice)
-		m.hostAverages.UploadBandwidthPrice = m.hostAverages.UploadBandwidthPrice.Add(entry.UploadBandwidthPrice)
-		m.hostAverages.ContractPrice = m.hostAverages.ContractPrice.Add(entry.ContractPrice)
-		m.hostAverages.BaseRPCPrice = m.hostAverages.BaseRPCPrice.Add(entry.BaseRPCPrice)
-		m.hostAverages.SectorAccessPrice = m.hostAverages.SectorAccessPrice.Add(entry.SectorAccessPrice)
+		m.hostAverages.Duration = m.hostAverages.Duration + entry.Settings.MaxDuration
+		m.hostAverages.StoragePrice = m.hostAverages.StoragePrice.Add(entry.Settings.StoragePrice)
+		m.hostAverages.Collateral = m.hostAverages.Collateral.Add(entry.Settings.Collateral)
+		m.hostAverages.DownloadBandwidthPrice = m.hostAverages.DownloadBandwidthPrice.Add(entry.Settings.DownloadBandwidthPrice)
+		m.hostAverages.UploadBandwidthPrice = m.hostAverages.UploadBandwidthPrice.Add(entry.Settings.UploadBandwidthPrice)
+		m.hostAverages.ContractPrice = m.hostAverages.ContractPrice.Add(entry.Settings.ContractPrice)
+		m.hostAverages.BaseRPCPrice = m.hostAverages.BaseRPCPrice.Add(entry.Settings.BaseRPCPrice)
+		m.hostAverages.SectorAccessPrice = m.hostAverages.SectorAccessPrice.Add(entry.Settings.SectorAccessPrice)
 		numHosts++
 	}
 

@@ -203,7 +203,7 @@ var _ modules.HostDB = (*HostDB)(nil)
 // insert inserts the HostDBEntry into both hosttrees.
 func (hdb *HostDB) insert(host modules.HostDBEntry) error {
 	err := hdb.staticHostTree.Insert(host)
-	if hdb.filteredDomains.managedIsFiltered(modules.NetAddress(host.NetAddress)) {
+	if hdb.filteredDomains.managedIsFiltered(modules.NetAddress(host.Settings.NetAddress)) {
 		hdb.filteredHosts[host.PublicKey.String()] = host.PublicKey
 		err = modules.ComposeErrors(err, hdb.staticHostTree.SetFiltered(host.PublicKey, true))
 	}
@@ -224,7 +224,7 @@ func (hdb *HostDB) modify(host modules.HostDBEntry) error {
 	isWhitelist := hdb.filterMode == modules.HostDBActiveWhitelist
 
 	err := hdb.staticHostTree.Modify(host)
-	if hdb.filteredDomains.managedIsFiltered(modules.NetAddress(host.NetAddress)) {
+	if hdb.filteredDomains.managedIsFiltered(modules.NetAddress(host.Settings.NetAddress)) {
 		hdb.filteredHosts[host.PublicKey.String()] = host.PublicKey
 		err = modules.ComposeErrors(err, hdb.staticHostTree.SetFiltered(host.PublicKey, true))
 		if isWhitelist {
@@ -479,7 +479,7 @@ func (hdb *HostDB) ActiveHosts() (activeHosts []modules.HostDBEntry, err error) 
 		if !entry.ScanHistory[len(entry.ScanHistory) - 1].Success {
 			continue
 		}
-		if !entry.AcceptingContracts {
+		if !entry.Settings.AcceptingContracts {
 			continue
 		}
 		activeHosts = append(activeHosts, entry)
@@ -541,12 +541,12 @@ func (hdb *HostDB) CheckForIPViolations(hosts []types.PublicKey) ([]types.Public
 	filter := hosttree.NewFilter()
 	for _, entry := range entries {
 		// Check if the host violates the rules.
-		if filter.Filtered(modules.NetAddress(entry.NetAddress)) {
+		if filter.Filtered(modules.NetAddress(entry.Settings.NetAddress)) {
 			badHosts = append(badHosts, entry.PublicKey)
 			continue
 		}
 		// If it didn't then we add it to the filter.
-		filter.Add(modules.NetAddress(entry.NetAddress))
+		filter.Add(modules.NetAddress(entry.Settings.NetAddress))
 	}
 	return badHosts, nil
 }
@@ -663,7 +663,7 @@ func (hdb *HostDB) SetFilterMode(fm modules.FilterMode, hosts []types.PublicKey,
 	var allErrs error
 	allHosts := hdb.staticHostTree.All()
 	for _, host := range allHosts {
-		if !filteredDomains.managedIsFiltered(modules.NetAddress(host.NetAddress)) {
+		if !filteredDomains.managedIsFiltered(modules.NetAddress(host.Settings.NetAddress)) {
 			continue
 		}
 		filteredHosts[host.PublicKey.String()] = host.PublicKey
