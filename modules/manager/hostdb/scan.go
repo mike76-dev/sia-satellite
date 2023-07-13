@@ -179,6 +179,7 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 	newEntry, exists := hdb.staticHostTree.Select(entry.PublicKey)
 	if exists {
 		newEntry.Settings = entry.Settings
+		newEntry.PriceTable = entry.PriceTable
 		newEntry.IPNets = entry.IPNets
 		newEntry.LastIPNetChange = entry.LastIPNetChange
 	} else {
