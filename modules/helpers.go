@@ -30,7 +30,7 @@ func Float64(c types.Currency) float64 {
 
 // FromFloat converts f Siacoins to a types.Currency value.
 func FromFloat(f float64) types.Currency {
-	if f < 0 {
+	if f < 1e-24 {
 		return types.ZeroCurrency
 	}
 	h := new(big.Rat).SetInt(types.HastingsPerSiacoin.Big())
