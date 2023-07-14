@@ -32,7 +32,7 @@ type RPCSession struct {
 }
 
 // readMessage reads an encrypted message from the renter.
-func (s *RPCSession) readMessage(message RequestBody, maxLen uint64) error {
+func (s *RPCSession) ReadMessage(message RequestBody, maxLen uint64) error {
 	if maxLen < MinMessageSize {
 		maxLen = MinMessageSize
 	}
@@ -63,7 +63,7 @@ func (s *RPCSession) readMessage(message RequestBody, maxLen uint64) error {
 }
 
 // writeMessage sends an encrypted message to the renter.
-func (s *RPCSession) writeMessage(message RequestBody) error {
+func (s *RPCSession) WriteMessage(message RequestBody) error {
 	nonce := make([]byte, 32)[:s.Aead.NonceSize()]
 	frand.Read(nonce)
 
@@ -96,7 +96,7 @@ func (s *RPCSession) writeMessage(message RequestBody) error {
 
 // WriteResponse sends an encrypted RPC responce to the renter.
 func (s *RPCSession) WriteResponse(resp RequestBody) error {
-	return s.writeMessage(&RPCResponse{nil, resp})
+	return s.WriteMessage(&RPCResponse{nil, resp})
 }
 
 // WriteError sends an error message to the renter.
@@ -105,13 +105,13 @@ func (s *RPCSession) WriteError(err error) error {
 	if err != nil {
 		re = &RPCError{Description: err.Error()}
 	}
-	return s.writeMessage(&RPCResponse{re, nil})
+	return s.WriteMessage(&RPCResponse{re, nil})
 }
 
 // ReadResponse reads an encrypted RPC response from the renter.
 func (s *RPCSession) ReadResponse(resp RequestBody, maxLen uint64) error {
 	rr := RPCResponse{nil, resp}
-	if err := s.readMessage(&rr, maxLen); err != nil {
+	if err := s.ReadMessage(&rr, maxLen); err != nil {
 		return err
 	} else if rr.err != nil {
 		return rr.err
@@ -121,7 +121,7 @@ func (s *RPCSession) ReadResponse(resp RequestBody, maxLen uint64) error {
 
 // ReadRequest reads an encrypted RPC request from the renter.
 func (s *RPCSession) ReadRequest(req RequestBody, maxLen uint64) (types.Hash256, error) {
-	err := s.readMessage(req, maxLen)
+	err := s.ReadMessage(req, maxLen)
 	if err != nil {
 		return types.Hash256{}, err
 	}

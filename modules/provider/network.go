@@ -210,16 +210,12 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	}
 
 	// Generate a session key, sign it, and derive the shared secret.
-	var xsk, xpk [32]byte
-	frand.Read(xsk[:])
-	curve25519.ScalarBaseMult(&xpk, &xsk)
+	xsk, xpk := generateX25519KeyPair()
 	h := types.NewHasher()
 	h.E.Write(req.PublicKey[:])
 	h.E.Write(xpk[:])
 	pubkeySig := p.secretKey.SignHash(h.Sum())
-	var dst [32]byte
-	curve25519.ScalarMult(&dst, &xsk, &req.PublicKey)
-	cipherKey := blake2b.Sum256(dst[:])
+	cipherKey := deriveSharedSecret(xsk, req.PublicKey)
 
 	// Send our half of the key exchange.
 	resp := loopKeyExchangeResponse{
@@ -251,14 +247,14 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	challengeReq := loopChallengeRequest{
 		Challenge: s.Challenge,
 	}
-	if err := s.WriteResponse(&challengeReq); err != nil {
+	if err := s.WriteMessage(&challengeReq); err != nil {
 		p.log.Println("ERROR: could not send challenge:", err)
 		return
 	}
 
 	// Read the request specifier.
 	var id types.Specifier
-	err = s.ReadResponse(&id, modules.MinMessageSize)
+	err = s.ReadMessage(&id, modules.MinMessageSize)
 	if err != nil {
 		p.log.Println("ERROR: could not read request specifier:", err)
 		return
@@ -296,19 +292,35 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 			err = errors.Extend(errors.New("incoming RPCRenewContract failed: "), err)
 		}*/
 	case getSettingsSpecifier:
-		/*err = p.managedGetSettings(s)
+		err = p.managedGetSettings(s)
 		if err != nil {
-			err = errors.Extend(errors.New("incoming RPCGetSettings failed: "), err)
-		}*/
+			err = modules.AddContext(err, "incoming RPCGetSettings failed")
+		}
 	case updateSettingsSpecifier:
-		/*err = p.managedUpdateSettings(s)
+		err = p.managedUpdateSettings(s)
 		if err != nil {
-			err = errors.Extend(errors.New("incoming RPCUpdateSettings failed: "), err)
-		}*/
+			err = modules.AddContext(err, "incoming RPCUpdateSettings failed")
+		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
 	}
 	if err != nil {
 		p.log.Printf("ERROR: error with %v: %v\n", conn.RemoteAddr(), err)
 	}
+}
+
+// generateX25519KeyPair generates an ephemeral key pair for use in ECDH.
+func generateX25519KeyPair() (xsk [32]byte, xpk [32]byte) {
+	frand.Read(xsk[:])
+	curve25519.ScalarBaseMult(&xpk, &xsk)
+	return
+}
+
+// deriveSharedSecret derives 32 bytes of entropy from a secret key and public
+// key. Derivation is via ScalarMult of the private and public keys, followed
+// by a 256-bit unkeyed blake2b hash.
+func deriveSharedSecret(xsk [32]byte, xpk [32]byte) (secret [32]byte) {
+	var dst [32]byte
+	curve25519.ScalarMult(&dst, &xsk, &xpk)
+	return blake2b.Sum256(dst[:])
 }

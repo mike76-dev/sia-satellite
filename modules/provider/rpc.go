@@ -650,12 +650,15 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	err = p.m.UpdateRenterSettings(usr.PubKey, modules.RenterSettings{
 		AutoRenewContracts: usr.AutoRenewContracts,
 	}, usr.PrivateKey)
-
-	// Send a response.
 	if err != nil {
 		err = fmt.Errorf("couldn't update settings: %v", err)
 		s.WriteError(err)
 		return err
+	}
+
+	// If not opted in, return.
+	if !usr.AutoRenewContracts {
+		return s.WriteResponse(nil)
 	}
 
 	// Create an allowance.
