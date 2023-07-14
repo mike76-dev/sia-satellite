@@ -742,7 +742,7 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 	us.CurrentLocked += amount
 	us.CurrentOverhead += amountWithFee - amount
 
-	return m.updateSpendings(email, *us)
+	return m.updateSpendings(email, us)
 }
 
 // UnlockSiacoins unlocks the specified amount of Siacoins in the user balance.
@@ -803,24 +803,24 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 		us.CurrentUsed += burned
 	}
 
-	return m.updateSpendings(email, *us)
+	return m.updateSpendings(email, us)
 }
 
 // RetrieveSpendings retrieves the user's spendings in the given currency.
-func (m *Manager) RetrieveSpendings(email string, currency string) (*modules.UserSpendings, error) {
+func (m *Manager) RetrieveSpendings(email string, currency string) (modules.UserSpendings, error) {
 	// Get exchange rate.
 	scRate, err := m.GetSiacoinRate(currency)
 	if err != nil {
-		return nil, err
+		return modules.UserSpendings{}, err
 	}
 	if scRate == 0 {
-		return nil, errors.New("couldn't get exchange rate")
+		return modules.UserSpendings{}, errors.New("couldn't get exchange rate")
 	}
 
 	// Get user spendings.
 	us, err := m.getSpendings(email)
 	if err != nil {
-		return nil, err
+		return modules.UserSpendings{}, err
 	}
 	us.SCRate = scRate
 

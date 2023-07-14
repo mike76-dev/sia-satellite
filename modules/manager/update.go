@@ -269,7 +269,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					us.PrevRenewed = us.CurrentRenewed
 					us.CurrentFormed = 0
 					us.CurrentRenewed = 0
-					err = m.updateSpendings(renter.Email, *us)
+					err = m.updateSpendings(renter.Email, us)
 					if err != nil {
 						m.log.Println("ERROR: couldn't update spendings")
 					}

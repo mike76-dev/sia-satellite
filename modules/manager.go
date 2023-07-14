@@ -313,7 +313,7 @@ type Manager interface {
 	GetAverages() HostAverages
 
 	// GetBalance retrieves the balance information on the account.
-	GetBalance(string) (*UserBalance, error)
+	GetBalance(string) (UserBalance, error)
 
 	// GetExchangeRate returns the exchange rate of a given currency.
 	GetExchangeRate(string) (float64, error)
@@ -362,7 +362,7 @@ type Manager interface {
 	Renters() []Renter
 
 	// RetrieveSpendings retrieves the user's spendings.
-	RetrieveSpendings(string, string) (*UserSpendings, error)
+	RetrieveSpendings(string, string) (UserSpendings, error)
 
 	// ScoreBreakdown returns the score breakdown of the specific host.
 	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
@@ -378,7 +378,7 @@ type Manager interface {
 	UnlockSiacoins(string, float64, float64, uint64) error
 
 	// UpdateBalance updates the balance information on the account.
-	UpdateBalance(email string, ub *UserBalance) error
+	UpdateBalance(email string, ub UserBalance) error
 
 	// UpdateRenterSettings updates the renter's opt-in settings.
 	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error

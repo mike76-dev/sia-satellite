@@ -95,7 +95,7 @@ func dbPutAverages(tx *sql.Tx, avg modules.HostAverages) error {
 
 // GetBalance retrieves the balance information on the account.
 // An empty struct is returned when there is no data.
-func (m *Manager) GetBalance(email string) (*modules.UserBalance, error) {
+func (m *Manager) GetBalance(email string) (modules.UserBalance, error) {
 	var sub bool
 	var b, l float64
 	var c, id string
@@ -103,16 +103,19 @@ func (m *Manager) GetBalance(email string) (*modules.UserBalance, error) {
 		SELECT subscribed, sc_balance, sc_locked, currency, stripe_id
 		FROM mg_balances WHERE email = ?
 	`, email).Scan(&sub, &b, &l, &c, &id)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		return modules.UserBalance{}, nil
+	}
+	if err != nil {
+		return modules.UserBalance{}, err
 	}
 
 	scRate, err := m.GetSiacoinRate(c)
 	if err != nil {
-		return nil, err
+		return modules.UserBalance{}, err
 	}
 
-	ub := &modules.UserBalance{
+	ub := modules.UserBalance{
 		IsUser:     !errors.Is(err, sql.ErrNoRows),
 		Subscribed: sub,
 		Balance:    b,
@@ -126,7 +129,7 @@ func (m *Manager) GetBalance(email string) (*modules.UserBalance, error) {
 }
 
 // UpdateBalance updates the balance information on the account.
-func (m *Manager) UpdateBalance(email string, ub *modules.UserBalance) error {
+func (m *Manager) UpdateBalance(email string, ub modules.UserBalance) error {
 	_, err := m.db.Exec(`
 		REPLACE INTO mg_balances
 		(email, subscribed, sc_balance, sc_locked, currency, stripe_id)
@@ -137,7 +140,7 @@ func (m *Manager) UpdateBalance(email string, ub *modules.UserBalance) error {
 }
 
 // getSpendings retrieves the user's spendings.
-func (m *Manager) getSpendings(email string) (*modules.UserSpendings, error) {
+func (m *Manager) getSpendings(email string) (modules.UserSpendings, error) {
 	var currLocked, currUsed, currOverhead float64
 	var prevLocked, prevUsed, prevOverhead float64
 	var currFormed, currRenewed, prevFormed, prevRenewed uint64
@@ -151,10 +154,10 @@ func (m *Manager) getSpendings(email string) (*modules.UserSpendings, error) {
 		WHERE email = ?`, email).Scan(&currLocked, &currUsed, &currOverhead, &prevLocked, &prevUsed, &prevOverhead, &currFormed, &currRenewed, &prevFormed, &prevRenewed)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
+		return modules.UserSpendings{}, err
 	}
 
-	us := &modules.UserSpendings{
+	us := modules.UserSpendings{
 		CurrentLocked:   currLocked,
 		CurrentUsed:     currUsed,
 		CurrentOverhead: currOverhead,

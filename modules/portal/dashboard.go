@@ -97,7 +97,7 @@ func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request
 	}
 
 	// Retrieve the balance information from the database.
-	var ub *modules.UserBalance
+	var ub modules.UserBalance
 	if ub, err = api.portal.manager.GetBalance(email); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
@@ -350,7 +350,7 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	}
 
 	// Retrieve the account balance.
-	var ub *modules.UserBalance
+	var ub modules.UserBalance
 	if ub, err = api.portal.manager.GetBalance(email); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
@@ -599,7 +599,7 @@ func (api *portalAPI) spendingsHandlerGET(w http.ResponseWriter, req *http.Reque
 	if currency == "" {
 		currency = "USD"
 	}
-	var us *modules.UserSpendings
+	var us modules.UserSpendings
 	if us, err = api.portal.manager.RetrieveSpendings(email, currency); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,

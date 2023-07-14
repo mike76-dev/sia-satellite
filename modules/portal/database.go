@@ -127,7 +127,7 @@ func (p *Portal) deleteAccount(email string) error {
 	// Search for the renter public key.
 	pk := make([]byte, 32)
 	err = p.db.QueryRow("SELECT public_key FROM ctr_renters WHERE email = ?", email).Scan(&pk)
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
@@ -144,7 +144,7 @@ func (p *Portal) deleteAccount(email string) error {
 	errs = append(errs, err)
 	_, err = p.db.Exec("DELETE FROM mg_balances WHERE email = ?", email)
 	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM mg_accounts WHERE email = ?", email)
+	_, err = p.db.Exec("DELETE FROM pt_accounts WHERE email = ?", email)
 	errs = append(errs, err)
 
 	return modules.ComposeErrors(errs...)
@@ -219,7 +219,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	}
 
 	// Calculate the new balance.
-	ub := &modules.UserBalance{
+	ub := modules.UserBalance{
 		IsUser:     true,
 		Subscribed: s,
 		Balance:    b,
