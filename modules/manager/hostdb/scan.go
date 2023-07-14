@@ -386,7 +386,7 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 		start := time.Now()
 		err := proto.WithTransportV2(ctx, netAddr, pubKey, func(t *rhpv2.Transport) error {
 			var err error
-			settings, err = proto.RPCSettings(t)
+			settings, err = proto.RPCSettings(ctx, t)
 			return err
 		})
 		latency = time.Since(start)
@@ -400,7 +400,7 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 		}
 		err = proto.WithTransportV3(ctx, settings.SiamuxAddr(), pubKey, func (t *rhpv3.Transport) error {
 			var err error
-			pt, err = proto.RPCPriceTable(t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
+			pt, err = proto.RPCPriceTable(ctx, t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
 				return nil, nil
 			})
 			return err
@@ -420,7 +420,9 @@ func (hdb *HostDB) managedScanHost(entry modules.HostDBEntry) {
 
 	// Update the host tree to have a new entry, including the new error. Then
 	// delete the entry from the scan map as the scan has been successful.
+	hdb.mu.Lock()
 	hdb.updateEntry(entry, err)
+	hdb.mu.Unlock()
 
 	// Add the scan to the initialScanLatencies if it was successful.
 	if success && len(hdb.initialScanLatencies) < minScansForSpeedup {
