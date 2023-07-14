@@ -277,25 +277,3 @@ func createFileContractUnlockConds(hpk types.SiaPublicKey, renterPK crypto.Publi
 		SignaturesRequired: 2,
 	}
 }
-
-// FetchPriceTable retrieves the price table from the host.
-func FetchPriceTable(host smodules.HostDBEntry) (rhpv3.HostPriceTable, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), contractHostPriceTableTimeout)
-	defer cancel()
-
-	hostName, _, err := net.SplitHostPort(string(host.NetAddress))
-	if err != nil {
-		return rhpv3.HostPriceTable{}, err
-	}
-	siamuxAddr := net.JoinHostPort(hostName, host.SiaMuxPort)
-
-	var pt rhpv3.HostPriceTable
-	err = WithTransportV3(ctx, siamuxAddr, host.PublicKey, func(t *rhpv3.Transport) (err error) {
-		pt, err = RPCPriceTable(t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
-			return nil, nil
-		})
-		return
-	})
-
-	return pt, err
-}

@@ -8,16 +8,14 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
-	core "go.sia.tech/core/types"
-	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 const bytesInTerabyte = 1024 * 1024 * 1024 * 1024
 
 // managedRequestContracts returns a slice containing the list of the
 // renter's active contracts.
-func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
+/*func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
 	// Extend the deadline to meet the formation of multiple contracts.
 	s.Conn.SetDeadline(time.Now().Add(requestContractsTime))
 
@@ -67,7 +65,7 @@ func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
 	}
 
 	return s.WriteResponse(&ecs)
-}
+}*/
 
 // managedFormContracts forms the specified number of contracts with the hosts
 // on behalf of the renter.
@@ -85,17 +83,15 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 	}
 
 	// Verify the signature.
-	err = crypto.VerifyHash(crypto.Hash(hash), fr.PubKey, crypto.Signature(fr.Signature))
-	if err != nil {
-		err = fmt.Errorf("could not verify renter signature: %v", err)
+	if !fr.PubKey.VerifyHash(hash, fr.Signature) {
+		err = errors.New("could not verify renter signature")
 		s.WriteError(err)
 		return err
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(fr.PubKey)
-	exists, err := p.satellite.UserExists(rpk)
-	if !exists || err != nil {
+	_, err = p.m.GetRenter(fr.PubKey)
+	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
 		return err
@@ -135,8 +131,8 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 	// Create an allowance.
 	a := modules.Allowance{
 		Hosts:       fr.Hosts,
-		Period:      types.BlockHeight(fr.Period),
-		RenewWindow: types.BlockHeight(fr.RenewWindow),
+		Period:      fr.Period,
+		RenewWindow: fr.RenewWindow,
 
 		ExpectedStorage:    fr.Storage,
 		ExpectedUpload:     fr.Upload,
@@ -144,18 +140,18 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 		MinShards:          fr.MinShards,
 		TotalShards:        fr.TotalShards,
 
-		MaxRPCPrice:               types.NewCurrency(fr.MaxRPCPrice.Big()),
-		MaxContractPrice:          types.NewCurrency(fr.MaxContractPrice.Big()),
-		MaxDownloadBandwidthPrice: types.NewCurrency(fr.MaxDownloadPrice.Big()).Div64(bytesInTerabyte),
-		MaxSectorAccessPrice:      types.NewCurrency(fr.MaxSectorAccessPrice.Big()),
-		MaxStoragePrice:           types.NewCurrency(fr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
-		MaxUploadBandwidthPrice:   types.NewCurrency(fr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
-		MinMaxCollateral:          types.NewCurrency(fr.MinMaxCollateral.Big()),
-		BlockHeightLeeway:         types.BlockHeight(fr.BlockHeightLeeway),
+		MaxRPCPrice:               fr.MaxRPCPrice,
+		MaxContractPrice:          fr.MaxContractPrice,
+		MaxDownloadBandwidthPrice: fr.MaxDownloadPrice.Div64(bytesInTerabyte),
+		MaxSectorAccessPrice:      fr.MaxSectorAccessPrice,
+		MaxStoragePrice:           fr.MaxStoragePrice.Div64(bytesInTerabyte),
+		MaxUploadBandwidthPrice:   fr.MaxUploadPrice.Div64(bytesInTerabyte),
+		MinMaxCollateral:          fr.MinMaxCollateral,
+		BlockHeightLeeway:         fr.BlockHeightLeeway,
 	}
 
 	// Form the contracts.
-	contracts, err := p.satellite.FormContracts(rpk, fr.SecretKey, a)
+	contracts, err := p.m.FormContracts(fr.PubKey, fr.SecretKey, a)
 	if err != nil {
 		err = fmt.Errorf("could not form contracts: %v", err)
 		s.WriteError(err)
@@ -166,8 +162,8 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 		cr := convertContract(contract)
 		ecs.contracts = append(ecs.contracts, extendedContract{
 			contract:    cr,
-			startHeight: uint64(contract.StartHeight),
-			totalCost:   modules.ConvertCurrency(contract.TotalCost),
+			startHeight: contract.StartHeight,
+			totalCost:   contract.TotalCost,
 		})
 	}
 
@@ -175,7 +171,7 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 }
 
 // managedRenewContracts tries to renew the given set of contracts.
-func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
+/*func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 	// Extend the deadline to meet the renewal of multiple contracts.
 	s.Conn.SetDeadline(time.Now().Add(renewContractsTime))
 
@@ -280,78 +276,22 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 	}
 
 	return s.WriteResponse(&ecs)
-}
+}*/
 
-// convertContract converts the contract metadata from `siad`-style
-// into `core`-style.
+// convertContract converts the contract metadata into `core` style.
 func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
-	fcr := c.Transaction.FileContractRevisions[0]
-	ts0 := c.Transaction.TransactionSignatures[0]
-	ts1 := c.Transaction.TransactionSignatures[1]
-	renterSig := make([]byte, len(ts0.Signature))
-	hostSig := make([]byte, len(ts1.Signature))
-	copy(renterSig, ts0.Signature)
-	copy(hostSig, ts1.Signature)
-	cr := rhpv2.ContractRevision{
-		Revision: core.FileContractRevision{
-			ParentID:         core.FileContractID(c.ID),
-			UnlockConditions: core.UnlockConditions{
-				Timelock:           uint64(fcr.UnlockConditions.Timelock),
-				PublicKeys:         []core.UnlockKey{
-					core.PublicKey(c.RenterPublicKey.ToPublicKey()).UnlockKey(),
-					core.PublicKey(c.HostPublicKey.ToPublicKey()).UnlockKey(),
-				},
-				SignaturesRequired: 2,
-			},
-			FileContract: core.FileContract{
-				Filesize:       fcr.NewFileSize,
-				FileMerkleRoot: core.Hash256(fcr.NewFileMerkleRoot),
-				WindowStart:    uint64(fcr.NewWindowStart),
-				WindowEnd:      uint64(fcr.NewWindowEnd),
-				Payout:         core.ZeroCurrency,
-
-				ValidProofOutputs:  []core.SiacoinOutput{{
-					Value:   modules.ConvertCurrency(fcr.NewValidProofOutputs[0].Value),
-					Address: core.Address(fcr.NewValidProofOutputs[0].UnlockHash),
-				}, {
-					Value:   modules.ConvertCurrency(fcr.NewValidProofOutputs[1].Value),
-					Address: core.Address(fcr.NewValidProofOutputs[1].UnlockHash),
-				}},
-				MissedProofOutputs: []core.SiacoinOutput{{
-					Value:   modules.ConvertCurrency(fcr.NewMissedProofOutputs[0].Value),
-					Address: core.Address(fcr.NewMissedProofOutputs[0].UnlockHash),
-				}, {
-					Value:   modules.ConvertCurrency(fcr.NewMissedProofOutputs[1].Value),
-					Address: core.Address(fcr.NewMissedProofOutputs[1].UnlockHash),
-				}, {
-					Value:   modules.ConvertCurrency(fcr.NewMissedProofOutputs[2].Value),
-					Address: core.Address(fcr.NewMissedProofOutputs[2].UnlockHash),
-				}},
-
-				UnlockHash:     core.Hash256(fcr.NewUnlockHash),
-				RevisionNumber: fcr.NewRevisionNumber,
-			},
+	txn := modules.CopyTransaction(c.Transaction)
+	return rhpv2.ContractRevision{
+		Revision:   txn.FileContractRevisions[0],
+		Signatures: [2]types.TransactionSignature{
+			txn.Signatures[0],
+			txn.Signatures[1],
 		},
-		Signatures: [2]core.TransactionSignature{{
-			ParentID:       core.Hash256(ts0.ParentID),
-			PublicKeyIndex: ts0.PublicKeyIndex,
-			Timelock:       uint64(ts0.Timelock),
-			CoveredFields:  core.CoveredFields{FileContractRevisions: []uint64{0},},
-			Signature:      renterSig,
-		}, {
-			ParentID:       core.Hash256(ts1.ParentID),
-			PublicKeyIndex: ts1.PublicKeyIndex,
-			Timelock:       uint64(ts1.Timelock),
-			CoveredFields:  core.CoveredFields{FileContractRevisions: []uint64{0},},
-			Signature:      hostSig,
-		}},
 	}
-
-	return cr
 }
 
 // managedUpdateRevision updates the contract with a new revision.
-func (p *Provider) managedUpdateRevision(s *modules.RPCSession) error {
+/*func (p *Provider) managedUpdateRevision(s *modules.RPCSession) error {
 	// Extend the deadline to meet the revision update.
 	s.Conn.SetDeadline(time.Now().Add(updateRevisionTime))
 
@@ -397,10 +337,10 @@ func (p *Provider) managedUpdateRevision(s *modules.RPCSession) error {
 	}
 
 	return s.WriteResponse(nil)
-}
+}*/
 
 // convertRevision converts a `core`-style revision into the `siad`-style.
-func convertRevision(rev rhpv2.ContractRevision) (types.FileContractRevision, []types.TransactionSignature) {
+/*func convertRevision(rev rhpv2.ContractRevision) (types.FileContractRevision, []types.TransactionSignature) {
 	var rpk, hpk crypto.PublicKey
 	copy(rpk[:], rev.Revision.UnlockConditions.PublicKeys[0].Key)
 	copy(hpk[:], rev.Revision.UnlockConditions.PublicKeys[1].Key)
@@ -459,11 +399,11 @@ func convertRevision(rev rhpv2.ContractRevision) (types.FileContractRevision, []
 	}}
 
 	return fcr, sigs
-}
+}*/
 
 // managedFormContract forms a single contract using the new Renter-Satellite
 // protocol.
-func (p *Provider) managedFormContract(s *modules.RPCSession) error {
+/*func (p *Provider) managedFormContract(s *modules.RPCSession) error {
 	// Extend the deadline to meet the contract formation.
 	s.Conn.SetDeadline(time.Now().Add(formContractTime))
 
@@ -539,11 +479,11 @@ func (p *Provider) managedFormContract(s *modules.RPCSession) error {
 	}
 
 	return s.WriteResponse(&ec)
-}
+}*/
 
 // managedRenewContract renews a contract using the new Renter-Satellite
 // protocol.
-func (p *Provider) managedRenewContract(s *modules.RPCSession) error {
+/*func (p *Provider) managedRenewContract(s *modules.RPCSession) error {
 	// Extend the deadline to meet the contract renewal.
 	s.Conn.SetDeadline(time.Now().Add(renewContractTime))
 
@@ -610,7 +550,7 @@ func (p *Provider) managedRenewContract(s *modules.RPCSession) error {
 	}
 
 	return s.WriteResponse(&ec)
-}
+}*/
 
 // managedGetSettings returns the renter's opt-in settings.
 func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
@@ -627,16 +567,14 @@ func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
 	}
 
 	// Verify the signature.
-	err = crypto.VerifyHash(crypto.Hash(hash), gsr.PubKey, crypto.Signature(gsr.Signature))
-	if err != nil {
-		err = fmt.Errorf("could not verify renter signature: %v", err)
+	if !gsr.PubKey.VerifyHash(hash, gsr.Signature) {
+		err = errors.New("could not verify renter signature")
 		s.WriteError(err)
 		return err
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(gsr.PubKey)
-	renter, err := p.satellite.GetRenter(rpk)
+	renter, err := p.m.GetRenter(gsr.PubKey)
 	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
@@ -665,16 +603,14 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	}
 
 	// Verify the signature.
-	err = crypto.VerifyHash(crypto.Hash(hash), usr.PubKey, crypto.Signature(usr.Signature))
-	if err != nil {
-		err = fmt.Errorf("could not verify renter signature: %v", err)
+	if !usr.PubKey.VerifyHash(hash, usr.Signature) {
+		err = errors.New("could not verify renter signature")
 		s.WriteError(err)
 		return err
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(usr.PubKey)
-	_, err = p.satellite.GetRenter(rpk)
+	_, err = p.m.GetRenter(usr.PubKey)
 	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
@@ -711,7 +647,7 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	}
 
 	// Update the settings.
-	err = p.satellite.UpdateRenterSettings(rpk, modules.RenterSettings{
+	err = p.m.UpdateRenterSettings(usr.PubKey, modules.RenterSettings{
 		AutoRenewContracts: usr.AutoRenewContracts,
 	}, usr.PrivateKey)
 
@@ -725,8 +661,8 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	// Create an allowance.
 	a := modules.Allowance{
 		Hosts:       usr.Hosts,
-		Period:      types.BlockHeight(usr.Period),
-		RenewWindow: types.BlockHeight(usr.RenewWindow),
+		Period:      usr.Period,
+		RenewWindow: usr.RenewWindow,
 
 		ExpectedStorage:    usr.Storage,
 		ExpectedUpload:     usr.Upload,
@@ -734,18 +670,18 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		MinShards:          usr.MinShards,
 		TotalShards:        usr.TotalShards,
 
-		MaxRPCPrice:               types.NewCurrency(usr.MaxRPCPrice.Big()),
-		MaxContractPrice:          types.NewCurrency(usr.MaxContractPrice.Big()),
-		MaxDownloadBandwidthPrice: types.NewCurrency(usr.MaxDownloadPrice.Big()).Div64(bytesInTerabyte),
-		MaxSectorAccessPrice:      types.NewCurrency(usr.MaxSectorAccessPrice.Big()),
-		MaxStoragePrice:           types.NewCurrency(usr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
-		MaxUploadBandwidthPrice:   types.NewCurrency(usr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
-		MinMaxCollateral:          types.NewCurrency(usr.MinMaxCollateral.Big()),
-		BlockHeightLeeway:         types.BlockHeight(usr.BlockHeightLeeway),
+		MaxRPCPrice:               usr.MaxRPCPrice,
+		MaxContractPrice:          usr.MaxContractPrice,
+		MaxDownloadBandwidthPrice: usr.MaxDownloadPrice.Div64(bytesInTerabyte),
+		MaxSectorAccessPrice:      usr.MaxSectorAccessPrice,
+		MaxStoragePrice:           usr.MaxStoragePrice.Div64(bytesInTerabyte),
+		MaxUploadBandwidthPrice:   usr.MaxUploadPrice.Div64(bytesInTerabyte),
+		MinMaxCollateral:          usr.MinMaxCollateral,
+		BlockHeightLeeway:         usr.BlockHeightLeeway,
 	}
 
 	// Set the allowance.
-	err = p.satellite.SetAllowance(rpk, a)
+	err = p.m.SetAllowance(usr.PubKey, a)
 	if err != nil {
 		err = fmt.Errorf("could not set allowance: %v", err)
 		s.WriteError(err)

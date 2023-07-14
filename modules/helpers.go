@@ -90,6 +90,51 @@ func PostTax(height uint64, payout types.Currency) types.Currency {
 	return payout.Sub(Tax(height, payout))
 }
 
+// RenterPayoutsPreTax calculates the renterPayout before tax and the hostPayout
+// given a host, the available renter funding, the expected txnFee for the
+// transaction and an optional basePrice in case this helper is used for a
+// renewal. It also returns the hostCollateral.
+func RenterPayoutsPreTax(host HostDBEntry, funding, txnFee, basePrice, baseCollateral types.Currency, period uint64, expectedStorage uint64) (renterPayout, hostPayout, hostCollateral types.Currency, err error) {
+	// Divide by zero check.
+	if host.Settings.StoragePrice.IsZero() {
+		host.Settings.StoragePrice = types.NewCurrency64(1)
+	}
+
+	// Underflow check.
+	if funding.Cmp(host.Settings.ContractPrice.Add(txnFee).Add(basePrice)) <= 0 {
+		err = fmt.Errorf("contract price (%v) plus transaction fee (%v) plus base price (%v) exceeds funding (%v)",
+			host.Settings.ContractPrice, txnFee, basePrice, funding)
+		return
+	}
+
+	// Calculate renterPayout.
+	renterPayout = funding.Sub(host.Settings.ContractPrice).Sub(txnFee).Sub(basePrice)
+
+	// Calculate hostCollateral by calculating the maximum amount of storage
+	// the renter can afford with 'funding' and calculating how much collateral
+	// the host wouldl have to put into the contract for that. We also add a
+	// potential baseCollateral.
+	maxStorageSizeTime := renterPayout.Div(host.Settings.StoragePrice)
+	hostCollateral = maxStorageSizeTime.Mul(host.Settings.Collateral).Add(baseCollateral)
+
+	// Don't add more collateral than 10x the collateral for the expected
+	// storage to save on fees.
+	maxRenterCollateral := host.Settings.Collateral.Mul64(period).Mul64(expectedStorage).Mul64(5)
+	if hostCollateral.Cmp(maxRenterCollateral) > 0 {
+		hostCollateral = maxRenterCollateral
+	}
+
+	// Don't add more collateral than the host is willing to put into a single
+	// contract.
+	if hostCollateral.Cmp(host.Settings.MaxCollateral) > 0 {
+		hostCollateral = host.Settings.MaxCollateral
+	}
+
+	// Calculate hostPayout.
+	hostPayout = hostCollateral.Add(host.Settings.ContractPrice).Add(basePrice)
+	return
+}
+
 // FilesizeUnits returns a string that displays a filesize in human-readable units.
 func FilesizeUnits(size uint64) string {
 	if size == 0 {

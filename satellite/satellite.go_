@@ -22,18 +22,6 @@ func (s *Satellite) ScoreBreakdown(e smodules.HostDBEntry) (smodules.HostScoreBr
 // EstimateHostScore calls Manager.EstimateHostScore.
 func (s *Satellite) EstimateHostScore(e smodules.HostDBEntry, a modules.Allowance) (smodules.HostScoreBreakdown, error) { return s.m.EstimateHostScore(e, a) }
 
-// UserExists returns true if the renter's public key is found in the
-// database. An error is returned as well.
-func (s *Satellite) UserExists(rpk types.SiaPublicKey) (exists bool, err error) {
-	var count int
-	err = s.db.QueryRow("SELECT COUNT(*) FROM renters WHERE public_key = ?", rpk.String()).Scan(&count)
-	if err != nil {
-		s.log.Println("ERROR: could not query database", err)
-	}
-	exists = count > 0
-	return
-}
-
 // GetRenter calls Manager.GetRenter.
 func (s *Satellite) GetRenter(pk types.SiaPublicKey) (modules.Renter, error) {
 	return s.m.GetRenter(pk)
@@ -47,40 +35,6 @@ func (s *Satellite) Renters() []modules.Renter {
 // SetAllowance calls Manager.SetAllowance.
 func (s *Satellite) SetAllowance(rpk types.SiaPublicKey, a modules.Allowance) error {
 	return s.m.SetAllowance(rpk, a)
-}
-
-// FormContracts forms the specified number of contracts with the hosts
-// and returns them.
-func (s *Satellite) FormContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, a modules.Allowance) ([]modules.RenterContract, error) {
-	// Get the estimated costs and update the allowance with them.
-	estimation, a, err := s.m.PriceEstimation(a)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if the user balance is sufficient to cover the costs.
-	renter, err := s.GetRenter(rpk)
-	if err != nil {
-		return nil, err
-	}
-	ub, err := s.GetBalance(renter.Email)
-	if err != nil {
-		return nil, err
-	}
-	if ub.Balance < estimation {
-		return nil, errors.New("insufficient account balance")
-	}
-
-	// Set the allowance.
-	err = s.m.SetAllowance(rpk, a)
-	if err != nil {
-		return nil, err
-	}
-
-	// Form the contracts.
-	contractSet, err := s.m.FormContracts(rpk, rsk)
-
-	return contractSet, err
 }
 
 // Contracts calls Manager.Contracts.

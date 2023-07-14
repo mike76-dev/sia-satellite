@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"context"
 	"encoding/json"
 	//"fmt"
 	//"math"
@@ -20,7 +21,7 @@ import (
 type PriceTablePaymentFunc func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error)
 
 // RPCPriceTable negotiates a price table with the host.
-func RPCPriceTable(t *rhpv3.Transport, paymentFunc PriceTablePaymentFunc) (pt rhpv3.HostPriceTable, err error) {
+func RPCPriceTable(ctx context.Context, t *rhpv3.Transport, paymentFunc PriceTablePaymentFunc) (pt rhpv3.HostPriceTable, err error) {
 	s := t.DialStream()
 	defer s.Close()
 

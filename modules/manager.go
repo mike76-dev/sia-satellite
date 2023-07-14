@@ -306,6 +306,9 @@ type Manager interface {
 	// Filter returns the HostDB's filterMode and filteredHosts.
 	Filter() (FilterMode, map[string]types.PublicKey, []string, error)
 
+	// FormContracts forms the required number of contracts with the hosts.
+	FormContracts(types.PublicKey, types.PrivateKey, Allowance) ([]RenterContract, error)
+
 	// GetAverages retrieves the host network averages.
 	GetAverages() HostAverages
 
@@ -364,6 +367,9 @@ type Manager interface {
 	// ScoreBreakdown returns the score breakdown of the specific host.
 	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
 
+	// SetAllowance sets the renter's allowance.
+	SetAllowance(types.PublicKey, Allowance) error
+
 	// SetFilterMode sets the HostDB's filter mode.
 	SetFilterMode(FilterMode, []types.PublicKey, []string) error
 
@@ -373,6 +379,9 @@ type Manager interface {
 
 	// UpdateBalance updates the balance information on the account.
 	UpdateBalance(email string, ub *UserBalance) error
+
+	// UpdateRenterSettings updates the renter's opt-in settings.
+	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error
 }
 
 // MaintenanceSpending is a helper struct that contains a breakdown of costs

@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // RPCSettings returns the host's reported settings.
-func RPCSettings(t *rhpv2.Transport) (settings rhpv2.HostSettings, err error) {
+func RPCSettings(ctx context.Context, t *rhpv2.Transport) (settings rhpv2.HostSettings, err error) {
 	var resp rhpv2.RPCSettingsResponse
 	if err := t.Call(rhpv2.RPCSettingsID, nil, &resp); err != nil {
 		return rhpv2.HostSettings{}, err
@@ -23,7 +24,7 @@ func RPCSettings(t *rhpv2.Transport) (settings rhpv2.HostSettings, err error) {
 }
 
 // RPCFormContract forms a contract with the host.
-/*func RPCFormContract(ctx context.Context, t *rhpv2.Transport, renterKey types.PrivateKey, txnSet []types.Transaction) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
+func RPCFormContract(ctx context.Context, t *rhpv2.Transport, renterKey types.PrivateKey, txnSet []types.Transaction) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
 	// Strip our signatures before sending.
 	parents, txn := txnSet[:len(txnSet) - 1], txnSet[len(txnSet) - 1]
 	renterContractSignatures := txn.Signatures
@@ -103,7 +104,7 @@ func RPCSettings(t *rhpv2.Transport) (settings rhpv2.HostSettings, err error) {
 			hostSigs.RevisionSignature,
 		},
 	}, signedTxnSet, nil
-}*/
+}
 
 // RPCTrustlessFormContract forms a contract with the host using the new
 // Renter-Satellite protocol.

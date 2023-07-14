@@ -1,7 +1,7 @@
 package provider
 
 import (
-	//rhpv2 "go.sia.tech/core/rhp/v2"
+	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/core/types"
 )
 
@@ -94,9 +94,9 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 
 // formRequest is used when the renter requests forming contracts with
 // the hosts.
-/*type formRequest struct {
-	PubKey      crypto.PublicKey
-	SecretKey   crypto.SecretKey
+type formRequest struct {
+	PubKey      types.PublicKey
+	SecretKey   types.PrivateKey
 	Hosts       uint64
 	Period      uint64
 	RenewWindow uint64
@@ -118,10 +118,10 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 	BlockHeightLeeway    uint64
 
 	Signature types.Signature
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (fr *formRequest) DecodeFrom(d *types.Decoder) {
+func (fr *formRequest) DecodeFrom(d *types.Decoder) {
 	copy(fr.PubKey[:], d.ReadBytes())
 	copy(fr.SecretKey[:], d.ReadBytes())
 	fr.Hosts = d.ReadUint64()
@@ -141,10 +141,10 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 	fr.MinMaxCollateral.DecodeFrom(d)
 	fr.BlockHeightLeeway = d.ReadUint64()
 	fr.Signature.DecodeFrom(d)
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (fr *formRequest) EncodeTo(e *types.Encoder) {
+func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(fr.PubKey[:])
 	e.WriteBytes(fr.SecretKey[:])
 	e.WriteUint64(fr.Hosts)
@@ -163,7 +163,7 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 	fr.MaxSectorAccessPrice.EncodeTo(e)
 	fr.MinMaxCollateral.EncodeTo(e)
 	e.WriteUint64(fr.BlockHeightLeeway)
-}*/
+}
 
 // renewRequest is used when the renter requests contract renewals.
 /*type renewRequest struct {
@@ -279,7 +279,7 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 }*/
 
 // extendedContract contains the contract and its metadata.
-/*type extendedContract struct {
+type extendedContract struct {
 	contract            rhpv2.ContractRevision
 	startHeight         uint64
 	totalCost           types.Currency
@@ -287,10 +287,10 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 	downloadSpending    types.Currency
 	fundAccountSpending types.Currency
 	renewedFrom         types.FileContractID
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (ec extendedContract) EncodeTo(e *types.Encoder) {
+func (ec extendedContract) EncodeTo(e *types.Encoder) {
 	ec.contract.Revision.EncodeTo(e)
 	ec.contract.Signatures[0].EncodeTo(e)
 	ec.contract.Signatures[1].EncodeTo(e)
@@ -300,30 +300,30 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 	ec.downloadSpending.EncodeTo(e)
 	ec.fundAccountSpending.EncodeTo(e)
 	ec.renewedFrom.EncodeTo(e)
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (ec extendedContract) DecodeFrom(d *types.Decoder) {
+func (ec extendedContract) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
-}*/
+}
 
 // extendedContractSet is a collection of extendedContracts.
-/*type extendedContractSet struct {
+type extendedContractSet struct {
 	contracts []extendedContract
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
+func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
 	e.WriteUint64(uint64(len(ecs.contracts)))
 	for _, ec := range ecs.contracts {
 		ec.EncodeTo(e)
 	}
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
+func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
-}*/
+}
 
 // formContractRequest is used when forming a contract with a single
 // host using the new Renter-Satellite protocol.
@@ -413,44 +413,44 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 
 // getSettingsRequest is used to retrieve the renter's opt-in
 // settings.
-/*type getSettingsRequest struct {
-	PubKey    crypto.PublicKey
+type getSettingsRequest struct {
+	PubKey    types.PublicKey
 	Signature types.Signature
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (gsr *getSettingsRequest) DecodeFrom(d *types.Decoder) {
+func (gsr *getSettingsRequest) DecodeFrom(d *types.Decoder) {
 	copy(gsr.PubKey[:], d.ReadBytes())
 	gsr.Signature.DecodeFrom(d)
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (gsr *getSettingsRequest) EncodeTo(e *types.Encoder) {
+func (gsr *getSettingsRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(gsr.PubKey[:])
-}*/
+}
 
 // getSettingsResponse is used to send the opt-in settings
 // to the renter.
-/*type getSettingsResponse struct {
+type getSettingsResponse struct {
 	AutoRenewContracts bool
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (gsr *getSettingsResponse) DecodeFrom(d *types.Decoder) {
+func (gsr *getSettingsResponse) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (gsr *getSettingsResponse) EncodeTo(e *types.Encoder) {
+func (gsr *getSettingsResponse) EncodeTo(e *types.Encoder) {
 	e.WriteBool(gsr.AutoRenewContracts)
-}*/
+}
 
 // updateSettingsRequest is used to update the renter's opt-in
 // settings.
-/*type updateSettingsRequest struct {
-	PubKey             crypto.PublicKey
+type updateSettingsRequest struct {
+	PubKey             types.PublicKey
 	AutoRenewContracts bool
-	PrivateKey         crypto.SecretKey
+	PrivateKey         types.PrivateKey
 
 	Hosts       uint64
 	Period      uint64
@@ -473,10 +473,10 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 	BlockHeightLeeway    uint64
 
 	Signature types.Signature
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
+func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 	copy(usr.PubKey[:], d.ReadBytes())
 	usr.AutoRenewContracts = d.ReadBool()
 	if usr.AutoRenewContracts {
@@ -499,10 +499,10 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 		usr.BlockHeightLeeway = d.ReadUint64()
 	}
 	usr.Signature.DecodeFrom(d)
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
+func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(usr.PubKey[:])
 	e.WriteBool(usr.AutoRenewContracts)
 	if usr.AutoRenewContracts {
@@ -524,4 +524,4 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 		usr.MinMaxCollateral.EncodeTo(e)
 		e.WriteUint64(usr.BlockHeightLeeway)
 	}
-}*/
+}

@@ -47,10 +47,6 @@ type Satellite interface {
 
 // ContractFormer is the minimal interface to be used by Provider.
 type ContractFormer interface {
-	PublicKey() types.PublicKey
-	SecretKey() types.PrivateKey
-	UserExists(types.PublicKey) (bool, error)
-	FormContracts(types.PublicKey, types.PrivateKey, Allowance) ([]RenterContract, error)
 	RenewContracts(types.PublicKey, types.PrivateKey, Allowance, []types.FileContractID) ([]RenterContract, error)
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 	GetRenter(types.PublicKey) (Renter, error)
@@ -60,6 +56,4 @@ type ContractFormer interface {
 	RenewedFrom(types.FileContractID) types.FileContractID
 	FormContract(*RPCSession, types.PublicKey, types.PublicKey, types.PublicKey, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
 	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
-	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error
-	SetAllowance(types.PublicKey, Allowance) error
 }

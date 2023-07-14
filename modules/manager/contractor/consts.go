@@ -1,6 +1,9 @@
 package contractor
 
 import (
+	"errors"
+	"time"
+
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"go.sia.tech/core/types"
@@ -10,6 +13,48 @@ const (
 	// randomHostsBufferForScore defines how many extra hosts are queried when trying
 	// to figure out an appropriate minimum score for the hosts that we have.
 	randomHostsBufferForScore = 50
+
+	// formContractTimeout is the amount of time we wait to form a contract
+	// with the host.
+	formContractTimeout = 5 * time.Minute
+)
+
+// Constants related to the contractor's alerts.
+const (
+	// AlertCauseInsufficientAllowanceFunds indicates that the cause for the
+	// alert was insufficient allowance funds remaining.
+	AlertCauseInsufficientAllowanceFunds = "Insufficient allowance funds remaining"
+
+	// AlertMSGAllowanceLowFunds indicates that forming/renewing a contract during
+	// contract maintenance isn't possible due to the allowance being low on
+	// funds.
+	AlertMSGAllowanceLowFunds = "At least one contract formation/renewal failed due to the allowance being low on funds"
+
+	// AlertMSGFailedContractRenewal indicates that the contract renewal failed.
+	AlertMSGFailedContractRenewal = "Contractor is attempting to renew/refresh contracts but failed"
+
+	// AlertMSGWalletLockedDuringMaintenance indicates that forming/renewing a
+	// contract during contract maintenance isn't possible due to a locked wallet.
+	AlertMSGWalletLockedDuringMaintenance = "At least one contract failed to form/renew due to the wallet being locked"
+)
+
+// Constants related to contract formation parameters.
+const (
+	// ContractFeeFundingMulFactor is the multiplying factor for contract fees
+	// to determine the funding for a new contract.
+	ContractFeeFundingMulFactor = uint64(10)
+
+	// MaxInitialContractFundingDivFactor is the dividing factor for determining
+	// the maximum amount of funds to put into a new contract.
+	MaxInitialContractFundingDivFactor = uint64(3)
+
+	// MaxInitialContractFundingMulFactor is the multiplying factor for
+	// determining the maximum amount of funds to put into a new contract.
+	MaxInitialContractFundingMulFactor = uint64(2)
+
+	// MinInitialContractFundingDivFactor is the dividing factor for determining
+	// the minimum amount of funds to put into a new contract.
+	MinInitialContractFundingDivFactor = uint64(20)
 )
 
 var (
@@ -53,4 +98,11 @@ var (
 	// oosRetryInterval is the time we wait for a host that ran out of storage to
 	// add more storage before trying to upload to it again.
 	oosRetryInterval = modules.BlocksPerWeek // 7 days
+
+	// errHostFault indicates if an error is the host's fault.
+	errHostFault = errors.New("host has returned an error")
+
+	// errDuplicateTransactionSet is the error that gets returned if a
+	// duplicate transaction set is given to the transaction pool.
+	errDuplicateTransactionSet = errors.New("transaction set contains only duplicate transactions")
 )
