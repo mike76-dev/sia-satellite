@@ -281,12 +281,16 @@ func (p *Portal) getPayments(email string) ([]userPayment, error) {
 
 // createNewRenter creates a new renter record in the database.
 func (p *Portal) createNewRenter(email string, pk types.PublicKey) error {
+	var buf bytes.Buffer
+	e := types.NewEncoder(&buf)
+	modules.DefaultAllowance.EncodeTo(e)
+	e.Flush()
 	_, err := p.db.Exec(`
 		INSERT INTO ctr_renters
 		(email, public_key, current_period, allowance,
 		private_key, auto_renew_contracts)
 		VALUES (?, ?, ?, ?, ?, ?)
-	`, email, pk[:], 0, []byte{}, []byte{}, false)
+	`, email, pk[:], 0, buf.Bytes(), []byte{}, false)
 	if err != nil {
 		return err
 	}

@@ -123,7 +123,8 @@ type formRequest struct {
 // DecodeFrom implements requestBody.
 func (fr *formRequest) DecodeFrom(d *types.Decoder) {
 	copy(fr.PubKey[:], d.ReadBytes())
-	copy(fr.SecretKey[:], d.ReadBytes())
+	sk := d.ReadBytes()
+	fr.SecretKey = types.PrivateKey(sk)
 	fr.Hosts = d.ReadUint64()
 	fr.Period = d.ReadUint64()
 	fr.RenewWindow = d.ReadUint64()
@@ -195,7 +196,8 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 // DecodeFrom implements requestBody.
 /*func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
 	copy(rr.PubKey[:], d.ReadBytes())
-	copy(rr.SecretKey[:], d.ReadBytes())
+	sk := d.ReadBytes()
+	rr.SecretKey = types.PrivateKey(sk)
 	numContracts := int(d.ReadUint64())
 	rr.Contracts = make([]types.FileContractID, numContracts)
 	for i := 0; i < numContracts; i++ {
@@ -480,7 +482,8 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 	copy(usr.PubKey[:], d.ReadBytes())
 	usr.AutoRenewContracts = d.ReadBool()
 	if usr.AutoRenewContracts {
-		copy(usr.PrivateKey[:], d.ReadBytes())
+		sk := d.ReadBytes()
+		usr.PrivateKey = types.PrivateKey(sk)
 		usr.Hosts = d.ReadUint64()
 		usr.Period = d.ReadUint64()
 		usr.RenewWindow = d.ReadUint64()

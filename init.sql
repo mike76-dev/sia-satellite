@@ -445,7 +445,7 @@ CREATE TABLE ctr_renters (
 	public_key           BINARY(32) NOT NULL UNIQUE,
 	current_period       BIGINT UNSIGNED NOT NULL,
 	allowance            BLOB NOT NULL,
-	private_key          BINARY(64) NOT NULL,
+	private_key          BINARY(64),
 	auto_renew_contracts BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
