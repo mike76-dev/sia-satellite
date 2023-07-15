@@ -342,6 +342,11 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	}
 	defer m.tg.Done()
 
+	// If the funding is zero, set the default one for the estimation.
+	if allowance.Funds.IsZero() {
+		allowance.Funds = types.HastingsPerSiacoin.Mul64(2500)
+	}
+
 	// Get hosts for the estimate.
 	var hosts []modules.HostDBEntry
 	hostmap := make(map[string]struct{})
