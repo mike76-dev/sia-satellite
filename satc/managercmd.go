@@ -203,7 +203,7 @@ Expired Refreshed: %v
 		fmt.Println()
 		fmt.Println("Active:")
 		for n, c := range contracts.ActiveContracts {
-			fmt.Printf(`%v. ID:           %v
+			fmt.Printf(`%v. ID:          %v
   Renter:       %v
   Host:         %v
   Host Address: %v
@@ -230,7 +230,7 @@ Expired Refreshed: %v
 		fmt.Println()
 		fmt.Println("Passive:")
 		for n, c := range contracts.PassiveContracts {
-			fmt.Printf(`%v. ID:           %v
+			fmt.Printf(`%v. ID:          %v
   Renter:       %v
   Host:         %v
   Host Address: %v
@@ -257,7 +257,7 @@ Expired Refreshed: %v
 		fmt.Println()
 		fmt.Println("Refreshed:")
 		for n, c := range contracts.RefreshedContracts {
-			fmt.Printf(`%v. ID:           %v
+			fmt.Printf(`%v. ID:          %v
   Renter:       %v
   Host:         %v
   Host Address: %v
@@ -284,7 +284,7 @@ Expired Refreshed: %v
 		fmt.Println()
 		fmt.Println("Disabled:")
 		for n, c := range contracts.DisabledContracts {
-			fmt.Printf(`%v. ID:           %v
+			fmt.Printf(`%v. ID:          %v
   Renter:       %v
   Host:         %v
   Host Address: %v
@@ -311,7 +311,7 @@ Expired Refreshed: %v
 		fmt.Println()
 		fmt.Println("Expired:")
 		for n, c := range contracts.ExpiredContracts {
-			fmt.Printf(`%v. ID:           %v
+			fmt.Printf(`%v. ID:          %v
   Renter:       %v
   Host:         %v
   Host Address: %v
@@ -338,7 +338,7 @@ Expired Refreshed: %v
 		fmt.Println()
 		fmt.Println("Expired Refreshed:")
 		for n, c := range contracts.ExpiredRefreshedContracts {
-			fmt.Printf(`%v. ID:           %v
+			fmt.Printf(`%v. ID:          %v
   Renter:       %v
   Host:         %v
   Host Address: %v

@@ -242,23 +242,26 @@ func (api *API) managerBalanceHandlerGET(w http.ResponseWriter, _ *http.Request,
 // ExpiredRefreshed contracts are refreshed contracts who's endheights are in
 // the past.
 func (api *API) managerContractsHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
-	pk := ps.ByName("publickey")
+	pk := strings.ToLower(ps.ByName("publickey"))
 	var rc RenterContracts
 	currentBlockHeight := api.cs.Height()
 
-	// Fetch the renter, if provided.
+	// Fetch the contracts.
 	var renter modules.Renter
 	var contracts, oldContracts []modules.RenterContract
 	if pk != "" {
 		var key types.PublicKey
 		err := key.UnmarshalText([]byte(pk))
-		if err == nil {
-			contracts = api.manager.ContractsByRenter(key)
-			oldContracts = api.manager.OldContractsByRenter(key)
-		} else {
-			contracts = api.manager.Contracts()
-			oldContracts = api.manager.OldContracts()
+		if err != nil {
+			WriteError(w, Error{"couldn't unmarshal public key: " + err.Error()}, http.StatusBadRequest)
+			return
 		}
+		contracts = api.manager.ContractsByRenter(key)
+		oldContracts = api.manager.OldContractsByRenter(key)
+		renter, _ = api.manager.GetRenter(key)
+	} else {
+		contracts = api.manager.Contracts()
+		oldContracts = api.manager.OldContracts()
 	}
 
 	for _, c := range contracts {
