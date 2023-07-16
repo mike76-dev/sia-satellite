@@ -103,7 +103,7 @@ func (cs *ContractSet) managedFindIDs(rpk types.PublicKey) []types.FileContractI
 		SELECT id
 		FROM ctr_contracts
 		WHERE renter_pk = ?
-	`, rpk.String())
+	`, rpk[:])
 	if err != nil {
 		cs.log.Println("ERROR: couldn't query database:", err)
 		return nil

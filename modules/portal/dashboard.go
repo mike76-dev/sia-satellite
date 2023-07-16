@@ -395,7 +395,7 @@ func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, _ *http.Request, _ ht
 	writeJSON(w, struct{Key string `json:"key"`}{Key: hex.EncodeToString(key[:])})
 }
 
-// contractsHandlerGet handles the GET /dashboard/contracts requests.
+// contractsHandlerGET handles the GET /dashboard/contracts requests.
 func (api *portalAPI) contractsHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Decode and verify the token.
 	token := getCookie(req, "satellite")
