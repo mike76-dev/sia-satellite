@@ -39,7 +39,7 @@ func (fc *FileContract) saveContract(rpk types.PublicKey) error {
 		INSERT INTO ctr_contracts (id, renter_pk, renewed_from, renewed_to, bytes)
 		VALUES (?, ?, ?, ?, ?) AS new
 		ON DUPLICATE KEY UPDATE
-		SET renter_pk = new.renter_pk, bytes = new.bytes
+		renter_pk = new.renter_pk, bytes = new.bytes
 	`, id[:], renterKey[:], []byte{}, []byte{}, buf.Bytes())
 
 	return err

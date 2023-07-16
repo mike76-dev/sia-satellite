@@ -148,7 +148,7 @@ func (w *watchdog) callMonitorContract(args monitorContractArgs) error {
 	}
 
 	if len(args.revisionTxn.FileContractRevisions) == 0 {
-		w.contractor.log.Println("WARN: no revisions in revisiontxn", args)
+		w.contractor.log.Println("ERROR: no revisions in revisiontxn", args)
 		return errors.New("no revision in monitor contract args")
 	}
 

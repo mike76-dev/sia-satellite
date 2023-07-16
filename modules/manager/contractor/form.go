@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
@@ -50,7 +49,7 @@ func (c *Contractor) prepareContractFormation(rpk types.PublicKey, host modules.
 		FileContracts: []types.FileContract{fc},
 	}
 	_, txnFee := c.tpool.FeeEstimation()
-	minerFee := txnFee.Mul64(uint64(types.EncodedLen(txn)))
+	minerFee := txnFee.Mul64(modules.EstimatedFileContractTransactionSetSize)
 	txn.MinerFees = []types.Currency{minerFee}
 	totalCost := cost.Add(minerFee).Add(tax)
 	parentTxn, err := c.wallet.FundTransaction(&txn, totalCost)
@@ -104,10 +103,13 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	defer cancel()
 
 	// Increase Successful/Failed interactions accordingly.
+	var hostFault bool
 	defer func() {
 		if err != nil {
 			c.hdb.IncrementFailedInteractions(host.PublicKey)
-			err = fmt.Errorf("%v: %v", errHostFault, err)
+			if hostFault {
+				err = fmt.Errorf("%v: %v", errHostFault, err)
+			}
 		} else {
 			c.hdb.IncrementSuccessfulInteractions(host.PublicKey)
 		}
@@ -117,10 +119,12 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	var txnSet, sweepParents []types.Transaction
 	var sweepTxn types.Transaction
 	var totalCost, contractPrice, minerFee, siafundFee types.Currency
+	var cr rhpv2.ContractRevision
 	err = proto.WithTransportV2(ctx, host.Settings.NetAddress, host.PublicKey, func(t *rhpv2.Transport) error {
 		// Get the host's settings.
 		hostSettings, err := proto.RPCSettings(ctx, t)
 		if err != nil {
+			hostFault = true
 			return modules.AddContext(err, "couldn't fetch host settings")
 		}
 
@@ -131,6 +135,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		// Check if the host is gouging.
 		_, txnFee := c.tpool.FeeEstimation()
 		if err := modules.CheckGouging(renter.Allowance, blockHeight, &hostSettings, nil, txnFee); err != nil {
+			hostFault = true
 			return modules.AddContext(err, "host is gouging")
 		}
 
@@ -160,8 +165,9 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		}
 
 		// Form the contract.
-		_, txnSet, err = proto.RPCFormContract(ctx, t, esk, renterTxnSet)
+		cr, txnSet, err = proto.RPCFormContract(ctx, t, esk, renterTxnSet)
 		if err != nil {
+			hostFault = true
 			c.wallet.ReleaseInputs(renterTxnSet[len(renterTxnSet) - 1])
 			return modules.AddContext(err, "couldn't form contract")
 		}
@@ -183,12 +189,20 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	}
 
 	// Add contract to the set.
-	contract, err := c.staticContracts.InsertContract(txnSet[len(txnSet) - 1], blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk)
+	revisionTxn := types.Transaction{
+		FileContractRevisions: []types.FileContractRevision{cr.Revision},
+		Signatures:            []types.TransactionSignature{cr.Signatures[0], cr.Signatures[1]},
+	}
+	contract, err := c.staticContracts.InsertContract(revisionTxn, blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk)
+	if err != nil {
+		c.log.Println("ERROR: couldn't add the new contract to the contract set:", err)
+		return types.ZeroCurrency, modules.RenterContract{}, err
+	}
 
 	// Inform watchdog about the new contract.
 	monitorContractArgs := monitorContractArgs{
 		contract.ID,
-		contract.Transaction,
+		revisionTxn,
 		txnSet,
 		sweepTxn,
 		sweepParents,
@@ -349,10 +363,9 @@ func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([
 		}
 
 		// Attempt forming a contract with this host.
-		start := time.Now()
 		fundsSpent, newContract, err := c.managedNewContract(rpk, rsk, host, contractFunds, endHeight)
 		if err != nil {
-			c.log.Printf("WARN: attempted to form a contract with %v, time spent %v, but negotiation failed: %v\n", host.Settings.NetAddress, time.Since(start).Round(time.Millisecond), err)
+			c.log.Printf("WARN: attempted to form a contract with %v, but negotiation failed: %v\n", host.Settings.NetAddress, err)
 			continue
 		}
 		fundsRemaining = fundsRemaining.Sub(fundsSpent)
