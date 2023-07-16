@@ -45,10 +45,7 @@ func DeriveEphemeralKey(rsk types.PrivateKey, hpk types.PublicKey) types.Private
 
 // GenerateKeyPair generates a private/public keypair from a seed.
 func GenerateKeyPair(seed types.Hash256) (sk types.PrivateKey, pk types.PublicKey) {
-	xsk := types.NewPrivateKeyFromSeed(seed[:])
-	defer frand.Read(seed[:])
-	copy(sk, xsk)
-	xpk := sk.PublicKey()
-	copy(pk[:], xpk[:])
+	sk = types.NewPrivateKeyFromSeed(seed[:])
+	pk = sk.PublicKey()
 	return
 }
