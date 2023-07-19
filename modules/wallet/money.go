@@ -173,7 +173,7 @@ func (w *Wallet) managedSendSiacoins(amount, fee types.Currency, dest types.Addr
 		MinerFees:      []types.Currency{fee},
 	}
 
-	parentTxn, err := w.FundTransaction(&txn, amount.Add(fee))
+	parentTxn, toSign, err := w.FundTransaction(&txn, amount.Add(fee))
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to fund transaction:", err)
 		w.ReleaseInputs(txn)
@@ -181,7 +181,7 @@ func (w *Wallet) managedSendSiacoins(amount, fee types.Currency, dest types.Addr
 	}
 
 	cf := modules.FullCoveredFields()
-	err = w.SignTransaction(&txn, nil, cf)
+	err = w.SignTransaction(&txn, toSign, cf)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to sign transaction:", err)
 		w.ReleaseInputs(txn)
@@ -249,14 +249,14 @@ func (w *Wallet) SendSiacoinsMulti(outputs []types.SiacoinOutput) (txns []types.
 	for _, sco := range outputs {
 		totalCost = totalCost.Add(sco.Value)
 	}
-	parentTxn, err := w.FundTransaction(&txn, totalCost)
+	parentTxn, toSign, err := w.FundTransaction(&txn, totalCost)
 	if err != nil {
 		w.ReleaseInputs(txn)
 		return nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
 	cf := modules.FullCoveredFields()
-	err = w.SignTransaction(&txn, nil, cf)
+	err = w.SignTransaction(&txn, toSign, cf)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to sign transaction:", err)
 		w.ReleaseInputs(txn)

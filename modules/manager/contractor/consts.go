@@ -17,6 +17,9 @@ const (
 	// formContractTimeout is the amount of time we wait to form a contract
 	// with the host.
 	formContractTimeout = 5 * time.Minute
+
+	// renewContractTimeout is the amount of time we wait to renew a contract.
+	renewContractTimeout = 5 * time.Minute
 )
 
 // Constants related to the contractor's alerts.
@@ -55,6 +58,18 @@ const (
 	// MinInitialContractFundingDivFactor is the dividing factor for determining
 	// the minimum amount of funds to put into a new contract.
 	MinInitialContractFundingDivFactor = uint64(20)
+
+	// fileContractMinimumFunding is the lowest percentage of an allowace (on a
+	// per-contract basis) that is allowed to go into funding a contract. If the
+	// allowance is 100 SC per contract (5,000 SC total for 50 contracts, or
+	// 2,000 SC total for 20 contracts, etc.), then the minimum amount of funds
+	// that a contract would be allowed to have is fileContractMinimumFunding *
+	// 100SC.
+	fileContractMinimumFunding = float64(0.15)
+
+	// minimumSupportedRenterHostProtocolVersion is the minimum version of Sia
+	// that supports the currently used version of the renter-host protocol.
+	minimumSupportedRenterHostProtocolVersion = "1.4.1"
 )
 
 var (
@@ -84,6 +99,10 @@ var (
 	// TODO: At this point in time, this value is somewhat arbitrary and could
 	// be getting set in a lot more scientific way.
 	scoreLeewayGoodForUpload = types.NewCurrency64(40)
+
+	// consecutiveRenewalsBeforeReplacement is the number of times a contract
+	// attempt to be renewed before it is marked as !goodForRenew.
+	consecutiveRenewalsBeforeReplacement = uint64(12) // ~2h
 
 	// minContractFundUploadThreshold is the percentage of contract funds
 	// remaining at which the contract gets marked !GoodForUpload. The number is

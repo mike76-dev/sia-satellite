@@ -123,7 +123,7 @@ type (
 		// amount to the provided transaction. A change output is also added,
 		// if necessary. The inputs will not be available to future calls to
 		// FundTransaction unless ReleaseInputs is called.
-		FundTransaction(txn *types.Transaction, amount types.Currency) (types.Transaction, error)
+		FundTransaction(txn *types.Transaction, amount types.Currency) (types.Transaction, []types.Hash256, error)
 
 		// MarkWalletInputs scans a transaction and infers which inputs belong
 		// to this wallet. This allows those inputs to be signed.
@@ -133,6 +133,9 @@ type (
 		// for use in other transactions. It should only be called on
 		// transactions that are invalid or will never be broadcast.
 		ReleaseInputs(txn types.Transaction)
+
+		// Sign will sign any inputs added by FundTransaction.
+		Sign(txn *types.Transaction, toSign []types.Hash256, cf types.CoveredFields) error
 	}
 
 	// EncryptionManager can encrypt, lock, unlock, and indicate the current

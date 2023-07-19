@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	//"strings"
 	"sync"
 
 	siasync "github.com/mike76-dev/sia-satellite/internal/sync"

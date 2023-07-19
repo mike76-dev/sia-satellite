@@ -122,7 +122,7 @@ type formRequest struct {
 
 // DecodeFrom implements requestBody.
 func (fr *formRequest) DecodeFrom(d *types.Decoder) {
-	copy(fr.PubKey[:], d.ReadBytes())
+	d.Read(fr.PubKey[:])
 	sk := d.ReadBytes()
 	fr.SecretKey = types.PrivateKey(sk)
 	fr.Hosts = d.ReadUint64()
@@ -146,7 +146,7 @@ func (fr *formRequest) DecodeFrom(d *types.Decoder) {
 
 // EncodeTo implements requestBody.
 func (fr *formRequest) EncodeTo(e *types.Encoder) {
-	e.WriteBytes(fr.PubKey[:])
+	e.Write(fr.PubKey[:])
 	e.WriteBytes(fr.SecretKey[:])
 	e.WriteUint64(fr.Hosts)
 	e.WriteUint64(fr.Period)
@@ -167,9 +167,9 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 }
 
 // renewRequest is used when the renter requests contract renewals.
-/*type renewRequest struct {
-	PubKey      crypto.PublicKey
-	SecretKey   crypto.SecretKey
+type renewRequest struct {
+	PubKey      types.PublicKey
+	SecretKey   types.PrivateKey
 	Contracts   []types.FileContractID
 	Period      uint64
 	RenewWindow uint64
@@ -191,17 +191,17 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	BlockHeightLeeway    uint64
 
 	Signature types.Signature
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
-	copy(rr.PubKey[:], d.ReadBytes())
+func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(rr.PubKey[:])
 	sk := d.ReadBytes()
 	rr.SecretKey = types.PrivateKey(sk)
 	numContracts := int(d.ReadUint64())
 	rr.Contracts = make([]types.FileContractID, numContracts)
 	for i := 0; i < numContracts; i++ {
-		copy(rr.Contracts[i][:], d.ReadBytes())
+		d.Read(rr.Contracts[i][:])
 	}
 	rr.Period = d.ReadUint64()
 	rr.RenewWindow = d.ReadUint64()
@@ -219,15 +219,15 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	rr.MinMaxCollateral.DecodeFrom(d)
 	rr.BlockHeightLeeway = d.ReadUint64()
 	rr.Signature.DecodeFrom(d)
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (rr *renewRequest) EncodeTo(e *types.Encoder) {
-	e.WriteBytes(rr.PubKey[:])
+func (rr *renewRequest) EncodeTo(e *types.Encoder) {
+	e.Write(rr.PubKey[:])
 	e.WriteBytes(rr.SecretKey[:])
 	e.WriteUint64(uint64(len(rr.Contracts)))
 	for _, id := range rr.Contracts {
-		e.WriteBytes(id[:])
+		e.Write(id[:])
 	}
 	e.WriteUint64(rr.Period)
 	e.WriteUint64(rr.RenewWindow)
@@ -244,7 +244,7 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	rr.MaxSectorAccessPrice.EncodeTo(e)
 	rr.MinMaxCollateral.EncodeTo(e)
 	e.WriteUint64(rr.BlockHeightLeeway)
-}/*
+}
 
 // updateRequest is used when the renter submits a new revision.
 /*type updateRequest struct {
@@ -259,7 +259,7 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 
 // DecodeFrom implements requestBody.
 /*func (ur *updateRequest) DecodeFrom(d *types.Decoder) {
-	copy(ur.PubKey[:], d.ReadBytes())
+	d.Read(ur.PubKey[:])
 	ur.Contract.Revision.DecodeFrom(d)
 	ur.Contract.Signatures[0].DecodeFrom(d)
 	ur.Contract.Signatures[1].DecodeFrom(d)
@@ -271,7 +271,7 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 
 // EncodeTo implements requestBody.
 /*func (ur *updateRequest) EncodeTo(e *types.Encoder) {
-	e.WriteBytes(ur.PubKey[:])
+	e.Write(ur.PubKey[:])
 	ur.Contract.Revision.EncodeTo(e)
 	ur.Contract.Signatures[0].EncodeTo(e)
 	ur.Contract.Signatures[1].EncodeTo(e)
@@ -346,9 +346,9 @@ func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 
 // DecodeFrom implements requestBody.
 /*func (fcr *formContractRequest) DecodeFrom(d *types.Decoder) {
-	copy(fcr.PubKey[:], d.ReadBytes())
-	copy(fcr.RenterPublicKey[:], d.ReadBytes())
-	copy(fcr.HostPublicKey[:], d.ReadBytes())
+	d.Read(fcr.PubKey[:])
+	d.Read(fcr.RenterPublicKey[:])
+	d.Read(fcr.HostPublicKey[:])
 	fcr.EndHeight = d.ReadUint64()
 	fcr.Storage = d.ReadUint64()
 	fcr.Upload = d.ReadUint64()
@@ -360,9 +360,9 @@ func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 
 // EncodeTo implements requestBody.
 /*func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
-	e.WriteBytes(fcr.PubKey[:])
-	e.WriteBytes(fcr.RenterPublicKey[:])
-	e.WriteBytes(fcr.HostPublicKey[:])
+	e.Write(fcr.PubKey[:])
+	e.Write(fcr.RenterPublicKey[:])
+	e.Write(fcr.HostPublicKey[:])
 	e.WriteUint64(fcr.EndHeight)
 	e.WriteUint64(fcr.Storage)
 	e.WriteUint64(fcr.Upload)
@@ -390,8 +390,8 @@ func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 
 // DecodeFrom implements requestBody.
 /*func (rcr *renewContractRequest) DecodeFrom(d *types.Decoder) {
-	copy(rcr.PubKey[:], d.ReadBytes())
-	copy(rcr.Contract[:], d.ReadBytes())
+	d.Read(rcr.PubKey[:])
+	d.Read(rcr.Contract[:])
 	rcr.EndHeight = d.ReadUint64()
 	rcr.Storage = d.ReadUint64()
 	rcr.Upload = d.ReadUint64()
@@ -403,8 +403,8 @@ func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 
 // EncodeTo implements requestBody.
 /*func (rcr *renewContractRequest) EncodeTo(e *types.Encoder) {
-	e.WriteBytes(rcr.PubKey[:])
-	e.WriteBytes(rcr.Contract[:])
+	e.Write(rcr.PubKey[:])
+	e.Write(rcr.Contract[:])
 	e.WriteUint64(rcr.EndHeight)
 	e.WriteUint64(rcr.Storage)
 	e.WriteUint64(rcr.Upload)
@@ -422,13 +422,13 @@ type getSettingsRequest struct {
 
 // DecodeFrom implements requestBody.
 func (gsr *getSettingsRequest) DecodeFrom(d *types.Decoder) {
-	copy(gsr.PubKey[:], d.ReadBytes())
+	d.Read(gsr.PubKey[:])
 	gsr.Signature.DecodeFrom(d)
 }
 
 // EncodeTo implements requestBody.
 func (gsr *getSettingsRequest) EncodeTo(e *types.Encoder) {
-	e.WriteBytes(gsr.PubKey[:])
+	e.Write(gsr.PubKey[:])
 }
 
 // getSettingsResponse is used to send the opt-in settings
@@ -479,7 +479,7 @@ type updateSettingsRequest struct {
 
 // DecodeFrom implements requestBody.
 func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
-	copy(usr.PubKey[:], d.ReadBytes())
+	d.Read(usr.PubKey[:])
 	usr.AutoRenewContracts = d.ReadBool()
 	if usr.AutoRenewContracts {
 		sk := d.ReadBytes()
@@ -506,7 +506,7 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 
 // EncodeTo implements requestBody.
 func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
-	e.WriteBytes(usr.PubKey[:])
+	e.Write(usr.PubKey[:])
 	e.WriteBool(usr.AutoRenewContracts)
 	if usr.AutoRenewContracts {
 		e.WriteBytes(usr.PrivateKey[:])

@@ -570,7 +570,7 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 				Value:   txnFunds,
 				Address: uc.UnlockHash(),
 			})
-			parentTxn, err := w.FundTransaction(&txn, estFee)
+			parentTxn, _, err := w.FundTransaction(&txn, estFee)
 			if err != nil {
 				w.ReleaseInputs(txn)
 				return types.Currency{}, 0, modules.AddContext(err, "couldn't pay transaction fee on swept funds")

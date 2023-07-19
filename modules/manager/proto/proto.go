@@ -11,6 +11,11 @@ import (
 	"go.sia.tech/core/types"
 )
 
+// transactionSigner is the minimal interface for modules.Wallet.
+type transactionSigner interface {
+	Sign(*types.Transaction, []types.Hash256, types.CoveredFields) error
+}
+
 // HostSettings uses the Settings RPC to retrieve the host's settings.
 func HostSettings(address string, hpk types.PublicKey) (settings rhpv2.HostSettings, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), settingsTimeout)

@@ -52,7 +52,7 @@ func (c *Contractor) prepareContractFormation(rpk types.PublicKey, host modules.
 	minerFee := txnFee.Mul64(modules.EstimatedFileContractTransactionSetSize)
 	txn.MinerFees = []types.Currency{minerFee}
 	totalCost := cost.Add(minerFee).Add(tax)
-	parentTxn, err := c.wallet.FundTransaction(&txn, totalCost)
+	parentTxn, toSign, err := c.wallet.FundTransaction(&txn, totalCost)
 	if err != nil {
 		c.wallet.ReleaseInputs(txn)
 		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, modules.AddContext(err, "unable to fund transaction")
@@ -72,7 +72,7 @@ func (c *Contractor) prepareContractFormation(rpk types.PublicKey, host modules.
 
 	// Sign the transaction.
 	cf := modules.ExplicitCoveredFields(txn)
-	err = c.wallet.SignTransaction(&txn, nil, cf)
+	err = c.wallet.Sign(&txn, toSign, cf)
 	if err != nil {
 		c.wallet.ReleaseInputs(txn)
 		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, modules.AddContext(err, "unable to sign transaction")
@@ -99,8 +99,14 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	}
 
 	// Create a context and set up its cancelling.
-	ctx, cancel := context.WithTimeout(context.Background(), formContractTimeout)
-	defer cancel()
+	ctx, cancelFunc := context.WithTimeout(context.Background(), formContractTimeout)
+	go func() {
+		select {
+		case <-c.tg.StopChan():
+			cancelFunc()
+		case <-ctx.Done():
+		}
+	}()
 
 	// Increase Successful/Failed interactions accordingly.
 	var hostFault bool
@@ -119,7 +125,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	var txnSet, sweepParents []types.Transaction
 	var sweepTxn types.Transaction
 	var totalCost, contractPrice, minerFee, siafundFee types.Currency
-	var cr rhpv2.ContractRevision
+	var rev rhpv2.ContractRevision
 	err = proto.WithTransportV2(ctx, host.Settings.NetAddress, host.PublicKey, func(t *rhpv2.Transport) error {
 		// Get the host's settings.
 		hostSettings, err := proto.RPCSettings(ctx, t)
@@ -165,7 +171,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		}
 
 		// Form the contract.
-		cr, txnSet, err = proto.RPCFormContract(ctx, t, esk, renterTxnSet)
+		rev, txnSet, err = proto.RPCFormContract(ctx, t, esk, renterTxnSet)
 		if err != nil {
 			hostFault = true
 			c.wallet.ReleaseInputs(renterTxnSet[len(renterTxnSet) - 1])
@@ -190,8 +196,8 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 
 	// Add contract to the set.
 	revisionTxn := types.Transaction{
-		FileContractRevisions: []types.FileContractRevision{cr.Revision},
-		Signatures:            []types.TransactionSignature{cr.Signatures[0], cr.Signatures[1]},
+		FileContractRevisions: []types.FileContractRevision{rev.Revision},
+		Signatures:            []types.TransactionSignature{rev.Signatures[0], rev.Signatures[1]},
 	}
 	contract, err := c.staticContracts.InsertContract(revisionTxn, blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk)
 	if err != nil {
@@ -219,7 +225,6 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	_, exists = c.pubKeysToContractID[contract.RenterPublicKey.String() + contract.HostPublicKey.String()]
 	if exists {
 		c.mu.Unlock()
-		c.wallet.ReleaseInputs(txnSet[len(txnSet) - 1])
 		// We need to return a funding value because money was spent on this
 		// host, even though the full process could not be completed.
 		c.log.Println("WARN: attempted to form a new contract with a host that this renter already has a contract with.")

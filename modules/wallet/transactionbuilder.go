@@ -92,7 +92,7 @@ func (w *Wallet) checkOutput(tx *sql.Tx, currentHeight uint64, id types.SiacoinO
 // the provided transaction. A change output is also added, if necessary. The
 // inputs will not be available to future calls to FundTransaction unless
 // ReleaseInputs is called.
-func (w *Wallet) FundTransaction(txn *types.Transaction, amount types.Currency) (parentTxn types.Transaction, err error) {
+func (w *Wallet) FundTransaction(txn *types.Transaction, amount types.Currency) (parentTxn types.Transaction, toSign []types.Hash256, err error) {
 	if amount.IsZero() {
 		return
 	}
@@ -173,17 +173,17 @@ func (w *Wallet) FundTransaction(txn *types.Transaction, amount types.Currency) 
 		}
 	}
 	if potentialFund.Cmp(amount) >= 0 && fund.Cmp(amount) < 0 {
-		return types.Transaction{}, modules.ErrIncompleteTransactions
+		return types.Transaction{}, nil, modules.ErrIncompleteTransactions
 	}
 	if fund.Cmp(amount) < 0 {
-		return types.Transaction{}, modules.ErrLowBalance
+		return types.Transaction{}, nil, modules.ErrLowBalance
 	}
 
 	// Create and add the output that will be used to fund the standard
 	// transaction.
 	parentUnlockConditions, err := w.nextPrimarySeedAddress(w.dbTx)
 	if err != nil {
-		return types.Transaction{}, err
+		return types.Transaction{}, nil, err
 	}
 	defer func() {
 		if err != nil {
@@ -201,7 +201,7 @@ func (w *Wallet) FundTransaction(txn *types.Transaction, amount types.Currency) 
 	if !amount.Equals(fund) {
 		refundUnlockConditions, err := w.nextPrimarySeedAddress(w.dbTx)
 		if err != nil {
-			return types.Transaction{}, err
+			return types.Transaction{}, nil, err
 		}
 		defer func() {
 			if err != nil {
@@ -224,7 +224,7 @@ func (w *Wallet) FundTransaction(txn *types.Transaction, amount types.Currency) 
 	// finished because otherwise the txid and output id will change.
 	err = dbPutSpentOutput(w.dbTx, types.Hash256(parentTxn.SiacoinOutputID(0)), consensusHeight)
 	if err != nil {
-		return types.Transaction{}, err
+		return types.Transaction{}, nil, err
 	}
 
 	// Add the exact output.
@@ -233,12 +233,13 @@ func (w *Wallet) FundTransaction(txn *types.Transaction, amount types.Currency) 
 		UnlockConditions: parentUnlockConditions,
 	}
 	txn.SiacoinInputs = append(txn.SiacoinInputs, newInput)
+	toSign = append(toSign, types.Hash256(newInput.ParentID))
 
 	// Mark all outputs that were spent as spent.
 	for _, scoid := range spentScoids {
 		err = dbPutSpentOutput(w.dbTx, types.Hash256(scoid), consensusHeight)
 		if err != nil {
-			return types.Transaction{}, err
+			return types.Transaction{}, nil, err
 		}
 	}
 
@@ -296,4 +297,40 @@ func (w *Wallet) MarkWalletInputs(txn types.Transaction) (toSign []types.Hash256
 	}
 
 	return
+}
+
+// Sign will sign any inputs added by FundTransaction.
+func (w *Wallet) Sign(txn *types.Transaction, toSign []types.Hash256, cf types.CoveredFields) error {
+	w.mu.Lock()
+	consensusHeight, err := dbGetConsensusHeight(w.dbTx)
+	w.mu.Unlock()
+	if err != nil {
+		return err
+	}
+
+	// For each Siacoin input covered by toSign, provide a signature.
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	for _, id := range toSign {
+		index := -1
+		for i, input := range txn.SiacoinInputs {
+			if id == types.Hash256(input.ParentID) {
+				index = i
+				break
+			}
+		}
+		if index == -1 {
+			return errors.New("toSign references an input not present in the transaction")
+		}
+
+		input := txn.SiacoinInputs[index]
+		key, ok := w.keys[input.UnlockConditions.UnlockHash()]
+		if !ok {
+			return errors.New("cannot sign input")
+		}
+
+		addSignatures(txn, cf, input.UnlockConditions, types.Hash256(input.ParentID), key, consensusHeight)
+	}
+
+	return nil
 }

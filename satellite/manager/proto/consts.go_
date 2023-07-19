@@ -26,10 +26,6 @@ const (
 
 	// contractRenewTimeout is the amount of time we wait to renew a contract.
 	contractRenewTimeout = 5 * time.Minute
-
-	// minimumSupportedRenterHostProtocolVersion is the minimum version of Sia
-	// that supports the currently used version of the renter-host protocol.
-	minimumSupportedRenterHostProtocolVersion = "1.4.1"
 )
 
 var (

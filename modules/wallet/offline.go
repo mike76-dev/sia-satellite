@@ -157,6 +157,44 @@ func (w *Wallet) AddUnlockConditions(uc types.UnlockConditions) error {
 // of each TransactionSignature referenced by toSign. For convenience, if
 // toSign is empty, SignTransaction signs everything that it can.
 func (w *Wallet) SignTransaction(txn *types.Transaction, toSign []types.Hash256, cf types.CoveredFields) error {
+	// Helper function to add the required number of signatures for the SC input.
+	addSiacoinInputSignature := func(input types.SiacoinInput) {
+		pubKeys := make(map[uint64]struct{})
+		for _, sig := range txn.Signatures {
+			if sig.ParentID == types.Hash256(input.ParentID) {
+				pubKeys[sig.PublicKeyIndex] = struct{}{}
+			}
+		}
+		for i := range input.UnlockConditions.PublicKeys {
+			if _, ok := pubKeys[uint64(i)]; !ok {
+				txn.Signatures = append(txn.Signatures, types.TransactionSignature{
+					ParentID:       types.Hash256(input.ParentID),
+					CoveredFields:  cf,
+					PublicKeyIndex: uint64(i),
+				})
+			}
+		}
+	}
+
+	// Helper function to add the required number of signatures for the SF input.
+	addSiafundInputSignature := func(input types.SiafundInput) {
+		pubKeys := make(map[uint64]struct{})
+		for _, sig := range txn.Signatures {
+			if sig.ParentID == types.Hash256(input.ParentID) {
+				pubKeys[sig.PublicKeyIndex] = struct{}{}
+			}
+		}
+		for i := range input.UnlockConditions.PublicKeys {
+			if _, ok := pubKeys[uint64(i)]; !ok {
+				txn.Signatures = append(txn.Signatures, types.TransactionSignature{
+					ParentID:       types.Hash256(input.ParentID),
+					CoveredFields:  cf,
+					PublicKeyIndex: uint64(i),
+				})
+			}
+		}
+	}
+
 	if err := w.tg.Add(); err != nil {
 		return err
 	}
@@ -174,18 +212,10 @@ func (w *Wallet) SignTransaction(txn *types.Transaction, toSign []types.Hash256,
 
 	// Add a signature for each input.
 	for _, input := range txn.SiacoinInputs {
-		key, ok := w.keys[input.UnlockConditions.UnlockHash()]
-		if !ok {
-			return errors.New("cannot sign Siacoin input")
-		}
-		addSignatures(txn, cf, input.UnlockConditions, types.Hash256(input.ParentID), key, consensusHeight)
+		addSiacoinInputSignature(input)
 	}
 	for _, input := range txn.SiafundInputs {
-		key, ok := w.keys[input.UnlockConditions.UnlockHash()]
-		if !ok {
-			return errors.New("cannot sign Siafund input")
-		}
-		addSignatures(txn, cf, input.UnlockConditions, types.Hash256(input.ParentID), key, consensusHeight)
+		addSiafundInputSignature(input)
 	}
 
 	// If toSign is empty, sign all inputs that we have keys for.

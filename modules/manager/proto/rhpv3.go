@@ -3,13 +3,11 @@ package proto
 import (
 	"context"
 	"encoding/json"
-	//"fmt"
-	//"math"
 	"time"
 
-	//"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/modules"
 
-	//rhpv2 "go.sia.tech/core/rhp/v2"
+	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
 )
@@ -24,8 +22,8 @@ type PriceTablePaymentFunc func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, e
 func RPCPriceTable(ctx context.Context, t *rhpv3.Transport, paymentFunc PriceTablePaymentFunc) (pt rhpv3.HostPriceTable, err error) {
 	s := t.DialStream()
 	defer s.Close()
-
 	s.SetDeadline(time.Now().Add(5 * time.Second))
+
 	const maxPriceTableSize = 16 * 1024
 	var ptr rhpv3.RPCUpdatePriceTableResponse
 	if err := s.WriteRequest(rhpv3.RPCUpdatePriceTableID, nil); err != nil {
@@ -73,169 +71,144 @@ func processPayment(s *rhpv3.Stream, payment rhpv3.PaymentMethod) error {
 }
 
 // RPCRenewContract negotiates a contract renewal with the host.
-/*func RPCRenewContract(t *rhpv3.Transport, txnBuilder transactionBuilder, renterKey types.PrivateKey, hostPK types.PublicKey, hostAddress, renterAddress types.Address, finalRevTxn types.Transaction, funding, newCollateral types.Currency, endHeight uint64) (_ rhpv2.ContractRevision, _ []types.Transaction, _ types.Transaction, _ []types.Transaction, err error) {
-	s, err := t.DialStream()
-	if err != nil {
-		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
-	}
+func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.PrivateKey, rev types.FileContractRevision, txnSet []types.Transaction, toSign []types.Hash256, ts transactionSigner) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
+	s := t.DialStream()
 	defer s.Close()
+	s.SetDeadline(time.Now().Add(5 * time.Minute))
 
-	// Send the ptUID.
-	var ptUID rhpv3.SettingsID
-	if err = s.WriteRequest(rhpv3.RPCRenewContractID, &ptUID); err != nil {
-		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
+	// Send an empty price table uid.
+	var pt rhpv3.HostPriceTable
+	if err = s.WriteRequest(rhpv3.RPCRenewContractID, &pt.UID); err != nil {
+		return rhpv2.ContractRevision{}, nil, err
 	}
 
 	// The price table we sent contained a zero uid so we receive a
 	// temporary one.
-	var ptResp rhpv3.RPCUpdatePriceTableResponse
-	if err = s.ReadResponse(&ptResp, 4096); err != nil {
-		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
+	var ptr rhpv3.RPCUpdatePriceTableResponse
+	if err = s.ReadResponse(&ptr, 8192); err != nil {
+		return rhpv2.ContractRevision{}, nil, err
 	}
 	err = json.Unmarshal(ptr.PriceTableJSON, &pt)
 	if err != nil {
-		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
+		return rhpv2.ContractRevision{}, nil, err
 	}
 
 	// Prepare the signed transaction that contains the final revision as well
 	// as the new contract.
-	rev := finalRevTxn.FileContractRevisions[0]
-	txnSet, err := prepareRenewal(txnBuilder, rev, hostAddress, renterAddress, funding, newCollateral, pt, endHeight)
-	if err != nil {
-		return rhpv2.ContractRevision{}, nil, types.Transaction{}, nil, err
-	}
 	parents, txn := txnSet[:len(txnSet) - 1], txnSet[len(txnSet) - 1]
+	h := types.NewHasher()
+	txn.FileContracts[0].EncodeTo(h.E)
+	txn.FileContractRevisions[0].EncodeTo(h.E)
+	finalRevisionSignature := renterKey.SignHash(h.Sum())
 
-	// Make a copy of the transaction builder so far, to be used to by the watchdog
-	// to double spend these inputs in case the contract never appears on chain.
-	sweepBuilder := txnBuilder.Copy()
-
-	// Add an output that sends all funds back to the refundAddress.
-	// Note that in order to send this transaction, a miner fee will have to be subtracted.
-	output := siad.SiacoinOutput{
-		Value:      funding,
-		UnlockHash: uc.UnlockHash(),
+	// Send the request.
+	req := rhpv3.RPCRenewContractRequest{
+		TransactionSet:         txnSet,
+		RenterKey:              rev.UnlockConditions.PublicKeys[0],
+		FinalRevisionSignature: finalRevisionSignature,
 	}
-	sweepBuilder.AddSiacoinOutput(output)
-	st, sp := sweepBuilder.View()
-	sweepTxn := modules.ConvertToCore(st)
-	sweepParents := modules.ConvertToCore(sp)
-
-
-	// Create request.
-	renterPK := renterKey.PublicKey()
-	req := &rpcRenewContractRequest{
-		TransactionSet: txnSet,
-		RenterKey:      types.Ed25519PublicKey(renterPK),
-	}
-	copy(req.FinalRevisionSignature[:], finalRevTxn.TransactionSignatures[0].Signature)
-
-	// Send request.
-	if err := s.WriteResponse(req); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to write RPCRenewContractRequest: %s", err)
+	if err = s.WriteResponse(&req); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to send RPCRenewContractRequest")
 	}
 
-	// Read the response. It contains the host's final revision sig and any
-	// additions it made.
-	var resp rpcRenewContractHostAdditions
-	if err := s.ReadResponse(&resp, 65536); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to read RPCRenewContractHostAdditions: %s", err)
+	// Incorporate the host's additions.
+	var hostAdditions rhpv3.RPCRenewContractHostAdditions
+	if err = s.ReadResponse(&hostAdditions, 65536); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to read RPCRenewContractHostAdditions")
 	}
+	parents = append(parents, hostAdditions.Parents...)
+	txn.SiacoinInputs = append(txn.SiacoinInputs, hostAdditions.SiacoinInputs...)
+	txn.SiacoinOutputs = append(txn.SiacoinOutputs, hostAdditions.SiacoinOutputs...)
 
-	// Incorporate host's modifications.
-	txnBuilder.AddParents(resp.Parents)
-	for _, input := range resp.SiacoinInputs {
-		txnBuilder.AddSiacoinInput(input)
-	}
-	for _, output := range resp.SiacoinOutputs {
-		txnBuilder.AddSiacoinOutput(output)
-	}
-
-	// Get the host sig for the final revision.
-	finalRevHostSigRaw := resp.FinalRevisionSignature
-	finalRevHostSig := types.TransactionSignature{
-		ParentID:       crypto.Hash(finalRevTxn.FileContractRevisions[0].ParentID),
-		PublicKeyIndex: 1,
-		CoveredFields:  types.CoveredFields{
+	finalRevRenterSig := types.TransactionSignature{
+		ParentID:       types.Hash256(rev.ParentID),
+		PublicKeyIndex: 0,
+		CoveredFields: types.CoveredFields{
 			FileContracts:         []uint64{0},
 			FileContractRevisions: []uint64{0},
 		},
-		Signature: finalRevHostSigRaw[:],
+		Signature: finalRevisionSignature[:],
+	}
+	finalRevHostSig := types.TransactionSignature{
+		ParentID:       types.Hash256(rev.ParentID),
+		PublicKeyIndex: 1,
+		CoveredFields: types.CoveredFields{
+			FileContracts:         []uint64{0},
+			FileContractRevisions: []uint64{0},
+		},
+		Signature: hostAdditions.FinalRevisionSignature[:],
+	}
+	txn.Signatures = []types.TransactionSignature{finalRevRenterSig, finalRevHostSig}
+
+	// Sign the inputs we funded the txn with and cover the whole txn including
+	// the existing signatures.
+	cf := types.CoveredFields{
+		WholeTransaction: true,
+		Signatures:       []uint64{0, 1},
+	}
+	if err := ts.Sign(&txn, toSign, cf); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to sign transaction")
 	}
 
-	// Add the revision signatures to the transaction set and sign it.
-	_ = txnBuilder.AddTransactionSignature(finalRevTxn.TransactionSignatures[0])
-	_ = txnBuilder.AddTransactionSignature(finalRevHostSig)
-	signedTxnSet, err := txnBuilder.Sign(true)
-	if err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to sign transaction set: %s", err)
-	}
-
-	// Calculate signatures added by the transaction builder.
-	var addedSignatures []types.TransactionSignature
-	_, _, _, addedSignatureIndices := txnBuilder.ViewAdded()
-	for _, i := range addedSignatureIndices {
-		addedSignatures = append(addedSignatures, signedTxnSet[len(signedTxnSet) - 1].TransactionSignatures[i])
-	}
-
-	// Create initial (no-op) revision, transaction, and signature.
-	fc := signedTxnSet[len(signedTxnSet) - 1].FileContracts[0]
-	initRevision := types.FileContractRevision{
-		ParentID:          signedTxnSet[len(signedTxnSet) - 1].FileContractID(0),
+	// Create a new no-op revision and sign it.
+	fc := txn.FileContracts[0]
+	noOpRevision := types.FileContractRevision{
+		ParentID:          txn.FileContractID(0),
 		UnlockConditions:  types.UnlockConditions{
-			PublicKeys: []types.SiaPublicKey{
-				types.Ed25519PublicKey(renterPK),
-				hostPK,
+			PublicKeys: []types.UnlockKey{
+				renterKey.PublicKey().UnlockKey(),
+				rev.UnlockConditions.PublicKeys[1],
 			},
 			SignaturesRequired: 2,
 		},
-		NewRevisionNumber: 1,
-
-		NewFileSize:           fc.FileSize,
-		NewFileMerkleRoot:     fc.FileMerkleRoot,
-		NewWindowStart:        fc.WindowStart,
-		NewWindowEnd:          fc.WindowEnd,
-		NewValidProofOutputs:  fc.ValidProofOutputs,
-		NewMissedProofOutputs: fc.MissedProofOutputs,
-		NewUnlockHash:         fc.UnlockHash,
-	}
-
-	renterRevisionSig := types.TransactionSignature{
-		ParentID:       crypto.Hash(initRevision.ParentID),
-		PublicKeyIndex: 0,
-		CoveredFields:  types.CoveredFields{
-			FileContractRevisions: []uint64{0},
+		FileContract: types.FileContract{
+			Filesize:           fc.Filesize,
+			FileMerkleRoot:     fc.FileMerkleRoot,
+			WindowStart:        fc.WindowStart,
+			WindowEnd:          fc.WindowEnd,
+			ValidProofOutputs:  fc.ValidProofOutputs,
+			MissedProofOutputs: fc.MissedProofOutputs,
+			UnlockHash:         fc.UnlockHash,
+			RevisionNumber: 1,
 		},
 	}
-	revisionTxn := types.Transaction{
-		FileContractRevisions: []types.FileContractRevision{initRevision},
-		TransactionSignatures: []types.TransactionSignature{renterRevisionSig},
-	}
-	encodedSig := crypto.SignHash(revisionTxn.SigHash(0, height), renterKey)
-	revisionTxn.TransactionSignatures[0].Signature = encodedSig[:]
-
-	// Send transaction signatures and no-op revision signature to host.
-	renterSigs := &rpcRenewSignatures{
-		TransactionSignatures: addedSignatures,
-		RevisionSignature:     revisionTxn.TransactionSignatures[0],
-	}
-	if err := s.WriteResponse(renterSigs); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to send RPCRenewSignatures to host: %s", err)
+	h = types.NewHasher()
+	noOpRevision.EncodeTo(h.E)
+	renterNoOpSig := renterKey.SignHash(h.Sum())
+	renterNoOpRevisionSignature := types.TransactionSignature{
+		ParentID:       types.Hash256(noOpRevision.ParentID),
+		PublicKeyIndex: 0,
+		CoveredFields: types.CoveredFields{
+			FileContractRevisions: []uint64{0},
+		},
+		Signature: renterNoOpSig[:],
 	}
 
-	// Read the host's signatures and add them to the transactions.
-	var hostSigs rpcRenewSignatures
-	if err := s.ReadResponse(&hostSigs, 65536); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to read RPCRenewSignatures from host: %s", err)
+	// Send the newly added signatures to the host and the signature for the
+	// initial no-op revision.
+	rs := rhpv3.RPCRenewSignatures{
+		TransactionSignatures: txn.Signatures[2:],
+		RevisionSignature:     renterNoOpRevisionSignature,
 	}
-	for _, sig := range hostSigs.TransactionSignatures {
-		_ = txnBuilder.AddTransactionSignature(sig)
+	if err = s.WriteResponse(&rs); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to send RPCRenewSignatures")
 	}
 
-	revisionTxn.TransactionSignatures = append(revisionTxn.TransactionSignatures, hostSigs.RevisionSignature)
+	// Receive the host's signatures.
+	var hostSigs rhpv3.RPCRenewSignatures
+	if err = s.ReadResponse(&hostSigs, 65536); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to read RPCRenewSignatures")
+	}
+	txn.Signatures = append(txn.Signatures, hostSigs.TransactionSignatures...)
 
-	return revisionTxn, nil
-}*/
+	// Add the parents to get the full txnSet.
+	txnSet = append(parents, txn)
+
+	return rhpv2.ContractRevision{
+		Revision:   noOpRevision,
+		Signatures: [2]types.TransactionSignature{renterNoOpRevisionSignature, hostSigs.RevisionSignature},
+	}, txnSet, nil
+}
 
 // RPCRenewOldContract negotiates a contract renewal with the host using
 // the new Renter-Satellite protocol.
@@ -390,7 +363,7 @@ func processPayment(s *rhpv3.Stream, payment rhpv3.PaymentMethod) error {
 }*/
 
 // RPCLatestRevision fetches the latest revision from the host.
-func RPCLatestRevision(t *rhpv3.Transport, contractID types.FileContractID) (types.FileContractRevision, error) {
+func RPCLatestRevision(ctx context.Context, t *rhpv3.Transport, contractID types.FileContractID) (types.FileContractRevision, error) {
 	s := t.DialStream()
 	defer s.Close()
 
@@ -409,42 +382,3 @@ func RPCLatestRevision(t *rhpv3.Transport, contractID types.FileContractID) (typ
 	}
 	return resp.Revision, nil
 }
-
-// prepareRenewal prepares the final revision and a new contract.
-/*func prepareRenewal(txnBuilder transactionBuilder, rev types.FileContractRevision, hostAddress, renterAddress types.Address, renterFunds, newCollateral types.Currency, pt rhpv3.HostPriceTable, endHeight uint64) ([]types.Transaction, error) {
-	// Create the final revision from the provided revision.
-	finalRevision := rev
-	finalRevision.MissedProofOutputs = finalRevision.ValidProofOutputs
-	finalRevision.Filesize = 0
-	finalRevision.FileMerkleRoot = types.Hash256{}
-	finalRevision.RevisionNumber = math.MaxUint64
-
-	// Prepare the new contract.
-	fc, basePrice := rhpv3.PrepareContractRenewal(rev, hostAddress, renterAddress, renterFunds, newCollateral, pt, endHeight)
-
-	// Add revision, contract, and mining fee.
-	txnBuilder.AddFileContractRevision(modules.ConvertToSiad(finalRev))
-	txnBuilder.AddFileContract(modules.ConvertToSiad(fc))
-	minerFee := pt.TxnFeeMaxRecommended.Mul64(4096)
-	txnBuilder.AddMinerFee(siad.NewCurrency(minerFee.Big()))
-
-	// Compute how much renter funds to put into the new contract.
-	cost := fc.ValidRenterPayout().Add(pt.ContractPrice).Add(minerFee)
-	cost = cost.Add(basePrice).Add(modules.Tax(fc.Payout))
-
-	// Fund the transaction.
-	err = txnBuilder.FundSiacoins(siad.NewCurrency(cost.Big()))
-	if err != nil {
-		return nil, fmt.Errorf("couldn't fund transaction: %s", err)
-	}
-
-	// Add any required parents.
-	up, err := txnBuilder.UnconfirmedParents()
-	if err != nil {
-		txnBuilder.Drop()
-		return nil, fmt.Errorf("couldn't load transaction dependencies: %s", err)
-	}
-
-	txn, parents := txnBuilder.View()
-	return append(modules.ConvertToCore(up), append(modules.ConvertToCore(parents), modules.ConvertToCore(txn))), nil
-}*/

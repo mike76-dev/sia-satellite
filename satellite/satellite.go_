@@ -62,41 +62,6 @@ func (s *Satellite) OldContractsByRenter(rpk types.SiaPublicKey) []modules.Rente
 	return s.m.OldContractsByRenter(rpk)
 }
 
-// RenewContracts tries to renew the given set of contracts and returns them.
-// If the contracts are not up to being renewed yet, existing contracts are
-// returned.
-func (s *Satellite) RenewContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, a modules.Allowance, contracts []types.FileContractID) ([]modules.RenterContract, error) {
-	// Get the estimated costs and update the allowance with them.
-	estimation, a, err := s.m.PriceEstimation(a)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if the user balance is sufficient to cover the costs.
-	renter, err := s.GetRenter(rpk)
-	if err != nil {
-		return nil, err
-	}
-	ub, err := s.GetBalance(renter.Email)
-	if err != nil {
-		return nil, err
-	}
-	if ub.Balance < estimation {
-		return nil, errors.New("insufficient account balance")
-	}
-
-	// Set the allowance.
-	err = s.m.SetAllowance(rpk, a)
-	if err != nil {
-		return nil, err
-	}
-
-	// Renew the contracts.
-	contractSet, err := s.m.RenewContracts(rpk, rsk, contracts)
-
-	return contractSet, err
-}
-
 // UpdateContract updates the contract with the new revision.
 func (s *Satellite) UpdateContract(rev types.FileContractRevision, sigs []types.TransactionSignature, uploads, downloads, fundAccount types.Currency) error {
 	return s.m.UpdateContract(rev, sigs, uploads, downloads, fundAccount)

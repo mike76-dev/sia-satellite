@@ -101,6 +101,7 @@ func (cs *ContractSet) Return(c *FileContract) {
 	if !ok {
 		cs.mu.Unlock()
 		cs.log.Println("CRITICAL: no contract with that key")
+		return
 	}
 	cs.mu.Unlock()
 	c.revisionMu.Unlock()

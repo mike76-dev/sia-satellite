@@ -358,6 +358,9 @@ type Manager interface {
 	// RefreshedContract returns a bool indicating if the contract was refreshed.
 	RefreshedContract(types.FileContractID) bool
 
+	// RenewContracts renews a set of contracts and returns a new set.
+	RenewContracts(types.PublicKey, types.PrivateKey, Allowance, []types.FileContractID) ([]RenterContract, error)
+
 	// Renters retrieves the list of renters.
 	Renters() []Renter
 

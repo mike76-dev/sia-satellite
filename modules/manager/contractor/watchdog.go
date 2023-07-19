@@ -206,7 +206,7 @@ func (w *watchdog) callScanConsensusChange(cc modules.ConsensusChange) {
 // duplicate transaction errors. (This is because the watchdog may be
 // overzealous in sending out transactions).
 func (w *watchdog) sendTxnSet(txnSet []types.Transaction, reason string) {
-	w.contractor.log.Println("INFO: sending txn set to tpool", reason)
+	w.contractor.log.Println("INFO: sending txn set to tpool:", reason)
 
 	// Send the transaction set in a go-routine to avoid deadlock when this
 	// sendTxnSet is called within ProcessConsensusChange.

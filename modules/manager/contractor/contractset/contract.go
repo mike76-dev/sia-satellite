@@ -303,6 +303,11 @@ func (c *FileContract) managedCommitClearContract(signedTxn types.Transaction, b
 	return c.applySetHeader(newHeader)
 }
 
+// Clear commits the changes we made to the revision when clearing a contract.
+func (c *FileContract) Clear(txn types.Transaction) error {
+	return c.managedCommitClearContract(txn, types.ZeroCurrency)
+}
+
 // managedSyncRevision checks whether rev accords with the FileContract's most
 // recent revision. If the revisions do not match, and the host's revision is
 // ahead of the renter's, managedSyncRevision uses the host's revision.

@@ -312,5 +312,10 @@ func (w *watchdog) load() error {
 	}
 
 	rows.Close()
+
+	for pk, renter := range w.contractor.renters {
+		w.renewWindows[pk] = renter.Allowance.RenewWindow
+	}
+
 	return tx.Commit()
 }

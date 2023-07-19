@@ -171,7 +171,7 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 }
 
 // managedRenewContracts tries to renew the given set of contracts.
-/*func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
+func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 	// Extend the deadline to meet the renewal of multiple contracts.
 	s.Conn.SetDeadline(time.Now().Add(renewContractsTime))
 
@@ -185,17 +185,15 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 	}
 
 	// Verify the signature.
-	err = crypto.VerifyHash(crypto.Hash(hash), rr.PubKey, crypto.Signature(rr.Signature))
-	if err != nil {
+	if !rr.PubKey.VerifyHash(hash, rr.Signature) {
 		err = fmt.Errorf("could not verify renter signature: %v", err)
 		s.WriteError(err)
 		return err
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(rr.PubKey)
-	exists, err := p.satellite.UserExists(rpk)
-	if !exists || err != nil {
+	_, err = p.m.GetRenter(rr.PubKey)
+	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
 		return err
@@ -235,8 +233,8 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 	// Create an allowance.
 	a := modules.Allowance{
 		Hosts:       uint64(len(rr.Contracts)),
-		Period:      types.BlockHeight(rr.Period),
-		RenewWindow: types.BlockHeight(rr.RenewWindow),
+		Period:      rr.Period,
+		RenewWindow: rr.RenewWindow,
 
 		ExpectedStorage:    rr.Storage,
 		ExpectedUpload:     rr.Upload,
@@ -244,22 +242,18 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 		MinShards:          rr.MinShards,
 		TotalShards:        rr.TotalShards,
 
-		MaxRPCPrice:               types.NewCurrency(rr.MaxRPCPrice.Big()),
-		MaxContractPrice:          types.NewCurrency(rr.MaxContractPrice.Big()),
-		MaxDownloadBandwidthPrice: types.NewCurrency(rr.MaxDownloadPrice.Big()).Div64(bytesInTerabyte),
-		MaxSectorAccessPrice:      types.NewCurrency(rr.MaxSectorAccessPrice.Big()),
-		MaxStoragePrice:           types.NewCurrency(rr.MaxStoragePrice.Big()).Div64(bytesInTerabyte),
-		MaxUploadBandwidthPrice:   types.NewCurrency(rr.MaxUploadPrice.Big()).Div64(bytesInTerabyte),
-		MinMaxCollateral:          types.NewCurrency(rr.MinMaxCollateral.Big()),
-		BlockHeightLeeway:         types.BlockHeight(rr.BlockHeightLeeway),
+		MaxRPCPrice:               rr.MaxRPCPrice,
+		MaxContractPrice:          rr.MaxContractPrice,
+		MaxDownloadBandwidthPrice: rr.MaxDownloadPrice.Div64(bytesInTerabyte),
+		MaxSectorAccessPrice:      rr.MaxSectorAccessPrice,
+		MaxStoragePrice:           rr.MaxStoragePrice.Div64(bytesInTerabyte),
+		MaxUploadBandwidthPrice:   rr.MaxUploadPrice.Div64(bytesInTerabyte),
+		MinMaxCollateral:          rr.MinMaxCollateral,
+		BlockHeightLeeway:         rr.BlockHeightLeeway,
 	}
 
 	// Renew the contracts.
-	fcids := make([]types.FileContractID, len(rr.Contracts))
-	for i, fcid := range rr.Contracts {
-		copy(fcids[i][:], fcid[:])
-	}
-	contracts, err := p.satellite.RenewContracts(rpk, rr.SecretKey, a, fcids)
+	contracts, err := p.m.RenewContracts(rr.PubKey, rr.SecretKey, a, rr.Contracts)
 	if err != nil {
 		err = fmt.Errorf("could not renew contracts: %v", err)
 		s.WriteError(err)
@@ -270,13 +264,13 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 		cr := convertContract(contract)
 		ecs.contracts = append(ecs.contracts, extendedContract{
 			contract:    cr,
-			startHeight: uint64(contract.StartHeight),
-			totalCost:   modules.ConvertCurrency(contract.TotalCost),
+			startHeight: contract.StartHeight,
+			totalCost:   contract.TotalCost,
 		})
 	}
 
 	return s.WriteResponse(&ecs)
-}*/
+}
 
 // convertContract converts the contract metadata into `core` style.
 func convertContract(c modules.RenterContract) rhpv2.ContractRevision {

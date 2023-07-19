@@ -101,7 +101,7 @@ type hostContractor interface {
 	//RenewContract(*modules.RPCSession, types.SiaPublicKey, modules.RenterContract, types.BlockHeight, types.Currency) (modules.RenterContract, error)
 
 	// RenewContracts tries to renew the given set of contracts.
-	//RenewContracts(types.SiaPublicKey, crypto.SecretKey, []types.FileContractID) ([]modules.RenterContract, error)
+	RenewContracts(types.PublicKey, types.PrivateKey, []types.FileContractID) ([]modules.RenterContract, error)
 
 	// Renters return the list of renters.
 	Renters() []modules.Renter
@@ -663,10 +663,38 @@ func (m *Manager) FormContracts(rpk types.PublicKey, rsk types.PrivateKey, a mod
 	return contractSet, err
 }
 
-// RenewContracts calls hostContractor.RenewContracts.
-/*func (m *Manager) RenewContracts(rpk types.SiaPublicKey, rsk crypto.SecretKey, contracts []types.FileContractID) ([]modules.RenterContract, error) {
-	return m.hostContractor.RenewContracts(rpk, rsk, contracts)
-}*/
+// RenewContracts renews a set of contracts and returns a new set.
+func (m *Manager) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, a modules.Allowance, contracts []types.FileContractID) ([]modules.RenterContract, error) {
+	// Get the estimated costs and update the allowance with them.
+	estimation, a, err := m.PriceEstimation(a)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the user balance is sufficient to cover the costs.
+	renter, err := m.GetRenter(rpk)
+	if err != nil {
+		return nil, err
+	}
+	ub, err := m.GetBalance(renter.Email)
+	if err != nil {
+		return nil, err
+	}
+	if ub.Balance < estimation {
+		return nil, errors.New("insufficient account balance")
+	}
+
+	// Set the allowance.
+	err = m.SetAllowance(rpk, a)
+	if err != nil {
+		return nil, err
+	}
+
+	// Renew the contracts.
+	contractSet, err := m.hostContractor.RenewContracts(rpk, rsk, contracts)
+
+	return contractSet, err
+}
 
 // Renters calls hostContractor.Renters.
 func (m *Manager) Renters() []modules.Renter {
