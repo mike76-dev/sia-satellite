@@ -282,10 +282,10 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 			err = errors.Extend(errors.New("incoming RPCUpdateRevision failed: "), err)
 		}*/
 	case formContractSpecifier:
-		/*err = p.managedFormContract(s)
+		err = p.managedFormContract(s)
 		if err != nil {
-			err = errors.Extend(errors.New("incoming RPCFormContract failed: "), err)
-		}*/
+			err = modules.AddContext(err, "incoming RPCFormContract failed")
+		}
 	case renewContractSpecifier:
 		/*err = p.managedRenewContract(s)
 		if err != nil {

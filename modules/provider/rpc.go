@@ -186,7 +186,7 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 
 	// Verify the signature.
 	if !rr.PubKey.VerifyHash(hash, rr.Signature) {
-		err = fmt.Errorf("could not verify renter signature: %v", err)
+		err = errors.New("could not verify renter signature")
 		s.WriteError(err)
 		return err
 	}
@@ -397,7 +397,7 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 
 // managedFormContract forms a single contract using the new Renter-Satellite
 // protocol.
-/*func (p *Provider) managedFormContract(s *modules.RPCSession) error {
+func (p *Provider) managedFormContract(s *modules.RPCSession) error {
 	// Extend the deadline to meet the contract formation.
 	s.Conn.SetDeadline(time.Now().Add(formContractTime))
 
@@ -411,34 +411,32 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 	}
 
 	// Verify the signature.
-	err = crypto.VerifyHash(crypto.Hash(hash), fcr.PubKey, crypto.Signature(fcr.Signature))
-	if err != nil {
-		err = fmt.Errorf("could not verify renter signature: %v", err)
+	if !fcr.PubKey.VerifyHash(hash, fcr.Signature) {
+		err = errors.New("could not verify renter signature")
 		s.WriteError(err)
 		return err
 	}
 
 	// Check if we know this renter.
-	pk := types.Ed25519PublicKey(fcr.PubKey)
-	exists, err := p.satellite.UserExists(pk)
-	if !exists || err != nil {
+	_, err = p.m.GetRenter(fcr.PubKey)
+	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
 		return err
 	}
 
 	// Sanity checks.
-	if (fcr.RenterPublicKey == crypto.PublicKey{}) {
+	if (fcr.RenterPublicKey == types.PublicKey{}) {
 		err := errors.New("can't form contract with no renter specified")
 		s.WriteError(err)
 		return err
 	}
-	if (fcr.HostPublicKey == crypto.PublicKey{}) {
+	if (fcr.HostPublicKey == types.PublicKey{}) {
 		err := errors.New("can't form contract with no host specified")
 		s.WriteError(err)
 		return err
 	}
-	if fcr.EndHeight <= uint64(p.satellite.BlockHeight()) {
+	if fcr.EndHeight <= uint64(p.m.BlockHeight()) {
 		err := errors.New("can't form contract with end height in the past")
 		s.WriteError(err)
 		return err
@@ -454,12 +452,8 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 		return err
 	}
 
-	// Convert the keys.
-	rpk := types.Ed25519PublicKey(fcr.RenterPublicKey)
-	hpk := types.Ed25519PublicKey(fcr.HostPublicKey)
-
 	// Form the contract.
-	contract, err := p.satellite.FormContract(s, pk, rpk, hpk, types.BlockHeight(fcr.EndHeight), fcr.Storage, fcr.Upload, fcr.Download, fcr.MinShards, fcr.TotalShards)
+	contract, err := p.m.FormContract(s, fcr.PubKey, fcr.RenterPublicKey, fcr.HostPublicKey, fcr.EndHeight, fcr.Storage, fcr.Upload, fcr.Download, fcr.MinShards, fcr.TotalShards)
 	if err != nil {
 		err = fmt.Errorf("could not form contract: %v", err)
 		s.WriteError(err)
@@ -468,12 +462,12 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 
 	ec := extendedContract{
 		contract:    convertContract(contract),
-		startHeight: uint64(contract.StartHeight),
-		totalCost:   modules.ConvertCurrency(contract.TotalCost),
+		startHeight: contract.StartHeight,
+		totalCost:   contract.TotalCost,
 	}
 
 	return s.WriteResponse(&ec)
-}*/
+}
 
 // managedRenewContract renews a contract using the new Renter-Satellite
 // protocol.

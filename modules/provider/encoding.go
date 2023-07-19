@@ -329,10 +329,10 @@ func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 
 // formContractRequest is used when forming a contract with a single
 // host using the new Renter-Satellite protocol.
-/*type formContractRequest struct {
-	PubKey          crypto.PublicKey
-	RenterPublicKey crypto.PublicKey
-	HostPublicKey   crypto.PublicKey
+type formContractRequest struct {
+	PubKey          types.PublicKey
+	RenterPublicKey types.PublicKey
+	HostPublicKey   types.PublicKey
 
 	EndHeight   uint64
 	Storage     uint64
@@ -342,10 +342,10 @@ func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 	TotalShards uint64
 
 	Signature types.Signature
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (fcr *formContractRequest) DecodeFrom(d *types.Decoder) {
+func (fcr *formContractRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(fcr.PubKey[:])
 	d.Read(fcr.RenterPublicKey[:])
 	d.Read(fcr.HostPublicKey[:])
@@ -356,10 +356,10 @@ func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 	fcr.MinShards = d.ReadUint64()
 	fcr.TotalShards = d.ReadUint64()
 	fcr.Signature.DecodeFrom(d)
-}/*
+}
 
 // EncodeTo implements requestBody.
-/*func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
+func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
 	e.Write(fcr.PubKey[:])
 	e.Write(fcr.RenterPublicKey[:])
 	e.Write(fcr.HostPublicKey[:])
@@ -369,7 +369,7 @@ func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
 	e.WriteUint64(fcr.Download)
 	e.WriteUint64(fcr.MinShards)
 	e.WriteUint64(fcr.TotalShards)
-}*/
+}
 
 // renewContractRequest is used when renewing a contract using
 // the new Renter-Satellite protocol.

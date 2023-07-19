@@ -74,7 +74,7 @@ type hostContractor interface {
 
 	// FormContract forms a contract with the specified host, puts it
 	// in the contract set, and returns it.
-	//FormContract(*modules.RPCSession, types.SiaPublicKey, types.SiaPublicKey, types.SiaPublicKey, types.BlockHeight, types.Currency) (modules.RenterContract, error)
+	FormContract(*modules.RPCSession, types.PublicKey, types.PublicKey, types.PublicKey, types.Currency, uint64) (modules.RenterContract, error)
 
 	// FormContracts forms up to the specified number of contracts, puts them
 	// in the contract set, and returns them.
@@ -499,7 +499,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 
 	// Add in Siafund fee. which should be around 10%. The 10% Siafund fee
 	// accounts for paying 3.9% Siafund on transactions and host collateral. We
-	// estimate the renter to spend all of it's allowance so the Siafund fee
+	// estimate the renter to spend all of its allowance so the Siafund fee
 	// will be calculated on the sum of the allowance and the hosts collateral.
 	totalPayout := totalCost.Add(hostCollateral)
 	siafundFee := modules.Tax(m.cs.Height(), totalPayout)
@@ -515,9 +515,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	est := totalContractCost.Add(totalDownloadCost)
 	est = est.Add(totalStorageCost)
 	est = est.Add(totalUploadCost)
-	est = modules.MulFloat(est, modules.SatelliteOverhead)
-
-	cost := modules.Float64(est)
+	cost := modules.Float64(est) * modules.SatelliteOverhead
 	h := modules.Float64(types.HastingsPerSiacoin)
 	allowance.Funds = totalCost
 
@@ -530,11 +528,11 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 
 // ContractPriceEstimation estimates the cost in siacoins of forming a contract
 // with the given host.
-/*func (m *Manager) ContractPriceEstimation(hpk types.SiaPublicKey, endHeight types.BlockHeight, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (types.Currency, float64, error) {
-	if err := m.threads.Add(); err != nil {
+func (m *Manager) ContractPriceEstimation(hpk types.PublicKey, endHeight uint64, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (types.Currency, float64, error) {
+	if err := m.tg.Add(); err != nil {
 		return types.ZeroCurrency, 0, err
 	}
-	defer m.threads.Done()
+	defer m.tg.Done()
 
 	// Get the host.
 	host, ok, err := m.hostDB.Host(hpk)
@@ -550,10 +548,10 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 
 	height := m.cs.Height()
 	period := endHeight - height
-	contractCost := host.ContractPrice
-	downloadCost := host.DownloadBandwidthPrice
-	storageCost := host.StoragePrice
-	uploadCost := host.UploadBandwidthPrice
+	contractCost := host.Settings.ContractPrice
+	downloadCost := host.Settings.DownloadBandwidthPrice
+	storageCost := host.Settings.StoragePrice
+	uploadCost := host.Settings.UploadBandwidthPrice
 
 	// Convert to match the provided values.
 	downloadCost = downloadCost.Mul64(download).Div64(uint64(period))
@@ -567,7 +565,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	// Add the cost of paying the transaction fees and then double the contract
 	// cost to account for renewing.
 	_, feePerByte := m.tpool.FeeEstimation()
-	txnsFees := feePerByte.Mul64(smodules.EstimatedFileContractTransactionSetSize).Mul64(3)
+	txnsFees := feePerByte.Mul64(modules.EstimatedFileContractTransactionSetSize).Mul64(3)
 	contractCost = contractCost.Add(txnsFees)
 	contractCost = contractCost.Mul64(2)
 
@@ -582,37 +580,35 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	// Assume that the ContractPrice equals contractCost and that
 	// the txnFee was zero. It doesn't matter since RenterPayoutsPreTax
 	// simply subtracts both values from the funding.
-	host.ContractPrice = contractCost
-	_, _, collateral, err := smodules.RenterPayoutsPreTax(host, funding, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, period, storage)
+	host.Settings.ContractPrice = contractCost
+	_, _, collateral, err := modules.RenterPayoutsPreTax(host, funding, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, period, storage)
 	if err != nil {
 		return types.ZeroCurrency, 0, err
 	}
 
-	// Add in siafund fee. which should be around 10%. The 10% siafund fee
+	// Add in Siafund fee. which should be around 10%. The 10% siafund fee
 	// accounts for paying 3.9% siafund on transactions and host collateral. We
-	// estimate the renter to spend all of it's allowance so the siafund fee
+	// estimate the renter to spend all of its allowance so the siafund fee
 	// will be calculated on the sum of the allowance and the hosts collateral.
 	totalPayout := funding.Add(collateral)
-	siafundFee := types.Tax(height, totalPayout)
+	siafundFee := modules.Tax(height, totalPayout)
 	contractCost = contractCost.Add(siafundFee)
 
 	// Increase estimates by a factor of safety to account for host churn and
 	// any potential missed additions.
-	contractCost = contractCost.MulFloat(1.2)
-	downloadCost = downloadCost.MulFloat(1.2)
-	storageCost = storageCost.MulFloat(1.2)
-	uploadCost = uploadCost.MulFloat(1.2)
+	contractCost = contractCost.Mul64(6).Div64(5)
+	downloadCost = downloadCost.Mul64(6).Div64(5)
+	storageCost = storageCost.Mul64(6).Div64(5)
+	uploadCost = uploadCost.Mul64(6).Div64(5)
 
 	est := contractCost.Add(downloadCost)
 	est = est.Add(storageCost)
 	est = est.Add(uploadCost)
-	est.MulFloat(modules.SatelliteOverhead)
-
-	cost, _ := est.Float64()
-	h, _ := types.SiacoinPrecision.Float64()
+	cost := modules.Float64(est) * modules.SatelliteOverhead
+	h := modules.Float64(types.HastingsPerSiacoin)
 
 	return funding, cost / h, nil
-}*/
+}
 
 // SetAllowance calls hostContractor.SetAllowance.
 func (m *Manager) SetAllowance(rpk types.PublicKey, a modules.Allowance) error {
@@ -722,10 +718,33 @@ func (m *Manager) Contract(fcid types.FileContractID) (modules.RenterContract, b
 	return m.hostContractor.Contract(fcid)
 }
 
-// FormContract calls hostContractor.FormContract.
-/*func (m *Manager) FormContract(s *modules.RPCSession, pk, rpk, hpk types.SiaPublicKey, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
-	return m.hostContractor.FormContract(s, pk, rpk, hpk, endHeight, funding)
-}*/
+// FormContract creates a contract with a single host using the new
+// Renter-Satellite protocol.
+func (m *Manager) FormContract(s *modules.RPCSession, rpk types.PublicKey, epk types.PublicKey, hpk types.PublicKey, endHeight uint64, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (modules.RenterContract, error) {
+	// Get the estimated costs.
+	funding, estimation, err := m.ContractPriceEstimation(hpk, endHeight, storage, upload, download, minShards, totalShards)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+
+	// Check if the user balance is sufficient to cover the costs.
+	renter, err := m.GetRenter(rpk)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+	ub, err := m.GetBalance(renter.Email)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+	if ub.Balance < estimation {
+		return modules.RenterContract{}, errors.New("insufficient account balance")
+	}
+
+	// Form the contract.
+	contract, err := m.hostContractor.FormContract(s, rpk, epk, hpk, funding, endHeight)
+
+	return contract, err
+}
 
 // RenewContract calls hostContractor.RenewContract.
 /*func (m *Manager) RenewContract(s *modules.RPCSession, pk types.SiaPublicKey, contract modules.RenterContract, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {

@@ -49,6 +49,5 @@ type Satellite interface {
 type ContractFormer interface {
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 	RenewedFrom(types.FileContractID) types.FileContractID
-	FormContract(*RPCSession, types.PublicKey, types.PublicKey, types.PublicKey, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
 	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
 }

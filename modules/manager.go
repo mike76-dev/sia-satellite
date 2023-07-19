@@ -306,6 +306,9 @@ type Manager interface {
 	// Filter returns the HostDB's filterMode and filteredHosts.
 	Filter() (FilterMode, map[string]types.PublicKey, []string, error)
 
+	// FormContract forms a contract with the specified host.
+	FormContract(*RPCSession, types.PublicKey, types.PublicKey, types.PublicKey, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
+
 	// FormContracts forms the required number of contracts with the hosts.
 	FormContracts(types.PublicKey, types.PrivateKey, Allowance) ([]RenterContract, error)
 
