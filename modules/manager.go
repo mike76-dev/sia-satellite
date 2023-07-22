@@ -349,17 +349,15 @@ type Manager interface {
 	// OldContractsByRenter returns expired contracts filtered by the renter.
 	OldContractsByRenter(types.PublicKey) []RenterContract
 
-	// PriceEstimation estimates the cost in siacoins of performing various
-	// storage and data operations. The estimation will be done using the provided
-	// allowance. The final allowance used will be returned.
-	//PriceEstimation(Allowance) (float64, Allowance, error)
-
 	// RandomHosts picks up to the specified number of random hosts from the
 	// hostdb sorted by weight.
 	RandomHosts(uint64, Allowance) ([]HostDBEntry, error)
 
 	// RefreshedContract returns a bool indicating if the contract was refreshed.
 	RefreshedContract(types.FileContractID) bool
+
+	// RenewContract renews a contract.
+	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
 
 	// RenewContracts renews a set of contracts and returns a new set.
 	RenewContracts(types.PublicKey, types.PrivateKey, Allowance, []types.FileContractID) ([]RenterContract, error)

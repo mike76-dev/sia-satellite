@@ -98,7 +98,7 @@ type hostContractor interface {
 	RefreshedContract(fcid types.FileContractID) bool
 
 	// RenewContract tries to renew the given contract.
-	//RenewContract(*modules.RPCSession, types.SiaPublicKey, modules.RenterContract, types.BlockHeight, types.Currency) (modules.RenterContract, error)
+	RenewContract(*modules.RPCSession, types.PublicKey, modules.RenterContract, types.Currency, uint64) (modules.RenterContract, error)
 
 	// RenewContracts tries to renew the given set of contracts.
 	RenewContracts(types.PublicKey, types.PrivateKey, []types.FileContractID) ([]modules.RenterContract, error)
@@ -746,10 +746,38 @@ func (m *Manager) FormContract(s *modules.RPCSession, rpk types.PublicKey, epk t
 	return contract, err
 }
 
-// RenewContract calls hostContractor.RenewContract.
-/*func (m *Manager) RenewContract(s *modules.RPCSession, pk types.SiaPublicKey, contract modules.RenterContract, endHeight types.BlockHeight, funding types.Currency) (modules.RenterContract, error) {
-	return m.hostContractor.RenewContract(s, pk, contract, endHeight, funding)
-}*/
+// RenewContract renews a contract using the new Renter-Satellite protocol.
+func (m *Manager) RenewContract(s *modules.RPCSession, rpk types.PublicKey, fcid types.FileContractID, endHeight uint64, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (modules.RenterContract, error) {
+	// Get the contract to renew.
+	contract, exists := m.Contract(fcid)
+	if !exists {
+		return modules.RenterContract{}, errors.New("contract not found")
+	}
+
+	// Get the estimated costs.
+	funding, estimation, err := m.ContractPriceEstimation(contract.HostPublicKey, endHeight, storage, upload, download, minShards, totalShards)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+
+	// Check if the user balance is sufficient to cover the costs.
+	renter, err := m.GetRenter(rpk)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+	ub, err := m.GetBalance(renter.Email)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+	if ub.Balance < estimation {
+		return modules.RenterContract{}, errors.New("insufficient account balance")
+	}
+
+	// Renew the contract.
+	newContract, err := m.hostContractor.RenewContract(s, rpk, contract, funding, endHeight)
+
+	return newContract, err
+}
 
 // UpdateRenterSettings calls hostContractor.UpdateRenterSettings.
 func (m *Manager) UpdateRenterSettings(rpk types.PublicKey, settings modules.RenterSettings, sk types.PrivateKey) error {

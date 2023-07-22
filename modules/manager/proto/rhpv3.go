@@ -210,9 +210,9 @@ func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.P
 	}, txnSet, nil
 }
 
-// RPCRenewOldContract negotiates a contract renewal with the host using
-// the new Renter-Satellite protocol.
-/*func RPCRenewOldContract(ss *modules.RPCSession, t *rhpv3.Transport, txnBuilder transactionBuilder, txnSet []types.Transaction, renterPK types.SiaPublicKey, hostPK types.SiaPublicKey, finalRevTxn types.Transaction, height types.BlockHeight) (types.Transaction, error) {
+// RPCTrustlessRenewContract negotiates a contract renewal with the host
+// using the new Renter-Satellite protocol.
+func RPCTrustlessRenewContract(ctx context.Context, ss *modules.RPCSession, t *rhpv3.Transport, txnSet []types.Transaction, toSign []types.Hash256, ts transactionSigner) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
 	s := t.DialStream()
 	defer s.Close()
 	s.SetDeadline(time.Now().Add(5 * time.Minute))
@@ -220,147 +220,153 @@ func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.P
 	// Send an empty price table uid.
 	var pt rhpv3.HostPriceTable
 	if err := s.WriteRequest(rhpv3.RPCRenewContractID, &pt.UID); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to write price table uid: %s", err)
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to write price table uid")
 	}
 
-	// If the price table we sent contained a zero uid, we receive a temporary
-	// one.
+	// The price table we sent contained a zero uid so we receive a
+	// temporary one.
 	var ptr rhpv3.RPCUpdatePriceTableResponse
-	err := s.ReadResponse(&ptr, 8192)
-	if err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to fetch temporary price table: %s", err)
+	if err = s.ReadResponse(&ptr, 8192); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to fetch temporary price table")
 	}
 	err = json.Unmarshal(ptr.PriceTableJSON, &pt)
 	if err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to unmarshal temporary price table: %s", err)
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to unmarshal temporary price table")
 	}
 
-	// Create request.
-	req := &rpcRenewContractRequest{
-		TransactionSet: txnSet,
-		RenterKey:      renterPK,
+	// Calculate the revision hash and send it to the renter.
+	parents, txn := txnSet[:len(txnSet) - 1], txnSet[len(txnSet) - 1]
+	fc := txn.FileContracts[0]
+	rev := txn.FileContractRevisions[0]
+	sr := signRequest{
+		RevisionHash: hashContractAndRevision(fc, rev),
 	}
-	copy(req.FinalRevisionSignature[:], finalRevTxn.TransactionSignatures[0].Signature)
+	if err := ss.WriteResponse(&sr); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to send final revision to renter")
+	}
 
-	// Send request.
-	if err := s.WriteResponse(req); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to write RPCRenewContractRequest: %s", err)
+	// Read the renter signature.
+	var srr signResponse
+	if err := ss.ReadResponse(&srr, 65536); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to read renter signature")
+	}
+
+	// Send the request.
+	req := rhpv3.RPCRenewContractRequest{
+		TransactionSet:         txnSet,
+		RenterKey:              rev.UnlockConditions.PublicKeys[0],
+		FinalRevisionSignature: srr.Signature,
+	}
+	if err := s.WriteResponse(&req); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to write RPCRenewContractRequest")
 	}
 
 	// Read the response. It contains the host's final revision sig and any
 	// additions it made.
-	var resp rpcRenewContractHostAdditions
-	if err := s.ReadResponse(&resp, 65536); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to read RPCRenewContractHostAdditions: %s", err)
+	var hostAdditions rhpv3.RPCRenewContractHostAdditions
+	if err := s.ReadResponse(&hostAdditions, 65536); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to read RPCRenewContractHostAdditions")
 	}
 
 	// Incorporate host's modifications.
-	txnBuilder.AddParents(resp.Parents)
-	for _, input := range resp.SiacoinInputs {
-		txnBuilder.AddSiacoinInput(input)
-	}
-	for _, output := range resp.SiacoinOutputs {
-		txnBuilder.AddSiacoinOutput(output)
-	}
+	parents = append(parents, hostAdditions.Parents...)
+	txn.SiacoinInputs = append(txn.SiacoinInputs, hostAdditions.SiacoinInputs...)
+	txn.SiacoinOutputs = append(txn.SiacoinOutputs, hostAdditions.SiacoinOutputs...)
 
-	// Get the host sig for the final revision.
-	finalRevHostSigRaw := resp.FinalRevisionSignature
+	finalRevRenterSig := types.TransactionSignature{
+		ParentID:       types.Hash256(rev.ParentID),
+		PublicKeyIndex: 0,
+		CoveredFields: types.CoveredFields{
+			FileContracts:         []uint64{0},
+			FileContractRevisions: []uint64{0},
+		},
+		Signature: srr.Signature[:],
+	}
 	finalRevHostSig := types.TransactionSignature{
-		ParentID:       crypto.Hash(finalRevTxn.FileContractRevisions[0].ParentID),
+		ParentID:       types.Hash256(rev.ParentID),
 		PublicKeyIndex: 1,
 		CoveredFields:  types.CoveredFields{
 			FileContracts:         []uint64{0},
 			FileContractRevisions: []uint64{0},
 		},
-		Signature: finalRevHostSigRaw[:],
+		Signature: hostAdditions.FinalRevisionSignature[:],
 	}
 
 	// Add the revision signatures to the transaction set and sign it.
-	_ = txnBuilder.AddTransactionSignature(finalRevTxn.TransactionSignatures[0])
-	_ = txnBuilder.AddTransactionSignature(finalRevHostSig)
-	signedTxnSet, err := txnBuilder.Sign(true)
-	if err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to sign transaction set: %s", err)
+	txn.Signatures = []types.TransactionSignature{finalRevRenterSig, finalRevHostSig}
+	cf := types.CoveredFields{
+		WholeTransaction: true,
+		Signatures:       []uint64{0, 1},
 	}
-
-	// Calculate signatures added by the transaction builder.
-	var addedSignatures []types.TransactionSignature
-	_, _, _, addedSignatureIndices := txnBuilder.ViewAdded()
-	for _, i := range addedSignatureIndices {
-		addedSignatures = append(addedSignatures, signedTxnSet[len(signedTxnSet) - 1].TransactionSignatures[i])
+	if err := ts.Sign(&txn, toSign, cf); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to sign transaction")
 	}
-
-	// Create initial (no-op) revision and transaction.
-	fc := signedTxnSet[len(signedTxnSet) - 1].FileContracts[0]
-	initRevision := types.FileContractRevision{
-		ParentID:          signedTxnSet[len(signedTxnSet) - 1].FileContractID(0),
+	
+	// Create initial (no-op) revision.
+	noOpRevision := types.FileContractRevision{
+		ParentID:          txn.FileContractID(0),
 		UnlockConditions:  types.UnlockConditions{
-			PublicKeys: []types.SiaPublicKey{
-				renterPK,
-				hostPK,
-			},
+			PublicKeys: rev.UnlockConditions.PublicKeys,
 			SignaturesRequired: 2,
 		},
-		NewRevisionNumber: 1,
-
-		NewFileSize:           fc.FileSize,
-		NewFileMerkleRoot:     fc.FileMerkleRoot,
-		NewWindowStart:        fc.WindowStart,
-		NewWindowEnd:          fc.WindowEnd,
-		NewValidProofOutputs:  fc.ValidProofOutputs,
-		NewMissedProofOutputs: fc.MissedProofOutputs,
-		NewUnlockHash:         fc.UnlockHash,
+		FileContract: types.FileContract{
+			Filesize:           fc.Filesize,
+			FileMerkleRoot:     fc.FileMerkleRoot,
+			WindowStart:        fc.WindowStart,
+			WindowEnd:          fc.WindowEnd,
+			ValidProofOutputs:  fc.ValidProofOutputs,
+			MissedProofOutputs: fc.MissedProofOutputs,
+			UnlockHash:         fc.UnlockHash,
+			RevisionNumber: 1,
+		},
 	}
 
-	renterRevisionSig := types.TransactionSignature{
-		ParentID:       crypto.Hash(initRevision.ParentID),
+	renterNoOpRevisionSignature := types.TransactionSignature{
+		ParentID:       types.Hash256(noOpRevision.ParentID),
 		PublicKeyIndex: 0,
 		CoveredFields:  types.CoveredFields{
 			FileContractRevisions: []uint64{0},
 		},
 	}
-	revisionTxn := types.Transaction{
-		FileContractRevisions: []types.FileContractRevision{initRevision},
-		TransactionSignatures: []types.TransactionSignature{renterRevisionSig},
+
+	// Calculate the revision hash and send it to the renter.
+	sr = signRequest{
+		RevisionHash: hashRevision(noOpRevision),
+	}
+	if err := ss.WriteResponse(&sr); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to send initial revision to renter")
 	}
 
-	// Calculate the txn hash and send it to the renter.
-	sr := &signRequest{
-		RevisionHash: revisionTxn.SigHash(0, height),
+	// Read the renter signature.
+	var srrNoOpRev signResponse
+	if err := ss.ReadResponse(&srrNoOpRev, 65536); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to read renter signature")
 	}
-	if err := ss.WriteResponse(sr); err != nil {
-		return types.Transaction{}, err
-	}
-
-	// Read the renter signature and add it to the txn.
-	var srr signResponse
-	if err := ss.ReadResponse(&srr, 65536); err != nil {
-		return types.Transaction{}, err
-	}
-	revisionTxn.TransactionSignatures[0].Signature = srr.Signature[:]
 
 	// Send transaction signatures and no-op revision signature to host.
-	renterSigs := &rpcRenewSignatures{
-		TransactionSignatures: addedSignatures,
-		RevisionSignature:     revisionTxn.TransactionSignatures[0],
+	renterNoOpRevisionSignature.Signature = srrNoOpRev.Signature[:]
+	renterSigs := rhpv3.RPCRenewSignatures{
+		TransactionSignatures: txn.Signatures[2:],
+		RevisionSignature:     renterNoOpRevisionSignature,
 	}
-	if err := s.WriteResponse(renterSigs); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to send RPCRenewSignatures to host: %s", err)
+	if err := s.WriteResponse(&renterSigs); err != nil {
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to send RPCRenewSignatures to host")
 	}
 
-	// Read the host's signatures and add them to the transactions.
-	var hostSigs rpcRenewSignatures
+	// Read the host's signatures and add them to the transaction.
+	var hostSigs rhpv3.RPCRenewSignatures
 	if err := s.ReadResponse(&hostSigs, 65536); err != nil {
-		return types.Transaction{}, fmt.Errorf("failed to read RPCRenewSignatures from host: %s", err)
-	}
-	for _, sig := range hostSigs.TransactionSignatures {
-		_ = txnBuilder.AddTransactionSignature(sig)
+		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to read RPCRenewSignatures from host")
 	}
 
-	revisionTxn.TransactionSignatures = append(revisionTxn.TransactionSignatures, hostSigs.RevisionSignature)
+	txn.Signatures = append(txn.Signatures, hostSigs.TransactionSignatures...)
+	txnSet = append(parents, txn)
 
-	return revisionTxn, nil
-}*/
+	return rhpv2.ContractRevision{
+		Revision:   noOpRevision,
+		Signatures: [2]types.TransactionSignature{renterNoOpRevisionSignature, hostSigs.RevisionSignature},
+	}, txnSet, nil
+}
 
 // RPCLatestRevision fetches the latest revision from the host.
 func RPCLatestRevision(ctx context.Context, t *rhpv3.Transport, contractID types.FileContractID) (types.FileContractRevision, error) {
@@ -381,4 +387,21 @@ func RPCLatestRevision(ctx context.Context, t *rhpv3.Transport, contractID types
 		return types.FileContractRevision{}, err
 	}
 	return resp.Revision, nil
+}
+
+// hashRevision calculates the revision hash to be signed with the
+// renter's private key.
+func hashRevision(rev types.FileContractRevision) types.Hash256 {
+	h := types.NewHasher()
+	rev.EncodeTo(h.E)
+	return h.Sum()
+}
+
+// hashContractAndRevision calculates the hash of the file contract and
+// the revision to be signed with the renter's private key.
+func hashContractAndRevision(fc types.FileContract, fcr types.FileContractRevision) types.Hash256 {
+	h := types.NewHasher()
+	fc.EncodeTo(h.E)
+	fcr.EncodeTo(h.E)
+	return h.Sum()
 }

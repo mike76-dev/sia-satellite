@@ -16,7 +16,7 @@ func (sr *signRequest) DecodeFrom(d *types.Decoder) {
 
 // EncodeTo implements rhpv2.ProtocolObject.
 func (sr *signRequest) EncodeTo(e *types.Encoder) {
-	e.Write(sr.RevisionHash[:])
+	sr.RevisionHash.EncodeTo(e)
 }
 
 // signResponse is used to receive the revision signature from the renter.
@@ -26,7 +26,7 @@ type signResponse struct {
 
 // DecodeFrom implements rhpv2.ProtocolObject.
 func (sr *signResponse) DecodeFrom(d *types.Decoder) {
-	d.Read(sr.Signature[:])
+	sr.Signature.DecodeFrom(d)
 }
 
 // EncodeTo implements rhpv2.ProtocolObject.

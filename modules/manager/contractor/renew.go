@@ -29,7 +29,7 @@ type (
 
 // prepareContractRenewal creates a renewed contract and a renewal
 // transaction set.
-func (c *Contractor) prepareContractRenewal(rpk types.PublicKey, host modules.HostDBEntry, oldRev types.FileContractRevision, contractFunding, hostCollateral types.Currency, endHeight uint64, address types.Address) ([]types.Transaction, types.Transaction, []types.Transaction, types.Currency, types.Currency, types.Currency, []types.Hash256, error) {
+func (c *Contractor) prepareContractRenewal(host modules.HostDBEntry, oldRev types.FileContractRevision, contractFunding, hostCollateral types.Currency, endHeight uint64, address types.Address) ([]types.Transaction, types.Transaction, []types.Transaction, types.Currency, types.Currency, types.Currency, []types.Hash256, error) {
 	c.mu.RLock()
 	blockHeight := c.blockHeight
 	c.mu.RUnlock()
@@ -65,7 +65,7 @@ func (c *Contractor) prepareContractRenewal(rpk types.PublicKey, host modules.Ho
 	// Fund the transaction.
 	parentTxn, toSign, err := c.wallet.FundTransaction(&txn, totalCost)
 	if err != nil {
-		c.wallet.ReleaseInputs(txn)
+		c.wallet.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
@@ -100,7 +100,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 	id := oldContract.ID
 	allowance := renter.Allowance
 	if reflect.DeepEqual(allowance, modules.Allowance{}) {
-		return types.ZeroCurrency, modules.RenterContract{}, errors.New("called managedRenew but allowance isn't set")
+		return types.ZeroCurrency, modules.RenterContract{}, errors.New("called managedRenewContract but allowance isn't set")
 	}
 
 	// Fetch the host.
@@ -198,7 +198,6 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 
 		// Derive ephemeral key.
 		esk := modules.DeriveEphemeralKey(rsk, host.PublicKey)
-		epk := esk.PublicKey()
 
 		// Get an address to use for negotiation.
 		uc, err := c.wallet.NextAddress()
@@ -221,7 +220,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		hostCollateral := rhpv2.ContractRenewalCollateral(oldRev.FileContract, expectedStorage, hostSettings, blockHeight, endHeight)
 		contractPrice = host.PriceTable.ContractPrice
 		var renterTxnSet []types.Transaction
-		renterTxnSet, sweepTxn, sweepParents, fundsSpent, minerFee, siafundFee, toSign, err = c.prepareContractRenewal(epk, host, oldRev, contractFunding, hostCollateral, endHeight, uc.UnlockHash())
+		renterTxnSet, sweepTxn, sweepParents, fundsSpent, minerFee, siafundFee, toSign, err = c.prepareContractRenewal(host, oldRev, contractFunding, hostCollateral, endHeight, uc.UnlockHash())
 		if err != nil {
 			return err
 		}
@@ -232,7 +231,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 			if !modules.ContainsError(err, errors.New("failed to sign transaction")) {
 				hostFault = true
 			}
-			c.wallet.ReleaseInputs(renterTxnSet[len(renterTxnSet) - 1])
+			c.wallet.ReleaseInputs(renterTxnSet)
 			return modules.AddContext(err, "couldn't renew contract")
 		}
 
@@ -243,7 +242,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 			err = nil
 		}
 		if err != nil {
-			c.wallet.ReleaseInputs(renterTxnSet[len(renterTxnSet) - 1])
+			c.wallet.ReleaseInputs(txnSet)
 			return modules.AddContext(err, "couldn't broadcast transaction set")
 		}
 
@@ -596,4 +595,386 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 	c.mu.Unlock()
 
 	return contractSet, nil
+}
+
+// managedTrustlessRenewContract will try to renew a contract using the new
+// Renter-Satellite protocol.
+func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk types.PublicKey, oldContract modules.RenterContract, contractFunding types.Currency, endHeight uint64) (fundsSpent types.Currency, newContract modules.RenterContract, err error) {
+	c.mu.RLock()
+	blockHeight := c.blockHeight
+
+	// Check if we know this renter.
+	renter, exists := c.renters[rpk]
+	c.mu.RUnlock()
+	if !exists {
+		return types.ZeroCurrency, newContract, ErrRenterNotFound
+	}
+
+	id := oldContract.ID
+	allowance := renter.Allowance
+	if reflect.DeepEqual(allowance, modules.Allowance{}) {
+		return types.ZeroCurrency, modules.RenterContract{}, errors.New("called managedTrustlessRenewContract but allowance isn't set")
+	}
+
+	// Fetch the host.
+	hostPubKey := oldContract.HostPublicKey
+	host, exists, err := c.hdb.Host(hostPubKey)
+	if err != nil {
+		return types.ZeroCurrency, newContract, modules.AddContext(err, "error getting host from hostdb")
+	}
+	if !exists {
+		return types.ZeroCurrency, newContract, errHostNotFound
+	} else if host.Filtered {
+		return types.ZeroCurrency, newContract, errHostBlocked
+	}
+
+	// Get the host settings and use the most recent hostSettings,
+	// along with the hostDB entry.
+	hostSettings, err := proto.HostSettings(string(host.Settings.NetAddress), hostPubKey)
+	if err != nil {
+		err = modules.AddContext(err, "unable to fetch host settings")
+		return
+	}
+	host.Settings = hostSettings
+	hostName, _, err := net.SplitHostPort(string(host.Settings.NetAddress))
+	if err != nil {
+		return types.ZeroCurrency, newContract, fmt.Errorf("failed to get host name: %v", err)
+	}
+	siamuxAddr := net.JoinHostPort(hostName, host.Settings.SiaMuxPort)
+
+	// Mark the contract as being renewed, and defer logic to unmark it
+	// once renewing is complete.
+	c.mu.Lock()
+	c.renewing[id] = true
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.renewing, id)
+		c.mu.Unlock()
+	}()
+
+	// Create a context and set up its cancelling.
+	ctx, cancelFunc := context.WithTimeout(context.Background(), renewContractTimeout)
+	go func() {
+		select {
+		case <-c.tg.StopChan():
+			cancelFunc()
+		case <-ctx.Done():
+		}
+	}()
+
+	// Increase Successful/Failed interactions accordingly.
+	var hostFault bool
+	defer func() {
+		if err != nil {
+			c.hdb.IncrementFailedInteractions(hostPubKey)
+			if hostFault {
+				err = fmt.Errorf("%v: %v", errHostFault, err)
+			}
+		} else {
+			c.hdb.IncrementSuccessfulInteractions(hostPubKey)
+		}
+	}()
+
+	// Perform the actual renewal. If the renewal succeeds, return the
+	// contract. If the renewal fails we check how often it has failed
+	// before. Once it has failed for a certain number of blocks in a
+	// row and reached its second half of the renew window, we give up
+	// on renewing it and set goodForRenew to false.
+	var txnSet, sweepParents []types.Transaction
+	var sweepTxn types.Transaction
+	var contractPrice, minerFee, siafundFee types.Currency
+	var toSign []types.Hash256
+	var rev rhpv2.ContractRevision
+	errRenew := proto.WithTransportV3(ctx, siamuxAddr, host.PublicKey, func(t *rhpv3.Transport) (err error) {
+		// Fetch the price table.
+		pt, err := proto.RPCPriceTable(ctx, t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) { return nil, nil })
+		if err != nil {
+			hostFault = true
+			return modules.AddContext(err, "unable to get price table")
+		}
+		host.PriceTable = pt
+
+		// Check if the host is gouging.
+		_, txnFee := c.tpool.FeeEstimation()
+		if err := modules.CheckGouging(allowance, blockHeight, &hostSettings, &pt, txnFee); err != nil {
+			hostFault = true
+			return modules.AddContext(err, "host is gouging")
+		}
+
+		// Fetch the latest revision.
+		oldRev, err := proto.RPCLatestRevision(ctx, t, id)
+		if err != nil {
+			hostFault = true
+			return modules.AddContext(err, "unable to get latest revision")
+		}
+
+		// Get an address to use for negotiation.
+		uc, err := c.wallet.NextAddress()
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err != nil {
+				err = modules.ComposeErrors(err, c.wallet.MarkAddressUnused(uc))
+			}
+		}()
+
+		// Avoid panic in rhpv2.ContractRenewalCollateral.
+		if oldRev.FileContract.EndHeight() > endHeight {
+			endHeight = oldRev.FileContract.EndHeight()
+		}
+
+		// Prepare the file contract and the final revision.
+		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight - blockHeight, hostSettings)
+		hostCollateral := rhpv2.ContractRenewalCollateral(oldRev.FileContract, expectedStorage, hostSettings, blockHeight, endHeight)
+		contractPrice = host.PriceTable.ContractPrice
+		var renterTxnSet []types.Transaction
+		renterTxnSet, sweepTxn, sweepParents, fundsSpent, minerFee, siafundFee, toSign, err = c.prepareContractRenewal(host, oldRev, contractFunding, hostCollateral, endHeight, uc.UnlockHash())
+		if err != nil {
+			return err
+		}
+
+		// Renew the contract.
+		rev, txnSet, err = proto.RPCTrustlessRenewContract(ctx, s, t, renterTxnSet, toSign, c.wallet)
+		if err != nil {
+			if !modules.ContainsError(err, errors.New("failed to sign transaction")) && !modules.ContainsError(err, errors.New("invalid renter signature")){
+				hostFault = true
+			}
+			c.wallet.ReleaseInputs(renterTxnSet)
+			return modules.AddContext(err, "couldn't renew contract")
+		}
+
+		// Submit to blockchain.
+		err = c.tpool.AcceptTransactionSet(txnSet)
+		if modules.ContainsError(err, errDuplicateTransactionSet) {
+			// As long as it made it into the transaction pool, we're good.
+			err = nil
+		}
+		if err != nil {
+			c.wallet.ReleaseInputs(txnSet)
+			return modules.AddContext(err, "couldn't broadcast transaction set")
+		}
+
+		return nil
+	})
+
+	oldFC, exists := c.staticContracts.Acquire(id)
+	if !exists {
+		return fundsSpent, modules.RenterContract{}, modules.AddContext(errContractNotFound, "failed to acquire oldContract after renewal")
+	}
+
+	if errRenew == nil {
+		// Add contract to the set.
+		revisionTxn := types.Transaction{
+			FileContractRevisions: []types.FileContractRevision{rev.Revision},
+			Signatures:            []types.TransactionSignature{rev.Signatures[0], rev.Signatures[1]},
+		}
+		newContract, err = c.staticContracts.InsertContract(revisionTxn, blockHeight, fundsSpent, contractPrice, minerFee, siafundFee, rpk)
+		if err != nil {
+			c.staticContracts.Return(oldFC)
+			return fundsSpent, modules.RenterContract{}, modules.AddContext(err, "couldn't add the new contract to the contract set")
+		}
+
+		// Commit changes to old contract.
+		if err := oldFC.Clear(txnSet[len(txnSet) - 1]); err != nil {
+			c.staticContracts.Return(oldFC)
+			return fundsSpent, modules.RenterContract{}, modules.AddContext(err, "couldn't clear the old contract")
+		}
+
+		// Inform watchdog about the new contract.
+		monitorContractArgs := monitorContractArgs{
+			newContract.ID,
+			revisionTxn,
+			txnSet,
+			sweepTxn,
+			sweepParents,
+			blockHeight,
+		}
+		err = c.staticWatchdog.callMonitorContract(monitorContractArgs)
+		if err != nil {
+			c.staticContracts.Return(oldFC)
+			return fundsSpent, modules.RenterContract{}, err
+		}
+
+		// Add a mapping from the contract's id to the public keys of the renter
+		// and the host. This will destroy the previous mapping from pubKey to
+		// contract id but other modules are only interested in the most recent
+		// contract anyway.
+		c.mu.Lock()
+		c.pubKeysToContractID[newContract.RenterPublicKey.String() + newContract.HostPublicKey.String()] = newContract.ID
+		c.mu.Unlock()
+
+		// Update the hostdb to include the new contract.
+		err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
+		if err != nil {
+			c.log.Println("ERROR: unable to update hostdb contracts:", err)
+		}
+	}
+
+	oldUtility := oldFC.Utility()
+	if errRenew != nil {
+		// Increment the number of failed renewals for the contract if it
+		// was the host's fault.
+		if hostFault {
+			c.mu.Lock()
+			c.numFailedRenews[id]++
+			totalFailures := c.numFailedRenews[id]
+			c.mu.Unlock()
+			c.log.Println("INFO: remote host determined to be at fault, tallying up failed renews", totalFailures, id)
+		}
+
+		// Check if contract has to be replaced.
+		md := oldFC.Metadata()
+		c.mu.RLock()
+		numRenews, failedBefore := c.numFailedRenews[md.ID]
+		c.mu.RUnlock()
+		secondHalfOfWindow := blockHeight + allowance.RenewWindow / 2 >= md.EndHeight
+		replace := numRenews >= consecutiveRenewalsBeforeReplacement
+		if failedBefore && secondHalfOfWindow && replace {
+			oldUtility.GoodForRenew = false
+			oldUtility.GoodForUpload = false
+			oldUtility.Locked = true
+			err := c.managedUpdateContractUtility(oldFC, oldUtility)
+			if err != nil {
+				c.log.Println("WARN: failed to mark contract as !goodForRenew:", err)
+			}
+
+			c.log.Printf("WARN: consistently failed to renew %v, marked as bad and locked: %v\n",
+				hostPubKey, errRenew)
+			c.staticContracts.Return(oldFC)
+
+			return types.ZeroCurrency, newContract, modules.AddContext(errRenew, "contract marked as bad for too many consecutive failed renew attempts")
+		}
+
+		// Seems like it doesn't have to be replaced yet. Log the
+		// failure and number of renews that have failed so far.
+		c.log.Printf("WARN: failed to renew contract %v [%v]: '%v', current height: %v, proposed end height: %v", hostPubKey, numRenews, errRenew, blockHeight, endHeight)
+		c.staticContracts.Return(oldFC)
+
+		return types.ZeroCurrency, newContract, modules.AddContext(errRenew, "contract renewal with host was unsuccessful")
+	}
+	c.log.Printf("INFO: renewed contract %v\n", id)
+
+	// Update the utility values for the new contract, and for the old
+	// contract.
+	newUtility := modules.ContractUtility{
+		GoodForUpload: true,
+		GoodForRenew:  true,
+	}
+	if err := c.managedAcquireAndUpdateContractUtility(newContract.ID, newUtility); err != nil {
+		c.log.Println("ERROR: failed to update the contract utilities", err)
+		c.staticContracts.Return(oldFC)
+		return fundsSpent, newContract, nil
+	}
+
+	oldUtility.GoodForRenew = false
+	oldUtility.GoodForUpload = false
+	oldUtility.Locked = true
+	if err := c.managedUpdateContractUtility(oldFC, oldUtility); err != nil {
+		c.log.Println("ERROR: failed to update the contract utilities", err)
+		c.staticContracts.Return(oldFC)
+		return fundsSpent, newContract, nil
+	}
+
+	// Lock the contractor as we update it to use the new contract
+	// instead of the old contract.
+	c.mu.Lock()
+
+	// Link Contracts.
+	c.renewedFrom[newContract.ID] = id
+	c.renewedTo[id] = newContract.ID
+
+	// Store the contract in the record of historic contracts.
+	c.staticContracts.RetireContract(id)
+	c.mu.Unlock()
+
+	// Update the database.
+	err = c.updateRenewedContract(id, newContract.ID)
+	if err != nil {
+		c.log.Println("ERROR: failed to update contracts in the database.")
+	}
+
+	// Delete the old contract.
+	c.staticContracts.Delete(oldFC)
+
+	// Signal to the watchdog that it should immediately post the last
+	// revision for this contract.
+	go c.staticWatchdog.threadedSendMostRecentRevision(oldFC.Metadata())
+
+	return fundsSpent, newContract, nil
+}
+
+// RenewContract tries to renew the given contract using RSP2.
+func (c *Contractor) RenewContract(s *modules.RPCSession, rpk types.PublicKey, contract modules.RenterContract, funding types.Currency, endHeight uint64) (modules.RenterContract, error) {
+	// No contract renewal until the contractor is synced.
+	if !c.managedSynced() {
+		return modules.RenterContract{}, errors.New("contractor isn't synced yet")
+	}
+
+	// Find the renter.
+	c.mu.RLock()
+	renter, exists := c.renters[rpk]
+	c.mu.RUnlock()
+	if !exists {
+		return modules.RenterContract{}, ErrRenterNotFound
+	}
+
+	// Check if the contract belongs to the renter.
+	r, err := c.managedFindRenter(contract.ID)
+	if err != nil {
+		c.log.Println("WARN: contract ID submitted that has no known renter associated with it:", contract.ID)
+		return modules.RenterContract{}, err
+	}
+	if r.PublicKey != rpk {
+		c.log.Println("WARN: contract ID submitted that doesn't belong to this renter:", contract.ID, renter.PublicKey)
+		return modules.RenterContract{}, errors.New("contract doesn't belong to this renter")
+	}
+
+	// Check if the wallet is unlocked.
+	unlocked, err := c.wallet.Unlocked()
+	if !unlocked || err != nil {
+		c.log.Println("ERROR: contractor is attempting to renew a contract but the wallet is locked")
+		return modules.RenterContract{}, err
+	}
+
+	// Renew the contract.
+	fundsSpent, newContract, err := c.managedTrustlessRenewContract(s, rpk, contract, funding, endHeight)
+	if err != nil {
+		c.log.Printf("WARN: attempted to renew a contract with %v, but renewal failed: %v\n", contract.HostPublicKey, err)
+		return modules.RenterContract{}, err
+	}
+
+	// Lock the funds in the database.
+	funds := modules.Float64(fundsSpent)
+	hastings := modules.Float64(types.HastingsPerSiacoin)
+	amount := funds / hastings
+	err = c.m.LockSiacoins(renter.Email, amount)
+	if err != nil {
+		c.log.Println("ERROR: couldn't lock funds")
+	}
+
+	// Increment the number of renewals in the database.
+	err = c.m.IncrementStats(renter.Email, true)
+	if err != nil {
+		c.log.Println("ERROR: couldn't update stats")
+	}
+
+	// Add this contract to the contractor and save.
+	err = c.managedAcquireAndUpdateContractUtility(newContract.ID, modules.ContractUtility{
+		GoodForUpload: true,
+		GoodForRenew:  true,
+	})
+	if err != nil {
+		c.log.Println("ERROR: failed to update the contract utilities", err)
+		return modules.RenterContract{}, err
+	}
+	c.mu.Lock()
+	err = c.save()
+	c.mu.Unlock()
+	if err != nil {
+		c.log.Println("ERROR: unable to save the contractor:", err)
+	}
+
+	return newContract, nil
 }

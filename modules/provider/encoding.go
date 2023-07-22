@@ -373,8 +373,8 @@ func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
 
 // renewContractRequest is used when renewing a contract using
 // the new Renter-Satellite protocol.
-/*type renewContractRequest struct {
-	PubKey          crypto.PublicKey
+type renewContractRequest struct {
+	PubKey          types.PublicKey
 	Contract        types.FileContractID
 	EndHeight       uint64
 
@@ -386,10 +386,10 @@ func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
 	TotalShards uint64
 
 	Signature types.Signature
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (rcr *renewContractRequest) DecodeFrom(d *types.Decoder) {
+func (rcr *renewContractRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(rcr.PubKey[:])
 	d.Read(rcr.Contract[:])
 	rcr.EndHeight = d.ReadUint64()
@@ -399,10 +399,10 @@ func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
 	rcr.MinShards = d.ReadUint64()
 	rcr.TotalShards = d.ReadUint64()
 	rcr.Signature.DecodeFrom(d)
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (rcr *renewContractRequest) EncodeTo(e *types.Encoder) {
+func (rcr *renewContractRequest) EncodeTo(e *types.Encoder) {
 	e.Write(rcr.PubKey[:])
 	e.Write(rcr.Contract[:])
 	e.WriteUint64(rcr.EndHeight)
@@ -411,7 +411,7 @@ func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
 	e.WriteUint64(rcr.Download)
 	e.WriteUint64(rcr.MinShards)
 	e.WriteUint64(rcr.TotalShards)
-}*/
+}
 
 // getSettingsRequest is used to retrieve the renter's opt-in
 // settings.

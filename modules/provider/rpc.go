@@ -471,7 +471,7 @@ func (p *Provider) managedFormContract(s *modules.RPCSession) error {
 
 // managedRenewContract renews a contract using the new Renter-Satellite
 // protocol.
-/*func (p *Provider) managedRenewContract(s *modules.RPCSession) error {
+func (p *Provider) managedRenewContract(s *modules.RPCSession) error {
 	// Extend the deadline to meet the contract renewal.
 	s.Conn.SetDeadline(time.Now().Add(renewContractTime))
 
@@ -485,29 +485,27 @@ func (p *Provider) managedFormContract(s *modules.RPCSession) error {
 	}
 
 	// Verify the signature.
-	err = crypto.VerifyHash(crypto.Hash(hash), rcr.PubKey, crypto.Signature(rcr.Signature))
-	if err != nil {
-		err = fmt.Errorf("could not verify renter signature: %v", err)
+	if !rcr.PubKey.VerifyHash(hash, rcr.Signature) {
+		err = errors.New("could not verify renter signature")
 		s.WriteError(err)
 		return err
 	}
 
 	// Check if we know this renter.
-	pk := types.Ed25519PublicKey(rcr.PubKey)
-	exists, err := p.satellite.UserExists(pk)
-	if !exists || err != nil {
+	_, err = p.m.GetRenter(rcr.PubKey)
+	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
 		return err
 	}
 
 	// Sanity checks.
-	if (rcr.Contract == core.FileContractID{}) {
+	if (rcr.Contract == types.FileContractID{}) {
 		err := errors.New("can't renew contract with no contract ID")
 		s.WriteError(err)
 		return err
 	}
-	if rcr.EndHeight <= uint64(p.satellite.BlockHeight()) {
+	if rcr.EndHeight <= p.m.BlockHeight() {
 		err := errors.New("can't renew contract with end height in the past")
 		s.WriteError(err)
 		return err
@@ -524,7 +522,7 @@ func (p *Provider) managedFormContract(s *modules.RPCSession) error {
 	}
 
 	// Renew the contract.
-	contract, err := p.satellite.RenewContract(s, pk, types.FileContractID(rcr.Contract), types.BlockHeight(rcr.EndHeight), rcr.Storage, rcr.Upload, rcr.Download, rcr.MinShards, rcr.TotalShards)
+	contract, err := p.m.RenewContract(s, rcr.PubKey, rcr.Contract, rcr.EndHeight, rcr.Storage, rcr.Upload, rcr.Download, rcr.MinShards, rcr.TotalShards)
 	if err != nil {
 		err = fmt.Errorf("could not renew contract: %v", err)
 		s.WriteError(err)
@@ -533,12 +531,12 @@ func (p *Provider) managedFormContract(s *modules.RPCSession) error {
 
 	ec := extendedContract{
 		contract:    convertContract(contract),
-		startHeight: uint64(contract.StartHeight),
-		totalCost:   modules.ConvertCurrency(contract.TotalCost),
+		startHeight: contract.StartHeight,
+		totalCost:   contract.TotalCost,
 	}
 
 	return s.WriteResponse(&ec)
-}*/
+}
 
 // managedGetSettings returns the renter's opt-in settings.
 func (p *Provider) managedGetSettings(s *modules.RPCSession) error {

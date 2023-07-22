@@ -201,11 +201,3 @@ func RPCTrustlessFormContract(ctx context.Context, t *rhpv2.Transport, s *module
 		},
 	}, signedTxnSet, nil
 }
-
-// hashRevision calculates the revision hash to be signed with the
-// renter's private key.
-func hashRevision(rev types.FileContractRevision) types.Hash256 {
-	h := types.NewHasher()
-	rev.EncodeTo(h.E)
-	return h.Sum()
-}

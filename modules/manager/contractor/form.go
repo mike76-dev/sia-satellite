@@ -54,7 +54,7 @@ func (c *Contractor) prepareContractFormation(rpk types.PublicKey, host modules.
 	totalCost := cost.Add(minerFee).Add(tax)
 	parentTxn, toSign, err := c.wallet.FundTransaction(&txn, totalCost)
 	if err != nil {
-		c.wallet.ReleaseInputs(txn)
+		c.wallet.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, modules.AddContext(err, "unable to fund transaction")
 	}
 
@@ -74,7 +74,7 @@ func (c *Contractor) prepareContractFormation(rpk types.PublicKey, host modules.
 	cf := modules.ExplicitCoveredFields(txn)
 	err = c.wallet.Sign(&txn, toSign, cf)
 	if err != nil {
-		c.wallet.ReleaseInputs(txn)
+		c.wallet.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, modules.AddContext(err, "unable to sign transaction")
 	}
 
@@ -174,7 +174,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		rev, txnSet, err = proto.RPCFormContract(ctx, t, esk, renterTxnSet)
 		if err != nil {
 			hostFault = true
-			c.wallet.ReleaseInputs(renterTxnSet[len(renterTxnSet) - 1])
+			c.wallet.ReleaseInputs(renterTxnSet)
 			return modules.AddContext(err, "couldn't form contract")
 		}
 
@@ -191,6 +191,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		err = nil
 	}
 	if err != nil {
+		c.wallet.ReleaseInputs(txnSet)
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
 
@@ -501,7 +502,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 		rev, txnSet, err = proto.RPCTrustlessFormContract(ctx, t, s, epk, renterTxnSet)
 		if err != nil {
 			hostFault = true
-			c.wallet.ReleaseInputs(renterTxnSet[len(renterTxnSet) - 1])
+			c.wallet.ReleaseInputs(renterTxnSet)
 			return modules.AddContext(err, "couldn't form contract")
 		}
 
@@ -518,6 +519,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 		err = nil
 	}
 	if err != nil {
+		c.wallet.ReleaseInputs(txnSet)
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
 

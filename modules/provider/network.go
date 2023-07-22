@@ -287,10 +287,10 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 			err = modules.AddContext(err, "incoming RPCFormContract failed")
 		}
 	case renewContractSpecifier:
-		/*err = p.managedRenewContract(s)
+		err = p.managedRenewContract(s)
 		if err != nil {
-			err = errors.Extend(errors.New("incoming RPCRenewContract failed: "), err)
-		}*/
+			err = modules.AddContext(err, "incoming RPCRenewContract failed")
+		}
 	case getSettingsSpecifier:
 		err = p.managedGetSettings(s)
 		if err != nil {
