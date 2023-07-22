@@ -2,7 +2,6 @@ package hostdb
 
 import (
 	"bytes"
-	"database/sql"
 	"io"
 	"time"
 
@@ -316,12 +315,75 @@ func (hdb *HostDB) threadedLoadHosts() {
 	}
 	defer hdb.tg.Done()
 
+	scanHistory := make(map[types.PublicKey][]modules.HostDBScan)
+	ipNets := make(map[types.PublicKey][]string)
+
+	// Load the scan history.
+	scanRows, err := hdb.db.Query("SELECT public_key, time, success FROM hdb_scanhistory")
+	if err != nil {
+		hdb.staticLog.Println("ERROR: could not load the scan history:", err)
+		return
+	}
+
+	for scanRows.Next() {
+		// Return if HostDB was shut down.
+		select {
+		case <-hdb.tg.StopChan():
+			return
+		default:
+		}
+
+		var timestamp uint64
+		var success bool
+		pkBytes := make([]byte, 32)
+		if err := scanRows.Scan(&pkBytes, &timestamp, &success); err != nil {
+			hdb.staticLog.Println("ERROR: could not load the scan history:", err)
+			continue
+		}
+		var pk types.PublicKey
+		copy(pk[:], pkBytes)
+		history := scanHistory[pk]
+		scanHistory[pk] = append(history, modules.HostDBScan{
+			Timestamp: time.Unix(int64(timestamp), 0),
+			Success:   success,
+		})
+	}
+	scanRows.Close()
+
+	// Load the IP subnets.
+	ipRows, err := hdb.db.Query("SELECT public_key, ip_net FROM hdb_ipnets")
+	if err != nil {
+		hdb.staticLog.Println("ERROR: could not load the IP subnets:", err)
+		return
+	}
+
+	for ipRows.Next() {
+		// Return if HostDB was shut down.
+		select {
+		case <-hdb.tg.StopChan():
+			return
+		default:
+		}
+
+		var ip string
+		pkBytes := make([]byte, 32)
+		if err := ipRows.Scan(&pkBytes, &ip); err != nil {
+			hdb.staticLog.Println("ERROR: could not load the IP subnets:", err)
+			continue
+		}
+		var pk types.PublicKey
+		copy(pk[:], pkBytes)
+		subnets := ipNets[pk]
+		ipNets[pk] = append(subnets, ip)
+	}
+	ipRows.Close()
+
+	// Load the hosts.
 	rows, err := hdb.db.Query("SELECT public_key, filtered, bytes FROM hdb_hosts")
 	if err != nil {
 		hdb.staticLog.Println("ERROR: could not load the hosts:", err)
 		return
 	}
-	defer rows.Close()
 
 	for rows.Next() {
 		// Return if HostDB was shut down.
@@ -332,10 +394,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 		}
 
 		var host modules.HostDBEntry
-		var scanRows, ipRows *sql.Rows
-		var timestamp uint64
-		var success, filtered bool
-		var ip string
+		var filtered bool
 		var hostBytes []byte
 		pkBytes := make([]byte, 32)
 		if err := rows.Scan(&pkBytes, &filtered, &hostBytes); err != nil {
@@ -352,47 +411,8 @@ func (hdb *HostDB) threadedLoadHosts() {
 		}
 		copy(host.PublicKey[:], pkBytes)
 		host.Filtered = filtered
-
-		// Load the scan history.
-		scanRows, err = hdb.db.Query(`
-			SELECT time, success
-			FROM hdb_scanhistory
-			WHERE public_key = ?
-		`, pkBytes)
-		if err != nil {
-			scanRows.Close()
-			hdb.staticLog.Println("ERROR: could not load the scan history:", err)
-			continue
-		}
-		for scanRows.Next() {
-			if err := scanRows.Scan(&timestamp, &success); err != nil {
-				scanRows.Close()
-				hdb.staticLog.Println("ERROR: could not load the scan history:", err)
-				continue
-			}
-			host.ScanHistory = append(host.ScanHistory, modules.HostDBScan{
-				Timestamp: time.Unix(int64(timestamp), 0),
-				Success:   success,
-			})
-		}
-		scanRows.Close()
-
-		// Load the IP subnets.
-		ipRows, err = hdb.db.Query("SELECT ip_net FROM hdb_ipnets WHERE public_key = ?", pkBytes)
-		if err != nil {
-			ipRows.Close()
-			hdb.staticLog.Println("ERROR: could not load the IP subnets:", err)
-			continue
-		}
-		for ipRows.Next() {
-			if err := ipRows.Scan(&ip); err != nil {
-				ipRows.Close()
-				hdb.staticLog.Println("ERROR: could not load the IP subnets:", err)
-				continue
-			}
-			host.IPNets = append(host.IPNets, ip)
-		}
-		ipRows.Close()
+		host.ScanHistory = scanHistory[host.PublicKey]
+		host.IPNets = ipNets[host.PublicKey]
 
 		// COMPATv1.1.0
 		//
@@ -406,15 +426,18 @@ func (hdb *HostDB) threadedLoadHosts() {
 
 		err := hdb.insert(host)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: could not insert host into hosttree while loading:", host.Settings.NetAddress)
+			hdb.staticLog.Printf("ERROR: could not insert host %v into hosttree while loading: %v\n", host.Settings.NetAddress, err)
+			hdb.mu.Unlock()
+			continue
 		}
-		hdb.mu.Unlock()
 
 		// Make sure that all hosts have gone through the initial scanning.
 		if len(host.ScanHistory) < 2 {
 			hdb.queueScan(host)
 		}
+		hdb.mu.Unlock()
 	}
+	rows.Close()
 
 	if hdb.initialScanComplete {
 		hdb.loadingComplete = true
