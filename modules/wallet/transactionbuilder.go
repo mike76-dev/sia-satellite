@@ -261,18 +261,13 @@ func (w *Wallet) SweepTransaction(txn types.Transaction, output types.SiacoinOut
 // ReleaseInputs is a helper function that releases the inputs of txn for use in
 // other transactions. It should only be called on transactions that are invalid
 // or will never be broadcast.
-func (w *Wallet) ReleaseInputs(txn types.Transaction) {
+func (w *Wallet) ReleaseInputs(txnSet []types.Transaction) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// Iterate through all parents and the transaction itself and restore all
-	// outputs to the list of available outputs.
-	_, parents, exists := w.tpool.Transaction(txn.ID())
-	if !exists {
-		w.log.Println("WARN: couldn't find transaction parents")
-	}
-	txns := append(parents, txn)
-	for _, txn := range txns {
+	// Iterate through all transactions and restore all outputs to the list of
+	// available outputs.
+	for _, txn := range txnSet {
 		for _, sci := range txn.SiacoinInputs {
 			dbDeleteSpentOutput(w.dbTx, types.Hash256(sci.ParentID))
 		}
@@ -333,4 +328,10 @@ func (w *Wallet) Sign(txn *types.Transaction, toSign []types.Hash256, cf types.C
 	}
 
 	return nil
+}
+
+// DropTransactions is a helper function that releases the inputs of
+// a transaction set. It should only be called on transactions that
+// are invalid or will never be broadcast.
+func (w *Wallet)DropTransactions(txnSet []types.Transaction) {
 }

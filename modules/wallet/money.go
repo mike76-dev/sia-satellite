@@ -176,7 +176,7 @@ func (w *Wallet) managedSendSiacoins(amount, fee types.Currency, dest types.Addr
 	parentTxn, toSign, err := w.FundTransaction(&txn, amount.Add(fee))
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to fund transaction:", err)
-		w.ReleaseInputs(txn)
+		w.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
@@ -184,7 +184,7 @@ func (w *Wallet) managedSendSiacoins(amount, fee types.Currency, dest types.Addr
 	err = w.SignTransaction(&txn, toSign, cf)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to sign transaction:", err)
-		w.ReleaseInputs(txn)
+		w.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, modules.AddContext(err, "unable to sign transaction")
 	}
 
@@ -192,7 +192,7 @@ func (w *Wallet) managedSendSiacoins(amount, fee types.Currency, dest types.Addr
 	err = w.tpool.AcceptTransactionSet(txnSet)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - transaction pool rejected transaction:", err)
-		w.ReleaseInputs(txn)
+		w.ReleaseInputs(txnSet)
 		return nil, modules.AddContext(err, "unable to get transaction accepted")
 	}
 
@@ -251,7 +251,7 @@ func (w *Wallet) SendSiacoinsMulti(outputs []types.SiacoinOutput) (txns []types.
 	}
 	parentTxn, toSign, err := w.FundTransaction(&txn, totalCost)
 	if err != nil {
-		w.ReleaseInputs(txn)
+		w.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
@@ -259,7 +259,7 @@ func (w *Wallet) SendSiacoinsMulti(outputs []types.SiacoinOutput) (txns []types.
 	err = w.SignTransaction(&txn, toSign, cf)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - failed to sign transaction:", err)
-		w.ReleaseInputs(txn)
+		w.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, modules.AddContext(err, "unable to sign transaction")
 	}
 
@@ -268,7 +268,7 @@ func (w *Wallet) SendSiacoinsMulti(outputs []types.SiacoinOutput) (txns []types.
 	err = w.tpool.AcceptTransactionSet(txnSet)
 	if err != nil {
 		w.log.Println("ERROR: attempt to send coins has failed - transaction pool rejected transaction:", err)
-		w.ReleaseInputs(txn)
+		w.ReleaseInputs(txnSet)
 		return nil, modules.AddContext(err, "unable to get transaction accepted")
 	}
 

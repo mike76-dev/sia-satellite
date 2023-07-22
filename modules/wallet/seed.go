@@ -572,7 +572,7 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 			})
 			parentTxn, _, err := w.FundTransaction(&txn, estFee)
 			if err != nil {
-				w.ReleaseInputs(txn)
+				w.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 				return types.Currency{}, 0, modules.AddContext(err, "couldn't pay transaction fee on swept funds")
 			}
 			parents = append(parents, parentTxn)
@@ -617,7 +617,7 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 		// Submit the transactions.
 		err = w.tpool.AcceptTransactionSet(txnSet)
 		if err != nil {
-			w.ReleaseInputs(txn)
+			w.ReleaseInputs(txnSet)
 			return types.ZeroCurrency, 0, err
 		}
 

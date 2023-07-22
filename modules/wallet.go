@@ -132,7 +132,7 @@ type (
 		// ReleaseInputs is a helper function that releases the inputs of txn
 		// for use in other transactions. It should only be called on
 		// transactions that are invalid or will never be broadcast.
-		ReleaseInputs(txn types.Transaction)
+		ReleaseInputs(txnSet []types.Transaction)
 
 		// Sign will sign any inputs added by FundTransaction.
 		Sign(txn *types.Transaction, toSign []types.Hash256, cf types.CoveredFields) error
