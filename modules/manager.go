@@ -23,7 +23,7 @@ type HostAverages struct {
 }
 
 // EncodeTo implements types.EncoderTo.
-func (ha *HostAverages) EncodeTo (e *types.Encoder) {
+func (ha *HostAverages) EncodeTo(e *types.Encoder) {
 	e.WriteUint64(ha.NumHosts)
 	e.WriteUint64(ha.Duration)
 	ha.StoragePrice.EncodeTo(e)
@@ -36,7 +36,7 @@ func (ha *HostAverages) EncodeTo (e *types.Encoder) {
 }
 
 // DecodeFrom implements types.DecoderFrom.
-func (ha *HostAverages) DecodeFrom (d *types.Decoder) {
+func (ha *HostAverages) DecodeFrom(d *types.Decoder) {
 	ha.NumHosts = d.ReadUint64()
 	ha.Duration = d.ReadUint64()
 	ha.StoragePrice.DecodeFrom(d)
@@ -362,6 +362,10 @@ type Manager interface {
 	// RenewContracts renews a set of contracts and returns a new set.
 	RenewContracts(types.PublicKey, types.PrivateKey, Allowance, []types.FileContractID) ([]RenterContract, error)
 
+	// RenewedFrom returns the ID of the contract the given contract was renewed
+	// from, if any.
+	RenewedFrom(types.FileContractID) types.FileContractID
+
 	// Renters retrieves the list of renters.
 	Renters() []Renter
 
@@ -383,6 +387,10 @@ type Manager interface {
 
 	// UpdateBalance updates the balance information on the account.
 	UpdateBalance(email string, ub UserBalance) error
+
+	// UpdateContract updates the contract with the new revision and spending
+	// details.
+	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 
 	// UpdateRenterSettings updates the renter's opt-in settings.
 	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error
@@ -545,12 +553,12 @@ var DefaultAllowance = Allowance{
 	Period:      2 * BlocksPerMonth,
 	RenewWindow: BlocksPerMonth,
 
-	ExpectedStorage:    1e12,                           // 1 TB
-	ExpectedUpload:     uint64(200e9) / BlocksPerMonth, // 200 GB per month
-	ExpectedDownload:   uint64(100e9) / BlocksPerMonth, // 100 GB per month
-	MinShards:          10,
-	TotalShards:        30,
-	BlockHeightLeeway:  3,
+	ExpectedStorage:   1e12,                           // 1 TB
+	ExpectedUpload:    uint64(200e9) / BlocksPerMonth, // 200 GB per month
+	ExpectedDownload:  uint64(100e9) / BlocksPerMonth, // 100 GB per month
+	MinShards:         10,
+	TotalShards:       30,
+	BlockHeightLeeway: 3,
 }
 
 // Active returns true if and only if this allowance has been set in the

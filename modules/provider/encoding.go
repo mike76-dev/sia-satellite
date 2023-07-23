@@ -76,21 +76,21 @@ func (r *loopChallengeRequest) DecodeFrom(d *types.Decoder) {
 
 // requestRequest is used when the renter requests the list of their
 // active contracts.
-/*type requestRequest struct {
-	PubKey    crypto.PublicKey
+type requestRequest struct {
+	PubKey    types.PublicKey
 	Signature types.Signature
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (rr *requestRequest) DecodeFrom(d *types.Decoder) {
-	copy(rr.PubKey[:], d.ReadBytes())
+func (rr *requestRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(rr.PubKey[:])
 	rr.Signature.DecodeFrom(d)
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (rr *requestRequest) EncodeTo(e *types.Encoder) {
-	e.WriteBytes(rr.PubKey[:])
-}*/
+func (rr *requestRequest) EncodeTo(e *types.Encoder) {
+	e.Write(rr.PubKey[:])
+}
 
 // formRequest is used when the renter requests forming contracts with
 // the hosts.
@@ -247,18 +247,18 @@ func (rr *renewRequest) EncodeTo(e *types.Encoder) {
 }
 
 // updateRequest is used when the renter submits a new revision.
-/*type updateRequest struct {
-	PubKey      crypto.PublicKey
+type updateRequest struct {
+	PubKey      types.PublicKey
 	Contract    rhpv2.ContractRevision
 	Uploads     types.Currency
 	Downloads   types.Currency
 	FundAccount types.Currency
 
 	Signature types.Signature
-}*/
+}
 
 // DecodeFrom implements requestBody.
-/*func (ur *updateRequest) DecodeFrom(d *types.Decoder) {
+func (ur *updateRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(ur.PubKey[:])
 	ur.Contract.Revision.DecodeFrom(d)
 	ur.Contract.Signatures[0].DecodeFrom(d)
@@ -267,10 +267,10 @@ func (rr *renewRequest) EncodeTo(e *types.Encoder) {
 	ur.Downloads.DecodeFrom(d)
 	ur.FundAccount.DecodeFrom(d)
 	ur.Signature.DecodeFrom(d)
-}*/
+}
 
 // EncodeTo implements requestBody.
-/*func (ur *updateRequest) EncodeTo(e *types.Encoder) {
+func (ur *updateRequest) EncodeTo(e *types.Encoder) {
 	e.Write(ur.PubKey[:])
 	ur.Contract.Revision.EncodeTo(e)
 	ur.Contract.Signatures[0].EncodeTo(e)
@@ -278,7 +278,7 @@ func (rr *renewRequest) EncodeTo(e *types.Encoder) {
 	ur.Uploads.EncodeTo(e)
 	ur.Downloads.EncodeTo(e)
 	ur.FundAccount.EncodeTo(e)
-}*/
+}
 
 // extendedContract contains the contract and its metadata.
 type extendedContract struct {
@@ -374,9 +374,9 @@ func (fcr *formContractRequest) EncodeTo(e *types.Encoder) {
 // renewContractRequest is used when renewing a contract using
 // the new Renter-Satellite protocol.
 type renewContractRequest struct {
-	PubKey          types.PublicKey
-	Contract        types.FileContractID
-	EndHeight       uint64
+	PubKey    types.PublicKey
+	Contract  types.FileContractID
+	EndHeight uint64
 
 	Storage  uint64
 	Upload   uint64

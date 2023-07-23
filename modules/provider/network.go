@@ -262,10 +262,10 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 
 	switch id {
 	case requestContractsSpecifier:
-		/*err = p.managedRequestContracts(s)
+		err = p.managedRequestContracts(s)
 		if err != nil {
-			err = errors.Extend(errors.New("incoming RPCRequestContracts failed: "), err)
-		}*/
+			err = modules.AddContext(err, "incoming RPCRequestContracts failed")
+		}
 	case formContractsSpecifier:
 		err = p.managedFormContracts(s)
 		if err != nil {
@@ -277,10 +277,10 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 			err = modules.AddContext(err, "incoming RPCRenewContracts failed")
 		}
 	case updateRevisionSpecifier:
-		/*err = p.managedUpdateRevision(s)
+		err = p.managedUpdateRevision(s)
 		if err != nil {
-			err = errors.Extend(errors.New("incoming RPCUpdateRevision failed: "), err)
-		}*/
+			err = modules.AddContext(err, "incoming RPCUpdateRevision failed")
+		}
 	case formContractSpecifier:
 		err = p.managedFormContract(s)
 		if err != nil {

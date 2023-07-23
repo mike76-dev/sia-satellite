@@ -15,7 +15,7 @@ const bytesInTerabyte = 1024 * 1024 * 1024 * 1024
 
 // managedRequestContracts returns a slice containing the list of the
 // renter's active contracts.
-/*func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
+func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
 	// Extend the deadline to meet the formation of multiple contracts.
 	s.Conn.SetDeadline(time.Now().Add(requestContractsTime))
 
@@ -29,16 +29,14 @@ const bytesInTerabyte = 1024 * 1024 * 1024 * 1024
 	}
 
 	// Verify the signature.
-	err = crypto.VerifyHash(crypto.Hash(hash), rr.PubKey, crypto.Signature(rr.Signature))
-	if err != nil {
-		err = fmt.Errorf("could not verify renter signature: %v", err)
+	if ok := rr.PubKey.VerifyHash(hash, rr.Signature); !ok {
+		err = errors.New("could not verify renter signature")
 		s.WriteError(err)
 		return err
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(rr.PubKey)
-	_, err = p.satellite.GetRenter(rpk)
+	_, err = p.m.GetRenter(rr.PubKey)
 	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
@@ -46,7 +44,7 @@ const bytesInTerabyte = 1024 * 1024 * 1024 * 1024
 	}
 
 	// Get the contracts.
-	contracts := p.satellite.ContractsByRenter(rpk)
+	contracts := p.m.ContractsByRenter(rr.PubKey)
 	ecs := extendedContractSet{
 		contracts: make([]extendedContract, 0, len(contracts)),
 	}
@@ -55,17 +53,17 @@ const bytesInTerabyte = 1024 * 1024 * 1024 * 1024
 		cr := convertContract(contract)
 		ecs.contracts = append(ecs.contracts, extendedContract{
 			contract:            cr,
-			startHeight:         uint64(contract.StartHeight),
-			totalCost:           modules.ConvertCurrency(contract.TotalCost),
-			uploadSpending:      modules.ConvertCurrency(contract.UploadSpending),
-			downloadSpending:    modules.ConvertCurrency(contract.DownloadSpending),
-			fundAccountSpending: modules.ConvertCurrency(contract.FundAccountSpending),
-			renewedFrom:         core.FileContractID(p.satellite.RenewedFrom(contract.ID)),
+			startHeight:         contract.StartHeight,
+			totalCost:           contract.TotalCost,
+			uploadSpending:      contract.UploadSpending,
+			downloadSpending:    contract.DownloadSpending,
+			fundAccountSpending: contract.FundAccountSpending,
+			renewedFrom:         p.m.RenewedFrom(contract.ID),
 		})
 	}
 
 	return s.WriteResponse(&ecs)
-}*/
+}
 
 // managedFormContracts forms the specified number of contracts with the hosts
 // on behalf of the renter.
@@ -134,11 +132,11 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 		Period:      fr.Period,
 		RenewWindow: fr.RenewWindow,
 
-		ExpectedStorage:    fr.Storage,
-		ExpectedUpload:     fr.Upload,
-		ExpectedDownload:   fr.Download,
-		MinShards:          fr.MinShards,
-		TotalShards:        fr.TotalShards,
+		ExpectedStorage:  fr.Storage,
+		ExpectedUpload:   fr.Upload,
+		ExpectedDownload: fr.Download,
+		MinShards:        fr.MinShards,
+		TotalShards:      fr.TotalShards,
 
 		MaxRPCPrice:               fr.MaxRPCPrice,
 		MaxContractPrice:          fr.MaxContractPrice,
@@ -236,11 +234,11 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 		Period:      rr.Period,
 		RenewWindow: rr.RenewWindow,
 
-		ExpectedStorage:    rr.Storage,
-		ExpectedUpload:     rr.Upload,
-		ExpectedDownload:   rr.Download,
-		MinShards:          rr.MinShards,
-		TotalShards:        rr.TotalShards,
+		ExpectedStorage:  rr.Storage,
+		ExpectedUpload:   rr.Upload,
+		ExpectedDownload: rr.Download,
+		MinShards:        rr.MinShards,
+		TotalShards:      rr.TotalShards,
 
 		MaxRPCPrice:               rr.MaxRPCPrice,
 		MaxContractPrice:          rr.MaxContractPrice,
@@ -276,7 +274,7 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 	txn := modules.CopyTransaction(c.Transaction)
 	return rhpv2.ContractRevision{
-		Revision:   txn.FileContractRevisions[0],
+		Revision: txn.FileContractRevisions[0],
 		Signatures: [2]types.TransactionSignature{
 			txn.Signatures[0],
 			txn.Signatures[1],
@@ -285,7 +283,7 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 }
 
 // managedUpdateRevision updates the contract with a new revision.
-/*func (p *Provider) managedUpdateRevision(s *modules.RPCSession) error {
+func (p *Provider) managedUpdateRevision(s *modules.RPCSession) error {
 	// Extend the deadline to meet the revision update.
 	s.Conn.SetDeadline(time.Now().Add(updateRevisionTime))
 
@@ -299,30 +297,28 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 	}
 
 	// Verify the signature.
-	err = crypto.VerifyHash(crypto.Hash(hash), ur.PubKey, crypto.Signature(ur.Signature))
-	if err != nil {
-		err = fmt.Errorf("could not verify renter signature: %v", err)
+	if ok := ur.PubKey.VerifyHash(hash, ur.Signature); !ok {
+		err = errors.New("could not verify renter signature")
 		s.WriteError(err)
 		return err
 	}
 
 	// Check if we know this renter.
-	rpk := types.Ed25519PublicKey(ur.PubKey)
-	exists, err := p.satellite.UserExists(rpk)
-	if !exists || err != nil {
+	_, err = p.m.GetRenter(ur.PubKey)
+	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
 		return err
 	}
 
-	uploads := types.NewCurrency(ur.Uploads.Big())
-	downloads := types.NewCurrency(ur.Downloads.Big())
-	fundAccount := types.NewCurrency(ur.FundAccount.Big())
-	rev, sigs := convertRevision(ur.Contract)
+	uploads := ur.Uploads
+	downloads := ur.Downloads
+	fundAccount := ur.FundAccount
+	rev, sigs := ur.Contract.Revision, ur.Contract.Signatures
 
 	// Update the contract.
-	err = p.satellite.UpdateContract(rev, sigs, uploads, downloads, fundAccount)
-	
+	err = p.m.UpdateContract(rev, sigs[:], uploads, downloads, fundAccount)
+
 	// Send a response.
 	if err != nil {
 		err = fmt.Errorf("couldn't update contract: %v", err)
@@ -331,69 +327,7 @@ func convertContract(c modules.RenterContract) rhpv2.ContractRevision {
 	}
 
 	return s.WriteResponse(nil)
-}*/
-
-// convertRevision converts a `core`-style revision into the `siad`-style.
-/*func convertRevision(rev rhpv2.ContractRevision) (types.FileContractRevision, []types.TransactionSignature) {
-	var rpk, hpk crypto.PublicKey
-	copy(rpk[:], rev.Revision.UnlockConditions.PublicKeys[0].Key)
-	copy(hpk[:], rev.Revision.UnlockConditions.PublicKeys[1].Key)
-	fcr := types.FileContractRevision{
-		ParentID:         types.FileContractID(rev.Revision.ParentID),
-		UnlockConditions: types.UnlockConditions{
-			Timelock:   types.BlockHeight(rev.Revision.UnlockConditions.Timelock),
-			PublicKeys: []types.SiaPublicKey{
-				types.Ed25519PublicKey(rpk),
-				types.Ed25519PublicKey(hpk),
-			},
-			SignaturesRequired: rev.Revision.UnlockConditions.SignaturesRequired,
-		},
-		NewRevisionNumber: rev.Revision.RevisionNumber,
-		NewFileSize:       rev.Revision.Filesize,
-		NewFileMerkleRoot: crypto.Hash(rev.Revision.FileMerkleRoot),
-		NewWindowStart:    types.BlockHeight(rev.Revision.WindowStart),
-		NewWindowEnd:      types.BlockHeight(rev.Revision.WindowEnd),
-
-		NewValidProofOutputs: []types.SiacoinOutput{{
-			Value:      types.NewCurrency(rev.Revision.ValidProofOutputs[0].Value.Big()),
-			UnlockHash: types.UnlockHash(rev.Revision.ValidProofOutputs[0].Address),
-		}, {
-			Value:      types.NewCurrency(rev.Revision.ValidProofOutputs[1].Value.Big()),
-			UnlockHash: types.UnlockHash(rev.Revision.ValidProofOutputs[1].Address),
-		}},
-		NewMissedProofOutputs: []types.SiacoinOutput{{
-			Value:      types.NewCurrency(rev.Revision.MissedProofOutputs[0].Value.Big()),
-			UnlockHash: types.UnlockHash(rev.Revision.MissedProofOutputs[0].Address),
-		}, {
-			Value:      types.NewCurrency(rev.Revision.MissedProofOutputs[1].Value.Big()),
-			UnlockHash: types.UnlockHash(rev.Revision.MissedProofOutputs[1].Address),
-		}, {
-			Value:      types.NewCurrency(rev.Revision.MissedProofOutputs[1].Value.Big()),
-			UnlockHash: types.UnlockHash(rev.Revision.MissedProofOutputs[1].Address),
-		}},
-		NewUnlockHash: types.UnlockHash(rev.Revision.UnlockHash),
-	}
-
-	renterSig := make([]byte, len(rev.Signatures[0].Signature))
-	copy(renterSig, rev.Signatures[0].Signature)
-	hostSig := make([]byte, len(rev.Signatures[1].Signature))
-	copy(hostSig, rev.Signatures[1].Signature)
-	sigs := []types.TransactionSignature{{
-		ParentID:       crypto.Hash(rev.Signatures[0].ParentID),
-		PublicKeyIndex: rev.Signatures[0].PublicKeyIndex,
-		Timelock:       types.BlockHeight(rev.Signatures[0].Timelock),
-		CoveredFields:  types.CoveredFields{FileContractRevisions: []uint64{0},},
-		Signature:      renterSig,
-	}, {
-		ParentID:       crypto.Hash(rev.Signatures[1].ParentID),
-		PublicKeyIndex: rev.Signatures[1].PublicKeyIndex,
-		Timelock:       types.BlockHeight(rev.Signatures[1].Timelock),
-		CoveredFields:  types.CoveredFields{FileContractRevisions: []uint64{0},},
-		Signature:      hostSig,
-	}}
-
-	return fcr, sigs
-}*/
+}
 
 // managedFormContract forms a single contract using the new Renter-Satellite
 // protocol.
@@ -653,11 +587,11 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		Period:      usr.Period,
 		RenewWindow: usr.RenewWindow,
 
-		ExpectedStorage:    usr.Storage,
-		ExpectedUpload:     usr.Upload,
-		ExpectedDownload:   usr.Download,
-		MinShards:          usr.MinShards,
-		TotalShards:        usr.TotalShards,
+		ExpectedStorage:  usr.Storage,
+		ExpectedUpload:   usr.Upload,
+		ExpectedDownload: usr.Download,
+		MinShards:        usr.MinShards,
+		TotalShards:      usr.TotalShards,
 
 		MaxRPCPrice:               usr.MaxRPCPrice,
 		MaxContractPrice:          usr.MaxContractPrice,

@@ -46,11 +46,11 @@ type Contractor struct {
 	interruptMaintenance chan struct{}
 	maintenanceLock      siasync.TryMutex
 
-	blockHeight   uint64
-	synced        chan struct{}
-	lastChange    modules.ConsensusChangeID
+	blockHeight uint64
+	synced      chan struct{}
+	lastChange  modules.ConsensusChangeID
 
-	renters       map[types.PublicKey]modules.Renter
+	renters map[types.PublicKey]modules.Renter
 
 	numFailedRenews map[types.FileContractID]uint64
 	renewing        map[types.FileContractID]bool // Prevent revising during renewal.
@@ -150,11 +150,11 @@ func (c *Contractor) PeriodSpending(rpk types.PublicKey) (modules.RenterSpending
 			spending.MaintenanceSpending = spending.MaintenanceSpending.Add(contract.MaintenanceSpending)
 			spending.UploadSpending = spending.UploadSpending.Add(contract.UploadSpending)
 			spending.StorageSpending = spending.StorageSpending.Add(contract.StorageSpending)
-		} else if err != nil && exist && contract.EndHeight + host.Settings.WindowSize + modules.MaturityDelay > c.blockHeight {
+		} else if err != nil && exist && contract.EndHeight+host.Settings.WindowSize+modules.MaturityDelay > c.blockHeight {
 			// Calculate funds that are being withheld in contracts.
 			spending.WithheldFunds = spending.WithheldFunds.Add(contract.RenterFunds)
 			// Record the largest window size for worst case when reporting the spending.
-			if contract.EndHeight + host.Settings.WindowSize + modules.MaturityDelay >= spending.ReleaseBlock {
+			if contract.EndHeight+host.Settings.WindowSize+modules.MaturityDelay >= spending.ReleaseBlock {
 				spending.ReleaseBlock = contract.EndHeight + host.Settings.WindowSize + modules.MaturityDelay
 			}
 			// Calculate Previous spending.
@@ -328,7 +328,7 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Ma
 		interruptMaintenance: make(chan struct{}),
 		synced:               make(chan struct{}),
 
-		renters:              make(map[types.PublicKey]modules.Renter),
+		renters: make(map[types.PublicKey]modules.Renter),
 
 		staticContracts:      contractSet,
 		doubleSpentContracts: make(map[types.FileContractID]uint64),
