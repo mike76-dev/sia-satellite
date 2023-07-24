@@ -178,7 +178,7 @@ func (tp *TransactionPool) ProcessConsensusChange(cc modules.ConsensusChange) {
 	// being provided to us correctly.
 	resetSanityCheck := false
 	recentID, err := tp.getRecentBlockID()
-	if modules.ContainsError(err, errNilRecentBlock) {
+	if modules.ContainsError(err, errNilRecentBlock) || cc.BlockHeight < tp.blockHeight {
 		// This almost certainly means that the database hasn't been initialized
 		// yet with a recent block.
 		resetSanityCheck = true
@@ -268,7 +268,7 @@ func (tp *TransactionPool) ProcessConsensusChange(cc modules.ConsensusChange) {
 			// Instead of grabbing the full median, look at the 75%-ile. It's
 			// going to be cheaper than the 50%-ile, but it still got into a
 			// block.
-			if uint64(progress) > modules.BlockSizeLimit / 4 {
+			if uint64(progress) > modules.BlockSizeLimit/4 {
 				tp.recentMedians = append(tp.recentMedians, fees[i].fee)
 				break
 			}
@@ -360,7 +360,7 @@ func (tp *TransactionPool) ProcessConsensusChange(cc modules.ConsensusChange) {
 				tp.transactionHeights[txn.ID()] = tp.blockHeight - 1
 				tp.log.Println("CRITICAL: transaction found in tpool which did not have its height recorded")
 			}
-			if tp.blockHeight - seenHeight < MaxTransactionAge || !seen {
+			if tp.blockHeight-seenHeight < MaxTransactionAge || !seen {
 				old = false
 				break
 			}
