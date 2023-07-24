@@ -26,7 +26,7 @@ func backtrackToCurrentPath(tx *sql.Tx, pb *processedBlock) []*processedBlock {
 		if currentPathID == pb.Block.ID() {
 			break
 		}
-			
+
 		// Prepend the next block to the list of blocks leading from the
 		// current path to the input block.
 		pb, exists, err := findBlockByID(tx, pb.Block.ParentID)
@@ -64,7 +64,7 @@ func (cs *ConsensusSet) revertToBlock(tx *sql.Tx, pb *processedBlock) (revertedB
 
 		// Sanity check - after removing a block, check that the consensus set
 		// has maintained consistency.
-		//cs.maybeCheckConsistency(tx) TODO
+		cs.maybeCheckConsistency(tx)
 	}
 	return revertedBlocks, nil
 }
@@ -93,7 +93,7 @@ func (cs *ConsensusSet) applyUntilBlock(tx *sql.Tx, pb *processedBlock) (applied
 
 		// Sanity check - after applying a block, check that the consensus set
 		// has maintained consistency.
-		//cs.maybeCheckConsistency(tx) TODO
+		cs.maybeCheckConsistency(tx)
 	}
 	return appliedBlocks, nil
 }
@@ -113,4 +113,17 @@ func (cs *ConsensusSet) forkBlockchain(tx *sql.Tx, newBlock *processedBlock) (re
 		return nil, nil, err
 	}
 	return revertedBlocks, appliedBlocks, nil
+}
+
+// revertLastBlock will try to remove the last block from the path if it was
+// found invalid.
+func revertLastBlock(tx *sql.Tx) error {
+	block := currentProcessedBlock(tx)
+	id := block.Block.ID()
+	err := commitDiffSet(tx, block, modules.DiffRevert)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM cs_map WHERE bid = ?", id[:])
+	return err
 }

@@ -59,7 +59,7 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 	// Check that the timestamp is not too far in the past to be acceptable.
 	minTimestamp := cs.minimumValidChildTimestamp(tx, parent)
 
-	err = cs.validateBlock(b, id, minTimestamp, parent.ChildTarget, parent.Height + 1)
+	err = cs.validateBlock(b, id, minTimestamp, parent.ChildTarget, parent.Height+1)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	}
 
 	// Check that the nonce is a legal nonce.
-	if parent.Height + 1 >= modules.ASICHardforkHeight && h.Nonce % modules.ASICHardforkFactor != 0 {
+	if parent.Height+1 >= modules.ASICHardforkHeight && h.Nonce%modules.ASICHardforkFactor != 0 {
 		return errors.New("block does not meet nonce requirements")
 	}
 	// Check that the target of the new block is sufficient.
@@ -127,7 +127,7 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	// future and extreme future because there is an assumption that by the time
 	// the extreme future arrives, this block will no longer be a part of the
 	// longest fork because it will have been ignored by all of the miners.
-	if h.Timestamp.Unix() > types.CurrentTimestamp().Unix() + modules.ExtremeFutureThreshold {
+	if h.Timestamp.Unix() > types.CurrentTimestamp().Unix()+modules.ExtremeFutureThreshold {
 		return ErrExtremeFutureTimestamp
 	}
 
@@ -202,7 +202,7 @@ func (cs *ConsensusSet) threadedSleepOnFutureBlock(b types.Block) {
 	select {
 	case <-cs.tg.StopChan():
 		return
-	case <-time.After(time.Duration(b.Timestamp.Unix() - (types.CurrentTimestamp().Unix() + modules.FutureThreshold)) * time.Second):
+	case <-time.After(time.Duration(b.Timestamp.Unix()-(types.CurrentTimestamp().Unix()+modules.FutureThreshold)) * time.Second):
 		_, err := cs.managedAcceptBlocks([]types.Block{b})
 		if err != nil {
 			cs.log.Println("WARN: failed to accept a future block:", err)
@@ -235,7 +235,7 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	blockIDs := make([]types.BlockID, 0, len(blocks))
 	for i := 0; i < len(blocks); i++ {
 		blockIDs = append(blockIDs, blocks[i].ID())
-		if i > 0 && blocks[i].ParentID != blockIDs[i - 1] {
+		if i > 0 && blocks[i].ParentID != blockIDs[i-1] {
 			return false, errNonLinearChain
 		}
 	}
@@ -269,13 +269,6 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 			if err == nil {
 				changes = append(changes, changeEntry)
 				chainExtended = true
-				var applied, reverted []string
-				for _, b := range changeEntry.AppliedBlocks {
-						applied = append(applied, b.String()[:6])
-				}
-				for _, b := range changeEntry.RevertedBlocks {
-					reverted = append(reverted, b.String()[:6])
-				}
 			}
 			if modules.ContainsError(err, modules.ErrNonExtendingBlock) {
 				err = nil
@@ -296,6 +289,13 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	}(tx)
 
 	if setErr != nil {
+		if modules.ContainsError(setErr, errExternalRevert) {
+			err := revertLastBlock(tx)
+			if err != nil {
+				return false, err
+			}
+			return false, tx.Commit()
+		}
 		if len(changes) == 0 {
 			cs.log.Println("Consensus received an invalid block:", setErr)
 		} else {

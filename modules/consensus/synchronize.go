@@ -12,7 +12,7 @@ import (
 
 	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
-	
+
 	"go.sia.tech/core/types"
 )
 
@@ -175,7 +175,7 @@ func (cs *ConsensusSet) managedReceiveBlocks(conn modules.PeerConn) (returnErr e
 	moreAvailable := true
 	for moreAvailable {
 		// Read a slice of blocks from the wire.
-		d := types.NewDecoder(io.LimitedReader{R: conn, N: int64(MaxCatchUpBlocks * modules.BlockSizeLimit) + 17})
+		d := types.NewDecoder(io.LimitedReader{R: conn, N: int64(MaxCatchUpBlocks*modules.BlockSizeLimit) + 17})
 		_ = d.ReadUint64()
 		num := d.ReadPrefix()
 		newBlocks := make([]types.Block, num)
@@ -262,7 +262,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 	// Read a list of blocks known to the requester and find the most recent
 	// block from the current path.
 	var knownBlocks [32]types.BlockID
-	d := types.NewDecoder(io.LimitedReader{R: conn, N: 32 * 32 + 8})
+	d := types.NewDecoder(io.LimitedReader{R: conn, N: 32*32 + 8})
 	_ = d.ReadUint64()
 	for i := 0; i < 32; i++ {
 		knownBlocks[i].DecodeFrom(d)
@@ -337,7 +337,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 		}
 		err = func(tx *sql.Tx) error {
 			height := blockHeight(tx)
-			for i := start; i <= height && i < start + MaxCatchUpBlocks; i++ {
+			for i := start; i <= height && i < start+MaxCatchUpBlocks; i++ {
 				id, err := getBlockAtHeight(tx, i)
 				if err != nil {
 					cs.log.Printf("CRITICAL: unable to get path: height %v :: request %v\n", height, i)
@@ -354,7 +354,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 				}
 				blocks = append(blocks, pb.Block)
 			}
-			moreAvailable = start + MaxCatchUpBlocks <= height
+			moreAvailable = start+MaxCatchUpBlocks <= height
 			start += MaxCatchUpBlocks
 			return nil
 		}(tx)
@@ -375,7 +375,7 @@ func (cs *ConsensusSet) rpcSendBlocks(conn modules.PeerConn) error {
 		}
 		e.Flush()
 		b := buf.Bytes()
-		binary.LittleEndian.PutUint64(b[:8], uint64(len(b) - 8))
+		binary.LittleEndian.PutUint64(b[:8], uint64(len(b)-8))
 		_, err = conn.Write(b)
 		if err != nil {
 			return err
@@ -543,7 +543,7 @@ func (cs *ConsensusSet) rpcSendBlk(conn modules.PeerConn) error {
 	b.EncodeTo(e)
 	e.Flush()
 	bb := buf.Bytes()
-	binary.LittleEndian.PutUint64(bb[:8], uint64(len(bb) - 8))
+	binary.LittleEndian.PutUint64(bb[:8], uint64(len(bb)-8))
 	_, err = conn.Write(bb)
 
 	return err
