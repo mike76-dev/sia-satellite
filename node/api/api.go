@@ -10,8 +10,6 @@ import (
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
-
-	smodules "go.sia.tech/siad/modules"
 )
 
 const (
@@ -93,15 +91,16 @@ type (
 	// API encapsulates a collection of modules and implements a http.Handler
 	// to access their methods.
 	API struct {
-		cs                smodules.ConsensusSet
-		gateway           smodules.Gateway
-		portal            modules.Portal
-		satellite         modules.Satellite
-		tpool             smodules.TransactionPool
-		wallet            smodules.Wallet
+		cs       modules.ConsensusSet
+		gateway  modules.Gateway
+		manager  modules.Manager
+		portal   modules.Portal
+		provider modules.Provider
+		tpool    modules.TransactionPool
+		wallet   modules.Wallet
 
-		router            http.Handler
-		routerMu          sync.RWMutex
+		router   http.Handler
+		routerMu sync.RWMutex
 
 		requiredUserAgent string
 		requiredPassword  string
@@ -118,16 +117,17 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // SetModules allows for replacing the modules in the API at runtime.
-func (api *API) SetModules(cs smodules.ConsensusSet, g smodules.Gateway, p modules.Portal, s modules.Satellite, tp smodules.TransactionPool, w smodules.Wallet) {
+func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet, m modules.Manager, portal modules.Portal, p modules.Provider, tp modules.TransactionPool, w modules.Wallet) {
 	if api.modulesSet {
 		log.Fatal("can't call SetModules more than once")
 	}
-	api.cs = cs
-	api.gateway = g
-	api.portal = p
-	api.satellite = s
-	api.tpool = tp
-	api.wallet = w
+	api.cs         = cs
+	api.gateway    = g
+	api.manager    = m
+	api.portal     = portal
+	api.provider   = p
+	api.tpool      = tp
+	api.wallet     = w
 	api.modulesSet = true
 	api.buildHTTPRoutes()
 }
@@ -135,14 +135,16 @@ func (api *API) SetModules(cs smodules.ConsensusSet, g smodules.Gateway, p modul
 // New creates a new API. The API will require authentication using HTTP basic
 // auth for certain endpoints if the supplied password is not the empty string.
 // Usernames are ignored for authentication.
-func New(requiredUserAgent string, requiredPassword string, cs smodules.ConsensusSet, g smodules.Gateway, p modules.Portal, s modules.Satellite, tp smodules.TransactionPool, w smodules.Wallet) *API {
+func New(requiredUserAgent string, requiredPassword string, g modules.Gateway, cs modules.ConsensusSet, m modules.Manager, portal modules.Portal, p modules.Provider, tp modules.TransactionPool, w modules.Wallet) *API {
 	api := &API{
-		cs:                cs,
-		gateway:           g,
-		portal:            p,
-		satellite:         s,
-		tpool:             tp,
-		wallet:            w,
+		cs:       cs,
+		gateway:  g,
+		manager:  m,
+		portal:   portal,
+		provider: p,
+		tpool:    tp,
+		wallet:   w,
+
 		requiredUserAgent: requiredUserAgent,
 		requiredPassword:  requiredPassword,
 	}

@@ -6,14 +6,10 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 
-	mnemonics "gitlab.com/NebulousLabs/entropy-mnemonics"
-	"gitlab.com/NebulousLabs/errors"
-
-	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
+	"go.sia.tech/core/types"
 )
 
 // WalletAddressGet requests a new address from the /wallet/address endpoint.
@@ -42,10 +38,7 @@ func (c *Client) WalletChangePasswordPost(currentPassword, newPassword string) (
 // WalletChangePasswordWithSeedPost uses the /wallet/changepassword endpoint to
 // change the password used to encrypt the wallet.
 func (c *Client) WalletChangePasswordWithSeedPost(seed modules.Seed, newPassword string) (err error) {
-	seedStr, err := modules.SeedToString(seed, mnemonics.DictionaryID("english"))
-	if err != nil {
-		return err
-	}
+	seedStr := modules.EncodeBIP39Phrase(seed)
 	return c.WalletChangePasswordPost(seedStr, newPassword)
 }
 
@@ -61,15 +54,8 @@ func (c *Client) WalletVerifyPasswordGet(password string) (wvpg api.WalletVerify
 // WalletVerifyPasswordSeedGet takes a seed and generates a seed string to
 // submit to the /wallet/verifypassword endpoint.
 func (c *Client) WalletVerifyPasswordSeedGet(seed modules.Seed) (wvpg api.WalletVerifyPasswordGET, err error) {
-	dicts := []mnemonics.DictionaryID{"english", "german", "japanese"}
-	for _, dict := range dicts {
-		seedStr, seedErr := modules.SeedToString(seed, mnemonics.DictionaryID(dict))
-		if err == nil {
-			return c.WalletVerifyPasswordGet(seedStr)
-		}
-		err = errors.Compose(err, seedErr)
-	}
-	return
+	seedStr := modules.EncodeBIP39Phrase(seed)
+	return c.WalletVerifyPasswordGet(seedStr)
 }
 
 // WalletInitPost uses the /wallet/init endpoint to initialize and encrypt a
@@ -145,9 +131,9 @@ func (c *Client) WalletSiacoinsMultiPost(outputs []types.SiacoinOutput) (wsp api
 
 // WalletSiacoinsPost uses the /wallet/siacoins api endpoint to send money to a
 // single address.
-func (c *Client) WalletSiacoinsPost(amount types.Currency, destination types.UnlockHash, feeIncluded bool) (wsp api.WalletSiacoinsPOST, err error) {
+func (c *Client) WalletSiacoinsPost(amount types.Currency, destination types.Address, feeIncluded bool) (wsp api.WalletSiacoinsPOST, err error) {
 	values := url.Values{}
-	values.Set("amount", amount.String())
+	values.Set("amount", amount.ExactString())
 	values.Set("destination", destination.String())
 	values.Set("feeIncluded", strconv.FormatBool(feeIncluded))
 	err = c.post("/wallet/siacoins", values.Encode(), &wsp)
@@ -155,7 +141,7 @@ func (c *Client) WalletSiacoinsPost(amount types.Currency, destination types.Unl
 }
 
 // WalletSignPost uses the /wallet/sign api endpoint to sign a transaction.
-func (c *Client) WalletSignPost(txn types.Transaction, toSign []crypto.Hash) (wspr api.WalletSignPOSTResp, err error) {
+func (c *Client) WalletSignPost(txn types.Transaction, toSign []types.Hash256) (wspr api.WalletSignPOSTResp, err error) {
 	json, err := json.Marshal(api.WalletSignPOSTParams{
 		Transaction: txn,
 		ToSign:      toSign,
@@ -178,7 +164,7 @@ func (c *Client) WalletSweepPost(seed string) (wsp api.WalletSweepPOST, err erro
 
 // WalletTransactionsGet requests the/wallet/transactions api resource for a
 // certain startheight and endheight.
-func (c *Client) WalletTransactionsGet(startHeight types.BlockHeight, endHeight types.BlockHeight) (wtg api.WalletTransactionsGET, err error) {
+func (c *Client) WalletTransactionsGet(startHeight uint64, endHeight uint64) (wtg api.WalletTransactionsGET, err error) {
 	err = c.get(fmt.Sprintf("/wallet/transactions?startheight=%v&endheight=%v",
 		startHeight, endHeight), &wtg)
 	return
@@ -202,7 +188,7 @@ func (c *Client) WalletUnlockPost(password string) (err error) {
 
 // WalletUnlockConditionsGet requests the /wallet/unlockconditions endpoint
 // and returns the UnlockConditions of addr.
-func (c *Client) WalletUnlockConditionsGet(addr types.UnlockHash) (wucg api.WalletUnlockConditionsGET, err error) {
+func (c *Client) WalletUnlockConditionsGet(addr types.Address) (wucg api.WalletUnlockConditionsGET, err error) {
 	err = c.get("/wallet/unlockconditions/" + addr.String(), &wucg)
 	return
 }
@@ -224,7 +210,7 @@ func (c *Client) WalletWatchGet() (wwg api.WalletWatchGET, err error) {
 // WalletWatchAddPost uses the /wallet/watch endpoint to add a set of addresses
 // to the watch set. The unused flag should be set to true if the addresses
 // have never appeared in the blockchain.
-func (c *Client) WalletWatchAddPost(addrs []types.UnlockHash, unused bool) error {
+func (c *Client) WalletWatchAddPost(addrs []types.Address, unused bool) error {
 	json, err := json.Marshal(api.WalletWatchPOST{
 		Addresses: addrs,
 		Remove:    false,
@@ -239,7 +225,7 @@ func (c *Client) WalletWatchAddPost(addrs []types.UnlockHash, unused bool) error
 // WalletWatchRemovePost uses the /wallet/watch endpoint to remove a set of
 // addresses from the watch set. The unused flag should be set to true if the
 // addresses have never appeared in the blockchain.
-func (c *Client) WalletWatchRemovePost(addrs []types.UnlockHash, unused bool) error {
+func (c *Client) WalletWatchRemovePost(addrs []types.Address, unused bool) error {
 	json, err := json.Marshal(api.WalletWatchPOST{
 		Addresses: addrs,
 		Remove:    true,

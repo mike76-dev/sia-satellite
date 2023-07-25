@@ -17,6 +17,6 @@
 # Various tools
 utils/
 
-# VSCode
+# VSCode files
 .vscode
 .DS_Store
