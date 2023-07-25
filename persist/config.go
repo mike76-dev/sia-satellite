@@ -2,12 +2,14 @@ package persist
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"encoding/json"
 	"os"
 	"path/filepath"
 
-	"gitlab.com/NebulousLabs/errors"
+	"github.com/mike76-dev/sia-satellite/modules"
 )
 
 // configFilename is the name of the configuration file.
@@ -51,7 +53,7 @@ func (sc *SatdConfig) Load(dir string) (ok bool, err error) {
 		return
 	}
 	if err != nil {
-		err = errors.AddContext(err, "failed to load the configuration")
+		err = fmt.Errorf("failed to load the configuration: %s", err)
 		return
 	}
 	ok = true
@@ -71,23 +73,23 @@ func loadJSON(meta satdMetadata, object interface{}, filename string) error {
 		return err
 	}
 	if err != nil {
-		return errors.AddContext(err, "unable to open persisted json object file")
+		return fmt.Errorf("unable to open persisted json object file: %s", err)
 	}
 	defer func() {
-		err = errors.Compose(err, file.Close())
+		err = modules.ComposeErrors(err, file.Close())
 	}()
 
 	// Read the metadata from the file.
 	var header, version string
 	dec := json.NewDecoder(file)
 	if err := dec.Decode(&header); err != nil {
-		return errors.AddContext(err, "unable to read header from persisted json object file")
+		return fmt.Errorf("unable to read header from persisted json object file: %s", err)
 	}
 	if header != meta.Header {
 		return errors.New("Wrong config file header")
 	}
 	if err := dec.Decode(&version); err != nil {
-		return errors.AddContext(err, "unable to read version from persisted json object file")
+		return fmt.Errorf("unable to read version from persisted json object file: %s", err)
 	}
 	if version != meta.Version {
 		return errors.New("Wrong config file version")
@@ -96,13 +98,13 @@ func loadJSON(meta satdMetadata, object interface{}, filename string) error {
 	// Read everything else.
 	remainingBytes, err := ioutil.ReadAll(dec.Buffered())
 	if err != nil {
-		return errors.AddContext(err, "unable to read persisted json object data")
+		return fmt.Errorf("unable to read persisted json object data: %s", err)
 	}
 	// The buffer may or may not have read the rest of the file, read the rest
 	// of the file to be certain.
 	remainingBytesExtra, err := ioutil.ReadAll(file)
 	if err != nil {
-		return errors.AddContext(err, "unable to read persisted json object data")
+		return fmt.Errorf("unable to read persisted json object data: %s", err)
 	}
 	remainingBytes = append(remainingBytes, remainingBytesExtra...)
 
@@ -116,16 +118,16 @@ func saveJSON(meta satdMetadata, object interface{}, filename string) error {
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)
 	if err := enc.Encode(meta.Header); err != nil {
-		return errors.AddContext(err, "unable to encode metadata header")
+		return fmt.Errorf("unable to encode metadata header: %s", err)
 	}
 	if err := enc.Encode(meta.Version); err != nil {
-		return errors.AddContext(err, "unable to encode metadata version")
+		return fmt.Errorf("unable to encode metadata version: %s", err)
 	}
 
 	// Marshal the object into json and write the result to the buffer.
 	objBytes, err := json.MarshalIndent(object, "", "\t")
 	if err != nil {
-		return errors.AddContext(err, "unable to marshal the provided object")
+		return fmt.Errorf("unable to marshal the provided object: %s", err)
 	}
 	buf.Write(objBytes)
 	data := buf.Bytes()
@@ -134,18 +136,18 @@ func saveJSON(meta satdMetadata, object interface{}, filename string) error {
 	err = func() (err error) {
 		file, err := os.OpenFile(filename, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0600)
 		if err != nil {
-			return errors.AddContext(err, "unable to open file")
+			return fmt.Errorf("unable to open file: %s", err)
 		}
 		defer func() {
-			err = errors.Compose(err, file.Close())
+			err = modules.ComposeErrors(err, file.Close())
 		}()
 		_, err = file.Write(data)
 		if err != nil {
-			return errors.AddContext(err, "unable to write file")
+			return fmt.Errorf("unable to write file: %s", err)
 		}
 		err = file.Sync()
 		if err != nil {
-			return errors.AddContext(err, "unable to sync file")
+			return fmt.Errorf("unable to sync file: %s", err)
 		}
 		return nil
 	}()

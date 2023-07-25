@@ -52,7 +52,7 @@ func (api *API) buildHTTPRoutes() {
 	}
 
 	// HostDB API Calls.
-	if api.satellite != nil {
+	if api.manager != nil {
 		router.GET("/hostdb", api.hostdbHandler)
 		router.GET("/hostdb/active", api.hostdbActiveHandler)
 		router.GET("/hostdb/all", api.hostdbAllHandler)
@@ -61,13 +61,15 @@ func (api *API) buildHTTPRoutes() {
 		router.POST("/hostdb/filtermode", RequirePassword(api.hostdbFilterModeHandlerPOST, requiredPassword))
 	}
 
-	// Satellite API Calls.
-	if api.satellite != nil {
-		router.GET("/satellite/renters", RequirePassword(api.satelliteRentersHandlerGET, requiredPassword))
-		router.GET("/satellite/renter/:publickey", RequirePassword(api.satelliteRenterHandlerGET, requiredPassword))
-		router.GET("/satellite/balance/:publickey", RequirePassword(api.satelliteBalanceHandlerGET, requiredPassword))
-		router.GET("/satellite/contracts", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))
-		router.GET("/satellite/contracts/:publickey", RequirePassword(api.satelliteContractsHandlerGET, requiredPassword))
+	// Manager API Calls.
+	if api.manager != nil {
+		router.GET("/manager/rate/:currency", api.managerRateHandlerGET)
+		router.GET("/manager/averages/:currency", api.managerAveragesHandlerGET)
+		router.GET("/manager/renters", RequirePassword(api.managerRentersHandlerGET, requiredPassword))
+		router.GET("/manager/renter/:publickey", RequirePassword(api.managerRenterHandlerGET, requiredPassword))
+		router.GET("/manager/balance/:publickey", RequirePassword(api.managerBalanceHandlerGET, requiredPassword))
+		router.GET("/manager/contracts", RequirePassword(api.managerContractsHandlerGET, requiredPassword))
+		router.GET("/manager/contracts/:publickey", RequirePassword(api.managerContractsHandlerGET, requiredPassword))
 	}
 
 	// Portal API Calls.

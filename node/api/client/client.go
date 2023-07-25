@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,9 +11,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
-
-	"gitlab.com/NebulousLabs/errors"
 )
 
 type (
@@ -99,10 +99,10 @@ func readAPIError(r io.Reader) error {
 	b, _ := ioutil.ReadAll(r)
 	if err := json.NewDecoder(bytes.NewReader(b)).Decode(&apiErr); err != nil {
 		fmt.Println("raw resp", string(b))
-		return errors.AddContext(err, "could not read error response")
+		return modules.AddContext(err, "could not read error response")
 	}
 
-	if strings.Contains(apiErr.Error(), ErrPeerExists.Error()) {
+	if modules.ContainsError(apiErr, ErrPeerExists) {
 		return ErrPeerExists
 	}
 
@@ -114,7 +114,7 @@ func readAPIError(r io.Reader) error {
 func (c *Client) getRawResponse(resource string) (http.Header, []byte, error) {
 	header, reader, err := c.getReaderResponse(resource)
 	if err != nil {
-		return nil, nil, errors.AddContext(err, "failed to get reader response")
+		return nil, nil, modules.AddContext(err, "failed to get reader response")
 	}
 	// Possible to get a nil reader if there is no response.
 	if reader == nil {
@@ -122,7 +122,7 @@ func (c *Client) getRawResponse(resource string) (http.Header, []byte, error) {
 	}
 	defer drainAndClose(reader)
 	d, err := ioutil.ReadAll(reader)
-	return header, d, errors.AddContext(err, "failed to read all bytes from reader")
+	return header, d, modules.AddContext(err, "failed to read all bytes from reader")
 }
 
 // getReaderResponse requests the specified resource. The response, if provided,
@@ -130,19 +130,19 @@ func (c *Client) getRawResponse(resource string) (http.Header, []byte, error) {
 func (c *Client) getReaderResponse(resource string) (http.Header, io.ReadCloser, error) {
 	req, err := c.NewRequest("GET", resource, nil)
 	if err != nil {
-		return nil, nil, errors.AddContext(err, "failed to construct GET request")
+		return nil, nil, modules.AddContext(err, "failed to construct GET request")
 	}
 	httpClient := http.Client{CheckRedirect: c.CheckRedirect}
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return nil, nil, errors.AddContext(err, "GET request failed")
+		return nil, nil, modules.AddContext(err, "GET request failed")
 	}
 
 	// Add ErrAPICallNotRecognized if StatusCode is StatusModuleNotLoaded to
 	// allow for handling of modules that are not loaded.
 	if res.StatusCode == api.StatusModuleNotLoaded {
-		err = errors.Compose(readAPIError(res.Body), api.ErrAPICallNotRecognized)
-		return nil, nil, errors.AddContext(err, "unable to perform GET on "+resource)
+		err = modules.ComposeErrors(readAPIError(res.Body), api.ErrAPICallNotRecognized)
+		return nil, nil, fmt.Errorf("unable to perform GET on %s: %s", resource, err)
 	}
 
 	// If the status code is not 2xx, decode and return the accompanying
@@ -150,7 +150,7 @@ func (c *Client) getReaderResponse(resource string) (http.Header, io.ReadCloser,
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		err := readAPIError(res.Body)
 		drainAndClose(res.Body)
-		return nil, nil, errors.AddContext(err, "GET request error")
+		return nil, nil, modules.AddContext(err, "GET request error")
 	}
 
 	if res.StatusCode == http.StatusNoContent {
@@ -166,28 +166,28 @@ func (c *Client) getReaderResponse(resource string) (http.Header, io.ReadCloser,
 func (c *Client) getRawPartialResponse(resource string, from, to uint64) ([]byte, error) {
 	req, err := c.NewRequest("GET", resource, nil)
 	if err != nil {
-		return nil, errors.AddContext(err, "failed to construct GET request")
+		return nil, modules.AddContext(err, "failed to construct GET request")
 	}
 	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", from, to - 1))
 
 	httpClient := http.Client{CheckRedirect: c.CheckRedirect}
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return nil, errors.AddContext(err, "GET request failed")
+		return nil, modules.AddContext(err, "GET request failed")
 	}
 	defer drainAndClose(res.Body)
 
 	// Add ErrAPICallNotRecognized if StatusCode is StatusModuleNotLoaded to allow for
 	// handling of modules that are not loaded.
 	if res.StatusCode == api.StatusModuleNotLoaded {
-		err = errors.Compose(readAPIError(res.Body), api.ErrAPICallNotRecognized)
-		return nil, errors.AddContext(err, "unable to perform GET on " + resource)
+		err = modules.ComposeErrors(readAPIError(res.Body), api.ErrAPICallNotRecognized)
+		return nil, fmt.Errorf("unable to perform GET on %s: %s", resource, err)
 	}
 
 	// If the status code is not 2xx, decode and return the accompanying
 	// api.Error.
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return nil, errors.AddContext(readAPIError(res.Body), "GET request error")
+		return nil, modules.AddContext(readAPIError(res.Body), "GET request error")
 	}
 
 	if res.StatusCode == http.StatusNoContent {
@@ -214,7 +214,7 @@ func (c *Client) get(resource string, obj interface{}) error {
 	buf := bytes.NewBuffer(data)
 	err = json.NewDecoder(buf).Decode(obj)
 	if err != nil {
-		return errors.AddContext(err, "could not read response")
+		return modules.AddContext(err, "could not read response")
 	}
 	return nil
 }
@@ -225,12 +225,12 @@ func (c *Client) get(resource string, obj interface{}) error {
 func (c *Client) head(resource string) (int, http.Header, error) {
 	req, err := c.NewRequest("HEAD", resource, nil)
 	if err != nil {
-		return 0, nil, errors.AddContext(err, "failed to construct HEAD request")
+		return 0, nil, modules.AddContext(err, "failed to construct HEAD request")
 	}
 	httpClient := http.Client{CheckRedirect: c.CheckRedirect}
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return 0, nil, errors.AddContext(err, "HEAD request failed")
+		return 0, nil, modules.AddContext(err, "HEAD request failed")
 	}
 	return res.StatusCode, res.Header, nil
 }
@@ -251,7 +251,7 @@ func (c *Client) postRawResponse(resource string, body io.Reader) (http.Header, 
 func (c *Client) postRawResponseWithHeaders(resource string, body io.Reader, headers http.Header) (http.Header, []byte, error) {
 	req, err := c.NewRequest("POST", resource, body)
 	if err != nil {
-		return http.Header{}, nil, errors.AddContext(err, "failed to construct POST request")
+		return http.Header{}, nil, modules.AddContext(err, "failed to construct POST request")
 	}
 
 	// Decorate the headers on the request object.
@@ -264,21 +264,21 @@ func (c *Client) postRawResponseWithHeaders(resource string, body io.Reader, hea
 	httpClient := http.Client{CheckRedirect: c.CheckRedirect}
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return http.Header{}, nil, errors.AddContext(err, "POST request failed")
+		return http.Header{}, nil, modules.AddContext(err, "POST request failed")
 	}
 	defer drainAndClose(res.Body)
 
 	// Add ErrAPICallNotRecognized if StatusCode is StatusModuleNotLoaded to allow for
 	// handling of modules that are not loaded.
 	if res.StatusCode == api.StatusModuleNotLoaded {
-		err = errors.Compose(readAPIError(res.Body), api.ErrAPICallNotRecognized)
-		return http.Header{}, nil, errors.AddContext(err, "unable to perform POST on " + resource)
+		err = modules.ComposeErrors(readAPIError(res.Body), api.ErrAPICallNotRecognized)
+		return http.Header{}, nil, fmt.Errorf("unable to perform POST on %s: %s", resource, err)
 	}
 
 	// If the status code is not 2xx, decode and return the accompanying
 	// api.Error.
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return http.Header{}, nil, errors.AddContext(readAPIError(res.Body), "POST request error")
+		return http.Header{}, nil, modules.AddContext(readAPIError(res.Body), "POST request error")
 	}
 
 	if res.StatusCode == http.StatusNoContent {
@@ -306,7 +306,7 @@ func (c *Client) post(resource string, data string, obj interface{}) error {
 	buf := bytes.NewBuffer(body)
 	err = json.NewDecoder(buf).Decode(obj)
 	if err != nil {
-		return errors.AddContext(err, "could not read response")
+		return modules.AddContext(err, "could not read response")
 	}
 	return nil
 }
