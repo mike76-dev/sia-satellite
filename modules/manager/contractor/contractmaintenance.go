@@ -278,13 +278,13 @@ func (c *Contractor) managedFindMinAllowedHostScores(rpk types.PublicKey) (types
 	if !exists {
 		return types.Currency{}, types.Currency{}, ErrRenterNotFound
 	}
-	
+
 	// Pull a new set of hosts from the hostdb that could be used as a new set
 	// to match the allowance. The lowest scoring host of these new hosts will
 	// be used as a baseline for determining whether our existing contracts are
 	// worthwhile.
 	hostCount := int(renter.Allowance.Hosts)
-	hosts, err := c.hdb.RandomHostsWithAllowance(hostCount + randomHostsBufferForScore, nil, nil, renter.Allowance)
+	hosts, err := c.hdb.RandomHostsWithAllowance(hostCount+randomHostsBufferForScore, nil, nil, renter.Allowance)
 	if err != nil {
 		return types.Currency{}, types.Currency{}, err
 	}
@@ -441,7 +441,7 @@ func (c *Contractor) threadedContractMaintenance() {
 	}
 
 	// Get the current block height.
-	/*c.mu.Lock()
+	c.mu.Lock()
 	blockHeight := c.blockHeight
 	c.mu.Unlock()
 
@@ -467,17 +467,16 @@ func (c *Contractor) threadedContractMaintenance() {
 
 		// Check if the contract needs to be renewed because it is about to
 		// expire.
-		if blockHeight + renter.Allowance.RenewWindow >= contract.EndHeight {
+		if blockHeight+renter.Allowance.RenewWindow >= contract.EndHeight {
 			renewAmount, err := c.managedEstimateRenewFundingRequirements(contract, blockHeight, renter.Allowance)
 			if err != nil {
 				c.log.Println("WARN: contract skipped because there was an error estimating renew funding requirements", renewAmount, err)
 				continue
 			}
 			renewSet = append(renewSet, fileContractRenewal{
-				id:           contract.ID,
+				contract:     contract,
 				amount:       renewAmount,
 				renterPubKey: renter.PublicKey,
-				hostPubKey:   contract.HostPublicKey,
 				secretKey:    renter.PrivateKey,
 			})
 		}
@@ -488,7 +487,7 @@ func (c *Contractor) threadedContractMaintenance() {
 	}
 
 	// Go through the contracts we've assembled for renewal.
-	hastings, _ := types.SiacoinPrecision.Float64()
+	hastings := modules.Float64(types.HastingsPerSiacoin)
 	for _, renewal := range renewSet {
 		// Return here if an interrupt or kill signal has been sent.
 		select {
@@ -505,16 +504,16 @@ func (c *Contractor) threadedContractMaintenance() {
 
 		// Get the renter. The error is ignored since we know already that
 		// the renter exists.
-		renter, _ := c.managedFindRenter(renewal.id)
+		renter, _ := c.managedFindRenter(renewal.contract.ID)
 
 		// Check if the renter has a sufficient balance.
-		ub, err := c.satellite.GetBalance(renter.Email)
+		ub, err := c.m.GetBalance(renter.Email)
 		if err != nil {
 			c.log.Println("ERROR: couldn't get renter balance:", err)
 			continue
 		}
-		cost, _ := renewal.amount.Float64()
-		if ub.Balance < cost / hastings {
+		cost := modules.Float64(renewal.amount)
+		if ub.Balance < cost/hastings {
 			c.log.Println("INFO: renewal skipped, because renter balance is insufficient")
 			continue
 		}
@@ -522,32 +521,32 @@ func (c *Contractor) threadedContractMaintenance() {
 		// Renew one contract. The error is ignored because the renew function
 		// already will have logged the error, and in the event of an error,
 		// 'fundsSpent' will return '0'.
-		fundsSpent, newContract, err := c.managedRenewContract(renewal, blockHeight, renter.ContractEndHeight())
-		if errors.Contains(err, errContractNotGFR) {
+		fundsSpent, newContract, err := c.managedRenewContract(renewal.contract, renewal.renterPubKey, renewal.secretKey, renewal.amount, renter.ContractEndHeight())
+		if modules.ContainsError(err, errContractNotGFR) {
 			// Do not add a renewal error.
-			c.log.Println("INFO: contract skipped because it is not good for renew", renewal.id)
+			c.log.Println("INFO: contract skipped because it is not good for renew", renewal.contract.ID)
 		} else if err != nil {
-			c.log.Println("ERROR: error renewing a contract", renewal.id, err)
-			renewErr = errors.Compose(renewErr, err)
+			c.log.Println("ERROR: error renewing a contract", renewal.contract.ID, err)
+			renewErr = modules.ComposeErrors(renewErr, err)
 			numRenewFails++
 		}
 
 		if err == nil {
 			// Lock the funds in the database.
-			funds, _ := fundsSpent.Float64()
+			funds := modules.Float64(fundsSpent)
 			amount := funds / hastings
-			err = c.satellite.LockSiacoins(renter.Email, amount)
+			err = c.m.LockSiacoins(renter.Email, amount)
 			if err != nil {
 				c.log.Println("ERROR: couldn't lock funds")
 			}
 			// Increment the number of renewals in the database.
-			err = c.satellite.IncrementStats(renter.Email, true)
+			err = c.m.IncrementStats(renter.Email, true)
 			if err != nil {
 				c.log.Println("ERROR: couldn't update stats")
 			}
 
 			// Add this contract to the contractor and save.
-			err = c.managedAcquireAndUpdateContractUtility(newContract.ID, smodules.ContractUtility{
+			err = c.managedAcquireAndUpdateContractUtility(newContract.ID, modules.ContractUtility{
 				GoodForUpload: true,
 				GoodForRenew:  true,
 			})
@@ -569,12 +568,12 @@ func (c *Contractor) threadedContractMaintenance() {
 	// use to track how many times consecutively we failed to renew a contract
 	// with a host, so that we know if we need to abandon that host.
 	c.mu.Lock()
-	newFirstFailedRenew := make(map[types.FileContractID]types.BlockHeight)
+	newFirstFailedRenew := make(map[types.FileContractID]uint64)
 	for _, r := range renewSet {
-		if _, exists := c.numFailedRenews[r.id]; exists {
-			newFirstFailedRenew[r.id] = c.numFailedRenews[r.id]
+		if _, exists := c.numFailedRenews[r.contract.ID]; exists {
+			newFirstFailedRenew[r.contract.ID] = c.numFailedRenews[r.contract.ID]
 		}
 	}
 	c.numFailedRenews = newFirstFailedRenew
-	c.mu.Unlock()*/
+	c.mu.Unlock()
 }
