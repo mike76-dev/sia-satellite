@@ -16,3 +16,7 @@
 
 # Various tools
 utils/
+
+# VSCode
+.vscode
+.DS_Store
