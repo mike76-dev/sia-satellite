@@ -6,15 +6,11 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/mike76-dev/sia-satellite/internal/build"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/node/api/client"
 	"github.com/spf13/cobra"
-
-	"gitlab.com/NebulousLabs/errors"
-
-	"go.sia.tech/siad/build"
-	smodules "go.sia.tech/siad/modules"
 )
 
 var (
@@ -89,7 +85,7 @@ func statuscmd() {
 
 	// Consensus Info.
 	cg, err := httpClient.ConsensusGet()
-	if errors.Contains(err, api.ErrAPICallNotRecognized) {
+	if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Consensus:\n  Status: %s\n\n", moduleNotReadyStatus)
 	} else if err != nil {
@@ -103,7 +99,7 @@ func statuscmd() {
 
 	// Wallet Info.
 	walletStatus, err := httpClient.WalletGet()
-	if errors.Contains(err, api.ErrAPICallNotRecognized) {
+	if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Wallet:\n  Status: %s\n\n", moduleNotReadyStatus)
 	} else if err != nil {
@@ -112,57 +108,27 @@ func statuscmd() {
 		fmt.Printf(`Wallet:
   Status:          unlocked
   Siacoin Balance: %v
-`, modules.CurrencyUnits(walletStatus.ConfirmedSiacoinBalance))
+`, walletStatus.ConfirmedSiacoinBalance)
 	} else {
 		fmt.Printf(`Wallet:
   Status: Locked
 `)
 	}
 
-	// Satellite Info.
-	renters, err := httpClient.SatelliteRentersGet()
+	// Manager Info.
+	renters, err := httpClient.ManagerRentersGet()
 	if err != nil {
 		die(err)
 	}
-	contracts, err := httpClient.SatelliteContractsGet("")
+	contracts, err := httpClient.ManagerContractsGet("")
 	if err != nil {
 		die(err)
 	}
 
-	fmt.Printf(`Satellite:
+	fmt.Printf(`Manager:
   Renters:          %v
   Active Contracts: %v
 `, len(renters.Renters), len(contracts.ActiveContracts))
-
-	// Gateway Rate Limits.
-	gg, err := httpClient.GatewayGet()
-	if err != nil {
-		die("Could not get gateway:", err)
-	}
-	fmt.Printf(`
-Gateway `)
-	rateLimitSummary(gg.MaxDownloadSpeed, gg.MaxUploadSpeed)
-}
-
-// rateLimitSummary displays the a summary of the provided rate limits.
-func rateLimitSummary(download, upload int64) {
-	fmt.Printf(`Rate limits: `)
-	if download == 0 {
-		fmt.Printf(`
-  Download Speed: %v`, "no limit")
-	} else {
-		fmt.Printf(`
-  Download Speed: %v`, ratelimitUnits(download))
-	}
-	if upload == 0 {
-		fmt.Printf(`
-  Upload Speed:   %v
-`, "no limit")
-	} else {
-		fmt.Printf(`
-  Upload Speed:   %v
-`, ratelimitUnits(upload))
-	}
 }
 
 func main() {
@@ -180,7 +146,7 @@ func main() {
 		// Check for Critical Alerts.
 		alerts, err := httpClient.DaemonAlertsGet()
 		if err == nil && len(alerts.CriticalAlerts) > 0 && !alertSuppress {
-			printAlerts(alerts.CriticalAlerts, smodules.SeverityCritical)
+			printAlerts(alerts.CriticalAlerts, modules.SeverityCritical)
 			fmt.Println("------------------")
 			fmt.Printf("\n  The above %v critical alerts should be resolved ASAP\n\n", len(alerts.CriticalAlerts))
 		}
@@ -205,37 +171,40 @@ func initCmds() *cobra.Command {
 		Run:   wrap(statuscmd),
 	}
 
+	// Daemon Commands.
+	root.AddCommand(alertsCmd, stopCmd, versionCmd)
+
+
 	// Create command tree (alphabetized by root command).
 	root.AddCommand(consensusCmd)
 
 	root.AddCommand(gatewayCmd)
-	gatewayCmd.AddCommand(gatewayAddressCmd, gatewayBandwidthCmd, gatewayBlocklistCmd, gatewayConnectCmd, gatewayDisconnectCmd, gatewayListCmd, gatewayRatelimitCmd)
+	gatewayCmd.AddCommand(gatewayAddressCmd, gatewayBlocklistCmd, gatewayConnectCmd, gatewayDisconnectCmd, gatewayListCmd)
 	gatewayBlocklistCmd.AddCommand(gatewayBlocklistAppendCmd, gatewayBlocklistClearCmd, gatewayBlocklistRemoveCmd, gatewayBlocklistSetCmd)
 
 	root.AddCommand(hostdbCmd)
 	hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
 	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
 
-	root.AddCommand(satelliteCmd)
-	satelliteCmd.AddCommand(satelliteRentersCmd, satelliteRenterCmd, satelliteBalanceCmd, satelliteContractsCmd)
+	root.AddCommand(managerCmd)
+	managerCmd.AddCommand(managerRateCmd)
+	managerCmd.AddCommand(managerAveragesCmd)
+	managerCmd.AddCommand(managerRentersCmd, managerRenterCmd, managerBalanceCmd, managerContractsCmd)
 
 	root.AddCommand(portalCmd)
 	portalCmd.AddCommand(portalSetCmd)
 
-	// Daemon Commands.
-	root.AddCommand(alertsCmd, stopCmd, versionCmd)
-
 	root.AddCommand(walletCmd)
-	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangepasswordCmd,
-		walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd,
-		walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)
+	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangePasswordCmd, walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd, walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)
 	walletInitCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Prompt for a custom password")
 	walletInitCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet and re-encrypt")
+	walletInitCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
 	walletInitSeedCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet")
 	walletInitSeedCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
 	walletLoadCmd.AddCommand(walletLoadSeedCmd)
 	walletSendCmd.AddCommand(walletSendSiacoinsCmd)
 	walletSendSiacoinsCmd.Flags().BoolVarP(&walletTxnFeeIncluded, "fee-included", "", false, "Take the transaction fee out of the balance being submitted instead of the fee being additional")
+	walletChangePasswordCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
 	walletUnlockCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
 	walletUnlockCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Display interactive password prompt even if SATD_WALLET_PASSWORD is set")
 	walletBroadcastCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Decode transaction as base64 instead of JSON")
@@ -246,7 +215,7 @@ func initCmds() *cobra.Command {
 	return root
 }
 
-// initClient initializes client cmd flags and default values
+// initClient initializes client cmd flags and default values.
 func initClient(root *cobra.Command, verbose *bool, client *client.Client, alertSuppress *bool) {
 	root.PersistentFlags().BoolVarP(verbose, "verbose", "v", false, "Display additional information")
 	root.PersistentFlags().StringVarP(&client.Address, "addr", "a", "localhost:9990", "which host/port to communicate with (i.e. the host/port satd is listening on)")
@@ -255,11 +224,11 @@ func initClient(root *cobra.Command, verbose *bool, client *client.Client, alert
 	root.PersistentFlags().BoolVarP(alertSuppress, "alert-suppress", "s", false, "suppress satc alerts")
 }
 
-// setAPIPasswordIfNotSet sets API password if it was not set
+// setAPIPasswordIfNotSet sets API password if it was not set.
 func setAPIPasswordIfNotSet() {
-	// Check if the API Password is set
+	// Check if the API Password is set.
 	if httpClient.Password == "" {
-		// No password passed in, fetch the API Password
+		// No password passed in, fetch the API Password.
 		pwd := os.Getenv("SATD_API_PASSWORD")
 		if pwd == "" {
 			fmt.Println("Exiting: Error getting API Password")

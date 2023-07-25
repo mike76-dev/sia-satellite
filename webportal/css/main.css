@@ -144,6 +144,10 @@ button:disabled {
 	display: none!important;
 }
 
+.fineprint {
+	font-size: 0.8rem;
+}
+
 .checkbox-container {
 	display: flex;
 	flex-direction: row;

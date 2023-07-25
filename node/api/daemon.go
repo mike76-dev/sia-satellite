@@ -5,9 +5,8 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-
-	"go.sia.tech/siad/build"
-	"go.sia.tech/siad/modules"
+	"github.com/mike76-dev/sia-satellite/internal/build"
+	"github.com/mike76-dev/sia-satellite/modules"
 )
 
 type (

@@ -779,7 +779,7 @@ function renderContracts() {
 		if (i >= contractsFrom + contractsStep - 1) return;
 		tr = document.createElement('tr');
 		tr.innerHTML = '<td>' + (i + 1) + '</td>';
-		tr.innerHTML += '<td class="cell-overflow">' + row.id + '</td>';
+		tr.innerHTML += '<td class="cell-overflow">' + row.id.slice(row.id.indexOf(':') + 1) + '</td>';
 		tr.innerHTML += '<td>' + row.startheight + '</td>';
 		tr.innerHTML += '<td>' + row.endheight + '</td>';
 		tr.innerHTML += '<td class="cell-overflow">' + row.netaddress + '</td>';

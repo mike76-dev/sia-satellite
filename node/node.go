@@ -4,24 +4,19 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"time"
 
-	"gitlab.com/NebulousLabs/errors"
-	"gitlab.com/NebulousLabs/siamux"
-
 	"github.com/go-sql-driver/mysql"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/modules/consensus"
+	"github.com/mike76-dev/sia-satellite/modules/gateway"
+	"github.com/mike76-dev/sia-satellite/modules/manager"
+	"github.com/mike76-dev/sia-satellite/modules/portal"
+	"github.com/mike76-dev/sia-satellite/modules/provider"
+	"github.com/mike76-dev/sia-satellite/modules/transactionpool"
+	"github.com/mike76-dev/sia-satellite/modules/wallet"
 	"github.com/mike76-dev/sia-satellite/persist"
-	"github.com/mike76-dev/sia-satellite/portal"
-	"github.com/mike76-dev/sia-satellite/satellite"
-
-	smodules "go.sia.tech/siad/modules"
-	"go.sia.tech/siad/modules/consensus"
-	"go.sia.tech/siad/modules/gateway"
-	"go.sia.tech/siad/modules/transactionpool"
-	"go.sia.tech/siad/modules/wallet"
 )
 
 // Node represents a satellite node containing all required modules.
@@ -29,17 +24,14 @@ type Node struct {
 	// MySQL database.
 	DB         *sql.DB
 
-	// The mux of the node.
-	Mux    *siamux.SiaMux
-	muxLog *os.File
-
 	// The modules of the node.
-	ConsensusSet    smodules.ConsensusSet
-	Gateway         smodules.Gateway
+	ConsensusSet    modules.ConsensusSet
+	Gateway         modules.Gateway
+	Manager         modules.Manager
 	Portal          modules.Portal
-	Satellite       modules.Satellite
-	TransactionPool smodules.TransactionPool
-	Wallet          smodules.Wallet
+	Provider        modules.Provider
+	TransactionPool modules.TransactionPool
+	Wallet          modules.Wallet
 
 	// The high level directory where all the persistence gets stored for the
 	// modules.
@@ -51,35 +43,35 @@ type Node struct {
 func (n *Node) Close() (err error) {
 	if n.Portal != nil {
 		fmt.Println("Closing portal...")
-		err = errors.Compose(err, n.Portal.Close())
+		err = modules.ComposeErrors(err, n.Portal.Close())
 	}
-	if n.Satellite != nil {
-		fmt.Println("Closing satellite...")
-		err = errors.Compose(err, n.Satellite.Close())
+	if n.Provider != nil {
+		fmt.Println("Closing provider...")
+		err = modules.ComposeErrors(err, n.Provider.Close())
+	}
+	if n.Manager != nil {
+		fmt.Println("Closing manager...")
+		err = modules.ComposeErrors(err, n.Manager.Close())
 	}
 	if n.Wallet != nil {
 		fmt.Println("Closing wallet...")
-		err = errors.Compose(err, n.Wallet.Close())
+		err = modules.ComposeErrors(err, n.Wallet.Close())
 	}
 	if n.TransactionPool != nil {
 		fmt.Println("Closing transaction pool...")
-		err = errors.Compose(err, n.TransactionPool.Close())
+		err = modules.ComposeErrors(err, n.TransactionPool.Close())
 	}
 	if n.ConsensusSet != nil {
 		fmt.Println("Closing consensus...")
-		err = errors.Compose(err, n.ConsensusSet.Close())
+		err = modules.ComposeErrors(err, n.ConsensusSet.Close())
 	}
 	if n.Gateway != nil {
 		fmt.Println("Closing gateway...")
-		err = errors.Compose(err, n.Gateway.Close())
-	}
-	if n.Mux != nil {
-		fmt.Println("Closing siamux...")
-		err = errors.Compose(err, n.Mux.Close(), n.muxLog.Close())
+		err = modules.ComposeErrors(err, n.Gateway.Close())
 	}
 	if n.DB != nil {
 		fmt.Println("Closing database...")
-		err = errors.Compose(err, n.DB.Close())
+		err = modules.ComposeErrors(err, n.DB.Close())
 	}
 	return err
 }
@@ -112,83 +104,63 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	if err != nil {
 		log.Fatalf("MySQL database not responding: %v\n", err)
 	}
-
-	// Create the siamux.
-	mux, muxLog, err := smodules.NewSiaMux(filepath.Join(d, "siamux"), d, config.SiamuxAddr, config.SiamuxWSAddr)
-	if err != nil {
-		errChan <- errors.Extend(err, errors.New("unable to create siamux"))
-		return nil, errChan
-	}
+	db.SetConnMaxLifetime(time.Minute * 3)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
 
 	// Load gateway.
 	fmt.Println("Loading gateway...")
-	gatewayDir := filepath.Join(d, "gateway")
-	if err := os.MkdirAll(gatewayDir, 0700); err != nil {
-		return nil, errChan
-	}
-	g, err := gateway.New(config.GatewayAddr, config.Bootstrap, gatewayDir)
+	g, err := gateway.New(db, config.GatewayAddr, config.Bootstrap, true, d)
 	if err != nil {
-		errChan <- errors.Extend(err, errors.New("unable to create gateway"))
+		errChan <- modules.AddContext(err, "unable to create gateway")
 		return nil, errChan
 	}
 
 	// Load consensus.
 	fmt.Println("Loading consensus...")
-	consensusDir := filepath.Join(d, "consensus")
-	if err := os.MkdirAll(consensusDir, 0700); err != nil {
-		return nil, errChan
-	}
-	cs, errChanCS := consensus.New(g, config.Bootstrap, consensusDir)
-	if err := smodules.PeekErr(errChanCS); err != nil {
-		errChan <- errors.Extend(err, errors.New("unable to create consensus set"))
+	cs, errChanCS := consensus.New(db, g, config.Bootstrap, d)
+	if err := modules.PeekErr(errChanCS); err != nil {
+		errChan <- modules.AddContext(err, "unable to create consensus set")
 		return nil, errChan
 	}
 
 	// Load transaction pool.
 	fmt.Println("Loading transaction pool...")
-	tpoolDir := filepath.Join(d, "transactionpool")
-	if err := os.MkdirAll(tpoolDir, 0700); err != nil {
-		return nil, errChan
-	}
-	tp, err := transactionpool.New(cs, g, tpoolDir)
+	tp, err := transactionpool.New(db, cs, g, d)
 	if err != nil {
-		errChan <- errors.Extend(err, errors.New("unable to create transaction pool"))
+		errChan <- modules.AddContext(err, "unable to create transaction pool")
 		return nil, errChan
 	}
 
 	// Load wallet.
 	fmt.Println("Loading wallet...")
-	walletDir := filepath.Join(d, "wallet")
-	if err := os.MkdirAll(walletDir, 0700); err != nil {
-		return nil, errChan
-	}
-	w, err := wallet.New(cs, tp, walletDir)
+	w, err := wallet.New(db, cs, tp, d)
 	if err != nil {
-		errChan <- errors.Extend(err, errors.New("unable to create wallet"))
+		errChan <- modules.AddContext(err, "unable to create wallet")
 		return nil, errChan
 	}
 
-	// Load satellite.
-	fmt.Println("Loading satellite...")
-	satDir := filepath.Join(d, "satellite")
-	if err := os.MkdirAll(satDir, 0700); err != nil {
+	// Load manager.
+	fmt.Println("Loading manager...")
+	m, errChanM := manager.New(db, cs, g, tp, w, d)
+	if err := modules.PeekErr(errChanM); err != nil {
+		errChan <- modules.AddContext(err, "unable to create manager")
 		return nil, errChan
 	}
-	s, errChanS := satellite.New(cs, g, tp, w, db, mux, config.SatelliteAddr, satDir)
-	if err := smodules.PeekErr(errChanS); err != nil {
-		errChan <- errors.Extend(err, errors.New("unable to create satellite"))
+
+	// Load provider.
+	fmt.Println("Loading provider...")
+	p, errChanP := provider.New(db, g, m, config.SatelliteAddr, d)
+	if err := modules.PeekErr(errChanP); err != nil {
+		errChan <- modules.AddContext(err, "unable to create provider")
 		return nil, errChan
 	}
 
 	// Load portal.
 	fmt.Println("Loading portal...")
-	portalDir := filepath.Join(d, "portal")
-	if err := os.MkdirAll(portalDir, 0700); err != nil {
-		return nil, errChan
-	}
-	p, err := portal.New(config, s, db, portalDir)
+	pt, err := portal.New(config, db, m, p, d)
 	if err != nil {
-		errChan <- errors.Extend(err, errors.New("unable to create portal"))
+		errChan <- modules.AddContext(err, "unable to create portal")
 		return nil, errChan
 	}
 
@@ -201,13 +173,11 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 	return &Node{
 		DB: db,
 
-		Mux:    mux,
-		muxLog: muxLog,
-
 		ConsensusSet:    cs,
 		Gateway:         g,
-		Portal:          p,
-		Satellite:       s,
+		Manager:         m,
+		Portal:          pt,
+		Provider:        p,
 		TransactionPool: tp,
 		Wallet:          w,
 

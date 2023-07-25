@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/spf13/cobra"
-
-	"gitlab.com/NebulousLabs/errors"
 )
 
 var (
@@ -22,7 +22,7 @@ var (
 // Prints the current state of consensus.
 func consensuscmd() {
 	cg, err := httpClient.ConsensusGet()
-	if errors.Contains(err, api.ErrAPICallNotRecognized) {
+	if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
 		// Assume module is not loaded if status command is not recognized.
 		fmt.Printf("Consensus:\n  Status: %s\n\n", moduleNotReadyStatus)
 		return
@@ -38,8 +38,17 @@ Target:     %v
 Difficulty: %v
 `, yesNo(cg.Synced), cg.CurrentBlock, cg.Height, cg.Target, cg.Difficulty)
 	} else {
+		estimatedHeight := (time.Now().Unix() - modules.GenesisTimestamp.Unix()) / modules.BlockFrequency
+		estimatedProgress := float64(cg.Height) / float64(estimatedHeight) * 100
+		if estimatedProgress > 100 {
+			estimatedProgress = 99.9
+		}
+		if estimatedProgress == 100 && !cg.Synced {
+			estimatedProgress = 99.9
+		}
 		fmt.Printf(`Synced: %v
 Height: %v
-`, yesNo(cg.Synced), cg.Height)
+Progress (estimated): %.1f%%
+`, yesNo(cg.Synced), cg.Height, estimatedProgress)
 	}
 }
