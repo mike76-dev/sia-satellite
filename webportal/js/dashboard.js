@@ -1016,7 +1016,9 @@ function getSettings() {
 				console.log(data);
 			} else {
 				let ar = document.getElementById('settings-autorenew');
+				let md = document.getElementById('settings-metadata')
 				ar.checked = data.autorenew;
+				md.checked = data.backupmetadata;
 			}
 		})
 		.catch(error => console.log(error));
