@@ -321,3 +321,61 @@ func (w *watchdog) load() error {
 
 	return tx.Commit()
 }
+
+// DeleteMetadata deletes the renter's saved file metadata.
+func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
+	var objects, slabs []types.Hash256
+	rows, err := c.db.Query("SELECT id FROM ctr_metadata WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		c.log.Println("ERROR: unable to retrieve metadata", err)
+	}
+
+	for rows.Next() {
+		id := make([]byte, 32)
+		if err := rows.Scan(&id); err != nil {
+			c.log.Println("ERROR: unable to retrieve metadata key:", err)
+			continue
+		}
+		var key types.Hash256
+		copy(key[:], id)
+		objects = append(objects, key)
+
+		slabRows, err := c.db.Query("SELECT id FROM ctr_slabs WHERE object_id = ?", id)
+		if err != nil {
+			c.log.Println("ERROR: unable to retrieve slabs:", err)
+			continue
+		}
+
+		for slabRows.Next() {
+			slabID := make([]byte, 32)
+			if err := slabRows.Scan(&slabID); err != nil {
+				c.log.Println("ERROR: unable to retrieve slab:", err)
+				continue
+			}
+			var slab types.Hash256
+			copy(slab[:], slabID)
+			slabs = append(slabs, slab)
+		}
+		slabRows.Close()
+	}
+	rows.Close()
+
+	for _, slab := range slabs {
+		_, err = c.db.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab[:])
+		if err != nil {
+			c.log.Println("ERROR: unable to delete shards", err)
+		}
+	}
+
+	for _, object := range objects {
+		_, err = c.db.Exec("DELETE FROM ctr_slabs WHERE object_id = ?", object[:])
+		if err != nil {
+			c.log.Println("ERROR: unable to delete slabs", err)
+		}
+	}
+
+	_, err = c.db.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		c.log.Println("ERROR: unable to delete metadata", err)
+	}
+}

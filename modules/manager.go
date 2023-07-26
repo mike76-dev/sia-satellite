@@ -296,6 +296,9 @@ type Manager interface {
 	// CreateNewRenter inserts a new renter into the map.
 	CreateNewRenter(string, types.PublicKey)
 
+	// DeleteMetadata deletes the renter's saved file metadata.
+	DeleteMetadata(types.PublicKey)
+
 	// DeleteRenter deletes the renter data from the memory.
 	DeleteRenter(string)
 

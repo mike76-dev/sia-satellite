@@ -69,6 +69,9 @@ type hostContractor interface {
 	// of the renter began.
 	CurrentPeriod(types.PublicKey) uint64
 
+	// DeleteMetadata deletes the renter's saved file metadata.
+	DeleteMetadata(types.PublicKey)
+
 	// GetRenter returns the renter with the given public key.
 	GetRenter(types.PublicKey) (modules.Renter, error)
 
@@ -197,15 +200,15 @@ func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.T
 
 	// Create the Manager object.
 	m := &Manager{
-		cs:             cs,
-		db:             db,
-		hostDB:         hdb,
-		tpool:          tpool,
-		wallet:         wallet,
+		cs:     cs,
+		db:     db,
+		hostDB: hdb,
+		tpool:  tpool,
+		wallet: wallet,
 
 		exchRates: make(map[string]float64),
 
-		staticAlerter:  modules.NewAlerter("manager"),
+		staticAlerter: modules.NewAlerter("manager"),
 	}
 
 	// Create the Contractor.
@@ -406,7 +409,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 		}
 		// Grab hosts to perform the estimation.
 		var err error
-		randHosts, err := m.hostDB.RandomHostsWithAllowance(int(allowance.Hosts) - len(hosts), pks, pks, allowance)
+		randHosts, err := m.hostDB.RandomHostsWithAllowance(int(allowance.Hosts)-len(hosts), pks, pks, allowance)
 		if err != nil {
 			return 0, allowance, modules.AddContext(err, "could not generate estimate, could not get random hosts")
 		}
@@ -920,4 +923,9 @@ func (m *Manager) FeeEstimation() (min, max types.Currency) { return m.tpool.Fee
 func (m *Manager) GetWalletSeed() (seed modules.Seed, err error) {
 	seed, _, err = m.wallet.PrimarySeed()
 	return
+}
+
+// DeleteMetadata deletes the renter's saved file metadata.
+func (m *Manager) DeleteMetadata(pk types.PublicKey) {
+	m.hostContractor.DeleteMetadata(pk)
 }

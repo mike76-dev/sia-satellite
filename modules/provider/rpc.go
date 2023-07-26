@@ -578,6 +578,11 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		return err
 	}
 
+	// Delete file metadata if opted out.
+	if !usr.BackupFileMetadata {
+		p.m.DeleteMetadata(usr.PubKey)
+	}
+
 	// If not opted in, return.
 	if !usr.AutoRenewContracts {
 		return s.WriteResponse(nil)
