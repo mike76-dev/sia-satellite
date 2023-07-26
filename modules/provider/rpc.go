@@ -503,6 +503,7 @@ func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
 
 	resp := getSettingsResponse{
 		AutoRenewContracts: renter.Settings.AutoRenewContracts,
+		BackupFileMetadata: renter.Settings.BackupFileMetadata,
 	}
 
 	return s.WriteResponse(&resp)
@@ -569,6 +570,7 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	// Update the settings.
 	err = p.m.UpdateRenterSettings(usr.PubKey, modules.RenterSettings{
 		AutoRenewContracts: usr.AutoRenewContracts,
+		BackupFileMetadata: usr.BackupFileMetadata,
 	}, usr.PrivateKey)
 	if err != nil {
 		err = fmt.Errorf("couldn't update settings: %v", err)

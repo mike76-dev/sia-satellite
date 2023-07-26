@@ -24,7 +24,7 @@ func (c *Contractor) initDB() error {
 	_, err = c.db.Exec(`
 		INSERT INTO ctr_info (height, last_change, synced)
 		VALUES (?, ?, ?)
-	`, 0,modules.ConsensusChangeBeginning[:], false)
+	`, 0, modules.ConsensusChangeBeginning[:], false)
 	return err
 }
 
@@ -77,9 +77,10 @@ func (c *Contractor) UpdateRenter(renter modules.Renter) error {
 	e.Flush()
 	_, err := c.db.Exec(`
 		UPDATE ctr_renters
-		SET current_period = ?, allowance = ?, private_key = ?, auto_renew_contracts = ?
+		SET current_period = ?, allowance = ?, private_key = ?,
+		auto_renew_contracts = ?, backup_file_metadata = ?
 		WHERE email = ?
-	`, renter.CurrentPeriod, buf.Bytes(), renter.PrivateKey, renter.Settings.AutoRenewContracts, renter.Email)
+	`, renter.CurrentPeriod, buf.Bytes(), renter.PrivateKey, renter.Settings.AutoRenewContracts, renter.Settings.BackupFileMetadata, renter.Email)
 	return err
 }
 
@@ -196,7 +197,7 @@ func (c *Contractor) loadRenewHistory() error {
 func (c *Contractor) loadRenters() error {
 	rows, err := c.db.Query(`
 		SELECT email, public_key, current_period,
-		allowance, private_key, auto_renew_contracts
+		allowance, private_key, auto_renew_contracts, backup_file_metadata
 		FROM ctr_renters
 	`)
 	if err != nil {
@@ -211,8 +212,8 @@ func (c *Contractor) loadRenters() error {
 		var aBytes []byte
 		var period uint64
 		sk := make([]byte, 64)
-		var autoRenew bool
-		if err := rows.Scan(&email, &pk, &period, &aBytes, &sk, &autoRenew); err != nil {
+		var autoRenew, backupMetadata bool
+		if err := rows.Scan(&email, &pk, &period, &aBytes, &sk, &autoRenew, &backupMetadata); err != nil {
 			c.log.Println("ERROR: could not load the renter:", err)
 			continue
 		}
@@ -225,13 +226,14 @@ func (c *Contractor) loadRenters() error {
 			return err
 		}
 
-		 renter := modules.Renter{
+		renter := modules.Renter{
 			Allowance:     a,
 			CurrentPeriod: period,
 			Email:         email,
 			PrivateKey:    types.PrivateKey(sk),
-			Settings:      modules.RenterSettings{
+			Settings: modules.RenterSettings{
 				AutoRenewContracts: autoRenew,
+				BackupFileMetadata: backupMetadata,
 			},
 		}
 		copy(renter.PublicKey[:], pk)

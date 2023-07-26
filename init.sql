@@ -438,6 +438,9 @@ DROP TABLE IF EXISTS ctr_renters;
 DROP TABLE IF EXISTS ctr_info;
 DROP TABLE IF EXISTS ctr_dspent;
 DROP TABLE IF EXISTS ctr_watchdog;
+DROP TABLE IF EXISTS ctr_shards;
+DROP TABLE IF EXISTS ctr_slabs;
+DROP TABLE IF EXISTS ctr_metadata;
 
 CREATE TABLE ctr_renters (
 	id                   INT NOT NULL AUTO_INCREMENT,
@@ -447,6 +450,7 @@ CREATE TABLE ctr_renters (
 	allowance            BLOB NOT NULL,
 	private_key          BINARY(64),
 	auto_renew_contracts BOOL NOT NULL,
+	backup_file_metadata BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );
@@ -481,3 +485,27 @@ CREATE TABLE ctr_watchdog (
 	PRIMARY KEY (id)
 );
 
+CREATE TABLE ctr_metadata (
+	id        BINARY(32) NOT NULL,
+	filepath  VARCHAR(255) NOT NULL,
+	renter_pk BINARY(32) NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
+);
+
+CREATE TABLE ctr_slabs (
+	id         BINARY(32) NOT NULL,
+	object_id  BINARY(32) NOT NULL,
+	min_shards INT UNSIGNED NOT NULL,
+	offset     BIGINT UNSIGNED NOT NULL,
+	len        BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (object_id) REFERENCES ctr_metadata(id)
+);
+
+CREATE TABLE ctr_shards (
+	slab_id     BINARY(32) NOT NULL,
+	host        BINARY(32) NOT NULL,
+	merkle_root BINARY(32) NOT NULL,
+	FOREIGN KEY (slab_id) REFERENCES ctr_slabs(id)
+);

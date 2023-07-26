@@ -678,6 +678,7 @@ func (rs RenterSpending) SpendingBreakdown() (totalSpent, unspentAllocated, unsp
 // RenterSettings keep the opt-in settings of the renter.
 type RenterSettings struct {
 	AutoRenewContracts bool `json:"autorenew"`
+	BackupFileMetadata bool `json:"backupmetadata"`
 }
 
 // Renter holds the data related to the specific renter.

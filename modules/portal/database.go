@@ -85,7 +85,7 @@ func (p *Portal) updateAccount(email, password string, verified bool) error {
 // passwordHash implements the Argon2id hashing mechanism.
 func passwordHash(password string) (pwh types.Hash256) {
 	t := uint8(runtime.NumCPU())
-	hash := argon2.IDKey([]byte(password), []byte(argon2Salt), 1, 64 * 1024, t, 32)
+	hash := argon2.IDKey([]byte(password), []byte(argon2Salt), 1, 64*1024, t, 32)
 	copy(pwh[:], hash)
 	return
 }
@@ -111,7 +111,7 @@ func (p *Portal) threadedPruneUnverifiedAccounts() {
 			defer p.mu.Unlock()
 
 			now := time.Now().Unix()
-			_, err = p.db.Exec("DELETE FROM pt_accounts WHERE verified = FALSE AND time < ?", now - pruneUnverifiedAccountsThreshold.Milliseconds() / 1000)
+			_, err = p.db.Exec("DELETE FROM pt_accounts WHERE verified = FALSE AND time < ?", now-pruneUnverifiedAccountsThreshold.Milliseconds()/1000)
 			if err != nil {
 				p.log.Printf("ERROR: error querying database: %v\n", err)
 			}
@@ -130,6 +130,56 @@ func (p *Portal) deleteAccount(email string) error {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
+
+	// Delete file metadata.
+	var objects, slabs []types.Hash256
+	rows, err := p.db.Query("SELECT id FROM ctr_metadata WHERE renter_pk = ?", pk)
+	if err != nil {
+		return err
+	}
+
+	for rows.Next() {
+		id := make([]byte, 32)
+		if err := rows.Scan(&id); err != nil {
+			p.log.Println("ERROR: unable to retrieve metadata key:", err)
+			continue
+		}
+		var key types.Hash256
+		copy(key[:], id)
+		objects = append(objects, key)
+
+		slabRows, err := p.db.Query("SELECT id FROM ctr_slabs WHERE object_id = ?", id)
+		if err != nil {
+			p.log.Println("ERROR: unable to retrieve slabs:", err)
+			continue
+		}
+
+		for slabRows.Next() {
+			slabID := make([]byte, 32)
+			if err := slabRows.Scan(&slabID); err != nil {
+				p.log.Println("ERROR: unable to retrieve slab:", err)
+				continue
+			}
+			var slab types.Hash256
+			copy(slab[:], slabID)
+			slabs = append(slabs, slab)
+		}
+		slabRows.Close()
+	}
+	rows.Close()
+
+	for _, slab := range slabs {
+		_, err = p.db.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab[:])
+		errs = append(errs, err)
+	}
+
+	for _, object := range objects {
+		_, err = p.db.Exec("DELETE FROM ctr_slabs WHERE object_id = ?", object[:])
+		errs = append(errs, err)
+	}
+
+	_, err = p.db.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk)
+	errs = append(errs, err)
 
 	// Delete contracts.
 	_, err = p.db.Exec("DELETE FROM ctr_contracts WHERE renter_pk = ?", pk)
@@ -288,9 +338,9 @@ func (p *Portal) createNewRenter(email string, pk types.PublicKey) error {
 	_, err := p.db.Exec(`
 		INSERT INTO ctr_renters
 		(email, public_key, current_period, allowance,
-		private_key, auto_renew_contracts)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, email, pk[:], 0, buf.Bytes(), []byte{}, false)
+		private_key, auto_renew_contracts, backup_file_metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, email, pk[:], 0, buf.Bytes(), []byte{}, false, false)
 	if err != nil {
 		return err
 	}
@@ -300,13 +350,13 @@ func (p *Portal) createNewRenter(email string, pk types.PublicKey) error {
 }
 
 // saveNonce updates a user account with the nonce value.
-func (p* Portal) saveNonce(email string, nonce []byte) error {
+func (p *Portal) saveNonce(email string, nonce []byte) error {
 	_, err := p.db.Exec("UPDATE pt_accounts SET nonce = ? WHERE email = ?", nonce, email)
 	return err
 }
 
 // verifyNonce verifies the nonce value against the user account.
-func (p* Portal) verifyNonce(email string, nonce []byte) (bool, error) {
+func (p *Portal) verifyNonce(email string, nonce []byte) (bool, error) {
 	n := make([]byte, 16)
 	err := p.db.QueryRow("SELECT nonce FROM pt_accounts WHERE email = ?", email).Scan(&n)
 	if err != nil {
@@ -317,7 +367,7 @@ func (p* Portal) verifyNonce(email string, nonce []byte) (bool, error) {
 }
 
 // saveStats updates the authentication stats in the database.
-func (p* Portal) saveStats() error {
+func (p *Portal) saveStats() error {
 	tx, err := p.db.Begin()
 	if err != nil {
 		p.log.Println("ERROR: couldn't save auth stats:", err)
@@ -349,7 +399,7 @@ func (p* Portal) saveStats() error {
 }
 
 // loadStats loads the authentication stats from the database.
-func (p* Portal) loadStats() error {
+func (p *Portal) loadStats() error {
 	rows, err := p.db.Query(`
 		SELECT remote_host, login_last, login_count, verify_last,
 		verify_count, reset_last, reset_count
@@ -389,7 +439,7 @@ func (p* Portal) loadStats() error {
 }
 
 // saveCredits updates the promotion data in the database.
-func (p* Portal) saveCredits() error {
+func (p *Portal) saveCredits() error {
 	_, err := p.db.Exec(`
 		REPLACE INTO pt_credits (id, amount, remaining)
 		VALUES (1, ?, ?)
@@ -403,7 +453,7 @@ func (p* Portal) saveCredits() error {
 }
 
 // loadCredits loads the promotion data from the database.
-func (p* Portal) loadCredits() error {
+func (p *Portal) loadCredits() error {
 	var a float64
 	var r uint64
 	err := p.db.QueryRow(`
