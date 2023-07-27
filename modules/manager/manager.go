@@ -72,6 +72,9 @@ type hostContractor interface {
 	// DeleteMetadata deletes the renter's saved file metadata.
 	DeleteMetadata(types.PublicKey)
 
+	// UpdateMetadata updates the file metadata in the database.
+	UpdateMetadata(types.PublicKey, modules.FileMetadata) error
+
 	// GetRenter returns the renter with the given public key.
 	GetRenter(types.PublicKey) (modules.Renter, error)
 
@@ -928,4 +931,9 @@ func (m *Manager) GetWalletSeed() (seed modules.Seed, err error) {
 // DeleteMetadata deletes the renter's saved file metadata.
 func (m *Manager) DeleteMetadata(pk types.PublicKey) {
 	m.hostContractor.DeleteMetadata(pk)
+}
+
+// UpdateMetadata updates the file metadata in the database.
+func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
+	return m.hostContractor.UpdateMetadata(pk, fm)
 }

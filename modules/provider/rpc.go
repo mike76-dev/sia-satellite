@@ -620,3 +620,50 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 
 	return s.WriteResponse(nil)
 }
+
+// managedSaveMetadata reads the file metadata and saves it.
+func (p *Provider) managedSaveMetadata(s *modules.RPCSession) error {
+	// Extend the deadline to meet the formation of multiple contracts.
+	s.Conn.SetDeadline(time.Now().Add(saveMetadataTime))
+
+	// Read the request.
+	var smr saveMetadataRequest
+	hash, err := s.ReadRequest(&smr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	if !smr.PubKey.VerifyHash(hash, smr.Signature) {
+		err = errors.New("could not verify renter signature")
+		s.WriteError(err)
+		return err
+	}
+
+	// Check if we know this renter.
+	renter, err := p.m.GetRenter(smr.PubKey)
+	if err != nil {
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Check if the renter has opted in.
+	if !renter.Settings.BackupFileMetadata {
+		err := errors.New("metadata backups disabled")
+		s.WriteError(err)
+		return err
+	}
+
+	// Save the metadata.
+	err = p.m.UpdateMetadata(smr.PubKey, smr.Metadata)
+	if err != nil {
+		err = fmt.Errorf("couldn't save metadata: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	return s.WriteResponse(nil)
+}

@@ -487,6 +487,7 @@ CREATE TABLE ctr_watchdog (
 
 CREATE TABLE ctr_metadata (
 	id        BINARY(32) NOT NULL,
+	enc_key   BINARY(32) NOT NULL,
 	filepath  VARCHAR(255) NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
 	PRIMARY KEY (id),
@@ -495,6 +496,7 @@ CREATE TABLE ctr_metadata (
 
 CREATE TABLE ctr_slabs (
 	id         BINARY(32) NOT NULL,
+	enc_key    BINARY(32) NOT NULL,
 	object_id  BINARY(32) NOT NULL,
 	min_shards INT UNSIGNED NOT NULL,
 	offset     BIGINT UNSIGNED NOT NULL,

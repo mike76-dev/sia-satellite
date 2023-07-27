@@ -35,6 +35,10 @@ const (
 	// send or receive renter's settings.
 	settingsTime = 1 * time.Minute
 
+	// saveMetadataTime defines the amount of time that the provider has
+	// to accept the file metadata and save it.
+	saveMetadataTime = 1 * time.Minute
+
 	// defaultConnectionDeadline is the default read and write deadline which is set
 	// on a connection. This ensures it times out if I/O exceeds this deadline.
 	defaultConnectionDeadline = 5 * time.Minute
@@ -73,4 +77,7 @@ var (
 
 	// updateSettingsSpecifier is used to update the renter's opt-in settings.
 	updateSettingsSpecifier = types.NewSpecifier("UpdateSettings")
+
+	// saveMetadataSpecifier is used to save the file metadata.
+	saveMetadataSpecifier = types.NewSpecifier("SaveMetadata")
 )

@@ -301,6 +301,11 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		if err != nil {
 			err = modules.AddContext(err, "incoming RPCUpdateSettings failed")
 		}
+	case saveMetadataSpecifier:
+		err = p.managedSaveMetadata(s)
+		if err != nil {
+			err = modules.AddContext(err, "incoming RPCSaveMetadata failed")
+		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
 	}

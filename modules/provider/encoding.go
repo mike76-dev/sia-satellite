@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"github.com/mike76-dev/sia-satellite/modules"
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/core/types"
 )
@@ -532,4 +533,24 @@ func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 		usr.MinMaxCollateral.EncodeTo(e)
 		e.WriteUint64(usr.BlockHeightLeeway)
 	}
+}
+
+// saveMetadataRequest is used to accept file metadata and save it.
+type saveMetadataRequest struct {
+	PubKey    types.PublicKey
+	Metadata  modules.FileMetadata
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (smr *saveMetadataRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(smr.PubKey[:])
+	smr.Metadata.DecodeFrom(d)
+	smr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (smr *saveMetadataRequest) EncodeTo(e *types.Encoder) {
+	e.Write(smr.PubKey[:])
+	smr.Metadata.EncodeTo(e)
 }

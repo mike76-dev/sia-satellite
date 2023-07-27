@@ -395,6 +395,9 @@ type Manager interface {
 	// details.
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 
+	// UpdateMetadata updates the file metadata in the database.
+	UpdateMetadata(types.PublicKey, FileMetadata) error
+
 	// UpdateRenterSettings updates the renter's opt-in settings.
 	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error
 }
@@ -698,4 +701,82 @@ type Renter struct {
 // end.
 func (r *Renter) ContractEndHeight() uint64 {
 	return r.CurrentPeriod + r.Allowance.Period + r.Allowance.RenewWindow
+}
+
+// FileMetadata contains the uploaded file metadata.
+type FileMetadata struct {
+	Key   types.Hash256 `json:"key"`
+	Path  string        `json:"path"`
+	Slabs []Slab        `json:"slabs"`
+}
+
+// Slab is a collection of shards.
+type Slab struct {
+	Key       types.Hash256 `json:"key"`
+	MinShards uint8         `json:"minShards"`
+	Offset    uint64        `json:"offset"`
+	Length    uint64        `json:"length"`
+	Shards    []Shard       `json:"shards"`
+}
+
+// Shard represents an individual shard.
+type Shard struct {
+	Host types.PublicKey `json:"host"`
+	Root types.Hash256   `json:"root"`
+}
+
+// EncodeTo implements types.ProtocolObject.
+func (ss *Shard) EncodeTo(e *types.Encoder) {
+	ss.Host.EncodeTo(e)
+	ss.Root.EncodeTo(e)
+}
+
+// DecodeFrom implements types.ProtocolObject.
+func (ss *Shard) DecodeFrom(d *types.Decoder) {
+	ss.Host.DecodeFrom(d)
+	ss.Root.DecodeFrom(d)
+}
+
+// EncodeTo implements types.ProtocolObject.
+func (s *Slab) EncodeTo(e *types.Encoder) {
+	s.Key.EncodeTo(e)
+	e.WriteUint64(uint64(s.MinShards))
+	e.WriteUint64(s.Offset)
+	e.WriteUint64(s.Length)
+	e.WritePrefix(len(s.Shards))
+	for _, ss := range s.Shards {
+		ss.EncodeTo(e)
+	}
+}
+
+// DecodeFrom implements types.ProtocolObject.
+func (s *Slab) DecodeFrom(d *types.Decoder) {
+	s.Key.DecodeFrom(d)
+	s.MinShards = uint8(d.ReadUint64())
+	s.Offset = d.ReadUint64()
+	s.Length = d.ReadUint64()
+	s.Shards = make([]Shard, d.ReadPrefix())
+	for i := 0; i < len(s.Shards); i++ {
+		s.Shards[i].DecodeFrom(d)
+	}
+}
+
+// EncodeTo implements types.ProtocolObject.
+func (fm *FileMetadata) EncodeTo(e *types.Encoder) {
+	fm.Key.EncodeTo(e)
+	e.WriteString(fm.Path)
+	e.WritePrefix(len(fm.Slabs))
+	for _, s := range fm.Slabs {
+		s.EncodeTo(e)
+	}
+}
+
+// DecodeFrom implements types.ProtocolObject.
+func (fm *FileMetadata) DecodeFrom(d *types.Decoder) {
+	fm.Key.DecodeFrom(d)
+	fm.Path = d.ReadString()
+	fm.Slabs = make([]Slab, d.ReadPrefix())
+	for i := 0; i < len(fm.Slabs); i++ {
+		fm.Slabs[i].DecodeFrom(d)
+	}
 }

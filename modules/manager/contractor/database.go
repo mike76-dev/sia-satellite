@@ -379,3 +379,61 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 		c.log.Println("ERROR: unable to delete metadata", err)
 	}
 }
+
+// UpdateMetadata updates the file metadata in the database.
+func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
+	tx, err := c.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	h := types.NewHasher()
+	fm.Key.EncodeTo(h.E)
+	h.E.WriteString(fm.Path)
+	objectID := h.Sum()
+	_, err = tx.Exec(`
+		REPLACE INTO ctr_metadata (id, enc_key, filepath, renter_pk)
+		VALUES (?, ?, ?, ?)
+	`, objectID[:], fm.Key[:], fm.Path, pk[:])
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "unable to store object")
+	}
+
+	for _, s := range fm.Slabs {
+		h := types.NewHasher()
+		objectID.EncodeTo(h.E)
+		s.Key.EncodeTo(h.E)
+		slabID := h.Sum()
+		_, err = tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slabID[:])
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "unable to delete shards")
+		}
+		_, err = tx.Exec("DELETE FROM ctr_slabs WHERE id = ?", slabID[:])
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "unable to delete slab")
+		}
+		_, err = tx.Exec(`
+			INSERT INTO ctr_slabs (id, enc_key, object_id, min_shards, offset, len)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, slabID[:], s.Key[:], objectID[:], s.MinShards, s.Offset, s.Length)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "unable to insert slab")
+		}
+		for _, ss := range s.Shards {
+			_, err = tx.Exec(`
+				INSERT INTO ctr_shards (slab_id, host, merkle_root)
+				VALUES (?, ?, ?)
+			`, slabID[:], ss.Host[:], ss.Root[:])
+			if err != nil {
+				tx.Rollback()
+				return modules.AddContext(err, "unable to insert shard")
+			}
+		}
+	}
+
+	return tx.Commit()
+}
