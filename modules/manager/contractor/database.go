@@ -380,6 +380,49 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 	}
 }
 
+// dbDeleteObject deletes a single file metadata object from
+// the database.
+func dbDeleteObject(tx *sql.Tx, fm modules.FileMetadata) error {
+	objectID := make([]byte, 32)
+	err := tx.QueryRow("SELECT id FROM ctr_metadata WHERE filepath = ?", fm.Path).Scan(&objectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	rows, err := tx.Query("SELECT id FROM ctr_slabs WHERE object_id = ?", objectID)
+	if err != nil {
+		return err
+	}
+	var slabs []types.Hash256
+	for rows.Next() {
+		var slab types.Hash256
+		id := make([]byte, 32)
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		copy(slab[:], id)
+		slabs = append(slabs, slab)
+	}
+	rows.Close()
+
+	for _, slab := range slabs {
+		_, err = tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab[:])
+		if err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec("DELETE FROM ctr_slabs WHERE object_id = ?", objectID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE id = ?", objectID)
+	return err
+}
+
 // UpdateMetadata updates the file metadata in the database.
 func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
 	tx, err := c.db.Begin()
@@ -387,12 +430,17 @@ func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		return err
 	}
 
+	if err := dbDeleteObject(tx, fm); err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "unable to delete object")
+	}
+
 	h := types.NewHasher()
 	fm.Key.EncodeTo(h.E)
 	h.E.WriteString(fm.Path)
 	objectID := h.Sum()
 	_, err = tx.Exec(`
-		REPLACE INTO ctr_metadata (id, enc_key, filepath, renter_pk)
+		INSERT INTO ctr_metadata (id, enc_key, filepath, renter_pk)
 		VALUES (?, ?, ?, ?)
 	`, objectID[:], fm.Key[:], fm.Path, pk[:])
 	if err != nil {
@@ -405,16 +453,6 @@ func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		objectID.EncodeTo(h.E)
 		s.Key.EncodeTo(h.E)
 		slabID := h.Sum()
-		_, err = tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slabID[:])
-		if err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "unable to delete shards")
-		}
-		_, err = tx.Exec("DELETE FROM ctr_slabs WHERE id = ?", slabID[:])
-		if err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "unable to delete slab")
-		}
 		_, err = tx.Exec(`
 			INSERT INTO ctr_slabs (id, enc_key, object_id, min_shards, offset, len)
 			VALUES (?, ?, ?, ?, ?, ?)
