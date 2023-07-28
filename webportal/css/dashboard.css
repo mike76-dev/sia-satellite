@@ -351,7 +351,7 @@ tbody > tr:nth-child(odd) {
 }
 
 .history-button {
-	width: 4rem;
+	width: 2rem;
 	height: 1.8rem;
 	background-color: var(--backgroundForm);
 	border: 1px solid var(--textSecondary);
