@@ -204,3 +204,32 @@ func (m *Manager) IncrementStats(email string, renewed bool) (err error) {
 	}
 	return
 }
+
+// numSlabs returns the count of file slab metadata objects stored for
+// the specified renter.
+func (m *Manager) numSlabs(pk types.PublicKey) (count int, err error) {
+	var items []types.Hash256
+	rows, err := m.db.Query("SELECT id FROM ctr_metadata WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item types.Hash256
+		id := make([]byte, 32)
+		if err = rows.Scan(&id); err != nil {
+			return
+		}
+		copy(item[:], id)
+		items = append(items, item)
+	}
+
+	for _, item := range items {
+		var c int
+		err = m.db.QueryRow("SELECT COUNT(*) FROM ctr_slabs WHERE object_id = ?", item[:]).Scan(&c)
+		count += c
+	}
+
+	return
+}

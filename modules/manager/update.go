@@ -19,13 +19,13 @@ const (
 
 var (
 	// Some sane values to cap the averages.
-	saneStoragePrice = types.HastingsPerSiacoin.Mul64(1e4)  // 10KS
-	saneCollateral = types.HastingsPerSiacoin.Mul64(2e4)    // 20KS
-	saneUploadPrice = types.HastingsPerSiacoin.Mul64(1e4)   // 10KS
-	saneDownloadPrice = types.HastingsPerSiacoin.Mul64(1e5) // 100KS
-	saneContractPrice = types.HastingsPerSiacoin.Mul64(100) // 100SC
-	saneBaseRPCPrice = types.HastingsPerSiacoin             // 1SC
-	saneSectorAccessPrice = types.HastingsPerSiacoin        // 1SC
+	saneStoragePrice      = types.HastingsPerSiacoin.Mul64(1e4) // 10KS
+	saneCollateral        = types.HastingsPerSiacoin.Mul64(2e4) // 20KS
+	saneUploadPrice       = types.HastingsPerSiacoin.Mul64(1e4) // 10KS
+	saneDownloadPrice     = types.HastingsPerSiacoin.Mul64(1e5) // 100KS
+	saneContractPrice     = types.HastingsPerSiacoin.Mul64(100) // 100SC
+	saneBaseRPCPrice      = types.HastingsPerSiacoin            // 1SC
+	saneSectorAccessPrice = types.HastingsPerSiacoin            // 1SC
 )
 
 // capAverages checks if the host settings exceed the sane values.
@@ -269,9 +269,32 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					us.PrevRenewed = us.CurrentRenewed
 					us.CurrentFormed = 0
 					us.CurrentRenewed = 0
+					count, err := m.numSlabs(renter.PublicKey)
+					if err != nil {
+						m.log.Println("ERROR: couldn't retrieve slab count:", err)
+						continue
+					}
+					fee := float64(modules.StoreMetadataFee * count)
+					us.PrevUsed += fee
+					us.PrevOverhead += fee
 					err = m.updateSpendings(renter.Email, us)
 					if err != nil {
-						m.log.Println("ERROR: couldn't update spendings")
+						m.log.Println("ERROR: couldn't update spendings:", err)
+					}
+					// Deduct from the account balance.
+					ub, err := m.GetBalance(renter.Email)
+					if err != nil {
+						m.log.Println("ERROR: couldn't retrieve balance:", err)
+					}
+					if ub.Balance < fee {
+						// Insufficient balance, delete the file metadata.
+						m.log.Println("WARN: insufficient account balance, deleting stored metadata")
+						m.DeleteMetadata(renter.PublicKey)
+						continue
+					}
+					ub.Balance -= fee
+					if err := m.UpdateBalance(renter.Email, ub); err != nil {
+						m.log.Println("ERROR: couldn't update balance", err)
 					}
 				}
 			}
@@ -281,4 +304,3 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 		}
 	}
 }
-

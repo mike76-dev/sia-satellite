@@ -521,7 +521,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	est := totalContractCost.Add(totalDownloadCost)
 	est = est.Add(totalStorageCost)
 	est = est.Add(totalUploadCost)
-	cost := modules.Float64(est) * modules.SatelliteOverhead
+	cost := modules.Float64(est) * (1 + modules.FormContractFee)
 	h := modules.Float64(types.HastingsPerSiacoin)
 	allowance.Funds = totalCost
 
@@ -610,7 +610,7 @@ func (m *Manager) ContractPriceEstimation(hpk types.PublicKey, endHeight uint64,
 	est := contractCost.Add(downloadCost)
 	est = est.Add(storageCost)
 	est = est.Add(uploadCost)
-	cost := modules.Float64(est) * modules.SatelliteOverhead
+	cost := modules.Float64(est) * (1 + modules.FormContractFee)
 	h := modules.Float64(types.HastingsPerSiacoin)
 
 	return funding, cost / h, nil
@@ -804,7 +804,7 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 	}
 
 	// Include the Satellite fee.
-	amountWithFee := amount * modules.SatelliteOverhead
+	amountWithFee := amount * (1 + modules.FormContractFee)
 	if amountWithFee > ub.Balance {
 		m.log.Println("WARN: trying to lock more than the available balance")
 		amountWithFee = ub.Balance
@@ -845,7 +845,7 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 	}
 
 	// Include the Satellite fee.
-	totalWithFee := total * modules.SatelliteOverhead
+	totalWithFee := total * (1 + modules.FormContractFee)
 
 	// Calculate the new balance.
 	unlocked := amount
@@ -935,5 +935,40 @@ func (m *Manager) DeleteMetadata(pk types.PublicKey) {
 
 // UpdateMetadata updates the file metadata in the database.
 func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
-	return m.hostContractor.UpdateMetadata(pk, fm)
+	// Get the balance and check if it is sufficient.
+	renter, err := m.GetRenter(pk)
+	if err != nil {
+		return err
+	}
+	ub, err := m.GetBalance(renter.Email)
+	if err != nil {
+		return err
+	}
+	fee := float64(len(fm.Slabs)) * modules.SaveMetadataFee
+	if ub.Balance < fee {
+		return errors.New("insufficient account balance")
+	}
+
+	// Update the metadata.
+	err = m.hostContractor.UpdateMetadata(pk, fm)
+	if err != nil {
+		return err
+	}
+
+	// Deduct from the account balance.
+	ub.Balance -= fee
+	err = m.UpdateBalance(renter.Email, ub)
+	if err != nil {
+		return err
+	}
+
+	// Update the spendings.
+	us, err := m.getSpendings(renter.Email)
+	if err != nil {
+		return err
+	}
+	us.CurrentUsed += fee
+	us.CurrentOverhead += fee
+
+	return m.updateSpendings(renter.Email, us)
 }
