@@ -306,6 +306,11 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		if err != nil {
 			err = modules.AddContext(err, "incoming RPCSaveMetadata failed")
 		}
+	case requestMetadataSpecifier:
+		err = p.managedRequestMetadata(s)
+		if err != nil {
+			err = modules.AddContext(err, "incoming RPCRequestMetadata failed")
+		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
 	}

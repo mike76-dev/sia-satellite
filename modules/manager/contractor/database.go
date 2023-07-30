@@ -495,3 +495,82 @@ func (c *Contractor) DeleteObject(pk types.PublicKey, path string) error {
 
 	return tx.Commit()
 }
+
+// RetrieveMetadata retrieves the file metadata from the database.
+func (c *Contractor) RetrieveMetadata(pk types.PublicKey) (fm []modules.FileMetadata, err error) {
+	rows, err := c.db.Query(`
+		SELECT id, enc_key, filepath
+		FROM ctr_metadata
+		WHERE renter_pk = ?
+	`, pk[:])
+	if err != nil {
+		return nil, modules.AddContext(err, "unable to query objects")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var slabs []modules.Slab
+		objectID := make([]byte, 32)
+		objectKey := make([]byte, 32)
+		var path string
+		if err := rows.Scan(&objectID, &objectKey, &path); err != nil {
+			return nil, modules.AddContext(err, "unable to retrieve object")
+		}
+		slabRows, err := c.db.Query(`
+			SELECT id, enc_key, min_shards, offset, len
+			FROM ctr_slabs
+			WHERE object_id = ?
+		`, objectID)
+		if err != nil {
+			return nil, modules.AddContext(err, "unable to query slabs")
+		}
+
+		for slabRows.Next() {
+			var shards []modules.Shard
+			slabID := make([]byte, 32)
+			slabKey := make([]byte, 32)
+			var minShards uint8
+			var offset, length uint64
+			if err := slabRows.Scan(&slabID, &slabKey, &minShards, &offset, &length); err != nil {
+				slabRows.Close()
+				return nil, modules.AddContext(err, "unable to retrieve slab")
+			}
+			shardRows, err := c.db.Query("SELECT host, merkle_root FROM ctr_shards WHERE slab_id = ?", slabID[:])
+			if err != nil {
+				slabRows.Close()
+				return nil, modules.AddContext(err, "unable to query slabs")
+			}
+			for shardRows.Next() {
+				host := make([]byte, 32)
+				root := make([]byte, 32)
+				if err := shardRows.Scan(&host, &root); err != nil {
+					shardRows.Close()
+					slabRows.Close()
+					return nil, modules.AddContext(err, "unable to retrieve shard")
+				}
+				var shard modules.Shard
+				copy(shard.Host[:], host)
+				copy(shard.Root[:], root)
+				shards = append(shards, shard)
+			}
+
+			shardRows.Close()
+			var slab modules.Slab
+			copy(slab.Key[:], slabKey)
+			slab.MinShards = minShards
+			slab.Offset = offset
+			slab.Length = length
+			slab.Shards = shards
+			slabs = append(slabs, slab)
+		}
+
+		slabRows.Close()
+		var md modules.FileMetadata
+		copy(md.Key[:], objectKey)
+		md.Path = path
+		md.Slabs = slabs
+		fm = append(fm, md)
+	}
+
+	return
+}

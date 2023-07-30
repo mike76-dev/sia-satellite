@@ -115,6 +115,9 @@ type hostContractor interface {
 	// Renters return the list of renters.
 	Renters() []modules.Renter
 
+	// RetrieveMetadata retrieves the file metadata from the database.
+	RetrieveMetadata(types.PublicKey) ([]modules.FileMetadata, error)
+
 	// Synced returns a channel that is closed when the contractor is fully
 	// synced with the peer-to-peer network.
 	Synced() <-chan struct{}
@@ -979,4 +982,9 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 // DeleteObject deletes the saved file metadata object.
 func (m *Manager) DeleteObject(pk types.PublicKey, path string) error {
 	return m.hostContractor.DeleteObject(pk, path)
+}
+
+// RetrieveMetadata retrieves the file metadata from the database.
+func (m *Manager) RetrieveMetadata(pk types.PublicKey) ([]modules.FileMetadata, error) {
+	return m.hostContractor.RetrieveMetadata(pk)
 }

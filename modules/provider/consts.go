@@ -39,6 +39,10 @@ const (
 	// to accept the file metadata and save it.
 	saveMetadataTime = 1 * time.Minute
 
+	// retrieveMetadataTime defines the amount of time that the provider has
+	// to retrieve the file metadata and send it.
+	requestMetadataTime = 1 * time.Minute
+
 	// defaultConnectionDeadline is the default read and write deadline which is set
 	// on a connection. This ensures it times out if I/O exceeds this deadline.
 	defaultConnectionDeadline = 5 * time.Minute
@@ -80,4 +84,7 @@ var (
 
 	// saveMetadataSpecifier is used to save the file metadata.
 	saveMetadataSpecifier = types.NewSpecifier("SaveMetadata")
+
+	// requestMetadataSpecifier is used to retrieve the file metadata.
+	requestMetadataSpecifier = types.NewSpecifier("RequestMetadata")
 )

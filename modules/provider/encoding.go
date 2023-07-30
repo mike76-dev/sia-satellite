@@ -317,7 +317,7 @@ type extendedContractSet struct {
 
 // EncodeTo implements requestBody.
 func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
-	e.WriteUint64(uint64(len(ecs.contracts)))
+	e.WritePrefix(len(ecs.contracts))
 	for _, ec := range ecs.contracts {
 		ec.EncodeTo(e)
 	}
@@ -553,4 +553,39 @@ func (smr *saveMetadataRequest) DecodeFrom(d *types.Decoder) {
 func (smr *saveMetadataRequest) EncodeTo(e *types.Encoder) {
 	e.Write(smr.PubKey[:])
 	smr.Metadata.EncodeTo(e)
+}
+
+// requestMetadataRequest is used to retrieve file metadata.
+type requestMetadataRequest struct {
+	PubKey    types.PublicKey
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (rmr *requestMetadataRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(rmr.PubKey[:])
+	rmr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (rmr *requestMetadataRequest) EncodeTo(e *types.Encoder) {
+	e.Write(rmr.PubKey[:])
+}
+
+// requestMetadataResponse is a response type for requestMetadataRequest.
+type requestMetadataResponse struct {
+	metadata []modules.FileMetadata
+}
+
+// EncodeTo implements requestBody.
+func (rmr requestMetadataResponse) EncodeTo(e *types.Encoder) {
+	e.WritePrefix(len(rmr.metadata))
+	for _, fm := range rmr.metadata {
+		fm.EncodeTo(e)
+	}
+}
+
+// DecodeFrom implements requestBody.
+func (rmr requestMetadataResponse) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
 }

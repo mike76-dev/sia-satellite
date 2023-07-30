@@ -16,7 +16,7 @@ const bytesInTerabyte = 1024 * 1024 * 1024 * 1024
 // managedRequestContracts returns a slice containing the list of the
 // renter's active contracts.
 func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
-	// Extend the deadline to meet the formation of multiple contracts.
+	// Extend the deadline.
 	s.Conn.SetDeadline(time.Now().Add(requestContractsTime))
 
 	// Read the request.
@@ -666,4 +666,49 @@ func (p *Provider) managedSaveMetadata(s *modules.RPCSession) error {
 	}
 
 	return s.WriteResponse(nil)
+}
+
+// managedRequestMetadata returns a slice containing the saved file
+// metadata belonging top the renter.
+func (p *Provider) managedRequestMetadata(s *modules.RPCSession) error {
+	// Extend the deadline.
+	s.Conn.SetDeadline(time.Now().Add(requestMetadataTime))
+
+	// Read the request.
+	var rmr requestMetadataRequest
+	hash, err := s.ReadRequest(&rmr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	if ok := rmr.PubKey.VerifyHash(hash, rmr.Signature); !ok {
+		err = errors.New("could not verify renter signature")
+		s.WriteError(err)
+		return err
+	}
+
+	// Check if we know this renter.
+	_, err = p.m.GetRenter(rmr.PubKey)
+	if err != nil {
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Get the metadata.
+	fm, err := p.m.RetrieveMetadata(rmr.PubKey)
+	if err != nil {
+		err = fmt.Errorf("could not retrieve metadata: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	resp := requestMetadataResponse{
+		metadata: fm,
+	}
+
+	return s.WriteResponse(&resp)
 }
