@@ -517,6 +517,10 @@ func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
 	}
 
 	for _, index := range indices {
+		if index >= len(sf) {
+			p.log.Printf("ERROR: index %v out of range (%v)\n", index, len(sf))
+			continue
+		}
 		if err := p.manager.DeleteObject(pk, sf[index].Path); err != nil {
 			return modules.AddContext(err, "couldn't delete file")
 		}
