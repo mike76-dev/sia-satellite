@@ -474,3 +474,53 @@ func (p *Portal) loadCredits() error {
 
 	return nil
 }
+
+// getFiles retrieves the information about the stored file metadata.
+func (p *Portal) getFiles(pk types.PublicKey) (sf []savedFile, err error) {
+	rows, err := p.db.Query(`
+		SELECT id, filepath, uploaded
+		FROM ctr_metadata
+		WHERE renter_pk = ?
+	`, pk[:])
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var path string
+		var timestamp uint64
+		id := make([]byte, 32)
+		if err = rows.Scan(&id, &path, &timestamp); err != nil {
+			return
+		}
+		var count int
+		err = p.db.QueryRow("SELECT COUNT(*) FROM ctr_slabs WHERE object_id = ?", id).Scan(&count)
+		if err != nil {
+			return
+		}
+		sf = append(sf, savedFile{
+			Path:     path,
+			Slabs:    count,
+			Uploaded: timestamp,
+		})
+	}
+
+	return
+}
+
+// deleteFiles deletes the specified metadata from the database.
+func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
+	sf, err := p.getFiles(pk)
+	if err != nil {
+		return modules.AddContext(err, "couldn't retrieve files")
+	}
+
+	for _, index := range indices {
+		if err := p.manager.DeleteObject(pk, sf[index].Path); err != nil {
+			return modules.AddContext(err, "couldn't delete file")
+		}
+	}
+
+	return nil
+}

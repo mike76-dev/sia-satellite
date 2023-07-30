@@ -490,6 +490,7 @@ CREATE TABLE ctr_metadata (
 	enc_key   BINARY(32) NOT NULL,
 	filepath  VARCHAR(255) NOT NULL UNIQUE,
 	renter_pk BINARY(32) NOT NULL,
+	uploaded  BIGINT UNSIGNED NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );

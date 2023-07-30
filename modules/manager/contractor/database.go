@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
@@ -382,9 +383,13 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 
 // dbDeleteObject deletes a single file metadata object from
 // the database.
-func dbDeleteObject(tx *sql.Tx, fm modules.FileMetadata) error {
+func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, path string) error {
 	objectID := make([]byte, 32)
-	err := tx.QueryRow("SELECT id FROM ctr_metadata WHERE filepath = ?", fm.Path).Scan(&objectID)
+	err := tx.QueryRow(`
+		SELECT id
+		FROM ctr_metadata
+		WHERE filepath = ? AND renter_pk = ?
+	`, path, pk[:]).Scan(&objectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -430,7 +435,7 @@ func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		return err
 	}
 
-	if err := dbDeleteObject(tx, fm); err != nil {
+	if err := dbDeleteObject(tx, pk, fm.Path); err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "unable to delete object")
 	}
@@ -440,9 +445,9 @@ func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 	h.E.WriteString(fm.Path)
 	objectID := h.Sum()
 	_, err = tx.Exec(`
-		INSERT INTO ctr_metadata (id, enc_key, filepath, renter_pk)
-		VALUES (?, ?, ?, ?)
-	`, objectID[:], fm.Key[:], fm.Path, pk[:])
+		INSERT INTO ctr_metadata (id, enc_key, filepath, renter_pk, uploaded)
+		VALUES (?, ?, ?, ?, ?)
+	`, objectID[:], fm.Key[:], fm.Path, pk[:], uint64(time.Now().Unix()))
 	if err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "unable to store object")
@@ -471,6 +476,21 @@ func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 				return modules.AddContext(err, "unable to insert shard")
 			}
 		}
+	}
+
+	return tx.Commit()
+}
+
+// DeleteObject deletes the saved file metadata object.
+func (c *Contractor) DeleteObject(pk types.PublicKey, path string) error {
+	tx, err := c.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	if err = dbDeleteObject(tx, pk, path); err != nil {
+		tx.Rollback()
+		return err
 	}
 
 	return tx.Commit()

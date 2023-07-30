@@ -27,10 +27,11 @@
 				<ul id="menu" class="menu-list">
 					<li index="0">Overview</li>
 					<li index="1">Contracts</li>
-					<li index="2">Spendings</li>
-					<li index="3">Payment</li>
-					<li index="4">History</li>
-					<li index="5">Account</li>
+					<li index="2">Files</li>
+					<li index="3">Spendings</li>
+					<li index="4">Payment</li>
+					<li index="5">History</li>
+					<li index="6">Account</li>
 				</ul>
 			</div>
 			<div id="pages" class="pages">
@@ -181,6 +182,51 @@
 									</tbody>
 								</table>
 							</div>
+						</div>
+					</section>
+				</div>
+				<div class="page disabled">
+					<h1>File Metadata</h1>
+					<section>
+						<p id="files-empty">No metadata saved.</p>
+						<div id="files-non-empty" class="container disabled">
+							<div>
+								<label for="files-rows">Rows to Display:</label>
+								<select id="files-rows"
+									onchange="changeFilesStep(this)">
+									<option value="10">10</option>
+									<option value="20">20</option>
+									<option value="50">50</option>
+								</select>
+								<button id="files-prev" class="history-button"
+									onclick="filesPrev()" disabled>&lt;
+								</button>
+								<button id="files-next" class="history-button"
+									onclick="filesNext()" disabled>&gt;
+								</button>
+							</div>
+							<div class="table-container">
+								<table>
+									<thead>
+										<tr>
+											<th style="width: 4rem">
+												<label class="checkbox" style="margin-left: 0.5rem">
+													<input id="files-all" type="checkbox"
+														onchange="selectFiles()">
+													<span class="checkmark"></span>
+												</label>
+											</th>
+											<th style="width: 4rem">No.</th>
+											<th style="width: 20rem">Path</th>
+											<th style="width: 6rem">Slabs</th>
+											<th style="width: 13rem">Uploaded</th>
+										</tr>
+									</thead>
+									<tbody id="files-table">
+									</tbody>
+								</table>
+							</div>
+							<button id="files-delete" onclick="deleteFiles()" disabled>Delete</button>
 						</div>
 					</section>
 				</div>

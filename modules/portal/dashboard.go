@@ -85,6 +85,18 @@ type (
 		GoodForRenew        bool   `json:"goodforrenew"`
 		BadContract         bool   `json:"badcontract"`
 	}
+
+	// savedFile contains the information about saved file metadata.
+	savedFile struct {
+		Path     string `json:"path"`
+		Slabs    int    `json:"slabs"`
+		Uploaded uint64 `json:"uploaded"`
+	}
+
+	// fileIndices contains the indices of files to delete.
+	fileIndices struct {
+		Indices []int `json:"files"`
+	}
 )
 
 // balanceHandlerGET handles the GET /dashboard/balance requests.
@@ -102,7 +114,7 @@ func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -119,7 +131,7 @@ func (api *portalAPI) averagesHandlerGET(w http.ResponseWriter, req *http.Reques
 	if err != nil {
 		writeError(w,
 			Error{
-				Code: httpErrorNotFound,
+				Code:    httpErrorNotFound,
 				Message: "unsupported currency",
 			}, http.StatusBadRequest)
 		return
@@ -135,11 +147,11 @@ func (api *portalAPI) averagesHandlerGET(w http.ResponseWriter, req *http.Reques
 // readable format. rate is the exchange rate between SC and the
 // currency to display the values in.
 func convertHostAverages(ha modules.HostAverages, rate float64) sensibleHostAverages {
-	sp  := modules.Float64(ha.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte))
-	c   := modules.Float64(ha.Collateral.Mul(modules.BlockBytesPerMonthTerabyte))
+	sp := modules.Float64(ha.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte))
+	c := modules.Float64(ha.Collateral.Mul(modules.BlockBytesPerMonthTerabyte))
 	dbp := modules.Float64(ha.DownloadBandwidthPrice.Mul64(modules.BytesPerTerabyte))
 	ubp := modules.Float64(ha.UploadBandwidthPrice.Mul64(modules.BytesPerTerabyte))
-	cp  := modules.Float64(ha.ContractPrice)
+	cp := modules.Float64(ha.ContractPrice)
 	brp := modules.Float64(ha.BaseRPCPrice)
 	sap := modules.Float64(ha.SectorAccessPrice)
 
@@ -188,7 +200,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	if err != nil {
 		writeError(w,
 			Error{
-				Code: httpErrorNotFound,
+				Code:    httpErrorNotFound,
 				Message: "unsupported currency",
 			}, http.StatusBadRequest)
 		return
@@ -199,7 +211,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 		api.portal.log.Println("ERROR: zero exchange rate")
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "zero exchange rate",
 			}, http.StatusInternalServerError)
 		return
@@ -228,7 +240,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 		api.portal.log.Println("ERROR: could not get random hosts", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "could not get hosts",
 			}, http.StatusInternalServerError)
 		return
@@ -236,7 +248,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Check if there are zero hosts, which means no estimation can be made.
 	if len(hosts) == 0 {
-		writeJSON(w, hostsResponse{ Currency: data.Currency, })
+		writeJSON(w, hostsResponse{Currency: data.Currency})
 		return
 	}
 
@@ -331,7 +343,7 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -355,7 +367,7 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -365,7 +377,7 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	if !ub.IsUser {
 		writeError(w,
 			Error{
-				Code: httpErrorNotFound,
+				Code:    httpErrorNotFound,
 				Message: "no such account",
 			}, http.StatusBadRequest)
 		return
@@ -377,14 +389,14 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 		api.portal.log.Printf("ERROR: error retrieving wallet seed: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
 	}
 	renterSeed := modules.DeriveRenterSeed(walletSeed, email)
 	defer frand.Read(renterSeed)
-	
+
 	w.Header().Set("Renter-Seed", hex.EncodeToString(renterSeed))
 	writeSuccess(w)
 }
@@ -392,7 +404,9 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 // keyHandlerGET handles the GET /dashboard/key requests.
 func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	key := api.portal.provider.PublicKey()
-	writeJSON(w, struct{Key string `json:"key"`}{Key: hex.EncodeToString(key[:])})
+	writeJSON(w, struct {
+		Key string `json:"key"`
+	}{Key: hex.EncodeToString(key[:])})
 }
 
 // contractsHandlerGET handles the GET /dashboard/contracts requests.
@@ -582,7 +596,9 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 
 // blockHeightHandlerGET handles the GET /dashboard/blockheight requests.
 func (api *portalAPI) blockHeightHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	writeJSON(w, struct{Height uint64 `json:"height"`}{Height: api.portal.manager.BlockHeight()})
+	writeJSON(w, struct {
+		Height uint64 `json:"height"`
+	}{Height: api.portal.manager.BlockHeight()})
 }
 
 // spendingsHandlerGET handles the GET /dashboard/spendings requests.
@@ -604,7 +620,7 @@ func (api *portalAPI) spendingsHandlerGET(w http.ResponseWriter, req *http.Reque
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -633,4 +649,85 @@ func (api *portalAPI) settingsHandlerGET(w http.ResponseWriter, req *http.Reques
 	}
 
 	writeJSON(w, renter.Settings)
+}
+
+// filesHandlerGET handles the GET /dashboard/files requests.
+func (api *portalAPI) filesHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Get the renter.
+	var renter modules.Renter
+	renters := api.portal.manager.Renters()
+	for _, r := range renters {
+		if r.Email == email {
+			renter = r
+			break
+		}
+	}
+
+	// Retrieve the file information.
+	sf, err := api.portal.getFiles(renter.PublicKey)
+	if err != nil {
+		api.portal.log.Printf("ERROR: couldn't retrieve files: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, sf)
+}
+
+// filesHandlerPOST handles the POST /dashboard/files requests.
+func (api *portalAPI) filesHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Decode the request body.
+	dec, err := prepareDecoder(w, req)
+	if err != nil {
+		return
+	}
+
+	var data fileIndices
+	hdErr, code := api.handleDecodeError(w, dec.Decode(&data))
+	if code != http.StatusOK {
+		writeError(w, hdErr, code)
+		return
+	}
+
+	// Get the renter.
+	var renter modules.Renter
+	renters := api.portal.manager.Renters()
+	for _, r := range renters {
+		if r.Email == email {
+			renter = r
+			break
+		}
+	}
+
+	// Delete the files.
+	err = api.portal.deleteFiles(renter.PublicKey, data.Indices)
+	if err != nil {
+		api.portal.log.Printf("ERROR: couldn't delete files: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeSuccess(w)
 }

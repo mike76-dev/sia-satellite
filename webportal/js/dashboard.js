@@ -77,6 +77,10 @@ var paymentsStep = 10;
 var contracts = [];
 var contractsFrom = 1;
 var contractsStep = 10;
+var files = [];
+var selectedFiles = [];
+var filesFrom = 1;
+var filesStep = 10;
 
 var sortByStart = 'inactive';
 var sortByEnd = 'inactive';
@@ -104,12 +108,15 @@ function setActiveMenuIndex(ind) {
 		getContracts();
 	}
 	if (ind == 2) {
+		getFiles();
+	}
+	if (ind == 3) {
 		getSpendings();
 	}
-	if (ind == 4) {
+	if (ind == 5) {
 		getPayments();
 	}
-	if (ind == 5) {
+	if (ind == 6) {
 		getSettings();
 	}
 }
@@ -1019,6 +1026,129 @@ function getSettings() {
 				let md = document.getElementById('settings-metadata')
 				ar.checked = data.autorenew;
 				md.checked = data.backupmetadata;
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function changeFilesStep(s) {
+	filesStep = parseInt(s.value);
+	filesFrom = 1;
+	renderFiles();
+}
+
+function renderFiles() {
+	let tbody = document.getElementById('files-table');
+	tbody.innerHTML = '';
+	if (files.length == 0) {
+		document.getElementById('files-non-empty').classList.add('disabled');
+		document.getElementById('files-empty').classList.remove('disabled');
+		document.getElementById('files-prev').disabled = true;
+		document.getElementById('files-next').disabled = true;
+		filesFrom = 1;
+		return;
+	}
+	let tr;
+	files.forEach((row, i) => {
+		if (i < filesFrom - 1) return;
+		if (i >= filesFrom + filesStep - 1) return;
+		timestamp = new Date(row.uploaded * 1000);
+		tr = document.createElement('tr');
+		tr.innerHTML = '<td><label class="checkbox" style="margin-left: 0.5rem"><input type="checkbox" onchange="selectFile(this)"><span class="checkmark"></span></label></td>';
+		tr.innerHTML += '<td>' + (i + 1) + '</td>';
+		tr.innerHTML += '<td class="cell-overflow">' + row.path.slice(1) + '</td>';
+		tr.innerHTML += '<td>' + row.slabs + '</td>';
+		tr.innerHTML += '<td>' + timestamp.toLocaleString() + '</td>';
+		tr.children[0].children[0].children[0].setAttribute('index', i);
+		tr.children[0].children[0].children[0].checked = selectedFiles.includes(i);
+		tbody.appendChild(tr);
+	});
+	document.getElementById('files-empty').classList.add('disabled');
+	document.getElementById('files-non-empty').classList.remove('disabled');
+	document.getElementById('files-prev').disabled = filesFrom == 1;
+	document.getElementById('files-next').disabled = files.length < filesFrom + filesStep;
+}
+
+function selectFile(obj) {
+	let index = parseInt(obj.getAttribute('index'));
+	let i = selectedFiles.indexOf(index);
+	if (i < 0) {
+		selectedFiles.push(index);
+	} else {
+		selectedFiles.splice(i, 1);
+	}
+	document.getElementById("files-delete").disabled = selectedFiles.length == 0;
+	document.getElementById('files-all').checked = selectedFiles.length == files.length;
+}
+
+function selectFiles() {
+	if (selectedFiles.length === files.length) {
+		selectedFiles = [];
+	} else {
+		selectedFiles = [];
+		files.forEach((value, index) => {
+			selectedFiles.push(index);
+		})
+	}
+	document.getElementById("files-delete").disabled = selectedFiles.length == 0;
+	renderFiles();
+}
+
+function getFiles() {
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/files', options)
+		.then(response => response.json())
+		.then(data => {
+			if (!data) data = [];
+			if (data.code) {
+				console.log(data);
+			} else {
+				files = data;
+				renderFiles();
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function filesPrev() {
+	filesFrom = filesFrom - filesStep;
+	if (filesFrom < 1) filesFrom = 1;
+	renderFiles();
+}
+
+function filesNext() {
+	filesFrom = filesFrom + filesStep;
+	renderFiles();
+}
+
+function deleteFiles() {
+	let data = {
+		files: selectedFiles
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	fetch(apiBaseURL + '/dashboard/files', options)
+		.then(response => {
+			if (response.status == 204) {
+				selectedFiles = [];
+				getFiles();
+			} else {
+				return response.json();
+			}
+		})
+		.then(data => {
+			if (data) {
+				console.log(data);
 			}
 		})
 		.catch(error => console.log(error));

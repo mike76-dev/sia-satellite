@@ -72,6 +72,9 @@ type hostContractor interface {
 	// DeleteMetadata deletes the renter's saved file metadata.
 	DeleteMetadata(types.PublicKey)
 
+	// DeleteObject deletes the saved file metadata object.
+	DeleteObject(types.PublicKey, string) error
+
 	// UpdateMetadata updates the file metadata in the database.
 	UpdateMetadata(types.PublicKey, modules.FileMetadata) error
 
@@ -971,4 +974,9 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	us.CurrentOverhead += fee
 
 	return m.updateSpendings(renter.Email, us)
+}
+
+// DeleteObject deletes the saved file metadata object.
+func (m *Manager) DeleteObject(pk types.PublicKey, path string) error {
+	return m.hostContractor.DeleteObject(pk, path)
 }

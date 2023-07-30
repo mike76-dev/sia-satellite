@@ -25,25 +25,25 @@ const (
 
 // Error codes provided in an HTTP response.
 const (
-	httpErrorNone                 = 0
-	httpErrorInternal             = 1
-	httpErrorBadRequest           = 2
+	httpErrorNone       = 0
+	httpErrorInternal   = 1
+	httpErrorBadRequest = 2
 
-	httpErrorEmailInvalid         = 10
-	httpErrorEmailUsed            = 11
-	httpErrorEmailTooLong         = 12
+	httpErrorEmailInvalid = 10
+	httpErrorEmailUsed    = 11
+	httpErrorEmailTooLong = 12
 
 	httpErrorPasswordTooShort     = 20
 	httpErrorPasswordTooLong      = 21
 	httpErrorPasswordNotCompliant = 22
 
-	httpErrorWrongCredentials     = 30
-	httpErrorTooManyRequests      = 31
+	httpErrorWrongCredentials = 30
+	httpErrorTooManyRequests  = 31
 
-	httpErrorTokenInvalid         = 40
-	httpErrorTokenExpired         = 41
+	httpErrorTokenInvalid = 40
+	httpErrorTokenExpired = 41
 
-	httpErrorNotFound             = 50
+	httpErrorNotFound = 50
 )
 
 // portalAPI implements the http.Handler interface.
@@ -122,6 +122,12 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.GET("/dashboard/settings", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.settingsHandlerGET(w, req, ps)
 	})
+	router.GET("/dashboard/files", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.filesHandlerGET(w, req, ps)
+	})
+	router.POST("/dashboard/files", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.filesHandlerPOST(w, req, ps)
+	})
 
 	// /stripe requests.
 	router.POST("/stripe/create-payment-intent", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
@@ -199,7 +205,7 @@ func writeSuccess(w http.ResponseWriter) {
 // the event of an error.
 type Error struct {
 	// Code identifies the error and enables an easier client-side error handling.
-	Code    int    `json:"code"`
+	Code int `json:"code"`
 	// Message describes the error in English. Typically it is set to
 	// `err.Error()`. This field is required.
 	Message string `json:"message"`
@@ -216,7 +222,7 @@ func checkHeader(w http.ResponseWriter, r *http.Request) Error {
 	value := r.Header.Get("Content-Type")
 	if value != "" && !strings.Contains(value, "application/json") {
 		return Error{
-			Code: httpErrorBadRequest,
+			Code:    httpErrorBadRequest,
 			Message: httpContentTypeError,
 		}
 	}
@@ -254,57 +260,57 @@ func (api *portalAPI) handleDecodeError(w http.ResponseWriter, err error) (Error
 	var unmarshalTypeError *json.UnmarshalTypeError
 
 	switch {
-		// Catch any syntax errors in the JSON.
-		case errors.As(err, &syntaxError):
-			return Error{
-				Code: httpErrorBadRequest,
-				Message: "wrong request body format",
-			}, http.StatusBadRequest
+	// Catch any syntax errors in the JSON.
+	case errors.As(err, &syntaxError):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "wrong request body format",
+		}, http.StatusBadRequest
 
-		// Catch a potential io.ErrUnexpectedEOF error in the JSON.
-		case errors.Is(err, io.ErrUnexpectedEOF):
-			return Error{
-				Code: httpErrorBadRequest,
-				Message: "wrong request body format",
-			}, http.StatusBadRequest
+	// Catch a potential io.ErrUnexpectedEOF error in the JSON.
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "wrong request body format",
+		}, http.StatusBadRequest
 
-		// Catch any type errors.
-		case errors.As(err, &unmarshalTypeError):
-			return Error{
-				Code: httpErrorBadRequest,
-				Message: "request body contains an invalid value",
-			}, http.StatusBadRequest
+	// Catch any type errors.
+	case errors.As(err, &unmarshalTypeError):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "request body contains an invalid value",
+		}, http.StatusBadRequest
 
-		// Catch the error caused by extra unexpected fields in the request
-		// body.
-		case strings.HasPrefix(err.Error(), "json: unknown field "):
-			return Error{
-				Code: httpErrorBadRequest,
-				Message: "request body contains an unknown field",
-			}, http.StatusBadRequest
+	// Catch the error caused by extra unexpected fields in the request
+	// body.
+	case strings.HasPrefix(err.Error(), "json: unknown field "):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "request body contains an unknown field",
+		}, http.StatusBadRequest
 
-		// An io.EOF error is returned by Decode() if the request body is
-		// empty.
-		case errors.Is(err, io.EOF):
-			return Error{
-				Code: httpErrorBadRequest,
-				Message: "request body is empty",
-			}, http.StatusBadRequest
+	// An io.EOF error is returned by Decode() if the request body is
+	// empty.
+	case errors.Is(err, io.EOF):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "request body is empty",
+		}, http.StatusBadRequest
 
-		// Catch the error caused by the request body being too large.
-		case err.Error() == "http: request body too large":
-			return Error{
-				Code: httpErrorBadRequest,
-				Message: "request body too large",
-			}, http.StatusRequestEntityTooLarge
+	// Catch the error caused by the request body being too large.
+	case err.Error() == "http: request body too large":
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "request body too large",
+		}, http.StatusRequestEntityTooLarge
 
-		// Otherwise send a 500 Internal Server Error response.
-		default:
-			api.portal.log.Printf("ERROR: failed to decode JSON: %v\n", err)
-			return Error{
-				Code: httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError
+	// Otherwise send a 500 Internal Server Error response.
+	default:
+		api.portal.log.Printf("ERROR: failed to decode JSON: %v\n", err)
+		return Error{
+			Code:    httpErrorInternal,
+			Message: "internal error",
+		}, http.StatusInternalServerError
 	}
 }
 
@@ -325,7 +331,7 @@ func getCookie(r *http.Request, name string) string {
 	cookie, err := r.Cookie(name)
 	if err == nil {
 		v := cookie.Value
-		return strings.TrimPrefix(v, name + "=")
+		return strings.TrimPrefix(v, name+"=")
 	}
 	return ""
 }

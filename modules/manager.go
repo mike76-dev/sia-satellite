@@ -299,6 +299,9 @@ type Manager interface {
 	// DeleteMetadata deletes the renter's saved file metadata.
 	DeleteMetadata(types.PublicKey)
 
+	// DeleteObject deletes the saved file metadata object.
+	DeleteObject(types.PublicKey, string) error
+
 	// DeleteRenter deletes the renter data from the memory.
 	DeleteRenter(string)
 
