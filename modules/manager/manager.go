@@ -116,7 +116,7 @@ type hostContractor interface {
 	Renters() []modules.Renter
 
 	// RetrieveMetadata retrieves the file metadata from the database.
-	RetrieveMetadata(types.PublicKey) ([]modules.FileMetadata, error)
+	RetrieveMetadata(types.PublicKey, []string) ([]modules.FileMetadata, error)
 
 	// Synced returns a channel that is closed when the contractor is fully
 	// synced with the peer-to-peer network.
@@ -985,6 +985,49 @@ func (m *Manager) DeleteObject(pk types.PublicKey, path string) error {
 }
 
 // RetrieveMetadata retrieves the file metadata from the database.
-func (m *Manager) RetrieveMetadata(pk types.PublicKey) ([]modules.FileMetadata, error) {
-	return m.hostContractor.RetrieveMetadata(pk)
+func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modules.FileMetadata, error) {
+	// Get the account balance.
+	renter, err := m.GetRenter(pk)
+	if err != nil {
+		return nil, err
+	}
+	ub, err := m.GetBalance(renter.Email)
+	if err != nil {
+		return nil, err
+	}
+
+	// Retrieve metadata.
+	md, err := m.hostContractor.RetrieveMetadata(pk, present)
+	if err != nil {
+		return nil, err
+	}
+
+	// Deduct from the balance.
+	var fee float64
+	for _, fm := range md {
+		fee += float64(len(fm.Slabs)) * modules.RetrieveMetadataFee
+	}
+	if ub.Balance < fee {
+		return nil, errors.New("insufficient account balance")
+	}
+	ub.Balance -= fee
+	err = m.UpdateBalance(renter.Email, ub)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the spendings.
+	us, err := m.getSpendings(renter.Email)
+	if err != nil {
+		return nil, err
+	}
+	us.CurrentUsed += fee
+	us.CurrentOverhead += fee
+
+	err = m.updateSpendings(renter.Email, us)
+	if err != nil {
+		return nil, err
+	}
+
+	return md, nil
 }

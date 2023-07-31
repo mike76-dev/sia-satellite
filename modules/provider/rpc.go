@@ -699,7 +699,7 @@ func (p *Provider) managedRequestMetadata(s *modules.RPCSession) error {
 	}
 
 	// Get the metadata.
-	fm, err := p.m.RetrieveMetadata(rmr.PubKey)
+	fm, err := p.m.RetrieveMetadata(rmr.PubKey, rmr.PresentObjects)
 	if err != nil {
 		err = fmt.Errorf("could not retrieve metadata: %v", err)
 		s.WriteError(err)

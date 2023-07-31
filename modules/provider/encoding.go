@@ -557,19 +557,28 @@ func (smr *saveMetadataRequest) EncodeTo(e *types.Encoder) {
 
 // requestMetadataRequest is used to retrieve file metadata.
 type requestMetadataRequest struct {
-	PubKey    types.PublicKey
-	Signature types.Signature
+	PubKey         types.PublicKey
+	PresentObjects []string
+	Signature      types.Signature
 }
 
 // DecodeFrom implements requestBody.
 func (rmr *requestMetadataRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(rmr.PubKey[:])
+	rmr.PresentObjects = make([]string, d.ReadPrefix())
+	for i := 0; i < len(rmr.PresentObjects); i++ {
+		rmr.PresentObjects[i] = d.ReadString()
+	}
 	rmr.Signature.DecodeFrom(d)
 }
 
 // EncodeTo implements requestBody.
 func (rmr *requestMetadataRequest) EncodeTo(e *types.Encoder) {
 	e.Write(rmr.PubKey[:])
+	e.WritePrefix(len(rmr.PresentObjects))
+	for _, po := range rmr.PresentObjects {
+		e.WriteString(po)
+	}
 }
 
 // requestMetadataResponse is a response type for requestMetadataRequest.

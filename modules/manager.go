@@ -376,7 +376,7 @@ type Manager interface {
 	Renters() []Renter
 
 	// RetrieveMetadata retrieves the file metadata from the database.
-	RetrieveMetadata(types.PublicKey) ([]FileMetadata, error)
+	RetrieveMetadata(types.PublicKey, []string) ([]FileMetadata, error)
 
 	// RetrieveSpendings retrieves the user's spendings.
 	RetrieveSpendings(string, string) (UserSpendings, error)

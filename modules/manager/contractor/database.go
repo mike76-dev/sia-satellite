@@ -497,7 +497,13 @@ func (c *Contractor) DeleteObject(pk types.PublicKey, path string) error {
 }
 
 // RetrieveMetadata retrieves the file metadata from the database.
-func (c *Contractor) RetrieveMetadata(pk types.PublicKey) (fm []modules.FileMetadata, err error) {
+func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm []modules.FileMetadata, err error) {
+	// Create a map of the present objects for convenience.
+	po := make(map[string]struct{})
+	for _, p := range present {
+		po[p] = struct{}{}
+	}
+
 	rows, err := c.db.Query(`
 		SELECT id, enc_key, filepath
 		FROM ctr_metadata
@@ -516,6 +522,12 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey) (fm []modules.FileMeta
 		if err := rows.Scan(&objectID, &objectKey, &path); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
+
+		// If the object is present in the map, skip it.
+		if _, exists := po[path]; exists {
+			continue
+		}
+
 		slabRows, err := c.db.Query(`
 			SELECT id, enc_key, min_shards, offset, len
 			FROM ctr_slabs
