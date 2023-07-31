@@ -33,12 +33,8 @@ func (w *Wallet) threadedDBUpdate() {
 		err := w.syncDB()
 		w.mu.Unlock()
 		if err != nil {
-			// If the database is having problems, we need to close it to
-			// protect it. This will likely cause a panic somewhere when another
-			// caller tries to access dbTx but it is nil.
-			w.log.Severe("ERROR: syncDB encountered an error. Closing database to protect wallet. Wallet may crash:", err)
-			w.db.Close()
-			return
+			w.log.Severe("ERROR: syncDB encountered an error:", err)
+			panic("wallet syncing error")
 		}
 	}
 }

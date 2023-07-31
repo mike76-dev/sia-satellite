@@ -93,15 +93,13 @@ func (w *Wallet) initPersist(dir string) error {
 	w.dbTx, err = w.db.Begin()
 	if err != nil {
 		w.log.Critical("ERROR: failed to start database update:", err)
+		return err
 	}
 
 	// Ensure that the final db transaction is committed when the wallet closes.
 	w.tg.AfterStop(func() {
 		w.mu.Lock()
 		defer w.mu.Unlock()
-
-		// Wait if we are syncing.
-		for w.syncing {}
 
 		var err error
 		if w.dbRollback {
