@@ -9,7 +9,7 @@ endif
 
 ldflags= \
 -X "github.com/mike76-dev/sia-satellite/internal/build.BinaryName=satd" \
--X "github.com/mike76-dev/sia-satellite/internal/build.NodeVersion=0.2.0" \
+-X "github.com/mike76-dev/sia-satellite/internal/build.NodeVersion=0.3.0" \
 -X "github.com/mike76-dev/sia-satellite/internal/build.GitRevision=${GIT_DIRTY}${GIT_REVISION}" \
 -X "github.com/mike76-dev/sia-satellite/internal/build.BuildTime=${BUILD_TIME}"
 
@@ -21,21 +21,25 @@ pkgs = \
 	./external \
 	./mail \
 	./modules \
+	./modules/consensus \
+	./modules/gateway \
+	./modules/manager \
+	./modules/manager/contractor \
+	./modules/manager/contractor/contractset \
+	./modules/manager/hostdb \
+	./modules/manager/hostdb/hosttree \
+	./modules/manager/proto \
+	./modules/portal \
+	./modules/provider \
+	./modules/transactionpool \
+	./modules/wallet \
 	./node \
 	./node/api \
 	./node/api/client \
 	./node/api/server \
 	./persist \
-	#./portal \
 	./satc \
-	./satd \
-	#./satellite \
-	#./satellite/manager \
-	#./satellite/manager/contractor \
-	#./satellite/manager/hostdb \
-	#./satellite/manager/hostdb/hosttree \
-	#./satellite/manager/proto \
-	#./satellite/provider \
+	./satd
 
 # release-pkgs determine which packages are built for release and distribution
 # when running a 'make release' command.
@@ -49,8 +53,6 @@ lockcheckpkgs = \
 	./node/api/server \
 	./satc \
 	./satd \
-	#./satellite/manager/hostdb \
-	#./satellite/manager/proto \
 
 # dependencies list all packages needed to run make commands used to build
 # and lint satc/satd locally and in CI systems.
