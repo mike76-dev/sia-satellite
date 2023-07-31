@@ -18,9 +18,9 @@ Take a note of these 12 words. If you don't want to enter the seed each time `re
 
 You also need to chose the API password, which will be used by the UI. You can either enter it on each startup or put it in the `RENTERD_API_PASSWORD` environment variable.
 
-Now start `renterd`. It's recommended to increase the upload timeout, because the default 5 seconds have proven to be too short:
+Now start `renterd`. Replace `<PATH>` with the actual folder name where the databases will be stored:
 ```
-renterd --worker.uploadSectorTimeout=60s
+renterd --dir="<PATH>"
 ```
 If this is a fresh installation, `renterd` will now be syncing to the blockchain. You can go to the following step in the meantime.
 

@@ -353,7 +353,7 @@ Run the following command to create a database for the Satellite. This guide wil
 ```
 mysql> CREATE DATABASE satellite;
 ```
-Then create a user for the Satellite. This guide will be using `satuser` as the user name. Take a note of this name and be sure to change password to a strong password of your choosing:
+Then create a user for the Satellite. This guide will be using `satuser` as the user name. Take a note of this name and be sure to change password to a strong password of your choice:
 ```
 mysql> CREATE USER 'satuser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
 ```
@@ -524,16 +524,25 @@ $ journalctl -u satd -f
 If everything went well, you should see the following output:
 ```
 Output:
-Apr 17 13:38:00 <host> satd[31511]: Loading gateway...
-Apr 17 13:38:00 <host> satd[31511]: Loading consensus...
-Apr 17 13:38:00 <host> satd[31511]: Loading transaction pool...
-Apr 17 13:38:00 <host> satd[31511]: Loading wallet...
-Apr 17 13:38:00 <host> satd[31511]: Loading satellite...
-Apr 17 13:38:00 <host> satd[31511]: Loading portal...
-Apr 17 13:38:00 <host> satd[31511]: API is now available, synchronous startup completed in 0.019 seconds
-Apr 17 13:38:00 <host> satd[31511]: Wallet Password found, attempting to auto-unlock wallet...
-Apr 17 13:38:00 <host> satd[31511]: Auto-unlock failed: provided encryption key is incorrect
-Apr 17 13:38:00 <host> satd[31511]: Finished full setup in 0s
+Jul 31 15:16:17 <host> systemd[1]: Started satd.
+Jul 31 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
+Jul 31 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
+Jul 31 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
+Jul 31 15:16:17 <host> satd[226480]: satd v0.3.0
+Jul 31 15:16:17 <host> satd[226480]: Git Revision c9352a6
+Jul 31 15:16:17 <host> satd[226480]: Loading...
+Jul 31 15:16:17 <host> satd[226480]: Connecting to the SQL database...
+Jul 31 15:16:17 <host> satd[226480]: Loading gateway...
+Jul 31 15:16:17 <host> satd[226480]: Loading consensus...
+Jul 31 15:16:17 <host> satd[226480]: Loading transaction pool...
+Jul 31 15:16:17 <host> satd[226480]: Loading wallet...
+Jul 31 15:16:17 <host> satd[226480]: Loading manager...
+Jul 31 15:16:18 <host> satd[226480]: Loading provider...
+Jul 31 15:16:18 <host> satd[226480]: Loading portal...
+Jul 31 15:16:18 <host> satd[226480]: API is now available, synchronous startup completed in 0.019 seconds
+Jul 31 15:16:18 <host> satd[226480]: Wallet Password found, attempting to auto-unlock wallet...
+Jul 31 15:16:18 <host> satd[226480]: Auto-unlock failed: provided encryption key is incorrect
+Jul 31 15:16:18 <host> satd[226480]: Finished full setup in 0s
 ```
 The daemon will now be syncing to the blockchain. You can monitor the progress with the following command:
 ```
@@ -548,16 +557,16 @@ Once the node is synced, the output will change:
 ```
 Output:
 Synced: Yes
-Block:      0000000000000000f2089ff2ec33a42207f16979dcb74c69c3b3167d32305694
-Height:     413607
-Target:     [0 0 0 0 0 0 0 1 22 215 247 157 14 247 150 210 163 181 123 100 116 238 29 238 227 43 124 77 26 113 76 182]
-Difficulty: 16935537016953595800
+Block:      bid:00000000000000013c202585e95d03c2614e99c0fc74c45abfbbef6c3327bec4
+Height:     428683
+Target:     [0 0 0 0 0 0 0 1 75 152 56 175 21 91 242 148 66 247 215 220 161 236 232 219 132 237 129 170 88 165 124 154]
+Difficulty: ~14.24 uS
 ```
 You should now create a wallet. You will need the password you set in your `systemd` unit earlier. When prompted type in the wallet password you chose.
 ```
 $ satc wallet init -p --apipassword <api_password>
 ```
-A new 29 word wallet seed will be generated. Save this seed somewhere secure.
+A new 12-word wallet seed will be generated. Save this seed somewhere secure.
 ```
 Output:
 Wallet password: 
