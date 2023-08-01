@@ -103,16 +103,13 @@ func (m *Manager) GetBalance(email string) (modules.UserBalance, error) {
 		SELECT subscribed, sc_balance, sc_locked, currency, stripe_id
 		FROM mg_balances WHERE email = ?
 	`, email).Scan(&sub, &b, &l, &c, &id)
-	if err != nil && errors.Is(err, sql.ErrNoRows) {
-		return modules.UserBalance{}, nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return modules.UserBalance{}, err
 	}
 
-	scRate, err := m.GetSiacoinRate(c)
-	if err != nil {
-		return modules.UserBalance{}, err
+	scRate, scErr := m.GetSiacoinRate(c)
+	if scErr != nil {
+		return modules.UserBalance{}, scErr
 	}
 
 	ub := modules.UserBalance{

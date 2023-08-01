@@ -236,20 +236,21 @@ func (m *Manager) GetExchangeRate(currency string) (float64, error) {
 // ProcessConsensusChange gets called to inform Manager about the
 // changes in the consensus set.
 func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	// Process the applied blocks till the first found in the following month.
-	currentMonth := m.currentMonth.Timestamp.Month()
 	for _, block := range cc.AppliedBlocks {
+		m.mu.RLock()
+		currentMonth := m.currentMonth.Timestamp.Month()
+		m.mu.RUnlock()
 		newMonth := block.Timestamp.Month()
 		if newMonth != currentMonth {
+			m.mu.Lock()
 			m.prevMonth = m.currentMonth
 			m.currentMonth = blockTimestamp{
 				BlockHeight: cc.BlockHeight,
 				Timestamp:   block.Timestamp,
 			}
 			err := dbPutBlockTimestamps(m.dbTx, m.currentMonth, m.prevMonth)
+			m.mu.Unlock()
 			if err != nil {
 				m.log.Println("ERROR: couldn't save block timestamps", err)
 			}
@@ -258,44 +259,46 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 			renters := m.Renters()
 			for _, renter := range renters {
 				us, err := m.getSpendings(renter.Email)
-				if err == nil {
-					us.PrevLocked = us.CurrentLocked
-					us.PrevUsed = us.CurrentUsed
-					us.PrevOverhead = us.CurrentOverhead
-					us.CurrentLocked = 0
-					us.CurrentUsed = 0
-					us.CurrentOverhead = 0
-					us.PrevFormed = us.CurrentFormed
-					us.PrevRenewed = us.CurrentRenewed
-					us.CurrentFormed = 0
-					us.CurrentRenewed = 0
-					count, err := m.numSlabs(renter.PublicKey)
-					if err != nil {
-						m.log.Println("ERROR: couldn't retrieve slab count:", err)
-						continue
-					}
-					fee := float64(modules.StoreMetadataFee * count)
-					us.PrevUsed += fee
-					us.PrevOverhead += fee
-					err = m.updateSpendings(renter.Email, us)
-					if err != nil {
-						m.log.Println("ERROR: couldn't update spendings:", err)
-					}
-					// Deduct from the account balance.
-					ub, err := m.GetBalance(renter.Email)
-					if err != nil {
-						m.log.Println("ERROR: couldn't retrieve balance:", err)
-					}
-					if ub.Balance < fee {
-						// Insufficient balance, delete the file metadata.
-						m.log.Println("WARN: insufficient account balance, deleting stored metadata")
-						m.DeleteMetadata(renter.PublicKey)
-						continue
-					}
-					ub.Balance -= fee
-					if err := m.UpdateBalance(renter.Email, ub); err != nil {
-						m.log.Println("ERROR: couldn't update balance", err)
-					}
+				if err != nil {
+					m.log.Println("ERROR: couldn't retrieve renter spendings:", err)
+					continue
+				}
+				us.PrevLocked = us.CurrentLocked
+				us.PrevUsed = us.CurrentUsed
+				us.PrevOverhead = us.CurrentOverhead
+				us.CurrentLocked = 0
+				us.CurrentUsed = 0
+				us.CurrentOverhead = 0
+				us.PrevFormed = us.CurrentFormed
+				us.PrevRenewed = us.CurrentRenewed
+				us.CurrentFormed = 0
+				us.CurrentRenewed = 0
+				count, err := m.numSlabs(renter.PublicKey)
+				if err != nil {
+					m.log.Println("ERROR: couldn't retrieve slab count:", err)
+					continue
+				}
+				fee := float64(modules.StoreMetadataFee * count)
+				us.PrevUsed += fee
+				us.PrevOverhead += fee
+				err = m.updateSpendings(renter.Email, us)
+				if err != nil {
+					m.log.Println("ERROR: couldn't update spendings:", err)
+				}
+				// Deduct from the account balance.
+				ub, err := m.GetBalance(renter.Email)
+				if err != nil {
+					m.log.Println("ERROR: couldn't retrieve balance:", err)
+				}
+				if ub.Balance < fee {
+					// Insufficient balance, delete the file metadata.
+					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
+					m.DeleteMetadata(renter.PublicKey)
+					continue
+				}
+				ub.Balance -= fee
+				if err := m.UpdateBalance(renter.Email, ub); err != nil {
+					m.log.Println("ERROR: couldn't update balance", err)
 				}
 			}
 
