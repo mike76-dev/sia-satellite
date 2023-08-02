@@ -23,7 +23,7 @@ type (
 		contract     modules.RenterContract
 		amount       types.Currency
 		renterPubKey types.PublicKey
-		secretKey    types.PrivateKey 
+		secretKey    types.PrivateKey
 	}
 )
 
@@ -216,7 +216,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		}
 
 		// Prepare the file contract and the final revision.
-		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight - blockHeight, hostSettings)
+		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight-blockHeight, hostSettings)
 		hostCollateral := rhpv2.ContractRenewalCollateral(oldRev.FileContract, expectedStorage, hostSettings, blockHeight, endHeight)
 		contractPrice = host.PriceTable.ContractPrice
 		var renterTxnSet []types.Transaction
@@ -267,7 +267,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		}
 
 		// Commit changes to old contract.
-		if err := oldFC.Clear(txnSet[len(txnSet) - 1]); err != nil {
+		if err := oldFC.Clear(txnSet[len(txnSet)-1]); err != nil {
 			c.staticContracts.Return(oldFC)
 			return fundsSpent, modules.RenterContract{}, modules.AddContext(err, "couldn't clear the old contract")
 		}
@@ -292,7 +292,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		// contract id but other modules are only interested in the most recent
 		// contract anyway.
 		c.mu.Lock()
-		c.pubKeysToContractID[newContract.RenterPublicKey.String() + newContract.HostPublicKey.String()] = newContract.ID
+		c.pubKeysToContractID[newContract.RenterPublicKey.String()+newContract.HostPublicKey.String()] = newContract.ID
 		c.mu.Unlock()
 
 		// Update the hostdb to include the new contract.
@@ -308,8 +308,9 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		// was the host's fault.
 		if hostFault {
 			c.mu.Lock()
-			c.numFailedRenews[id]++
 			totalFailures := c.numFailedRenews[id]
+			totalFailures++
+			c.numFailedRenews[id] = totalFailures
 			c.mu.Unlock()
 			c.log.Println("INFO: remote host determined to be at fault, tallying up failed renews", totalFailures, id)
 		}
@@ -319,7 +320,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		c.mu.RLock()
 		numRenews, failedBefore := c.numFailedRenews[md.ID]
 		c.mu.RUnlock()
-		secondHalfOfWindow := blockHeight + allowance.RenewWindow / 2 >= md.EndHeight
+		secondHalfOfWindow := blockHeight+allowance.RenewWindow/2 >= md.EndHeight
 		replace := numRenews >= consecutiveRenewalsBeforeReplacement
 		if failedBefore && secondHalfOfWindow && replace {
 			oldUtility.GoodForRenew = false
@@ -726,7 +727,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		}
 
 		// Prepare the file contract and the final revision.
-		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight - blockHeight, hostSettings)
+		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight-blockHeight, hostSettings)
 		hostCollateral := rhpv2.ContractRenewalCollateral(oldRev.FileContract, expectedStorage, hostSettings, blockHeight, endHeight)
 		contractPrice = host.PriceTable.ContractPrice
 		var renterTxnSet []types.Transaction
@@ -738,7 +739,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		// Renew the contract.
 		rev, txnSet, err = proto.RPCTrustlessRenewContract(ctx, s, t, renterTxnSet, toSign, c.wallet)
 		if err != nil {
-			if !modules.ContainsError(err, errors.New("failed to sign transaction")) && !modules.ContainsError(err, errors.New("invalid renter signature")){
+			if !modules.ContainsError(err, errors.New("failed to sign transaction")) && !modules.ContainsError(err, errors.New("invalid renter signature")) {
 				hostFault = true
 			}
 			c.wallet.ReleaseInputs(renterTxnSet)
@@ -777,7 +778,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		}
 
 		// Commit changes to old contract.
-		if err := oldFC.Clear(txnSet[len(txnSet) - 1]); err != nil {
+		if err := oldFC.Clear(txnSet[len(txnSet)-1]); err != nil {
 			c.staticContracts.Return(oldFC)
 			return fundsSpent, modules.RenterContract{}, modules.AddContext(err, "couldn't clear the old contract")
 		}
@@ -802,7 +803,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		// contract id but other modules are only interested in the most recent
 		// contract anyway.
 		c.mu.Lock()
-		c.pubKeysToContractID[newContract.RenterPublicKey.String() + newContract.HostPublicKey.String()] = newContract.ID
+		c.pubKeysToContractID[newContract.RenterPublicKey.String()+newContract.HostPublicKey.String()] = newContract.ID
 		c.mu.Unlock()
 
 		// Update the hostdb to include the new contract.
@@ -829,7 +830,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		c.mu.RLock()
 		numRenews, failedBefore := c.numFailedRenews[md.ID]
 		c.mu.RUnlock()
-		secondHalfOfWindow := blockHeight + allowance.RenewWindow / 2 >= md.EndHeight
+		secondHalfOfWindow := blockHeight+allowance.RenewWindow/2 >= md.EndHeight
 		replace := numRenews >= consecutiveRenewalsBeforeReplacement
 		if failedBefore && secondHalfOfWindow && replace {
 			oldUtility.GoodForRenew = false

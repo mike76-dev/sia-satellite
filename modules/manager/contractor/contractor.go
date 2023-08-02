@@ -335,6 +335,7 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Ma
 		renewing:             make(map[types.FileContractID]bool),
 		renewedFrom:          make(map[types.FileContractID]types.FileContractID),
 		renewedTo:            make(map[types.FileContractID]types.FileContractID),
+		numFailedRenews:      make(map[types.FileContractID]uint64),
 	}
 	c.staticWatchdog = newWatchdog(c)
 
