@@ -11,8 +11,6 @@ import (
 	"go.sia.tech/core/types"
 )
 
-const bytesInTerabyte = 1024 * 1024 * 1024 * 1024
-
 // managedRequestContracts returns a slice containing the list of the
 // renter's active contracts.
 func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
@@ -140,10 +138,10 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 
 		MaxRPCPrice:               fr.MaxRPCPrice,
 		MaxContractPrice:          fr.MaxContractPrice,
-		MaxDownloadBandwidthPrice: fr.MaxDownloadPrice.Div64(bytesInTerabyte),
+		MaxDownloadBandwidthPrice: fr.MaxDownloadPrice,
 		MaxSectorAccessPrice:      fr.MaxSectorAccessPrice,
-		MaxStoragePrice:           fr.MaxStoragePrice.Div64(bytesInTerabyte),
-		MaxUploadBandwidthPrice:   fr.MaxUploadPrice.Div64(bytesInTerabyte),
+		MaxStoragePrice:           fr.MaxStoragePrice.Mul64(modules.BlocksPerMonth).Mul64(modules.BytesPerTerabyte),
+		MaxUploadBandwidthPrice:   fr.MaxUploadPrice,
 		MinMaxCollateral:          fr.MinMaxCollateral,
 		BlockHeightLeeway:         fr.BlockHeightLeeway,
 	}
@@ -242,10 +240,10 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 
 		MaxRPCPrice:               rr.MaxRPCPrice,
 		MaxContractPrice:          rr.MaxContractPrice,
-		MaxDownloadBandwidthPrice: rr.MaxDownloadPrice.Div64(bytesInTerabyte),
+		MaxDownloadBandwidthPrice: rr.MaxDownloadPrice,
 		MaxSectorAccessPrice:      rr.MaxSectorAccessPrice,
-		MaxStoragePrice:           rr.MaxStoragePrice.Div64(bytesInTerabyte),
-		MaxUploadBandwidthPrice:   rr.MaxUploadPrice.Div64(bytesInTerabyte),
+		MaxStoragePrice:           rr.MaxStoragePrice.Mul64(modules.BlocksPerMonth).Mul64(modules.BytesPerTerabyte),
+		MaxUploadBandwidthPrice:   rr.MaxUploadPrice,
 		MinMaxCollateral:          rr.MinMaxCollateral,
 		BlockHeightLeeway:         rr.BlockHeightLeeway,
 	}
@@ -531,7 +529,7 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	}
 
 	// Check if we know this renter.
-	_, err = p.m.GetRenter(usr.PubKey)
+	renter, err := p.m.GetRenter(usr.PubKey)
 	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
 		s.WriteError(err)
@@ -590,6 +588,7 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 
 	// Create an allowance.
 	a := modules.Allowance{
+		Funds:       renter.Allowance.Funds,
 		Hosts:       usr.Hosts,
 		Period:      usr.Period,
 		RenewWindow: usr.RenewWindow,
@@ -602,12 +601,15 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 
 		MaxRPCPrice:               usr.MaxRPCPrice,
 		MaxContractPrice:          usr.MaxContractPrice,
-		MaxDownloadBandwidthPrice: usr.MaxDownloadPrice.Div64(bytesInTerabyte),
+		MaxDownloadBandwidthPrice: usr.MaxDownloadPrice,
 		MaxSectorAccessPrice:      usr.MaxSectorAccessPrice,
-		MaxStoragePrice:           usr.MaxStoragePrice.Div64(bytesInTerabyte),
-		MaxUploadBandwidthPrice:   usr.MaxUploadPrice.Div64(bytesInTerabyte),
+		MaxStoragePrice:           usr.MaxStoragePrice.Mul64(modules.BlocksPerMonth).Mul64(modules.BytesPerTerabyte),
+		MaxUploadBandwidthPrice:   usr.MaxUploadPrice,
 		MinMaxCollateral:          usr.MinMaxCollateral,
 		BlockHeightLeeway:         usr.BlockHeightLeeway,
+	}
+	if a.Funds.IsZero() {
+		a.Funds = types.HastingsPerSiacoin.Mul64(1000) // 1 KS
 	}
 
 	// Set the allowance.
