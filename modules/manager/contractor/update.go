@@ -23,7 +23,7 @@ func (c *Contractor) managedArchiveContracts() {
 		c.mu.RLock()
 		_, renewed := c.renewedTo[contract.ID]
 		c.mu.RUnlock()
-		if currentHeight > contract.EndHeight || renewed {
+		if currentHeight > contract.EndHeight-modules.BlocksPerDay || renewed {
 			id := contract.ID
 			c.staticContracts.RetireContract(id)
 			expired = append(expired, id)
@@ -57,7 +57,7 @@ func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
 	// CurrentPeriod.
 	renters := c.renters
 	for key, renter := range renters {
-		if renter.Allowance.Active() && c.blockHeight >= renter.CurrentPeriod + renter.Allowance.Period {
+		if renter.Allowance.Active() && c.blockHeight >= renter.CurrentPeriod+renter.Allowance.Period {
 			renter.CurrentPeriod += renter.Allowance.Period
 			c.renters[key] = renter
 			err := c.UpdateRenter(renter)

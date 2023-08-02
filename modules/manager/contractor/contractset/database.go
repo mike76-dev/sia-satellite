@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/mike76-dev/sia-satellite/modules"
 	"go.sia.tech/core/types"
 )
 
@@ -83,11 +84,11 @@ func (cs *ContractSet) loadContracts(height uint64) error {
 		copy(renewedTo[:], renewed)
 
 		// Check if the contract has expired.
-		if renewedTo == (types.FileContractID{}) && fc.header.EndHeight() >= height {
+		if renewedTo == (types.FileContractID{}) && fc.header.EndHeight() >= height+modules.BlocksPerDay {
 			cs.contracts[fcid] = fc
 			rpk := fc.header.RenterPublicKey().String()
 			hpk := fc.header.HostPublicKey().String()
-			cs.pubKeys[rpk + hpk] = fcid
+			cs.pubKeys[rpk+hpk] = fcid
 		} else {
 			cs.oldContracts[fcid] = fc
 		}
