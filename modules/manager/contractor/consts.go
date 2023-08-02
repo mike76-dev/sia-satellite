@@ -16,10 +16,10 @@ const (
 
 	// formContractTimeout is the amount of time we wait to form a contract
 	// with the host.
-	formContractTimeout = 5 * time.Minute
+	formContractTimeout = 1 * time.Minute
 
 	// renewContractTimeout is the amount of time we wait to renew a contract.
-	renewContractTimeout = 5 * time.Minute
+	renewContractTimeout = 1 * time.Minute
 )
 
 // Constants related to the contractor's alerts.
