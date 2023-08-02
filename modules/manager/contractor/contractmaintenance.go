@@ -486,6 +486,20 @@ func (c *Contractor) threadedContractMaintenance() {
 		c.log.Printf("INFO: renewing %v contracts\n", len(renewSet))
 	}
 
+	// Update the failed renew map so that it only contains contracts which we
+	// are currently trying to renew. The failed renew map is a map that we use
+	// to track how many times consecutively we failed to renew a contract with
+	// a host, so that we know if we need to abandon that host.
+	c.mu.Lock()
+	newFirstFailedRenew := make(map[types.FileContractID]uint64)
+	for _, r := range renewSet {
+		if _, exists := c.numFailedRenews[r.contract.ID]; exists {
+			newFirstFailedRenew[r.contract.ID] = c.numFailedRenews[r.contract.ID]
+		}
+	}
+	c.numFailedRenews = newFirstFailedRenew
+	c.mu.Unlock()
+
 	// Go through the contracts we've assembled for renewal.
 	hastings := modules.Float64(types.HastingsPerSiacoin)
 	for _, renewal := range renewSet {
@@ -562,18 +576,4 @@ func (c *Contractor) threadedContractMaintenance() {
 			}
 		}
 	}
-
-	// Update the failed renew map so that it only contains contracts which we
-	// are currently trying to renew. The failed renew map is a map that we
-	// use to track how many times consecutively we failed to renew a contract
-	// with a host, so that we know if we need to abandon that host.
-	c.mu.Lock()
-	newFirstFailedRenew := make(map[types.FileContractID]uint64)
-	for _, r := range renewSet {
-		if _, exists := c.numFailedRenews[r.contract.ID]; exists {
-			newFirstFailedRenew[r.contract.ID] = c.numFailedRenews[r.contract.ID]
-		}
-	}
-	c.numFailedRenews = newFirstFailedRenew
-	c.mu.Unlock()
 }
