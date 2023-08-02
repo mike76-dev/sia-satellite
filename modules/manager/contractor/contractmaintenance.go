@@ -424,26 +424,23 @@ func (c *Contractor) threadedContractMaintenance() {
 	}
 	defer c.maintenanceLock.Unlock()
 
+	// Get the current block height.
+	c.mu.Lock()
+	blockHeight := c.blockHeight
+	c.mu.Unlock()
+
 	// Perform general cleanup of the contracts. This includes archiving
 	// contracts and other cleanup work.
 	c.managedArchiveContracts()
 	c.managedCheckForDuplicates()
 	c.managedUpdatePubKeysToContractIDMap()
 	c.managedPruneRedundantAddressRange()
-	if err != nil {
-		c.log.Println("ERROR: unable to mark contract utilities:", err)
-		return
-	}
+	c.staticContracts.DeleteOldContracts(blockHeight)
 	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
 		c.log.Println("ERROR: unable to update hostdb contracts:", err)
 		return
 	}
-
-	// Get the current block height.
-	c.mu.Lock()
-	blockHeight := c.blockHeight
-	c.mu.Unlock()
 
 	// The total number of renews that failed for any reason.
 	var numRenewFails int

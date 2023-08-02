@@ -10,6 +10,10 @@ import (
 	"go.sia.tech/core/types"
 )
 
+// contractAgeThreshold is the height after which an old contract is removed
+// from the contract sets.
+const contractAgeThreshold = modules.BlocksPerMonth // 1 month
+
 // A ContractSet provides access to a set of contracts. Its purpose is to
 // serialize modifications to individual contracts, as well as to provide
 // operations on the set as a whole.
@@ -59,7 +63,7 @@ func (cs *ContractSet) Delete(c *FileContract) {
 	}
 	id := c.header.ID()
 	delete(cs.contracts, id)
-	delete(cs.pubKeys, c.header.RenterPublicKey().String() + c.header.HostPublicKey().String())
+	delete(cs.pubKeys, c.header.RenterPublicKey().String()+c.header.HostPublicKey().String())
 	cs.mu.Unlock()
 	c.revisionMu.Unlock()
 }
@@ -69,6 +73,25 @@ func (cs *ContractSet) Erase(fcid types.FileContractID) {
 	err := deleteContract(fcid, cs.db)
 	if err != nil {
 		cs.log.Println("ERROR: unable to delete the contract:", fcid)
+	}
+}
+
+// DeleteOldContracts deletes old contracts from both the set and the database.
+func (cs *ContractSet) DeleteOldContracts(height uint64) {
+	var toDelete []types.FileContractID
+	cs.mu.Lock()
+	for _, oc := range cs.oldContracts {
+		id := oc.header.ID()
+		endHeight := oc.header.EndHeight()
+		if height > endHeight+contractAgeThreshold {
+			toDelete = append(toDelete, id)
+			delete(cs.oldContracts, id)
+		}
+	}
+	cs.mu.Unlock()
+
+	for _, id := range toDelete {
+		cs.Erase(id)
 	}
 }
 
