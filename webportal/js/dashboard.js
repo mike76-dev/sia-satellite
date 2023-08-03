@@ -1024,9 +1024,11 @@ function getSettings() {
 				console.log(data);
 			} else {
 				let ar = document.getElementById('settings-autorenew');
-				let md = document.getElementById('settings-metadata')
+				let md = document.getElementById('settings-metadata');
+				let fr = document.getElementById('settings-autorepair');
 				ar.checked = data.autorenew;
 				md.checked = data.backupmetadata;
+				fr.checked = data.autorepair;
 			}
 		})
 		.catch(error => console.log(error));

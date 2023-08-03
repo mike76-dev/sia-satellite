@@ -338,9 +338,10 @@ func (p *Portal) createNewRenter(email string, pk types.PublicKey) error {
 	_, err := p.db.Exec(`
 		INSERT INTO ctr_renters
 		(email, public_key, current_period, allowance,
-		private_key, auto_renew_contracts, backup_file_metadata)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, email, pk[:], 0, buf.Bytes(), []byte{}, false, false)
+		private_key, auto_renew_contracts, backup_file_metadata,
+		auto_repair_files)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, pk[:], 0, buf.Bytes(), []byte{}, false, false, false)
 	if err != nil {
 		return err
 	}

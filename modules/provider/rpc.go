@@ -502,6 +502,7 @@ func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
 	resp := getSettingsResponse{
 		AutoRenewContracts: renter.Settings.AutoRenewContracts,
 		BackupFileMetadata: renter.Settings.BackupFileMetadata,
+		AutoRepairFiles:    renter.Settings.AutoRepairFiles,
 	}
 
 	return s.WriteResponse(&resp)
@@ -537,6 +538,13 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	}
 
 	// Sanity checks.
+	if usr.AutoRenewContracts || usr.AutoRepairFiles {
+		if len(usr.PrivateKey) == 0 {
+			err := errors.New("private key must be provided with these options")
+			s.WriteError(err)
+			return err
+		}
+	}
 	if usr.AutoRenewContracts {
 		if usr.Hosts == 0 {
 			err := errors.New("can't set zero hosts")
@@ -564,11 +572,17 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 			return err
 		}
 	}
+	if usr.AutoRepairFiles && !usr.BackupFileMetadata {
+		err := errors.New("file auto-repairs only work with metadata backups enabled")
+		s.WriteError(err)
+		return err
+	}
 
 	// Update the settings.
 	err = p.m.UpdateRenterSettings(usr.PubKey, modules.RenterSettings{
 		AutoRenewContracts: usr.AutoRenewContracts,
 		BackupFileMetadata: usr.BackupFileMetadata,
+		AutoRepairFiles:    usr.AutoRepairFiles,
 	}, usr.PrivateKey)
 	if err != nil {
 		err = fmt.Errorf("couldn't update settings: %v", err)

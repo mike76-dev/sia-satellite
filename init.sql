@@ -451,6 +451,7 @@ CREATE TABLE ctr_renters (
 	private_key          BINARY(64),
 	auto_renew_contracts BOOL NOT NULL,
 	backup_file_metadata BOOL NOT NULL,
+	auto_repair_files    BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );
