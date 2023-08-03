@@ -242,7 +242,7 @@ func dbForEachSiafundOutput(tx *sql.Tx, fn func(types.SiafundOutputID, types.Sia
 
 // dbPutSpentOutput inserts a new spent output into the database.
 func dbPutSpentOutput(tx *sql.Tx, id types.Hash256, height uint64) error {
-	_, err := tx.Exec("INSERT INTO wt_spo (oid, height) VALUES (?, ?)", id[:], height)
+	_, err := tx.Exec("REPLACE INTO wt_spo (oid, height) VALUES (?, ?)", id[:], height)
 	return err
 }
 
