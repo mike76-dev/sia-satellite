@@ -76,7 +76,7 @@ func (w *Wallet) checkOutput(tx *sql.Tx, currentHeight uint64, id types.SiacoinO
 	// Check that this output has not recently been spent by the wallet.
 	spendHeight, err := dbGetSpentOutput(tx, types.Hash256(id))
 	if err == nil {
-		if spendHeight + RespendTimeout > currentHeight {
+		if spendHeight+RespendTimeout > currentHeight {
 			return errSpendHeightTooHigh
 		}
 	}
@@ -333,5 +333,5 @@ func (w *Wallet) Sign(txn *types.Transaction, toSign []types.Hash256, cf types.C
 // DropTransactions is a helper function that releases the inputs of
 // a transaction set. It should only be called on transactions that
 // are invalid or will never be broadcast.
-func (w *Wallet)DropTransactions(txnSet []types.Transaction) {
+func (w *Wallet) DropTransactions(txnSet []types.Transaction) {
 }

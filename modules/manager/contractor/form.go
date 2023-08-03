@@ -161,7 +161,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		}()
 
 		// Prepare and add file contract.
-		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight - blockHeight, hostSettings)
+		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight-blockHeight, hostSettings)
 		hostCollateral := rhpv2.ContractFormationCollateral(renter.Allowance.Period, expectedStorage, hostSettings)
 		contractPrice = host.Settings.ContractPrice
 		var renterTxnSet []types.Transaction
@@ -223,7 +223,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	// Add a mapping from the contract's id to the public keys of the host
 	// and the renter.
 	c.mu.Lock()
-	_, exists = c.pubKeysToContractID[contract.RenterPublicKey.String() + contract.HostPublicKey.String()]
+	_, exists = c.pubKeysToContractID[contract.RenterPublicKey.String()+contract.HostPublicKey.String()]
 	if exists {
 		c.mu.Unlock()
 		// We need to return a funding value because money was spent on this
@@ -231,7 +231,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		c.log.Println("WARN: attempted to form a new contract with a host that this renter already has a contract with.")
 		return contractFunding, modules.RenterContract{}, fmt.Errorf("%v already has a contract with host %v", contract.RenterPublicKey, contract.HostPublicKey)
 	}
-	c.pubKeysToContractID[contract.RenterPublicKey.String() + contract.HostPublicKey.String()] = contract.ID
+	c.pubKeysToContractID[contract.RenterPublicKey.String()+contract.HostPublicKey.String()] = contract.ID
 	c.mu.Unlock()
 
 	c.log.Printf("INFO: formed contract %v with %v for %v\n", contract.ID, host.Settings.NetAddress, contract.RenterFunds)
@@ -303,7 +303,7 @@ func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([
 	minInitialContractFunds := renter.Allowance.Funds.Div64(renter.Allowance.Hosts).Div64(MinInitialContractFundingDivFactor)
 
 	// Get Hosts.
-	hosts, err := c.hdb.RandomHostsWithAllowance(neededContracts * 4 + randomHostsBufferForScore, blacklist, addressBlacklist, renter.Allowance)
+	hosts, err := c.hdb.RandomHostsWithAllowance(neededContracts*4+randomHostsBufferForScore, blacklist, addressBlacklist, renter.Allowance)
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +489,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 		}()
 
 		// Prepare and add file contract.
-		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight - blockHeight, hostSettings)
+		expectedStorage := fundsToExpectedStorage(contractFunding, endHeight-blockHeight, hostSettings)
 		hostCollateral := rhpv2.ContractFormationCollateral(renter.Allowance.Period, expectedStorage, hostSettings)
 		contractPrice = host.Settings.ContractPrice
 		var renterTxnSet []types.Transaction
@@ -551,7 +551,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 	// Add a mapping from the contract's id to the public keys of the host
 	// and the renter.
 	c.mu.Lock()
-	_, exists = c.pubKeysToContractID[contract.RenterPublicKey.String() + contract.HostPublicKey.String()]
+	_, exists = c.pubKeysToContractID[contract.RenterPublicKey.String()+contract.HostPublicKey.String()]
 	if exists {
 		c.mu.Unlock()
 		// We need to return a funding value because money was spent on this
@@ -559,7 +559,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 		c.log.Println("WARN: attempted to form a new contract with a host that this renter already has a contract with.")
 		return contractFunding, modules.RenterContract{}, fmt.Errorf("%v already has a contract with host %v", contract.RenterPublicKey, contract.HostPublicKey)
 	}
-	c.pubKeysToContractID[contract.RenterPublicKey.String() + contract.HostPublicKey.String()] = contract.ID
+	c.pubKeysToContractID[contract.RenterPublicKey.String()+contract.HostPublicKey.String()] = contract.ID
 	c.mu.Unlock()
 
 	c.log.Printf("INFO: formed contract %v with %v for %v\n", contract.ID, host.Settings.NetAddress, contract.RenterFunds)
