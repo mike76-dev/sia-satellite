@@ -63,6 +63,7 @@ var paymentCurrency = 'USD';
 var processing = false;
 var paying = false;
 
+getVersion();
 retrieveBlockHeight();
 retrieveBalance();
 retrieveAverages();
@@ -1149,6 +1150,25 @@ function deleteFiles() {
 		.then(data => {
 			if (data) {
 				console.log(data);
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function getVersion() {
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/version', options)
+		.then(response => response.json())
+		.then(data => {
+			if (data.code) {
+				console.log(data);
+			} else {
+				document.getElementById('version').innerHTML = data.version;
 			}
 		})
 		.catch(error => console.log(error));

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/mike76-dev/sia-satellite/internal/build"
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"go.sia.tech/core/types"
@@ -730,4 +731,11 @@ func (api *portalAPI) filesHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	writeSuccess(w)
+}
+
+// versionHandlerGET handles the GET /dashboard/version requests.
+func (api *portalAPI) versionHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	writeJSON(w, struct {
+		Version string `json:"version"`
+	}{Version: build.NodeVersion})
 }
