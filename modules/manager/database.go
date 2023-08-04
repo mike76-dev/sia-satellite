@@ -107,6 +107,11 @@ func (m *Manager) GetBalance(email string) (modules.UserBalance, error) {
 		return modules.UserBalance{}, err
 	}
 
+	// New user: set USD as the default currency.
+	if errors.Is(err, sql.ErrNoRows) {
+		c = "USD"
+	}
+
 	scRate, scErr := m.GetSiacoinRate(c)
 	if scErr != nil {
 		return modules.UserBalance{}, scErr
