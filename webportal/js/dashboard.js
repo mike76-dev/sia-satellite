@@ -358,25 +358,22 @@ function retrieveBalance() {
 					averages.currency = c;
 					retrieveAverages();
 				}
-				if (data.isuser) {
-					document.getElementById('select-none').classList.add('disabled');
-					document.getElementById('select-plan').innerHTML =
-						(data.subscribed ? 'Subscription' : 'Pre-payment');
-					document.getElementById('select-balance-primary').innerHTML = 
-						(data.balance * data.scrate).toFixed(2) + ' ' + c;
-					document.getElementById('select-balance-secondary').innerHTML = 
-						data.balance.toFixed(2) + ' SC';
-					document.getElementById('select-currency').value = c;
-					document.getElementById('payment-currency').innerHTML = c;
-					document.getElementById('contract-currency').innerHTML = c;
-					document.getElementById('storage-currency').innerHTML = c;
-					document.getElementById('upload-currency').innerHTML = c;
-					document.getElementById('download-currency').innerHTML = c;
-					if (!paying) {
-						document.getElementById('select').classList.remove('disabled');
-					}
-					document.getElementById('reveal').classList.remove('disabled');
+				document.getElementById('select-plan').innerHTML =
+					(data.subscribed ? 'Subscription' : 'Pre-payment');
+				document.getElementById('select-balance-primary').innerHTML = 
+					(data.balance * data.scrate).toFixed(2) + ' ' + c;
+				document.getElementById('select-balance-secondary').innerHTML = 
+					data.balance.toFixed(2) + ' SC';
+				document.getElementById('select-currency').value = c;
+				document.getElementById('payment-currency').innerHTML = c;
+				document.getElementById('contract-currency').innerHTML = c;
+				document.getElementById('storage-currency').innerHTML = c;
+				document.getElementById('upload-currency').innerHTML = c;
+				document.getElementById('download-currency').innerHTML = c;
+				if (!paying) {console.log('removing');
+					document.getElementById('select').classList.remove('disabled');
 				}
+				document.getElementById('reveal').classList.remove('disabled');
 			}
 		})
 		.catch(error => console.log(error));
