@@ -206,7 +206,7 @@ func (m *Manager) IncrementStats(email string, renewed bool) (err error) {
 // the specified renter.
 func (m *Manager) numSlabs(pk types.PublicKey) (count int, err error) {
 	var items []types.Hash256
-	rows, err := m.db.Query("SELECT id FROM ctr_metadata WHERE renter_pk = ?", pk[:])
+	rows, err := m.db.Query("SELECT enc_key FROM ctr_metadata WHERE renter_pk = ?", pk[:])
 	if err != nil {
 		return
 	}

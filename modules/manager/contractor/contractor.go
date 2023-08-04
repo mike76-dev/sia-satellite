@@ -520,3 +520,21 @@ func (c *Contractor) UpdateRenterSettings(rpk types.PublicKey, settings modules.
 	c.renters[rpk] = renter
 	return c.UpdateRenter(renter)
 }
+
+// UpdateMetadata updates the file metadata in the database.
+func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
+	err := c.updateMetadata(pk, fm)
+	if err != nil {
+		c.log.Println("ERROR: couldn't update metadata:", err)
+	}
+	return err
+}
+
+// RetrieveMetadata retrieves the file metadata from the database.
+func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm []modules.FileMetadata, err error) {
+	fm, err = c.retrieveMetadata(pk, present)
+	if err != nil {
+		c.log.Println("ERROR: couldn't retrieve metadata:", err)
+	}
+	return
+}

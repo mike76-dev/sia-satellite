@@ -329,7 +329,7 @@ func (w *watchdog) load() error {
 // DeleteMetadata deletes the renter's saved file metadata.
 func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 	var objects, slabs []types.Hash256
-	rows, err := c.db.Query("SELECT id FROM ctr_metadata WHERE renter_pk = ?", pk[:])
+	rows, err := c.db.Query("SELECT enc_key FROM ctr_metadata WHERE renter_pk = ?", pk[:])
 	if err != nil {
 		c.log.Println("ERROR: unable to retrieve metadata", err)
 	}
@@ -344,7 +344,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 		copy(key[:], id)
 		objects = append(objects, key)
 
-		slabRows, err := c.db.Query("SELECT id FROM ctr_slabs WHERE object_id = ?", id)
+		slabRows, err := c.db.Query("SELECT enc_key FROM ctr_slabs WHERE object_id = ?", id)
 		if err != nil {
 			c.log.Println("ERROR: unable to retrieve slabs:", err)
 			continue
@@ -389,7 +389,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, path string) error {
 	objectID := make([]byte, 32)
 	err := tx.QueryRow(`
-		SELECT id
+		SELECT enc_key
 		FROM ctr_metadata
 		WHERE filepath = ? AND renter_pk = ?
 	`, path, pk[:]).Scan(&objectID)
@@ -400,7 +400,7 @@ func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, path string) error {
 		return err
 	}
 
-	rows, err := tx.Query("SELECT id FROM ctr_slabs WHERE object_id = ?", objectID)
+	rows, err := tx.Query("SELECT enc_key FROM ctr_slabs WHERE object_id = ?", objectID)
 	if err != nil {
 		return err
 	}
@@ -427,12 +427,12 @@ func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, path string) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE id = ?", objectID)
+	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE enc_key = ?", objectID)
 	return err
 }
 
-// UpdateMetadata updates the file metadata in the database.
-func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
+// updateMetadata updates the file metadata in the database.
+func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return err
@@ -443,28 +443,20 @@ func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		return modules.AddContext(err, "unable to delete object")
 	}
 
-	h := types.NewHasher()
-	fm.Key.EncodeTo(h.E)
-	h.E.WriteString(fm.Path)
-	objectID := h.Sum()
 	_, err = tx.Exec(`
-		INSERT INTO ctr_metadata (id, enc_key, filepath, renter_pk, uploaded)
-		VALUES (?, ?, ?, ?, ?)
-	`, objectID[:], fm.Key[:], fm.Path, pk[:], uint64(time.Now().Unix()))
+		INSERT INTO ctr_metadata (enc_key, filepath, renter_pk, uploaded)
+		VALUES (?, ?, ?, ?)
+	`, fm.Key[:], fm.Path, pk[:], uint64(time.Now().Unix()))
 	if err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "unable to store object")
 	}
 
 	for _, s := range fm.Slabs {
-		h := types.NewHasher()
-		objectID.EncodeTo(h.E)
-		s.Key.EncodeTo(h.E)
-		slabID := h.Sum()
 		_, err = tx.Exec(`
-			INSERT INTO ctr_slabs (id, enc_key, object_id, min_shards, offset, len)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, slabID[:], s.Key[:], objectID[:], s.MinShards, s.Offset, s.Length)
+			INSERT INTO ctr_slabs (enc_key, object_id, min_shards, offset, len)
+			VALUES (?, ?, ?, ?, ?)
+		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "unable to insert slab")
@@ -473,7 +465,7 @@ func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 			_, err = tx.Exec(`
 				INSERT INTO ctr_shards (slab_id, host, merkle_root)
 				VALUES (?, ?, ?)
-			`, slabID[:], ss.Host[:], ss.Root[:])
+			`, s.Key[:], ss.Host[:], ss.Root[:])
 			if err != nil {
 				tx.Rollback()
 				return modules.AddContext(err, "unable to insert shard")
@@ -499,8 +491,8 @@ func (c *Contractor) DeleteObject(pk types.PublicKey, path string) error {
 	return tx.Commit()
 }
 
-// RetrieveMetadata retrieves the file metadata from the database.
-func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm []modules.FileMetadata, err error) {
+// retrieveMetadata retrieves the file metadata from the database.
+func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm []modules.FileMetadata, err error) {
 	// Create a map of the present objects for convenience.
 	po := make(map[string]struct{})
 	for _, p := range present {
@@ -508,7 +500,7 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm 
 	}
 
 	rows, err := c.db.Query(`
-		SELECT id, enc_key, filepath
+		SELECT enc_key, filepath
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 	`, pk[:])
@@ -520,9 +512,8 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm 
 	for rows.Next() {
 		var slabs []modules.Slab
 		objectID := make([]byte, 32)
-		objectKey := make([]byte, 32)
 		var path string
-		if err := rows.Scan(&objectID, &objectKey, &path); err != nil {
+		if err := rows.Scan(&objectID, &path); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
@@ -532,7 +523,7 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm 
 		}
 
 		slabRows, err := c.db.Query(`
-			SELECT id, enc_key, min_shards, offset, len
+			SELECT enc_key, min_shards, offset, len
 			FROM ctr_slabs
 			WHERE object_id = ?
 		`, objectID)
@@ -543,10 +534,9 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm 
 		for slabRows.Next() {
 			var shards []modules.Shard
 			slabID := make([]byte, 32)
-			slabKey := make([]byte, 32)
 			var minShards uint8
 			var offset, length uint64
-			if err := slabRows.Scan(&slabID, &slabKey, &minShards, &offset, &length); err != nil {
+			if err := slabRows.Scan(&slabID, &minShards, &offset, &length); err != nil {
 				slabRows.Close()
 				return nil, modules.AddContext(err, "unable to retrieve slab")
 			}
@@ -571,7 +561,7 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm 
 
 			shardRows.Close()
 			var slab modules.Slab
-			copy(slab.Key[:], slabKey)
+			copy(slab.Key[:], slabID)
 			slab.MinShards = minShards
 			slab.Offset = offset
 			slab.Length = length
@@ -581,7 +571,7 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm 
 
 		slabRows.Close()
 		var md modules.FileMetadata
-		copy(md.Key[:], objectKey)
+		copy(md.Key[:], objectID)
 		md.Path = path
 		md.Slabs = slabs
 		fm = append(fm, md)
