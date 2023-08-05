@@ -976,8 +976,14 @@ function getSpendings() {
 				let pos = document.getElementById('spendings-prev-overhead-secondary');
 				let cf = document.getElementById('spendings-current-formed');
 				let cr = document.getElementById('spendings-current-renewed');
+				let cs = document.getElementById('spendings-current-saved');
+				let crr = document.getElementById('spendings-current-retrieved');
+				let cmm = document.getElementById('spendings-current-migrated');
 				let pf = document.getElementById('spendings-prev-formed');
 				let pr = document.getElementById('spendings-prev-renewed');
+				let ps = document.getElementById('spendings-prev-saved');
+				let prr = document.getElementById('spendings-prev-retrieved');
+				let pmm = document.getElementById('spendings-prev-migrated');
 				c.innerHTML = month[cm] + ' ' + cy;
 				p.innerHTML = month[pm] + ' ' + py;
 				clp.innerHTML = (data.currentlocked * data.scrate).toFixed(2) +
@@ -991,6 +997,9 @@ function getSpendings() {
 				cos.innerHTML = data.currentoverhead.toFixed(2) + ' SC';
 				cf.innerHTML = data.currentformed;
 				cr.innerHTML = data.currentrenewed;
+				cs.innerHTML = data.currentslabssaved;
+				crr.innerHTML = data.currentslabsretrieved;
+				cmm.innerHTML = data.currentslabsmigrated;
 				plp.innerHTML = (data.prevlocked * data.scrate).toFixed(2) +
 					' ' + averages.currency;
 				pls.innerHTML = data.prevlocked.toFixed(2) + ' SC';
@@ -1002,6 +1011,9 @@ function getSpendings() {
 				pos.innerHTML = data.prevoverhead.toFixed(2) + ' SC';
 				pf.innerHTML = data.prevformed;
 				pr.innerHTML = data.prevrenewed;
+				ps.innerHTML = data.prevslabssaved;
+				prr.innerHTML = data.prevslabsretrieved;
+				pmm.innerHTML = data.prevslabsmigrated;
 			}
 		})
 		.catch(error => console.log(error));

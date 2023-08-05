@@ -63,17 +63,23 @@ type UserBalance struct {
 // UserSpendings contains the spendings in the current and the
 // previous months.
 type UserSpendings struct {
-	CurrentLocked   float64 `json:"currentlocked"`
-	CurrentUsed     float64 `json:"currentused"`
-	CurrentOverhead float64 `json:"currentoverhead"`
-	PrevLocked      float64 `json:"prevlocked"`
-	PrevUsed        float64 `json:"prevused"`
-	PrevOverhead    float64 `json:"prevoverhead"`
-	SCRate          float64 `json:"scrate"`
-	CurrentFormed   uint64  `json:"currentformed"`
-	CurrentRenewed  uint64  `json:"currentrenewed"`
-	PrevFormed      uint64  `json:"prevformed"`
-	PrevRenewed     uint64  `json:"prevrenewed"`
+	CurrentLocked         float64 `json:"currentlocked"`
+	CurrentUsed           float64 `json:"currentused"`
+	CurrentOverhead       float64 `json:"currentoverhead"`
+	PrevLocked            float64 `json:"prevlocked"`
+	PrevUsed              float64 `json:"prevused"`
+	PrevOverhead          float64 `json:"prevoverhead"`
+	SCRate                float64 `json:"scrate"`
+	CurrentFormed         uint64  `json:"currentformed"`
+	CurrentRenewed        uint64  `json:"currentrenewed"`
+	CurrentSlabsSaved     uint64  `json:"currentslabssaved"`
+	CurrentSlabsRetrieved uint64  `json:"currentslabsretrieved"`
+	CurrentSlabsMigrated  uint64  `json:"currentslabsmigrated"`
+	PrevFormed            uint64  `json:"prevformed"`
+	PrevRenewed           uint64  `json:"prevrenewed"`
+	PrevSlabsSaved        uint64  `json:"prevslabssaved"`
+	PrevSlabsRetrieved    uint64  `json:"prevslabsretrieved"`
+	PrevSlabsMigrated     uint64  `json:"prevslabsmigrated"`
 }
 
 // HostScoreBreakdown breaks down the host scores.

@@ -978,6 +978,7 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	}
 	us.CurrentUsed += fee
 	us.CurrentOverhead += fee
+	us.CurrentSlabsSaved += uint64(len(fm.Slabs))
 
 	return m.updateSpendings(renter.Email, us)
 }
@@ -1007,8 +1008,10 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 
 	// Deduct from the balance.
 	var fee float64
+	var numRetrieved uint64
 	for _, fm := range md {
 		fee += float64(len(fm.Slabs)) * modules.RetrieveMetadataFee
+		numRetrieved += uint64(len(fm.Slabs))
 	}
 	if ub.Balance < fee {
 		return nil, errors.New("insufficient account balance")
@@ -1026,6 +1029,7 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 	}
 	us.CurrentUsed += fee
 	us.CurrentOverhead += fee
+	us.CurrentSlabsRetrieved += numRetrieved
 
 	err = m.updateSpendings(renter.Email, us)
 	if err != nil {
@@ -1071,6 +1075,7 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 	}
 	us.CurrentUsed += fee
 	us.CurrentOverhead += fee
+	us.CurrentSlabsMigrated += 1
 
 	return m.updateSpendings(renter.Email, us)
 }

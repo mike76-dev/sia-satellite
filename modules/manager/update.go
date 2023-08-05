@@ -273,6 +273,12 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				us.PrevRenewed = us.CurrentRenewed
 				us.CurrentFormed = 0
 				us.CurrentRenewed = 0
+				us.PrevSlabsSaved = us.CurrentSlabsSaved
+				us.PrevSlabsRetrieved = us.CurrentSlabsRetrieved
+				us.PrevSlabsMigrated = us.CurrentSlabsMigrated
+				us.CurrentSlabsSaved = 0
+				us.CurrentSlabsRetrieved = 0
+				us.CurrentSlabsMigrated = 0
 				count, err := m.numSlabs(renter.PublicKey)
 				if err != nil {
 					m.log.Println("ERROR: couldn't retrieve slab count:", err)

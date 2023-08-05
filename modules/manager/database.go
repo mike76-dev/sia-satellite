@@ -146,30 +146,40 @@ func (m *Manager) getSpendings(email string) (modules.UserSpendings, error) {
 	var currLocked, currUsed, currOverhead float64
 	var prevLocked, prevUsed, prevOverhead float64
 	var currFormed, currRenewed, prevFormed, prevRenewed uint64
+	var currSlabsSaved, currSlabsRetrieved, currSlabsMigrated uint64
+	var prevSlabsSaved, prevSlabsRetrieved, prevSlabsMigrated uint64
 
 	err := m.db.QueryRow(`
 		SELECT current_locked, current_used, current_overhead,
 			prev_locked, prev_used, prev_overhead,
 			current_formed, current_renewed,
-			prev_formed, prev_renewed
+			current_slabs_saved, current_slabs_retrieved, current_slabs_migrated,
+			prev_formed, prev_renewed,
+			prev_slabs_saved, prev_slabs_retrieved, prev_slabs_migrated
 		FROM mg_spendings
-		WHERE email = ?`, email).Scan(&currLocked, &currUsed, &currOverhead, &prevLocked, &prevUsed, &prevOverhead, &currFormed, &currRenewed, &prevFormed, &prevRenewed)
+		WHERE email = ?`, email).Scan(&currLocked, &currUsed, &currOverhead, &prevLocked, &prevUsed, &prevOverhead, &currFormed, &currRenewed, &currSlabsSaved, &currSlabsRetrieved, &currSlabsMigrated, &prevFormed, &prevRenewed, &prevSlabsSaved, &prevSlabsRetrieved, &prevSlabsMigrated)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return modules.UserSpendings{}, err
 	}
 
 	us := modules.UserSpendings{
-		CurrentLocked:   currLocked,
-		CurrentUsed:     currUsed,
-		CurrentOverhead: currOverhead,
-		PrevLocked:      prevLocked,
-		PrevUsed:        prevUsed,
-		PrevOverhead:    prevOverhead,
-		CurrentFormed:   currFormed,
-		CurrentRenewed:  currRenewed,
-		PrevFormed:      prevFormed,
-		PrevRenewed:     prevRenewed,
+		CurrentLocked:         currLocked,
+		CurrentUsed:           currUsed,
+		CurrentOverhead:       currOverhead,
+		PrevLocked:            prevLocked,
+		PrevUsed:              prevUsed,
+		PrevOverhead:          prevOverhead,
+		CurrentFormed:         currFormed,
+		CurrentRenewed:        currRenewed,
+		CurrentSlabsSaved:     currSlabsSaved,
+		CurrentSlabsRetrieved: currSlabsRetrieved,
+		CurrentSlabsMigrated:  currSlabsMigrated,
+		PrevFormed:            prevFormed,
+		PrevRenewed:           prevRenewed,
+		PrevSlabsSaved:        prevSlabsSaved,
+		PrevSlabsRetrieved:    prevSlabsRetrieved,
+		PrevSlabsMigrated:     prevSlabsMigrated,
 	}
 
 	return us, nil
@@ -182,9 +192,11 @@ func (m *Manager) updateSpendings(email string, us modules.UserSpendings) error 
 		(email, current_locked, current_used, current_overhead,
 		prev_locked, prev_used, prev_overhead,
 		current_formed, current_renewed,
-		prev_formed, prev_renewed)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, email, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead, us.CurrentFormed, us.CurrentRenewed, us.PrevFormed, us.PrevRenewed)
+		current_slabs_saved, current_slabs_retrieved, current_slabs_migrated,
+		prev_formed, prev_renewed,
+		prev_slabs_saved, prev_slabs_retrieved, prev_slabs_migrated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead, us.CurrentFormed, us.CurrentRenewed, us.CurrentSlabsSaved, us.CurrentSlabsRetrieved, us.CurrentSlabsMigrated, us.PrevFormed, us.PrevRenewed, us.PrevSlabsSaved, us.PrevSlabsRetrieved, us.PrevSlabsMigrated)
 
 	return err
 }
