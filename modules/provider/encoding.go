@@ -607,3 +607,23 @@ func (rmr requestMetadataResponse) EncodeTo(e *types.Encoder) {
 func (rmr requestMetadataResponse) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
 }
+
+// updateSlabRequest is used to update a single slab.
+type updateSlabRequest struct {
+	PubKey    types.PublicKey
+	Slab      modules.Slab
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (usr *updateSlabRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(usr.PubKey[:])
+	usr.Slab.DecodeFrom(d)
+	usr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (usr *updateSlabRequest) EncodeTo(e *types.Encoder) {
+	e.Write(usr.PubKey[:])
+	usr.Slab.EncodeTo(e)
+}

@@ -406,6 +406,9 @@ type Manager interface {
 
 	// UpdateRenterSettings updates the renter's opt-in settings.
 	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error
+
+	// UpdateSlab updates a file slab after a successful migration.
+	UpdateSlab(types.PublicKey, Slab) error
 }
 
 // MaintenanceSpending is a helper struct that contains a breakdown of costs

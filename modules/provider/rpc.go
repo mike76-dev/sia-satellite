@@ -472,7 +472,7 @@ func (p *Provider) managedRenewContract(s *modules.RPCSession) error {
 
 // managedGetSettings returns the renter's opt-in settings.
 func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
-	// Extend the deadline to meet the formation of multiple contracts.
+	// Extend the deadline.
 	s.Conn.SetDeadline(time.Now().Add(settingsTime))
 
 	// Read the request.
@@ -510,7 +510,7 @@ func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
 
 // managedUpdateSettings updates the renter's opt-in settings.
 func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
-	// Extend the deadline to meet the formation of multiple contracts.
+	// Extend the deadline.
 	s.Conn.SetDeadline(time.Now().Add(settingsTime))
 
 	// Read the request.
@@ -639,7 +639,7 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 
 // managedSaveMetadata reads the file metadata and saves it.
 func (p *Provider) managedSaveMetadata(s *modules.RPCSession) error {
-	// Extend the deadline to meet the formation of multiple contracts.
+	// Extend the deadline.
 	s.Conn.SetDeadline(time.Now().Add(saveMetadataTime))
 
 	// Read the request.
@@ -727,4 +727,51 @@ func (p *Provider) managedRequestMetadata(s *modules.RPCSession) error {
 	}
 
 	return s.WriteResponse(&resp)
+}
+
+// managedUpdateSlab updates a single slab.
+func (p *Provider) managedUpdateSlab(s *modules.RPCSession) error {
+	// Extend the deadline.
+	s.Conn.SetDeadline(time.Now().Add(updateSlabTime))
+
+	// Read the request.
+	var usr updateSlabRequest
+	hash, err := s.ReadRequest(&usr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	if !usr.PubKey.VerifyHash(hash, usr.Signature) {
+		err = errors.New("could not verify renter signature")
+		s.WriteError(err)
+		return err
+	}
+
+	// Check if we know this renter.
+	renter, err := p.m.GetRenter(usr.PubKey)
+	if err != nil {
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Check if the renter has opted in.
+	if !renter.Settings.BackupFileMetadata {
+		err := errors.New("metadata backups disabled")
+		s.WriteError(err)
+		return err
+	}
+
+	// Update the slab.
+	err = p.m.UpdateSlab(usr.PubKey, usr.Slab)
+	if err != nil {
+		err = fmt.Errorf("couldn't update slab: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	return s.WriteResponse(nil)
 }

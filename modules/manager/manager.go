@@ -128,6 +128,9 @@ type hostContractor interface {
 	// UpdateRenterSettings updates the renter's opt-in settings.
 	UpdateRenterSettings(types.PublicKey, modules.RenterSettings, types.PrivateKey) error
 
+	// UpdateSlab updates a file slab after a successful migration.
+	UpdateSlab(modules.Slab) error
+
 	// RenewedFrom returns the ID of the contract the given contract was
 	// renewed from, if any.
 	RenewedFrom(types.FileContractID) types.FileContractID
@@ -1030,4 +1033,44 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 	}
 
 	return md, nil
+}
+
+// UpdateSlab updates a file slab after a successful migration.
+func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
+	// Get the balance and check if it is sufficient.
+	renter, err := m.GetRenter(pk)
+	if err != nil {
+		return err
+	}
+	ub, err := m.GetBalance(renter.Email)
+	if err != nil {
+		return err
+	}
+	fee := modules.MigrateSlabFee
+	if ub.Balance < fee {
+		return errors.New("insufficient account balance")
+	}
+
+	// Update the slab.
+	err = m.hostContractor.UpdateSlab(slab)
+	if err != nil {
+		return err
+	}
+
+	// Deduct from the account balance.
+	ub.Balance -= fee
+	err = m.UpdateBalance(renter.Email, ub)
+	if err != nil {
+		return err
+	}
+
+	// Update the spendings.
+	us, err := m.getSpendings(renter.Email)
+	if err != nil {
+		return err
+	}
+	us.CurrentUsed += fee
+	us.CurrentOverhead += fee
+
+	return m.updateSpendings(renter.Email, us)
 }

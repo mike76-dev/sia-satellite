@@ -579,3 +579,57 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 
 	return
 }
+
+// updateSlab updates a file slab after a successful migration.
+func (c *Contractor) updateSlab(slab modules.Slab) error {
+	tx, err := c.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	id := make([]byte, 32)
+	err = tx.QueryRow("SELECT object_id FROM ctr_slabs WHERE enc_key = ?", slab.Key[:]).Scan(&id)
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "couldn't find slab")
+	}
+
+	_, err = tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab.Key[:])
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "couldn't delete shards")
+	}
+
+	for _, shard := range slab.Shards {
+		_, err = tx.Exec(`
+			INSERT INTO ctr_shards (slab_id, host, merkle_root)
+			VALUES (?, ?, ?)
+		`, slab.Key[:], shard.Host[:], shard.Root[:])
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't insert shard")
+		}
+	}
+
+	_, err = tx.Exec(`
+		UPDATE ctr_slabs
+		SET min_shards = ?, offset = ?, len = ?
+		WHERE enc_key = ?
+	`, slab.MinShards, slab.Offset, slab.Length, slab.Key[:])
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "couldn't update slab")
+	}
+
+	_, err = tx.Exec(`
+		UPDATE ctr_metadata
+		SET uploaded = ?
+		WHERE id = ?
+	`, uint64(time.Now().Unix()), id)
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "couldn't update object")
+	}
+
+	return tx.Commit()
+}

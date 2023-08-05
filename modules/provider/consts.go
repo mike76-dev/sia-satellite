@@ -21,7 +21,7 @@ const (
 
 	// updateRevisionTime defines the amount of time that the provider
 	// has to update a contract and send back a response.
-	updateRevisionTime = 1 * time.Minute
+	updateRevisionTime = 15 * time.Second
 
 	// formContractTime defines the amount of time that the provider
 	// has to form a single contract with a host.
@@ -33,7 +33,7 @@ const (
 
 	// settingsTime defines the amount of time that the provider has to
 	// send or receive renter's settings.
-	settingsTime = 1 * time.Minute
+	settingsTime = 15 * time.Second
 
 	// saveMetadataTime defines the amount of time that the provider has
 	// to accept the file metadata and save it.
@@ -42,6 +42,10 @@ const (
 	// retrieveMetadataTime defines the amount of time that the provider has
 	// to retrieve the file metadata and send it.
 	requestMetadataTime = 1 * time.Minute
+
+	// updateSlabTime defines the amount of time that the provider has to
+	// update a single slab.
+	updateSlabTime = 15 * time.Second
 
 	// defaultConnectionDeadline is the default read and write deadline which is set
 	// on a connection. This ensures it times out if I/O exceeds this deadline.
@@ -87,4 +91,7 @@ var (
 
 	// requestMetadataSpecifier is used to retrieve the file metadata.
 	requestMetadataSpecifier = types.NewSpecifier("RequestMetadata")
+
+	// updateSlabSpecifier is used to update a single slab.
+	updateSlabSpecifier = types.NewSpecifier("UpdateSlab")
 )

@@ -538,3 +538,12 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm 
 	}
 	return
 }
+
+// UpdateSlab updates a file slab after a successful migration.
+func (c *Contractor) UpdateSlab(slab modules.Slab) error {
+	err := c.updateSlab(slab)
+	if err != nil {
+		c.log.Println("ERROR: couldn't update slab:", err)
+	}
+	return err
+}
