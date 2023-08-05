@@ -572,8 +572,8 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 			return err
 		}
 	}
-	if usr.AutoRepairFiles && !usr.BackupFileMetadata {
-		err := errors.New("file auto-repairs only work with metadata backups enabled")
+	if usr.AutoRepairFiles && (!usr.BackupFileMetadata || !usr.AutoRenewContracts) {
+		err := errors.New("file auto-repairs only work with automatic renewals and metadata backups enabled")
 		s.WriteError(err)
 		return err
 	}
