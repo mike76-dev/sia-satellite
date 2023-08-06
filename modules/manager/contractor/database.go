@@ -624,7 +624,7 @@ func (c *Contractor) updateSlab(slab modules.Slab) error {
 	_, err = tx.Exec(`
 		UPDATE ctr_metadata
 		SET uploaded = ?
-		WHERE id = ?
+		WHERE enc_key = ?
 	`, uint64(time.Now().Unix()), id)
 	if err != nil {
 		tx.Rollback()
