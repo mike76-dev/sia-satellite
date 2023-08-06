@@ -114,6 +114,15 @@ var (
 	// failure mode of 'can't retrieve stuff already uploaded'.
 	minContractFundUploadThreshold = float64(0.05) // 5%
 
+	// minContractFundRenewalThreshold defines the ratio of remaining funds to
+	// total contract cost below which the contractor will prematurely renew a
+	// contract.
+	//
+	// This number is deliberately a little higher than the
+	// minContractFundUploadThreshold because we want to make sure that renewals
+	// will kick in before uploading stops.
+	minContractFundRenewalThreshold = float64(0.06) // 6%
+
 	// oosRetryInterval is the time we wait for a host that ran out of storage to
 	// add more storage before trying to upload to it again.
 	oosRetryInterval = modules.BlocksPerWeek // 7 days
