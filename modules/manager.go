@@ -411,7 +411,7 @@ type Manager interface {
 	UpdateMetadata(types.PublicKey, FileMetadata) error
 
 	// UpdateRenterSettings updates the renter's opt-in settings.
-	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey) error
+	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey, types.PrivateKey) error
 
 	// UpdateSlab updates a file slab after a successful migration.
 	UpdateSlab(types.PublicKey, Slab) error
@@ -711,6 +711,7 @@ type Renter struct {
 	Email         string // Link to the user account.
 	Settings      RenterSettings
 	PrivateKey    types.PrivateKey
+	AccountKey    types.PrivateKey
 }
 
 // contractEndHeight returns the height at which the renter's contracts

@@ -545,6 +545,13 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 			return err
 		}
 	}
+	if usr.AutoRepairFiles {
+		if len(usr.AccountKey) == 0 {
+			err := errors.New("account key must be provided with these options")
+			s.WriteError(err)
+			return err
+		}
+	}
 	if usr.AutoRenewContracts {
 		if usr.Hosts == 0 {
 			err := errors.New("can't set zero hosts")
@@ -583,7 +590,7 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		AutoRenewContracts: usr.AutoRenewContracts,
 		BackupFileMetadata: usr.BackupFileMetadata,
 		AutoRepairFiles:    usr.AutoRepairFiles,
-	}, usr.PrivateKey)
+	}, usr.PrivateKey, usr.AccountKey)
 	if err != nil {
 		err = fmt.Errorf("couldn't update settings: %v", err)
 		s.WriteError(err)

@@ -460,6 +460,7 @@ type updateSettingsRequest struct {
 	BackupFileMetadata bool
 	AutoRepairFiles    bool
 	PrivateKey         types.PrivateKey
+	AccountKey         types.PrivateKey
 
 	Hosts       uint64
 	Period      uint64
@@ -494,6 +495,10 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 		sk := d.ReadBytes()
 		usr.PrivateKey = types.PrivateKey(sk)
 	}
+	if usr.AutoRepairFiles {
+		ak := d.ReadBytes()
+		usr.AccountKey = types.PrivateKey(ak)
+	}
 	if usr.AutoRenewContracts {
 		usr.Hosts = d.ReadUint64()
 		usr.Period = d.ReadUint64()
@@ -523,6 +528,9 @@ func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBool(usr.AutoRepairFiles)
 	if usr.AutoRenewContracts || usr.AutoRepairFiles {
 		e.WriteBytes(usr.PrivateKey[:])
+	}
+	if usr.AutoRepairFiles {
+		e.WriteBytes(usr.AccountKey[:])
 	}
 	if usr.AutoRenewContracts {
 		e.WriteUint64(usr.Hosts)

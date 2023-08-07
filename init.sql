@@ -455,6 +455,7 @@ CREATE TABLE ctr_renters (
 	current_period       BIGINT UNSIGNED NOT NULL,
 	allowance            BLOB NOT NULL,
 	private_key          BINARY(64),
+	account_key          BINARY(64),
 	auto_renew_contracts BOOL NOT NULL,
 	backup_file_metadata BOOL NOT NULL,
 	auto_repair_files    BOOL NOT NULL,

@@ -508,7 +508,7 @@ func (c *Contractor) Contract(fcid types.FileContractID) (modules.RenterContract
 }
 
 // UpdateRenterSettings updates the renter's opt-in settings.
-func (c *Contractor) UpdateRenterSettings(rpk types.PublicKey, settings modules.RenterSettings, sk types.PrivateKey) error {
+func (c *Contractor) UpdateRenterSettings(rpk types.PublicKey, settings modules.RenterSettings, sk, ak types.PrivateKey) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	renter, exists := c.renters[rpk]
@@ -517,6 +517,7 @@ func (c *Contractor) UpdateRenterSettings(rpk types.PublicKey, settings modules.
 	}
 	renter.Settings = settings
 	renter.PrivateKey = sk
+	renter.AccountKey = ak
 	c.renters[rpk] = renter
 	return c.UpdateRenter(renter)
 }
