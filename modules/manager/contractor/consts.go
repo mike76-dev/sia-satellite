@@ -20,6 +20,13 @@ const (
 
 	// renewContractTimeout is the amount of time we wait to renew a contract.
 	renewContractTimeout = 1 * time.Minute
+
+	// syncAccountTimeout is the amount of time we wait to retrieve the balance
+	// of an ephemeral account.
+	syncAccountTimeout = 10 * time.Second
+
+	// fundAccountTimeout is the amount of time we wait to fund an ephemeral account.
+	fundAccountTimeout = 10 * time.Second
 )
 
 // Constants related to the contractor's alerts.

@@ -95,7 +95,7 @@ func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.P
 
 	// Prepare the signed transaction that contains the final revision as well
 	// as the new contract.
-	parents, txn := txnSet[:len(txnSet) - 1], txnSet[len(txnSet) - 1]
+	parents, txn := txnSet[:len(txnSet)-1], txnSet[len(txnSet)-1]
 	h := types.NewHasher()
 	txn.FileContracts[0].EncodeTo(h.E)
 	txn.FileContractRevisions[0].EncodeTo(h.E)
@@ -153,8 +153,8 @@ func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.P
 	// Create a new no-op revision and sign it.
 	fc := txn.FileContracts[0]
 	noOpRevision := types.FileContractRevision{
-		ParentID:          txn.FileContractID(0),
-		UnlockConditions:  types.UnlockConditions{
+		ParentID: txn.FileContractID(0),
+		UnlockConditions: types.UnlockConditions{
 			PublicKeys: []types.UnlockKey{
 				renterKey.PublicKey().UnlockKey(),
 				rev.UnlockConditions.PublicKeys[1],
@@ -169,7 +169,7 @@ func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.P
 			ValidProofOutputs:  fc.ValidProofOutputs,
 			MissedProofOutputs: fc.MissedProofOutputs,
 			UnlockHash:         fc.UnlockHash,
-			RevisionNumber: 1,
+			RevisionNumber:     1,
 		},
 	}
 	h = types.NewHasher()
@@ -235,7 +235,7 @@ func RPCTrustlessRenewContract(ctx context.Context, ss *modules.RPCSession, t *r
 	}
 
 	// Calculate the revision hash and send it to the renter.
-	parents, txn := txnSet[:len(txnSet) - 1], txnSet[len(txnSet) - 1]
+	parents, txn := txnSet[:len(txnSet)-1], txnSet[len(txnSet)-1]
 	fc := txn.FileContracts[0]
 	rev := txn.FileContractRevisions[0]
 	sr := signRequest{
@@ -285,7 +285,7 @@ func RPCTrustlessRenewContract(ctx context.Context, ss *modules.RPCSession, t *r
 	finalRevHostSig := types.TransactionSignature{
 		ParentID:       types.Hash256(rev.ParentID),
 		PublicKeyIndex: 1,
-		CoveredFields:  types.CoveredFields{
+		CoveredFields: types.CoveredFields{
 			FileContracts:         []uint64{0},
 			FileContractRevisions: []uint64{0},
 		},
@@ -301,12 +301,12 @@ func RPCTrustlessRenewContract(ctx context.Context, ss *modules.RPCSession, t *r
 	if err := ts.Sign(&txn, toSign, cf); err != nil {
 		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to sign transaction")
 	}
-	
+
 	// Create initial (no-op) revision.
 	noOpRevision := types.FileContractRevision{
-		ParentID:          txn.FileContractID(0),
-		UnlockConditions:  types.UnlockConditions{
-			PublicKeys: rev.UnlockConditions.PublicKeys,
+		ParentID: txn.FileContractID(0),
+		UnlockConditions: types.UnlockConditions{
+			PublicKeys:         rev.UnlockConditions.PublicKeys,
 			SignaturesRequired: 2,
 		},
 		FileContract: types.FileContract{
@@ -317,14 +317,14 @@ func RPCTrustlessRenewContract(ctx context.Context, ss *modules.RPCSession, t *r
 			ValidProofOutputs:  fc.ValidProofOutputs,
 			MissedProofOutputs: fc.MissedProofOutputs,
 			UnlockHash:         fc.UnlockHash,
-			RevisionNumber: 1,
+			RevisionNumber:     1,
 		},
 	}
 
 	renterNoOpRevisionSignature := types.TransactionSignature{
 		ParentID:       types.Hash256(noOpRevision.ParentID),
 		PublicKeyIndex: 0,
-		CoveredFields:  types.CoveredFields{
+		CoveredFields: types.CoveredFields{
 			FileContractRevisions: []uint64{0},
 		},
 	}
@@ -404,4 +404,46 @@ func hashContractAndRevision(fc types.FileContract, fcr types.FileContractRevisi
 	fc.EncodeTo(h.E)
 	fcr.EncodeTo(h.E)
 	return h.Sum()
+}
+
+// RPCAccountBalance fetches the balance of an ephemeral account.
+func RPCAccountBalance(ctx context.Context, t *rhpv3.Transport, payment rhpv3.PaymentMethod, account rhpv3.Account, settingsID rhpv3.SettingsID) (bal types.Currency, err error) {
+	s := t.DialStream()
+	defer s.Close()
+
+	req := rhpv3.RPCAccountBalanceRequest{
+		Account: account,
+	}
+	var resp rhpv3.RPCAccountBalanceResponse
+	if err := s.WriteRequest(rhpv3.RPCAccountBalanceID, &settingsID); err != nil {
+		return types.ZeroCurrency, err
+	} else if err := processPayment(s, payment); err != nil {
+		return types.ZeroCurrency, err
+	} else if err := s.WriteResponse(&req); err != nil {
+		return types.ZeroCurrency, err
+	} else if err := s.ReadResponse(&resp, 128); err != nil {
+		return types.ZeroCurrency, err
+	}
+	return resp.Balance, nil
+}
+
+// RPCFundAccount funds an ephemeral account.
+func RPCFundAccount(ctx context.Context, t *rhpv3.Transport, payment rhpv3.PaymentMethod, account rhpv3.Account, settingsID rhpv3.SettingsID) (err error) {
+	s := t.DialStream()
+	defer s.Close()
+
+	req := rhpv3.RPCFundAccountRequest{
+		Account: account,
+	}
+	var resp rhpv3.RPCFundAccountResponse
+	if err := s.WriteRequest(rhpv3.RPCFundAccountID, &settingsID); err != nil {
+		return err
+	} else if err := s.WriteResponse(&req); err != nil {
+		return err
+	} else if err := processPayment(s, payment); err != nil {
+		return err
+	} else if err := s.ReadResponse(&resp, 65536); err != nil {
+		return err
+	}
+	return nil
 }

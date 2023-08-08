@@ -31,9 +31,18 @@ func DeriveRenterSeed(walletSeed Seed, email string) []byte {
 }
 
 // DeriveEphemeralKey derives a secret key to be used by the renter for the
-// exchange with the hosts.
+// exchange with the host.
 func DeriveEphemeralKey(rsk types.PrivateKey, hpk types.PublicKey) types.PrivateKey {
 	ers := types.HashBytes(append(rsk, hpk[:]...))
+	defer frand.Read(ers[:])
+	esk, _ := GenerateKeyPair(ers)
+	return esk
+}
+
+// DeriveAccountKey derives an account key to be used by the renter to
+// access the ephemeral account at the host.
+func DeriveAccountKey(ak types.PrivateKey, hpk types.PublicKey) types.PrivateKey {
+	ers := types.HashBytes(append(append(ak, hpk[:]...), byte(0)))
 	defer frand.Read(ers[:])
 	esk, _ := GenerateKeyPair(ers)
 	return esk
