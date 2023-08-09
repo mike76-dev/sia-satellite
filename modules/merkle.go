@@ -49,7 +49,7 @@ func (t *MerkleTree) Root() (h types.Hash256) {
 // data of size 'dataSize'.
 func CalculateLeaves(dataSize uint64) uint64 {
 	numSegments := dataSize / SegmentSize
-	if dataSize == 0 || dataSize % SegmentSize != 0 {
+	if dataSize == 0 || dataSize%SegmentSize != 0 {
 		numSegments++
 	}
 	return numSegments
@@ -59,10 +59,22 @@ func CalculateLeaves(dataSize uint64) uint64 {
 // Merkle root.
 func VerifySegment(base []byte, hashSet []types.Hash256, numSegments, proofIndex uint64, root types.Hash256) bool {
 	// Convert base and hashSet to proofSet.
-	proofSet := make([][32]byte, len(hashSet) + 1)
+	proofSet := make([][32]byte, len(hashSet)+1)
 	proofSet[0] = merkletree.LeafSum(base)
 	for i := range hashSet {
-		proofSet[i + 1] = [32]byte(hashSet[i])
+		proofSet[i+1] = [32]byte(hashSet[i])
 	}
 	return merkletree.VerifyProof(root, proofSet, proofIndex, numSegments)
+}
+
+// VerifyRangeProof verifies a proof produced by MerkleRangeProof.
+//
+// VerifyRangeProof for a single segment is NOT equivalent to VerifySegment.
+func VerifyRangeProof(segments []byte, proof []types.Hash256, start, end int, root types.Hash256) bool {
+	proofBytes := make([][32]byte, len(proof))
+	for i := range proof {
+		proofBytes[i] = [32]byte(proof[i])
+	}
+	result, _ := merkletree.VerifyRangeProof(merkletree.NewReaderLeafHasher(bytes.NewReader(segments), SegmentSize), start, end, proofBytes, [32]byte(root))
+	return result
 }
