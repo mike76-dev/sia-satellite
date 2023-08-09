@@ -126,7 +126,7 @@ type hostContractor interface {
 	UpdateContract(types.FileContractRevision, []types.TransactionSignature, types.Currency, types.Currency, types.Currency) error
 
 	// UpdateRenterSettings updates the renter's opt-in settings.
-	UpdateRenterSettings(types.PublicKey, modules.RenterSettings, types.PrivateKey) error
+	UpdateRenterSettings(types.PublicKey, modules.RenterSettings, types.PrivateKey, types.PrivateKey) error
 
 	// UpdateSlab updates a file slab after a successful migration.
 	UpdateSlab(modules.Slab) error
@@ -795,8 +795,8 @@ func (m *Manager) RenewContract(s *modules.RPCSession, rpk types.PublicKey, fcid
 }
 
 // UpdateRenterSettings calls hostContractor.UpdateRenterSettings.
-func (m *Manager) UpdateRenterSettings(rpk types.PublicKey, settings modules.RenterSettings, sk types.PrivateKey) error {
-	return m.hostContractor.UpdateRenterSettings(rpk, settings, sk)
+func (m *Manager) UpdateRenterSettings(rpk types.PublicKey, settings modules.RenterSettings, sk, ak types.PrivateKey) error {
+	return m.hostContractor.UpdateRenterSettings(rpk, settings, sk, ak)
 }
 
 // LockSiacoins locks the specified amount of Siacoins in the user balance.

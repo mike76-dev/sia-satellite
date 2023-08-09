@@ -95,13 +95,13 @@ func manageraveragescmd(currency string) {
 		fmt.Printf("Base RPC Price: \t%v\n", ha.BaseRPCPrice)
 		fmt.Printf("Sector Access Price: \t%v\n", ha.SectorAccessPrice)
 	} else {
-		fmt.Printf("Storage Price: \t\t%.4f %v\n", modules.Float64(ha.StoragePrice) * ha.Rate, currency)
-		fmt.Printf("Collateral: \t\t%.4f %v\n", modules.Float64(ha.Collateral) * ha.Rate, currency)
-		fmt.Printf("Download Price: \t%.4f %v\n", modules.Float64(ha.DownloadBandwidthPrice) * ha.Rate, currency)
-		fmt.Printf("Upload Price: \t\t%.4f %v\n", modules.Float64(ha.UploadBandwidthPrice) * ha.Rate, currency)
-		fmt.Printf("Contract Price: \t%.4f %v\n", modules.Float64(ha.ContractPrice) * ha.Rate, currency)
-		fmt.Printf("Base RPC Price: \t%.4f %v\n", modules.Float64(ha.BaseRPCPrice) * ha.Rate, currency)
-		fmt.Printf("Sector Access Price: \t%.4f %v\n", modules.Float64(ha.SectorAccessPrice) * ha.Rate, currency)
+		fmt.Printf("Storage Price: \t\t%.4f %v\n", modules.Float64(ha.StoragePrice)*ha.Rate, currency)
+		fmt.Printf("Collateral: \t\t%.4f %v\n", modules.Float64(ha.Collateral)*ha.Rate, currency)
+		fmt.Printf("Download Price: \t%.4f %v\n", modules.Float64(ha.DownloadBandwidthPrice)*ha.Rate, currency)
+		fmt.Printf("Upload Price: \t\t%.4f %v\n", modules.Float64(ha.UploadBandwidthPrice)*ha.Rate, currency)
+		fmt.Printf("Contract Price: \t%.4f %v\n", modules.Float64(ha.ContractPrice)*ha.Rate, currency)
+		fmt.Printf("Base RPC Price: \t%.4f %v\n", modules.Float64(ha.BaseRPCPrice)*ha.Rate, currency)
+		fmt.Printf("Sector Access Price: \t%.4f %v\n", modules.Float64(ha.SectorAccessPrice)*ha.Rate, currency)
 	}
 }
 
@@ -130,9 +130,12 @@ func managerrentercmd(key string) {
 	if err != nil {
 		die(err)
 	}
-	var sk string
+	var sk, ak string
 	if renter.PrivateKey != nil {
 		sk = hex.EncodeToString(renter.PrivateKey)
+	}
+	if renter.AccountKey != nil {
+		ak = hex.EncodeToString(renter.AccountKey)
 	}
 	fmt.Printf(`Public Key: %v
 Email:      %v
@@ -158,10 +161,13 @@ Min Max Collateral:      %v
 Block Height Leeway:     %v
 
 Private Key:          %v
+Account Key:          %v
 Auto Renew Contracts: %v
+Backup File Metadata: %v
+Auto Repair Files:    %v
 `, renter.PublicKey.String(), renter.Email, renter.CurrentPeriod, renter.Allowance.Period, renter.Allowance.RenewWindow, renter.Allowance.Hosts, modules.FilesizeUnits(renter.Allowance.ExpectedStorage), modules.FilesizeUnits(renter.Allowance.ExpectedUpload), modules.FilesizeUnits(renter.Allowance.ExpectedDownload),
-renter.Allowance.MinShards, renter.Allowance.TotalShards, renter.Allowance.MaxRPCPrice, renter.Allowance.MaxContractPrice, renter.Allowance.MaxDownloadBandwidthPrice, renter.Allowance.MaxSectorAccessPrice, renter.Allowance.MaxStoragePrice, renter.Allowance.MaxUploadBandwidthPrice,
-renter.Allowance.MinMaxCollateral, renter.Allowance.BlockHeightLeeway, sk, renter.Settings.AutoRenewContracts)
+		renter.Allowance.MinShards, renter.Allowance.TotalShards, renter.Allowance.MaxRPCPrice, renter.Allowance.MaxContractPrice, renter.Allowance.MaxDownloadBandwidthPrice, renter.Allowance.MaxSectorAccessPrice, renter.Allowance.MaxStoragePrice, renter.Allowance.MaxUploadBandwidthPrice,
+		renter.Allowance.MinMaxCollateral, renter.Allowance.BlockHeightLeeway, sk, ak, renter.Settings.AutoRenewContracts, renter.Settings.BackupFileMetadata, renter.Settings.AutoRepairFiles)
 }
 
 // managerbalancecmd is the handler for the command `satc manager balance [public_key]`.
@@ -224,7 +230,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n+1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -251,7 +257,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n+1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -278,7 +284,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n+1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -305,7 +311,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n+1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -332,7 +338,7 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n+1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 
 		fmt.Println()
@@ -359,11 +365,11 @@ Expired Refreshed: %v
   Good For Upload: %v
   Good For Renew:  %v
   Bad Contract:    %v
-`, n + 1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
+`, n+1, c.ID.String(), c.RenterPublicKey.String(), c.HostPublicKey.String(), c.NetAddress, c.HostVersion, c.StartHeight, c.EndHeight, c.StorageSpending, c.UploadSpending, c.DownloadSpending, c.FundAccountSpending, c.MaintenanceSpending.AccountBalanceCost.Add(c.MaintenanceSpending.FundAccountCost).Add(c.MaintenanceSpending.UpdatePriceTableCost), c.Fees, c.TotalCost, c.RenterFunds, modules.FilesizeUnits(c.Size), c.GoodForUpload, c.GoodForRenew, c.BadContract)
 		}
 	}
 }
-		
+
 // managercmd is the handler for the command `satc manager`.
 // Prints the information about the manager.
 func managercmd() {
