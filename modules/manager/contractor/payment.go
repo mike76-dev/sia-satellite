@@ -15,6 +15,10 @@ import (
 )
 
 var (
+	// errBalanceInsufficient occurs when a withdrawal failed because the
+	// account balance was insufficient.
+	errBalanceInsufficient = errors.New("ephemeral account balance was insufficient")
+
 	// errInsufficientFunds is returned by various RPCs when the satellite is
 	// unable to provide sufficient payment to the host.
 	errInsufficientFunds = errors.New("insufficient funds")
@@ -23,6 +27,19 @@ var (
 	// already reached the highest possible revision number. Usually happens
 	// when trying to use a renewed contract.
 	errMaxRevisionReached = errors.New("contract has reached the maximum number of revisions")
+
+	// errPriceTableExpired is returned by the host when the price table that
+	// corresponds to the id it was given is already expired and thus no longer
+	// valid.
+	errPriceTableExpired = errors.New("price table requested is expired")
+
+	// errPriceTableNotFound is returned by the host when it can not find a
+	// price table that corresponds with the id we sent it.
+	errPriceTableNotFound = errors.New("price table not found")
+
+	// errSectorNotFound is returned by the host when it can not find the
+	// requested sector.
+	errSectorNotFound = errors.New("sector not found")
 )
 
 func payByContract(rev *types.FileContractRevision, amount types.Currency, refundAcct rhpv3.Account, sk types.PrivateKey) (rhpv3.PayByContractRequest, error) {
@@ -37,13 +54,13 @@ func payByContract(rev *types.FileContractRevision, amount types.Currency, refun
 }
 
 // managedAccountBalance returns the balance of an ephemeral account.
-func (c *Contractor) managedAccountBalance(rpk, hpk types.PublicKey) (balance types.Currency, err error) {
+func (c *Contractor) managedAccountBalance(rpk, hpk types.PublicKey) (balance types.Currency, pt rhpv3.HostPriceTable, err error) {
 	// Get the renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk]
 	c.mu.RUnlock()
 	if !exists {
-		return types.ZeroCurrency, ErrRenterNotFound
+		return types.ZeroCurrency, rhpv3.HostPriceTable{}, ErrRenterNotFound
 	}
 
 	// Get the contract ID.
@@ -56,25 +73,26 @@ func (c *Contractor) managedAccountBalance(rpk, hpk types.PublicKey) (balance ty
 		}
 	}
 	if fcid == (types.FileContractID{}) {
-		return types.ZeroCurrency, errors.New("couldn't find the contract")
+		return types.ZeroCurrency, rhpv3.HostPriceTable{}, errors.New("couldn't find the contract")
 	}
 
 	// Fetch the host.
 	host, exists, err := c.hdb.Host(hpk)
 	if err != nil {
-		return types.ZeroCurrency, modules.AddContext(err, "error getting host from hostdb")
+		return types.ZeroCurrency, rhpv3.HostPriceTable{}, modules.AddContext(err, "error getting host from hostdb")
 	}
 	if !exists {
-		return types.ZeroCurrency, errHostNotFound
+		return types.ZeroCurrency, rhpv3.HostPriceTable{}, errHostNotFound
 	}
 	hostName, _, err := net.SplitHostPort(string(host.Settings.NetAddress))
 	if err != nil {
-		return types.ZeroCurrency, modules.AddContext(err, "failed to get host name")
+		return types.ZeroCurrency, rhpv3.HostPriceTable{}, modules.AddContext(err, "failed to get host name")
 	}
 	siamuxAddr := net.JoinHostPort(hostName, host.Settings.SiaMuxPort)
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), syncAccountTimeout)
+	defer cancelFunc()
 	go func() {
 		select {
 		case <-c.tg.StopChan():
@@ -112,7 +130,7 @@ func (c *Contractor) managedAccountBalance(rpk, hpk types.PublicKey) (balance ty
 		}
 
 		// Fetch the price table.
-		pt, err := proto.RPCPriceTable(ctx, t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
+		pt, err = proto.RPCPriceTable(ctx, t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
 			payment, err := payByContract(&rev, pt.UpdatePriceTableCost, accountID, esk)
 			if err != nil {
 				return nil, err
@@ -134,6 +152,9 @@ func (c *Contractor) managedAccountBalance(rpk, hpk types.PublicKey) (balance ty
 			hostFault = true
 		}
 
+		// Update the contract.
+		err = c.UpdateContract(rev, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency)
+
 		return err
 	})
 
@@ -141,13 +162,13 @@ func (c *Contractor) managedAccountBalance(rpk, hpk types.PublicKey) (balance ty
 }
 
 // managedFundAccount tries to add funds to an ephemeral account.
-func (c *Contractor) managedFundAccount(rpk, hpk types.PublicKey, balance types.Currency) (err error) {
+func (c *Contractor) managedFundAccount(rpk, hpk types.PublicKey, balance types.Currency) (pt rhpv3.HostPriceTable, err error) {
 	// Get the renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk]
 	c.mu.RUnlock()
 	if !exists {
-		return ErrRenterNotFound
+		return rhpv3.HostPriceTable{}, ErrRenterNotFound
 	}
 
 	// Get the contract ID.
@@ -160,25 +181,26 @@ func (c *Contractor) managedFundAccount(rpk, hpk types.PublicKey, balance types.
 		}
 	}
 	if fcid == (types.FileContractID{}) {
-		return errors.New("couldn't find the contract")
+		return rhpv3.HostPriceTable{}, errors.New("couldn't find the contract")
 	}
 
 	// Fetch the host.
 	host, exists, err := c.hdb.Host(hpk)
 	if err != nil {
-		return modules.AddContext(err, "error getting host from hostdb")
+		return rhpv3.HostPriceTable{}, modules.AddContext(err, "error getting host from hostdb")
 	}
 	if !exists {
-		return errHostNotFound
+		return rhpv3.HostPriceTable{}, errHostNotFound
 	}
 	hostName, _, err := net.SplitHostPort(string(host.Settings.NetAddress))
 	if err != nil {
-		return modules.AddContext(err, "failed to get host name")
+		return rhpv3.HostPriceTable{}, modules.AddContext(err, "failed to get host name")
 	}
 	siamuxAddr := net.JoinHostPort(hostName, host.Settings.SiaMuxPort)
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), fundAccountTimeout)
+	defer cancelFunc()
 	go func() {
 		select {
 		case <-c.tg.StopChan():
@@ -216,7 +238,7 @@ func (c *Contractor) managedFundAccount(rpk, hpk types.PublicKey, balance types.
 		}
 
 		// Fetch the price table.
-		pt, err := proto.RPCPriceTable(ctx, t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
+		pt, err = proto.RPCPriceTable(ctx, t, func(pt rhpv3.HostPriceTable) (rhpv3.PaymentMethod, error) {
 			payment, err := payByContract(&rev, pt.UpdatePriceTableCost, accountID, esk)
 			if err != nil {
 				return nil, err
@@ -262,7 +284,10 @@ func (c *Contractor) managedFundAccount(rpk, hpk types.PublicKey, balance types.
 			return fmt.Errorf("failed to fund account with %v; %w", amount, err)
 		}
 
-		return nil
+		// Update the contract.
+		err = c.UpdateContract(rev, nil, types.ZeroCurrency, types.ZeroCurrency, amount)
+
+		return err
 	})
 
 	return

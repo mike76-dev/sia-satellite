@@ -1,8 +1,11 @@
 package proto
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -10,6 +13,12 @@ import (
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
+)
+
+const (
+	// responseLeeway is the amount of leeway given to the maxLen when we read
+	// the response in the ReadSector RPC.
+	responseLeeway = 1 << 12 // 4 KiB
 )
 
 // PriceTablePaymentFunc is a function that can be passed in to RPCPriceTable.
@@ -446,4 +455,60 @@ func RPCFundAccount(ctx context.Context, t *rhpv3.Transport, payment rhpv3.Payme
 		return err
 	}
 	return nil
+}
+
+// RPCReadSector calls the ExecuteProgram RPC with a ReadSector instruction.
+func RPCReadSector(ctx context.Context, t *rhpv3.Transport, w io.Writer, pt rhpv3.HostPriceTable, payment rhpv3.PaymentMethod, offset, length uint32, merkleRoot types.Hash256) (cost, refund types.Currency, err error) {
+	s := t.DialStream()
+	defer s.Close()
+
+	var buf bytes.Buffer
+	e := types.NewEncoder(&buf)
+	e.WriteUint64(uint64(length))
+	e.WriteUint64(uint64(offset))
+	merkleRoot.EncodeTo(e)
+	e.Flush()
+
+	req := rhpv3.RPCExecuteProgramRequest{
+		FileContractID: types.FileContractID{},
+		Program: []rhpv3.Instruction{&rhpv3.InstrReadSector{
+			LengthOffset:     0,
+			OffsetOffset:     8,
+			MerkleRootOffset: 16,
+			ProofRequired:    true,
+		}},
+		ProgramData: buf.Bytes(),
+	}
+
+	var cancellationToken types.Specifier
+	var resp rhpv3.RPCExecuteProgramResponse
+	if err = s.WriteRequest(rhpv3.RPCExecuteProgramID, &pt.UID); err != nil {
+		return
+	} else if err = processPayment(s, payment); err != nil {
+		return
+	} else if err = s.WriteResponse(&req); err != nil {
+		return
+	} else if err = s.ReadResponse(&cancellationToken, 16); err != nil {
+		return
+	} else if err = s.ReadResponse(&resp, rhpv2.SectorSize+responseLeeway); err != nil {
+		return
+	}
+
+	// Check response error.
+	if err = resp.Error; err != nil {
+		refund = resp.FailureRefund
+		return
+	}
+	cost = resp.TotalCost
+
+	// Verify proof.
+	proofStart := int(offset) / modules.SegmentSize
+	proofEnd := int(offset+length) / modules.SegmentSize
+	if !modules.VerifyRangeProof(resp.Output, resp.Proof, proofStart, proofEnd, merkleRoot) {
+		err = errors.New("proof verification failed")
+		return
+	}
+
+	_, err = w.Write(resp.Output)
+	return
 }

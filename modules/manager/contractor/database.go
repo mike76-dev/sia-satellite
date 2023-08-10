@@ -3,6 +3,7 @@ package contractor
 import (
 	"bytes"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"io"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"go.sia.tech/core/types"
+	"go.sia.tech/renterd/object"
 )
 
 // initDB initializes the sync state.
@@ -634,4 +636,61 @@ func (c *Contractor) updateSlab(slab modules.Slab) error {
 	}
 
 	return tx.Commit()
+}
+
+// getSlab tries to find a slab by the encryption key.
+func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
+	// Unmarshal encryption key first.
+	var key object.EncryptionKey
+	keyStr := hex.EncodeToString(id[:])
+	err = key.UnmarshalText([]byte(keyStr))
+	if err != nil {
+		return object.Slab{}, modules.AddContext(err, "couldn't unmarshal key")
+	}
+
+	// Start a transaction.
+	tx, err := c.db.Begin()
+	if err != nil {
+		return
+	}
+
+	// Load shards.
+	rows, err := tx.Query("SELECT host, merkle_root FROM ctr_shards WHERE slab_id = ?", id[:])
+	if err != nil {
+		tx.Rollback()
+		return object.Slab{}, modules.AddContext(err, "couldn't query shards")
+	}
+
+	var shards []object.Sector
+	for rows.Next() {
+		h := make([]byte, 32)
+		r := make([]byte, 32)
+		if err := rows.Scan(&h, &r); err != nil {
+			rows.Close()
+			tx.Rollback()
+			return object.Slab{}, modules.AddContext(err, "couldn't retrieve shard")
+		}
+		var shard object.Sector
+		copy(shard.Host[:], h)
+		copy(shard.Root[:], r)
+		shards = append(shards, shard)
+	}
+	rows.Close()
+
+	// Load the slab.
+	var minShards uint8
+	err = tx.QueryRow("SELECT min_shards FROM ctr_slabs WHERE enc_key = ?", id[:]).Scan(&minShards)
+	if err != nil {
+		tx.Rollback()
+		return object.Slab{}, modules.AddContext(err, "couldn't load slab")
+	}
+
+	slab = object.Slab{
+		Key:       key,
+		MinShards: minShards,
+		Shards:    shards,
+	}
+
+	tx.Commit()
+	return
 }

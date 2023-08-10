@@ -27,6 +27,12 @@ const (
 
 	// fundAccountTimeout is the amount of time we wait to fund an ephemeral account.
 	fundAccountTimeout = 10 * time.Second
+
+	// downloadSectorTimeout is the amount of time we wait to download a single sector.
+	downloadSectorTimeout = 30 * time.Second
+
+	// uploadSectorTimeout is the amount of time we wait to upload a single sector.
+	uploadSectorTimeout = 30 * time.Second
 )
 
 // Constants related to the contractor's alerts.
