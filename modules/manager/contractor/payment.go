@@ -15,6 +15,10 @@ import (
 )
 
 var (
+	// errBalanceInsufficient occurs when a withdrawal failed because the
+	// account balance was insufficient.
+	errBalanceInsufficient = errors.New("ephemeral account balance was insufficient")
+
 	// errInsufficientFunds is returned by various RPCs when the satellite is
 	// unable to provide sufficient payment to the host.
 	errInsufficientFunds = errors.New("insufficient funds")
@@ -23,6 +27,19 @@ var (
 	// already reached the highest possible revision number. Usually happens
 	// when trying to use a renewed contract.
 	errMaxRevisionReached = errors.New("contract has reached the maximum number of revisions")
+
+	// errPriceTableExpired is returned by the host when the price table that
+	// corresponds to the id it was given is already expired and thus no longer
+	// valid.
+	errPriceTableExpired = errors.New("price table requested is expired")
+
+	// errPriceTableNotFound is returned by the host when it can not find a
+	// price table that corresponds with the id we sent it.
+	errPriceTableNotFound = errors.New("price table not found")
+
+	// errSectorNotFound is returned by the host when it can not find the
+	// requested sector.
+	errSectorNotFound = errors.New("sector not found")
 )
 
 func payByContract(rev *types.FileContractRevision, amount types.Currency, refundAcct rhpv3.Account, sk types.PrivateKey) (rhpv3.PayByContractRequest, error) {
@@ -75,6 +92,7 @@ func (c *Contractor) managedAccountBalance(rpk, hpk types.PublicKey) (balance ty
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), syncAccountTimeout)
+	defer cancelFunc()
 	go func() {
 		select {
 		case <-c.tg.StopChan():
@@ -182,6 +200,7 @@ func (c *Contractor) managedFundAccount(rpk, hpk types.PublicKey, balance types.
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), fundAccountTimeout)
+	defer cancelFunc()
 	go func() {
 		select {
 		case <-c.tg.StopChan():

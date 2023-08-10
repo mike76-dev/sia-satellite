@@ -21,8 +21,8 @@ const (
 	defaultWithdrawalExpiryBlocks = 6
 )
 
-// DownloadSector downloads a single sector from the host.
-func (c *Contractor) DownloadSector(rpk, hpk types.PublicKey, w io.Writer, root types.Hash256, offset, length uint32) (err error) {
+// managedDownloadSector downloads a single sector from the host.
+func (c *Contractor) managedDownloadSector(ctx context.Context, rpk, hpk types.PublicKey, w io.Writer, root types.Hash256, offset, length uint32) (err error) {
 	// Get the renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk]
@@ -44,16 +44,6 @@ func (c *Contractor) DownloadSector(rpk, hpk types.PublicKey, w io.Writer, root 
 		return modules.AddContext(err, "failed to get host name")
 	}
 	siamuxAddr := net.JoinHostPort(hostName, host.Settings.SiaMuxPort)
-
-	// Create a context and set up its cancelling.
-	ctx, cancelFunc := context.WithTimeout(context.Background(), downloadSectorTimeout)
-	go func() {
-		select {
-		case <-c.tg.StopChan():
-			cancelFunc()
-		case <-ctx.Done():
-		}
-	}()
 
 	// Increase Successful/Failed interactions accordingly.
 	var hostFault bool

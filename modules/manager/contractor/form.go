@@ -100,6 +100,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), formContractTimeout)
+	defer cancelFunc()
 	go func() {
 		select {
 		case <-c.tg.StopChan():
@@ -432,6 +433,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), formContractTimeout)
+	defer cancelFunc()
 	go func() {
 		select {
 		case <-c.tg.StopChan():

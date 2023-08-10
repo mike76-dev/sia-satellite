@@ -142,6 +142,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), renewContractTimeout)
+	defer cancelFunc()
 	go func() {
 		select {
 		case <-c.tg.StopChan():
@@ -656,6 +657,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 
 	// Create a context and set up its cancelling.
 	ctx, cancelFunc := context.WithTimeout(context.Background(), renewContractTimeout)
+	defer cancelFunc()
 	go func() {
 		select {
 		case <-c.tg.StopChan():
