@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+	"time"
 
 	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -69,6 +70,7 @@ type Contractor struct {
 	renewedFrom          map[types.FileContractID]types.FileContractID
 	renewedTo            map[types.FileContractID]types.FileContractID
 
+	dm             *downloadManager
 	staticWatchdog *watchdog
 }
 
@@ -338,6 +340,7 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Ma
 		numFailedRenews:      make(map[types.FileContractID]uint64),
 	}
 	c.staticWatchdog = newWatchdog(c)
+	c.dm = newDownloadManager(c, 5, 3*time.Second)
 
 	// Close the logger upon shutdown.
 	c.tg.AfterStop(func() {
