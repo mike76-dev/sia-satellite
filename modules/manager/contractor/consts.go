@@ -32,7 +32,7 @@ const (
 	downloadSectorTimeout = 30 * time.Second
 
 	// uploadSectorTimeout is the amount of time we wait to upload a single sector.
-	uploadSectorTimeout = 30 * time.Second
+	uploadSectorTimeout = 1 * time.Minute
 )
 
 // Constants related to the contractor's alerts.
