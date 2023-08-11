@@ -179,11 +179,11 @@ func (c *Contractor) managedUploadSector(ctx context.Context, rpk, hpk types.Pub
 			if err != nil {
 				return modules.AddContext(err, "unable to update contract")
 			}
-
-			// Upload the data.
-			payment := rhpv3.PayByEphemeralAccount(accountID, cost, pt.HostBlockHeight+defaultWithdrawalExpiryBlocks, ak)
-			root, _, err = proto.RPCAppendSector(ctx, t, esk, pt, rev, &payment, sector)
 		}
+
+		// Upload the data.
+		payment = rhpv3.PayByEphemeralAccount(accountID, cost, pt.HostBlockHeight+defaultWithdrawalExpiryBlocks, ak)
+		root, _, err = proto.RPCAppendSector(ctx, t, esk, pt, rev, &payment, sector)
 		if err != nil {
 			hostFault = true
 			return err
