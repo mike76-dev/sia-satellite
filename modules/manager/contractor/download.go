@@ -231,6 +231,16 @@ func (mgr *downloadManager) managedDownloadSlab(ctx context.Context, rpk types.P
 	return resp.shards, err
 }
 
+// stop stops the download manager and all running downloads.
+func (mgr *downloadManager) stop() {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+	close(mgr.stopChan)
+	for _, d := range mgr.downloaders {
+		close(d.stopChan)
+	}
+}
+
 // numDownloaders returns the current number of downloaders.
 func (mgr *downloadManager) numDownloaders() int {
 	mgr.mu.Lock()

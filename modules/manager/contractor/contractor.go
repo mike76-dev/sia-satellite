@@ -244,6 +244,7 @@ func (c *Contractor) Synced() <-chan struct{} {
 
 // Close closes the Contractor.
 func (c *Contractor) Close() error {
+	c.dm.stop()
 	return c.tg.Stop()
 }
 
