@@ -3,6 +3,7 @@ package proto
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -26,9 +27,9 @@ func RPCSettings(ctx context.Context, t *rhpv2.Transport) (settings rhpv2.HostSe
 // RPCFormContract forms a contract with the host.
 func RPCFormContract(ctx context.Context, t *rhpv2.Transport, renterKey types.PrivateKey, txnSet []types.Transaction) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
 	// Strip our signatures before sending.
-	parents, txn := txnSet[:len(txnSet) - 1], txnSet[len(txnSet) - 1]
+	parents, txn := txnSet[:len(txnSet)-1], txnSet[len(txnSet)-1]
 	renterContractSignatures := txn.Signatures
-	txnSet[len(txnSet) - 1].Signatures = nil
+	txnSet[len(txnSet)-1].Signatures = nil
 
 	// Create request.
 	renterPubkey := renterKey.PublicKey()
@@ -110,9 +111,9 @@ func RPCFormContract(ctx context.Context, t *rhpv2.Transport, renterKey types.Pr
 // Renter-Satellite protocol.
 func RPCTrustlessFormContract(ctx context.Context, t *rhpv2.Transport, s *modules.RPCSession, rpk types.PublicKey, txnSet []types.Transaction) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
 	// Strip our signatures before sending.
-	parents, txn := txnSet[:len(txnSet) - 1], txnSet[len(txnSet) - 1]
+	parents, txn := txnSet[:len(txnSet)-1], txnSet[len(txnSet)-1]
 	renterContractSignatures := txn.Signatures
-	txnSet[len(txnSet) - 1].Signatures = nil
+	txnSet[len(txnSet)-1].Signatures = nil
 
 	// Create request.
 	req := &rhpv2.RPCFormContractRequest{
@@ -200,4 +201,39 @@ func RPCTrustlessFormContract(ctx context.Context, t *rhpv2.Transport, s *module
 			hostSigs.RevisionSignature,
 		},
 	}, signedTxnSet, nil
+}
+
+// updateRevisionOutputs updates the revision outputs with new values.
+func updateRevisionOutputs(rev *types.FileContractRevision, cost, collateral types.Currency) (valid, missed []types.Currency, err error) {
+	// Allocate new slices; don't want to risk accidentally sharing memory.
+	rev.ValidProofOutputs = append([]types.SiacoinOutput(nil), rev.ValidProofOutputs...)
+	rev.MissedProofOutputs = append([]types.SiacoinOutput(nil), rev.MissedProofOutputs...)
+
+	// Move valid payout from renter to host.
+	var underflow, overflow bool
+	rev.ValidProofOutputs[0].Value, underflow = rev.ValidProofOutputs[0].Value.SubWithUnderflow(cost)
+	rev.ValidProofOutputs[1].Value, overflow = rev.ValidProofOutputs[1].Value.AddWithOverflow(cost)
+	if underflow || overflow {
+		err = errors.New("insufficient funds to pay host")
+		return
+	}
+
+	// Move missed payout from renter to void.
+	rev.MissedProofOutputs[0].Value, underflow = rev.MissedProofOutputs[0].Value.SubWithUnderflow(cost)
+	rev.MissedProofOutputs[2].Value, overflow = rev.MissedProofOutputs[2].Value.AddWithOverflow(cost)
+	if underflow || overflow {
+		err = errors.New("insufficient funds to move missed payout to void")
+		return
+	}
+
+	// Move collateral from host to void.
+	rev.MissedProofOutputs[1].Value, underflow = rev.MissedProofOutputs[1].Value.SubWithUnderflow(collateral)
+	rev.MissedProofOutputs[2].Value, overflow = rev.MissedProofOutputs[2].Value.AddWithOverflow(collateral)
+	if underflow || overflow {
+		err = errors.New("insufficient collateral")
+		return
+	}
+
+	return []types.Currency{rev.ValidProofOutputs[0].Value, rev.ValidProofOutputs[1].Value},
+		[]types.Currency{rev.MissedProofOutputs[0].Value, rev.MissedProofOutputs[1].Value, rev.MissedProofOutputs[2].Value}, nil
 }

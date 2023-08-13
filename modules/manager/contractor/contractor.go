@@ -71,6 +71,7 @@ type Contractor struct {
 	renewedTo            map[types.FileContractID]types.FileContractID
 
 	dm             *downloadManager
+	um             *uploadManager
 	staticWatchdog *watchdog
 }
 
@@ -244,6 +245,8 @@ func (c *Contractor) Synced() <-chan struct{} {
 
 // Close closes the Contractor.
 func (c *Contractor) Close() error {
+	c.dm.stop()
+	c.um.stop()
 	return c.tg.Stop()
 }
 
@@ -341,6 +344,7 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Ma
 	}
 	c.staticWatchdog = newWatchdog(c)
 	c.dm = newDownloadManager(c, 5, 3*time.Second)
+	c.um = newUploadManager(c, 5, 3*time.Second)
 
 	// Close the logger upon shutdown.
 	c.tg.AfterStop(func() {
