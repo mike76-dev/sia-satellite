@@ -478,7 +478,7 @@ func addSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, sco types.SiacoinOut
 	e := types.NewEncoder(&buf)
 	sco.EncodeTo(e)
 	e.Flush()
-	_, err := tx.Exec("INSERT INTO cs_sco (scoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec("REPLACE INTO cs_sco (scoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 	return err
 }
 
@@ -526,7 +526,7 @@ func addSiafundOutput(tx *sql.Tx, id types.SiafundOutputID, sfo types.SiafundOut
 	sfo.Address.EncodeTo(e)
 	claimStart.EncodeTo(e)
 	e.Flush()
-	_, err := tx.Exec("INSERT INTO cs_sfo (sfoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec("REPLACE INTO cs_sfo (sfoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 	return err
 }
 
@@ -567,13 +567,13 @@ func addFileContract(tx *sql.Tx, id types.FileContractID, fc types.FileContract)
 	e := types.NewEncoder(&buf)
 	fc.EncodeTo(e)
 	e.Flush()
-	_, err := tx.Exec("INSERT INTO cs_fc (fcid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec("REPLACE INTO cs_fc (fcid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 	if err != nil {
 		return err
 	}
 
 	// Add an entry for when the file contract expires.
-	_, err = tx.Exec("INSERT INTO cs_fcex (height, fcid, bytes) VALUES (?, ?, ?)", fc.WindowEnd, id[:], []byte{})
+	_, err = tx.Exec("REPLACE INTO cs_fcex (height, fcid, bytes) VALUES (?, ?, ?)", fc.WindowEnd, id[:], []byte{})
 	return err
 }
 
@@ -666,7 +666,7 @@ func setPriorFoundationUnlockHashes(tx *sql.Tx, height uint64) error {
 		return err
 	}
 	_, err = tx.Exec(`
-		INSERT INTO cs_fuh (height, bytes) VALUES (?, ?)
+		REPLACE INTO cs_fuh (height, bytes) VALUES (?, ?)
 	`, height, fuhBytes)
 	return err
 }
@@ -703,7 +703,7 @@ func addDSCO(tx *sql.Tx, bh uint64, id types.SiacoinOutputID, sco types.SiacoinO
 	e := types.NewEncoder(&buf)
 	sco.EncodeTo(e)
 	e.Flush()
-	_, err = tx.Exec("INSERT INTO cs_dsco (height, scoid, bytes) VALUES (?, ?, ?)", bh, id[:], buf.Bytes())
+	_, err = tx.Exec("REPLACE INTO cs_dsco (height, scoid, bytes) VALUES (?, ?, ?)", bh, id[:], buf.Bytes())
 
 	return err
 }
@@ -726,7 +726,7 @@ func checkDoSBlock(tx *sql.Tx, id types.BlockID) (known bool, err error) {
 // addDoSBlock adds the block to known blocks list.
 func addDoSBlock(tx *sql.Tx, id types.BlockID) error {
 	_, err := tx.Exec(`
-		INSERT INTO cs_dos (bid) VALUES (?)
+		REPLACE INTO cs_dos (bid) VALUES (?)
 	`, id[:])
 	return err
 }
