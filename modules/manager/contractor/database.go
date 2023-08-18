@@ -694,3 +694,65 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
 	tx.Commit()
 	return
 }
+
+// getSlabs loads the slabs from the database.
+func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
+	// Load slabs.
+	rows, err := c.db.Query("SELECT enc_key, object_id, min_shards, offset, len FROM ctr_slabs")
+	if err != nil {
+		return nil, modules.AddContext(err, "unable to query slabs")
+	}
+
+	for rows.Next() {
+		key := make([]byte, 32)
+		id := make([]byte, 32)
+		var minShards uint8
+		var offset, length uint64
+		if err := rows.Scan(&key, &id, &minShards, &offset, &length); err != nil {
+			rows.Close()
+			return nil, modules.AddContext(err, "unable to retrieve slab")
+		}
+		slab := modules.Slab{
+			MinShards: minShards,
+			Offset:    offset,
+			Length:    length,
+		}
+		copy(slab.Key[:], key)
+		rpk := make([]byte, 32)
+		err = c.db.QueryRow("SELECT renter_pk FROM ctr_metadata WHERE enc_key = ?", id[:]).Scan(&rpk)
+		if err != nil {
+			rows.Close()
+			return nil, modules.AddContext(err, "unable to retrieve public key")
+		}
+		si := slabInfo{
+			Slab: slab,
+		}
+		copy(si.renterKey[:], rpk)
+		slabs = append(slabs, si)
+	}
+	rows.Close()
+
+	// Load shards.
+	for index := range slabs {
+		rows, err := c.db.Query("SELECT host, merkle_root FROM ctr_shards WHERE slab_id = ?", slabs[index].Key[:])
+		if err != nil {
+			return nil, modules.AddContext(err, "unable to query shards")
+		}
+
+		for rows.Next() {
+			host := make([]byte, 32)
+			root := make([]byte, 32)
+			if err := rows.Scan(&host, &root); err != nil {
+				rows.Close()
+				return nil, modules.AddContext(err, "unable to retrieve shard")
+			}
+			var shard modules.Shard
+			copy(shard.Host[:], host)
+			copy(shard.Root[:], root)
+			slabs[index].Shards = append(slabs[index].Shards, shard)
+		}
+		rows.Close()
+	}
+
+	return
+}
