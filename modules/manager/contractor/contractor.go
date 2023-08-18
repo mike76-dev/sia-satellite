@@ -304,13 +304,13 @@ func New(db *sql.DB, cs modules.ConsensusSet, m modules.Manager, tpool modules.T
 	go func() {
 		// Subscribe to the consensus set in a separate goroutine.
 		if err := c.tg.Add(); err != nil {
-			errChan <- err
+			c.log.Println("ERROR: couldn't start a thread:", err)
 			return
 		}
 		defer c.tg.Done()
 		err := contractorAsyncStartup(c, cs)
 		if err != nil {
-			errChan <- err
+			c.log.Println("ERROR: couldn't start contractor:", err)
 		}
 	}()
 
