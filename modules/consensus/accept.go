@@ -294,7 +294,13 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 			if err != nil {
 				return false, err
 			}
-			return false, tx.Commit()
+			if err := tx.Commit(); err != nil {
+				return false, err
+			}
+			for i := 0; i < len(changes)-1; i++ {
+				cs.updateSubscribers(changes[i])
+			}
+			return chainExtended && len(changes) > 1, nil
 		}
 		if len(changes) == 0 {
 			cs.log.Println("Consensus received an invalid block:", setErr)
