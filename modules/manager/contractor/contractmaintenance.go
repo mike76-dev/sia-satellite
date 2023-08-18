@@ -417,6 +417,13 @@ func (c *Contractor) threadedContractMaintenance() {
 		return
 	}
 
+	// No contract maintenance unless the wallet is synced.
+	height, err := c.wallet.Height()
+	if err != nil || height != c.blockHeight {
+		c.log.Println("INFO: skipping contract maintenance since wallet isn't synced yet")
+		return
+	}
+
 	// Only one instance of this thread should be running at a time. It is
 	// fine to return early if another thread is already doing maintenance.
 	// The next block will trigger another round.
@@ -862,4 +869,6 @@ func (c *Contractor) threadedContractMaintenance() {
 			}
 		}
 	}
+
+	c.managedCheckFileHealth()
 }
