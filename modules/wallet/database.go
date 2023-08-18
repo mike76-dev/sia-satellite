@@ -673,3 +673,32 @@ func dbPutUnseededKeys(tx *sql.Tx, keys []encryptedSpendableKey) error {
 	}
 	return nil
 }
+
+// dbResetBeforeRescan deletes the wallet history before starting a new scan.
+func dbResetBeforeRescan(tx *sql.Tx) error {
+	_, err := tx.Exec("DELETE FROM wt_txn")
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM wt_addr")
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM wt_sco")
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM wt_sfo")
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM wt_spo")
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec("DELETE FROM wt_uc")
+	if err != nil {
+		return err
+	}
+	return nil
+}

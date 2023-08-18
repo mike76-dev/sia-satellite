@@ -29,7 +29,7 @@ var (
 
 // saltedEncryptionKey creates an encryption key that is used to decrypt a
 // specific key.
-func saltedEncryptionKey(masterKey modules.WalletKey, salt walletSalt) (modules.WalletKey) {
+func saltedEncryptionKey(masterKey modules.WalletKey, salt walletSalt) modules.WalletKey {
 	h := types.NewHasher()
 	h.E.Write(masterKey[:])
 	h.E.Write(salt[:])
@@ -39,7 +39,7 @@ func saltedEncryptionKey(masterKey modules.WalletKey, salt walletSalt) (modules.
 
 // walletPasswordEncryptionKey creates an encryption key that is used to
 // encrypt/decrypt the master encryption key.
-func walletPasswordEncryptionKey(seed modules.Seed, salt walletSalt) (modules.WalletKey) {
+func walletPasswordEncryptionKey(seed modules.Seed, salt walletSalt) modules.WalletKey {
 	h := types.NewHasher()
 	h.E.Write(seed[:])
 	h.E.Write(salt[:])
@@ -343,6 +343,12 @@ func (w *Wallet) managedAsyncUnlock(lastChange modules.ConsensusChangeID) error 
 			err = dbPutConsensusHeight(w.dbTx, 0)
 			if err != nil {
 				return fmt.Errorf("failed to reset db during rescan: %v", err)
+			}
+			// Delete the wallet history before resubscribing. Otherwise we
+			// will end up with duplicate entries in the database.
+			err = dbResetBeforeRescan(w.dbTx)
+			if err != nil {
+				return fmt.Errorf("failed to reset wallet history during rescan: %v", err)
 			}
 			err = w.cs.ConsensusSetSubscribe(w, modules.ConsensusChangeBeginning, w.tg.StopChan())
 		}
