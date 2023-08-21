@@ -141,8 +141,8 @@ func (m *Manager) UpdateBalance(email string, ub modules.UserBalance) error {
 	return err
 }
 
-// getSpendings retrieves the user's spendings.
-func (m *Manager) getSpendings(email string) (modules.UserSpendings, error) {
+// GetSpendings retrieves the user's spendings.
+func (m *Manager) GetSpendings(email string) (modules.UserSpendings, error) {
 	var currLocked, currUsed, currOverhead float64
 	var prevLocked, prevUsed, prevOverhead float64
 	var currFormed, currRenewed, prevFormed, prevRenewed uint64
@@ -185,8 +185,8 @@ func (m *Manager) getSpendings(email string) (modules.UserSpendings, error) {
 	return us, nil
 }
 
-// updateSpendings updates the user's spendings.
-func (m *Manager) updateSpendings(email string, us modules.UserSpendings) error {
+// UpdateSpendings updates the user's spendings.
+func (m *Manager) UpdateSpendings(email string, us modules.UserSpendings) error {
 	_, err := m.db.Exec(`
 		REPLACE INTO mg_spendings
 		(email, current_locked, current_used, current_overhead,

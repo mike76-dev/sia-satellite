@@ -258,7 +258,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 			// Move the current spendings of each renter to the previous ones.
 			renters := m.Renters()
 			for _, renter := range renters {
-				us, err := m.getSpendings(renter.Email)
+				us, err := m.GetSpendings(renter.Email)
 				if err != nil {
 					m.log.Println("ERROR: couldn't retrieve renter spendings:", err)
 					continue
@@ -287,7 +287,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				fee := float64(modules.StoreMetadataFee * count)
 				us.PrevUsed += fee
 				us.PrevOverhead += fee
-				err = m.updateSpendings(renter.Email, us)
+				err = m.UpdateSpendings(renter.Email, us)
 				if err != nil {
 					m.log.Println("ERROR: couldn't update spendings:", err)
 				}

@@ -20,10 +20,6 @@ var (
 	// ErrInsufficientAllowance indicates that the renter's allowance is less
 	// than the amount necessary to store at least one sector
 	ErrInsufficientAllowance = errors.New("allowance is not large enough to cover fees of contract creation")
-	errTooExpensive          = errors.New("host price was too high")
-
-	// errContractEnded is the error returned when the contract has already ended
-	errContractEnded = errors.New("contract has already ended")
 
 	// errContractNotGFR is used to indicate that a contract renewal failed
 	// because the contract was marked !GFR.
@@ -242,82 +238,6 @@ func (c *Contractor) managedEstimateRenewFundingRequirements(contract modules.Re
 		estimatedCost = minimum
 	}
 	return estimatedCost, nil
-}
-
-// callInterruptContractMaintenance will issue an interrupt signal to any
-// running maintenance, stopping that maintenance. If there are multiple threads
-// running maintenance, they will all be stopped.
-func (c *Contractor) callInterruptContractMaintenance() {
-	// Spin up a thread to grab the maintenance lock. Signal that the lock was
-	// acquired after the lock is acquired.
-	gotLock := make(chan struct{})
-	go func() {
-		c.maintenanceLock.Lock()
-		close(gotLock)
-		c.maintenanceLock.Unlock()
-	}()
-
-	// There may be multiple threads contending for the maintenance lock. Issue
-	// interrupts repeatedly until we get a signal that the maintenance lock has
-	// been acquired.
-	for {
-		select {
-		case <-gotLock:
-			return
-		case c.interruptMaintenance <- struct{}{}:
-			c.log.Println("INFO: signal sent to interrupt contract maintenance")
-		}
-	}
-}
-
-// managedFindMinAllowedHostScores uses a set of random hosts from the hostdb to
-// calculate minimum acceptable score for a host to be marked GFR and GFU.
-func (c *Contractor) managedFindMinAllowedHostScores(rpk types.PublicKey) (types.Currency, types.Currency, error) {
-	// Check if we know this renter.
-	c.mu.RLock()
-	renter, exists := c.renters[rpk]
-	c.mu.RUnlock()
-	if !exists {
-		return types.Currency{}, types.Currency{}, ErrRenterNotFound
-	}
-
-	// Pull a new set of hosts from the hostdb that could be used as a new set
-	// to match the allowance. The lowest scoring host of these new hosts will
-	// be used as a baseline for determining whether our existing contracts are
-	// worthwhile.
-	hostCount := int(renter.Allowance.Hosts)
-	hosts, err := c.hdb.RandomHostsWithAllowance(hostCount+randomHostsBufferForScore, nil, nil, renter.Allowance)
-	if err != nil {
-		return types.Currency{}, types.Currency{}, err
-	}
-
-	if len(hosts) == 0 {
-		return types.Currency{}, types.Currency{}, errors.New("no hosts returned in RandomHosts")
-	}
-
-	// Find the minimum score that a host is allowed to have to be considered
-	// good for upload.
-	var minScoreGFR, minScoreGFU types.Currency
-	sb, err := c.hdb.ScoreBreakdown(hosts[0])
-	if err != nil {
-		return types.Currency{}, types.Currency{}, err
-	}
-
-	lowestScore := sb.Score
-	for i := 1; i < len(hosts); i++ {
-		score, err := c.hdb.ScoreBreakdown(hosts[i])
-		if err != nil {
-			return types.Currency{}, types.Currency{}, err
-		}
-		if score.Score.Cmp(lowestScore) < 0 {
-			lowestScore = score.Score
-		}
-	}
-	// Set the minimum acceptable score to a factor of the lowest score.
-	minScoreGFR = lowestScore.Div(scoreLeewayGoodForRenew)
-	minScoreGFU = lowestScore.Div(scoreLeewayGoodForUpload)
-
-	return minScoreGFR, minScoreGFU, nil
 }
 
 // managedPruneRedundantAddressRange uses the hostdb to find hosts that
@@ -870,5 +790,7 @@ func (c *Contractor) threadedContractMaintenance() {
 		}
 	}
 
-	c.managedCheckFileHealth()
+	// Perform slab migrations.
+	c.migrator.signalMaintenanceFinished()
+	c.migrator.tryPerformMigrations()
 }
