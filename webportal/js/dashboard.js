@@ -596,7 +596,7 @@ function toPayment() {
 	initialize();
 	paying = true;
 	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
-		paymentCurrency;
+		averages.currency;
 	document.getElementById('select').classList.add('disabled');
 	document.getElementById('payment').classList.remove('disabled');
 }
