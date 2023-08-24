@@ -370,7 +370,7 @@ function retrieveBalance() {
 				document.getElementById('storage-currency').innerHTML = c;
 				document.getElementById('upload-currency').innerHTML = c;
 				document.getElementById('download-currency').innerHTML = c;
-				if (!paying) {console.log('removing');
+				if (!paying) {
 					document.getElementById('select').classList.remove('disabled');
 				}
 				document.getElementById('reveal').classList.remove('disabled');
@@ -593,10 +593,11 @@ function paymentChange(obj) {
 function toPayment() {
 	let a = document.getElementById('payment-actual');
 	paymentAmount = parseFloat(a.value);
+	paymentCurrency = averages.currency;
 	initialize();
 	paying = true;
 	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
-		averages.currency;
+		paymentCurrency;
 	document.getElementById('select').classList.add('disabled');
 	document.getElementById('payment').classList.remove('disabled');
 }
