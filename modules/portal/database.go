@@ -239,11 +239,10 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	var email string
 	var s bool
 	var b, l float64
-	var c string
 	err = p.db.QueryRow(`
-		SELECT email, subscribed, sc_balance, sc_locked, currency
+		SELECT email, subscribed, sc_balance, sc_locked
 		FROM mg_balances WHERE stripe_id = ?
-	`, id).Scan(&email, &s, &b, &l, &c)
+	`, id).Scan(&email, &s, &b, &l)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -274,10 +273,26 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 		Subscribed: s,
 		Balance:    b,
 		Locked:     l,
-		Currency:   c,
+		Currency:   currency,
 		StripeID:   id,
 	}
-	if ub.Currency == "" {
+	if credit {
+		ub.StripeID = ""
+	}
+	ub.Balance += amount / rate
+
+	// Update the balances table.
+	if err = p.manager.UpdateBalance(email, ub); err != nil {
+		return err
+	}
+
+	// Create a new renter if needed.
+	var c int
+	err = p.db.QueryRow("SELECT COUNT(*) FROM ctr_renters WHERE email = ?", email).Scan(&c)
+	if err != nil {
+		return err
+	}
+	if c == 0 {
 		// New renter, need to create a new record.
 		seed, err := p.manager.GetWalletSeed()
 		defer frand.Read(seed[:])
@@ -290,15 +305,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 		if err = p.createNewRenter(email, pk); err != nil {
 			return err
 		}
-		ub.Currency = currency
 	}
-	if credit {
-		ub.StripeID = ""
-	}
-	ub.Balance += amount / rate
-
-	// Update the balances table.
-	err = p.manager.UpdateBalance(email, ub)
 
 	return err
 }
