@@ -487,7 +487,7 @@ func (p *Portal) loadCredits() error {
 // getFiles retrieves the information about the stored file metadata.
 func (p *Portal) getFiles(pk types.PublicKey) (sf []savedFile, err error) {
 	rows, err := p.db.Query(`
-		SELECT enc_key, filepath, uploaded
+		SELECT enc_key, filepath, updated
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 	`, pk[:])
