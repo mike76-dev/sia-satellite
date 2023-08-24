@@ -72,6 +72,7 @@ type Contractor struct {
 
 	dm             *downloadManager
 	um             *uploadManager
+	migrator       *migrator
 	staticWatchdog *watchdog
 }
 
@@ -345,6 +346,7 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Ma
 	c.staticWatchdog = newWatchdog(c)
 	c.dm = newDownloadManager(c, 5, 3*time.Second)
 	c.um = newUploadManager(c, 5, 3*time.Second)
+	c.migrator = newMigrator(c, 1)
 
 	// Close the logger upon shutdown.
 	c.tg.AfterStop(func() {

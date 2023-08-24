@@ -339,6 +339,9 @@ type Manager interface {
 	// GetSiacoinRate calculates the SC price in a given currency.
 	GetSiacoinRate(string) (float64, error)
 
+	// GetSpendings retrieves the user's spendings.
+	GetSpendings(string) (UserSpendings, error)
+
 	// GetWalletSeed returns the wallet seed.
 	GetWalletSeed() (Seed, error)
 
@@ -415,6 +418,9 @@ type Manager interface {
 
 	// UpdateSlab updates a file slab after a successful migration.
 	UpdateSlab(types.PublicKey, Slab) error
+
+	// UpdateSpendings updates the user's spendings.
+	UpdateSpendings(string, UserSpendings) error
 }
 
 // MaintenanceSpending is a helper struct that contains a breakdown of costs

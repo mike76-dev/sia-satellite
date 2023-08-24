@@ -830,14 +830,14 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 	}
 
 	// Update the spendings.
-	us, err := m.getSpendings(email)
+	us, err := m.GetSpendings(email)
 	if err != nil {
 		return err
 	}
 	us.CurrentLocked += amount
 	us.CurrentOverhead += amountWithFee - amount
 
-	return m.updateSpendings(email, us)
+	return m.UpdateSpendings(email, us)
 }
 
 // UnlockSiacoins unlocks the specified amount of Siacoins in the user balance.
@@ -886,7 +886,7 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 		// Spending outside the reporting period.
 		return nil
 	}
-	us, err := m.getSpendings(email)
+	us, err := m.GetSpendings(email)
 	if err != nil {
 		return err
 	}
@@ -898,7 +898,7 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 		us.CurrentUsed += burned
 	}
 
-	return m.updateSpendings(email, us)
+	return m.UpdateSpendings(email, us)
 }
 
 // RetrieveSpendings retrieves the user's spendings in the given currency.
@@ -913,7 +913,7 @@ func (m *Manager) RetrieveSpendings(email string, currency string) (modules.User
 	}
 
 	// Get user spendings.
-	us, err := m.getSpendings(email)
+	us, err := m.GetSpendings(email)
 	if err != nil {
 		return modules.UserSpendings{}, err
 	}
@@ -972,7 +972,7 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	}
 
 	// Update the spendings.
-	us, err := m.getSpendings(renter.Email)
+	us, err := m.GetSpendings(renter.Email)
 	if err != nil {
 		return err
 	}
@@ -980,7 +980,7 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	us.CurrentOverhead += fee
 	us.CurrentSlabsSaved += uint64(len(fm.Slabs))
 
-	return m.updateSpendings(renter.Email, us)
+	return m.UpdateSpendings(renter.Email, us)
 }
 
 // DeleteObject deletes the saved file metadata object.
@@ -1023,7 +1023,7 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 	}
 
 	// Update the spendings.
-	us, err := m.getSpendings(renter.Email)
+	us, err := m.GetSpendings(renter.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -1031,7 +1031,7 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 	us.CurrentOverhead += fee
 	us.CurrentSlabsRetrieved += numRetrieved
 
-	err = m.updateSpendings(renter.Email, us)
+	err = m.UpdateSpendings(renter.Email, us)
 	if err != nil {
 		return nil, err
 	}
@@ -1069,7 +1069,7 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 	}
 
 	// Update the spendings.
-	us, err := m.getSpendings(renter.Email)
+	us, err := m.GetSpendings(renter.Email)
 	if err != nil {
 		return err
 	}
@@ -1077,5 +1077,5 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 	us.CurrentOverhead += fee
 	us.CurrentSlabsMigrated += 1
 
-	return m.updateSpendings(renter.Email, us)
+	return m.UpdateSpendings(renter.Email, us)
 }
