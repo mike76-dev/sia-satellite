@@ -352,6 +352,7 @@ func (c *Contractor) threadedContractMaintenance() {
 		return
 	}
 	defer c.maintenanceLock.Unlock()
+	c.log.Println("INFO: performing contract maintenance")
 
 	// Get the current block height.
 	c.mu.Lock()
