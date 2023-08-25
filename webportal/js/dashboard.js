@@ -85,6 +85,7 @@ var filesStep = 10;
 
 var sortByStart = 'inactive';
 var sortByEnd = 'inactive';
+var sortByTimestamp = 'ascending';
 
 var expandedContract = -1;
 
@@ -1184,4 +1185,23 @@ function getVersion() {
 			}
 		})
 		.catch(error => console.log(error));
+}
+
+function sortByPaymentTime() {
+	switch (sortByTimestamp) {
+	case 'ascending':
+		sortByTimestamp = 'descending';
+		document.getElementById('history-timestamp-desc').classList.add('active');
+		document.getElementById('history-timestamp-asc').classList.remove('active');
+		payments = payments.sort((a, b) => b.timestamp - a.timestamp);
+		break;
+	case 'descending':
+		sortByTimestamp = 'ascending';
+		document.getElementById('history-timestamp-asc').classList.add('active');
+		document.getElementById('history-timestamp-desc').classList.remove('active');
+		payments = payments.sort((a, b) => a.timestamp - b.timestamp);
+		break;
+	default:
+	}
+	renderPayments();
 }
