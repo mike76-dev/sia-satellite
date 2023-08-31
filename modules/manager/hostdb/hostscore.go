@@ -27,7 +27,7 @@ func contractPriceForScore(he modules.HostDBEntry) types.Currency {
 // bytesToSectors converts bytes to the number of sectors.
 func bytesToSectors(bytes uint64) uint64 {
 	numSectors := bytes / rhpv2.SectorSize
-	if bytes % rhpv2.SectorSize != 0 {
+	if bytes%rhpv2.SectorSize != 0 {
 		numSectors++
 	}
 	return numSectors
@@ -64,9 +64,9 @@ func storageCostForScore(a modules.Allowance, he modules.HostDBEntry, bytes uint
 // storing data on the host with the given allowance settings.
 func hostPeriodCostForScore(a modules.Allowance, he modules.HostDBEntry) types.Currency {
 	// Compute how much data we upload, download and store.
-	uploadPerHost := uint64(float64(a.ExpectedUpload * a.TotalShards / a.MinShards) / float64(a.Hosts))
-	downloadPerHost := uint64(float64(a.ExpectedDownload * a.TotalShards / a.MinShards) / float64(a.Hosts))
-	storagePerHost := uint64(float64(a.ExpectedStorage * a.TotalShards / a.MinShards) / float64(a.Hosts))
+	uploadPerHost := uint64(float64(a.ExpectedUpload*a.TotalShards/a.MinShards) / float64(a.Hosts))
+	downloadPerHost := uint64(float64(a.ExpectedDownload*a.TotalShards/a.MinShards) / float64(a.Hosts))
+	storagePerHost := uint64(float64(a.ExpectedStorage*a.TotalShards/a.MinShards) / float64(a.Hosts))
 
 	// Compute the individual costs.
 	hostCollateral := rhpv2.ContractFormationCollateral(a.Period, storagePerHost, he.Settings)
@@ -126,7 +126,7 @@ func (hdb *HostDB) priceAdjustmentScore(allowance modules.Allowance, entry modul
 		return 1.5 / math.Pow(3, fRatio)
 	case -1:
 		// Cost < budget -> score is (0.5; 1].
-		s := 0.44 + 0.06 * (1 / fRatio)
+		s := 0.44 + 0.06*(1/fRatio)
 		if s > 1.0 {
 			s = 1.0
 		}
@@ -160,7 +160,7 @@ func (hdb *HostDB) storageRemainingScore(allowance modules.Allowance, entry modu
 	// idealDataPerHost is the amount of data that we would have to put on each
 	// host assuming that our storage requirements were spread evenly across
 	// every single host.
-	idealDataPerHost := float64(allowance.ExpectedStorage * allowance.TotalShards / allowance.MinShards) / float64(allowance.Hosts)
+	idealDataPerHost := float64(allowance.ExpectedStorage*allowance.TotalShards/allowance.MinShards) / float64(allowance.Hosts)
 
 	// allocationPerHost is the amount of data that we would like to be able to
 	// put on each host, because data is not always spread evenly across the
@@ -292,7 +292,7 @@ func (hdb *HostDB) interactionScore(entry modules.HostDBEntry) float64 {
 	success, fail := 30.0, 1.0
 	success += entry.HistoricSuccessfulInteractions
 	fail += entry.HistoricFailedInteractions
-	return math.Pow(success / (success + fail), 10)
+	return math.Pow(success/(success+fail), 10)
 }
 
 // uptimeScore computes a score for a host based on its historic uptime.
@@ -307,15 +307,15 @@ func (hdb *HostDB) uptimeScore(entry modules.HostDBEntry) float64 {
 	case 0:
 		return 0.25 // No scans yet.
 	case 1:
-		lastScanSuccess = entry.ScanHistory[totalScans - 1].Success
+		lastScanSuccess = entry.ScanHistory[totalScans-1].Success
 		if lastScanSuccess {
 			return 0.75 // 1 successful scan.
 		} else {
 			return 0.25 // 1 failed scan.
 		}
 	case 2:
-		lastScanSuccess = entry.ScanHistory[totalScans - 1].Success
-		secondLastScanSuccess = entry.ScanHistory[totalScans - 2].Success
+		lastScanSuccess = entry.ScanHistory[totalScans-1].Success
+		secondLastScanSuccess = entry.ScanHistory[totalScans-2].Success
 		if lastScanSuccess && secondLastScanSuccess {
 			return 0.85
 		} else if lastScanSuccess || secondLastScanSuccess {
@@ -327,14 +327,14 @@ func (hdb *HostDB) uptimeScore(entry modules.HostDBEntry) float64 {
 
 	// Account for the interval between the most recent interaction and the
 	// current time.
-	lastScanSuccess = entry.ScanHistory[totalScans - 1].Success
-	finalInterval := time.Since(entry.ScanHistory[totalScans - 1].Timestamp)
+	lastScanSuccess = entry.ScanHistory[totalScans-1].Success
+	finalInterval := time.Since(entry.ScanHistory[totalScans-1].Timestamp)
 	if lastScanSuccess {
 		uptime += finalInterval
 	} else {
 		downtime += finalInterval
 	}
-	ratio := float64(uptime) / float64(uptime + downtime)
+	ratio := float64(uptime) / float64(uptime+downtime)
 
 	// Unconditionally forgive up to 2% downtime.
 	if ratio >= 0.98 {
@@ -344,11 +344,11 @@ func (hdb *HostDB) uptimeScore(entry modules.HostDBEntry) float64 {
 	// Forgive downtime inversely proportional to the number of interactions;
 	// e.g. if we have only interacted 4 times, and half of the interactions
 	// failed, assume a ratio of 88% rather than 50%.
-	ratio = math.Max(ratio, 1 - (0.03 * float64(totalScans)))
+	ratio = math.Max(ratio, 1-(0.03*float64(totalScans)))
 
 	// Calculate the penalty for poor uptime. Penalties increase extremely
 	// quickly as uptime falls away from 95%.
-	return math.Pow(ratio, 200 * math.Min(1 - ratio, 0.30))
+	return math.Pow(ratio, 200*math.Min(1-ratio, 0.30))
 }
 
 // versionScore computes a score for a host based on its version.
@@ -357,10 +357,8 @@ func (hdb *HostDB) versionScore(entry modules.HostDBEntry) float64 {
 		version string
 		penalty float64
 	}{
-		{"1.5.10", 1.0},
-		{"1.5.9", 0.99},
-		{"1.5.8", 0.99},
-		{"1.5.6", 0.90},
+		{"1.6.0", 0.99},
+		{"1.5.9", 0.00},
 	}
 	weight := 1.0
 	for _, v := range versions {
