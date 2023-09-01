@@ -9,6 +9,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -298,10 +299,18 @@ func (mgr *uploadManager) upload(ctx context.Context, r io.Reader, rpk types.Pub
 	defer close(nextSlabChan)
 
 	// Create the response channel.
-	var wg sync.WaitGroup
+	var ongoingUploads uint64
 	respChan := make(chan slabUploadResponse)
 	defer func() {
-		wg.Wait()
+		// Wait for ongoing uploads to send their responses
+		// down the channel before closing it.
+		if atomic.LoadUint64(&ongoingUploads) > 0 {
+			for range respChan {
+				if atomic.LoadUint64(&ongoingUploads) == 0 {
+					break
+				}
+			}
+		}
 		close(respChan)
 	}()
 
@@ -332,10 +341,10 @@ loop:
 			} else if err != nil && err != io.ErrUnexpectedEOF {
 				return object.Object{}, err
 			}
-			wg.Add(1)
+			atomic.AddUint64(&ongoingUploads, 1)
 			go func(min, total uint64, data []byte, length, slabIndex int) {
 				u.uploadSlab(ctx, min, total, data, length, slabIndex, respChan, nextSlabChan)
-				wg.Done()
+				atomic.AddUint64(&ongoingUploads, ^uint64(0))
 			}(renter.Allowance.MinShards, renter.Allowance.TotalShards, data, length, slabIndex)
 			slabIndex++
 		case res := <-respChan:
