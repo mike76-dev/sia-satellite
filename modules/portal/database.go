@@ -133,7 +133,7 @@ func (p *Portal) deleteAccount(email string) error {
 
 	// Delete file metadata.
 	var objects, slabs []types.Hash256
-	rows, err := p.db.Query("SELECT id FROM ctr_metadata WHERE renter_pk = ?", pk)
+	rows, err := p.db.Query("SELECT enc_key FROM ctr_metadata WHERE renter_pk = ?", pk)
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func (p *Portal) deleteAccount(email string) error {
 		copy(key[:], id)
 		objects = append(objects, key)
 
-		slabRows, err := p.db.Query("SELECT id FROM ctr_slabs WHERE object_id = ?", id)
+		slabRows, err := p.db.Query("SELECT enc_key FROM ctr_slabs WHERE object_id = ?", id)
 		if err != nil {
 			p.log.Println("ERROR: unable to retrieve slabs:", err)
 			continue
