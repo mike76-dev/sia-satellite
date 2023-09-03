@@ -429,6 +429,7 @@ func (c *Contractor) threadedContractMaintenance() {
 		}
 
 		// Check if the renter opted in for auto-repairs.
+		// If not, skip contract refreshes.
 		if !renter.Settings.AutoRepairFiles {
 			continue
 		}
@@ -643,6 +644,12 @@ func (c *Contractor) threadedContractMaintenance() {
 	renters := c.renters
 	c.mu.RUnlock()
 	for _, renter := range renters {
+		// Check if the renter opted in for auto-repairs.
+		// If not, skip contract formations.
+		if !renter.Settings.AutoRepairFiles {
+			continue
+		}
+
 		// Count the number of contracts which are good for uploading, and then make
 		// more as needed to fill the gap.
 		uploadContracts := 0
