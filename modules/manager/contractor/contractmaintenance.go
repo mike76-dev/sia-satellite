@@ -357,6 +357,7 @@ func (c *Contractor) threadedContractMaintenance() {
 	// Get the current block height.
 	c.mu.Lock()
 	blockHeight := c.blockHeight
+	renters := c.renters
 	c.mu.Unlock()
 
 	// Perform general cleanup of the contracts. This includes archiving
@@ -366,6 +367,12 @@ func (c *Contractor) threadedContractMaintenance() {
 	c.managedUpdatePubKeysToContractIDMap()
 	c.managedPruneRedundantAddressRange()
 	c.staticContracts.DeleteOldContracts(blockHeight)
+	for rpk := range renters {
+		err = c.managedMarkContractsUtility(rpk)
+		if err != nil {
+			return
+		}
+	}
 	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
 		c.log.Println("ERROR: unable to update hostdb contracts:", err)
@@ -640,9 +647,6 @@ func (c *Contractor) threadedContractMaintenance() {
 	}
 
 	// Run contract formations if needed.
-	c.mu.RLock()
-	renters := c.renters
-	c.mu.RUnlock()
 	for _, renter := range renters {
 		// Check if the renter opted in for auto-repairs.
 		// If not, skip contract formations.

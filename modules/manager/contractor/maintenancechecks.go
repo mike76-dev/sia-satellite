@@ -69,7 +69,7 @@ func (c *Contractor) managedCheckHostScore(contract modules.RenterContract, sb m
 	if deadScore || badScore {
 		// Log if the utility has changed.
 		if u.GoodForUpload || u.GoodForRenew {
-			c.log.Printf("Marking contract as having no utility because of host score: %v\n", contract.ID)
+			c.log.Printf("INFO: marking contract as having no utility because of host score: %v\n", contract.ID)
 			c.log.Println("Min Score:", minScoreGFR)
 			c.log.Println("Score:    ", sb.Score)
 			c.log.Println("Age Adjustment:        ", sb.Age)
@@ -234,7 +234,7 @@ func (c *Contractor) upForRenewalCheck(contract modules.RenterContract, renewWin
 	u := contract.Utility
 	// Contract should not be used for uploading if the time has come to
 	// renew the contract.
-	if blockHeight + renewWindow >= contract.EndHeight {
+	if blockHeight+renewWindow >= contract.EndHeight {
 		if u.GoodForUpload {
 			c.log.Println("INFO: marking contract as not good for upload because it is time to renew the contract:", contract.ID)
 		}
@@ -288,7 +288,7 @@ func (c *Contractor) outOfStorageCheck(contract modules.RenterContract, blockHei
 		return u, false
 	}
 	// Contract should not be used for uploading if the host is out of storage.
-	if blockHeight - u.LastOOSErr <= oosRetryInterval {
+	if blockHeight-u.LastOOSErr <= oosRetryInterval {
 		if u.GoodForUpload {
 			c.log.Println("INFO: marking contract as not being good for upload due to the host running out of storage:", contract.ID)
 		}
