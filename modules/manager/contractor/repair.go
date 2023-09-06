@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
+	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/core/types"
 	"go.sia.tech/renterd/object"
 )
@@ -63,17 +65,19 @@ func (m *migrator) tryPerformMigrations() {
 	}
 	m.migrating = true
 	m.migratingLastStart = time.Now()
-	m.mu.Unlock()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	err := m.contractor.tg.Add()
 	if err != nil {
+		m.contractor.log.Println("ERROR: couldn't add thread:", err)
+		m.migrating = false
+		m.mu.Unlock()
 		return
 	}
+	m.mu.Unlock()
 	go func() {
 		defer m.contractor.tg.Done()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		m.performMigrations(ctx)
 		m.mu.Lock()
 		m.migrating = false
@@ -99,18 +103,44 @@ func (m *migrator) performMigrations(ctx context.Context) {
 		success   bool
 	}
 	responses := make(chan jobResponse)
+	var threadsLeft uint64
 
-	var wg sync.WaitGroup
-	defer func() {
-		close(jobs)
-		wg.Wait()
-		migrated := make(map[types.PublicKey]uint64)
-		for resp := range responses {
-			if resp.success {
-				migrated[resp.renterKey]++
+	// Prepare a map of migrated slabs.
+	type migratedSlabs struct {
+		slabs map[types.PublicKey]uint64
+		mu    sync.Mutex
+	}
+	var migrated migratedSlabs
+	migrated.slabs = make(map[types.PublicKey]uint64)
+
+	go func() {
+		for {
+			if atomic.LoadUint64(&threadsLeft) == 0 {
+				break
+			}
+			select {
+			case <-m.contractor.tg.StopChan():
+				return
+			case resp := <-responses:
+				if resp.success {
+					migrated.mu.Lock()
+					migrated.slabs[resp.renterKey]++
+					migrated.mu.Unlock()
+				}
+			default:
 			}
 		}
-		for rpk, num := range migrated {
+	}()
+
+	defer func() {
+		close(jobs)
+		for {
+			if atomic.LoadUint64(&threadsLeft) == 0 {
+				break
+			}
+		}
+
+		for rpk, num := range migrated.slabs {
 			// Deduct from the account balance.
 			renter, err := m.contractor.m.GetRenter(rpk)
 			if err != nil {
@@ -144,14 +174,13 @@ func (m *migrator) performMigrations(ctx context.Context) {
 				m.contractor.log.Println("ERROR: couldn't update renter spendings:", err)
 			}
 		}
-		close(responses)
 	}()
 
 	// Run migrations.
 	for i := uint64(0); i < m.parallelSlabs; i++ {
-		wg.Add(1)
+		atomic.AddUint64(&threadsLeft, 1)
 		go func() {
-			defer wg.Done()
+			defer atomic.AddUint64(&threadsLeft, ^uint64(0))
 
 			for j := range jobs {
 				slab, err := m.contractor.getSlab(j.Key)
@@ -164,10 +193,30 @@ func (m *migrator) performMigrations(ctx context.Context) {
 				err = m.contractor.migrateSlab(ctx, j.renterKey, &slab)
 				if err != nil {
 					m.contractor.log.Printf("ERROR: failed to migrate slab %d/%d, health: %v, err: %v\n", j.slabIdx+1, j.batchSize, j.health, err)
+				} else {
+					m.contractor.log.Printf("INFO: successfully migrated slab %d/%d\n", j.slabIdx+1, j.batchSize)
 				}
 
+				// Update the slab in the database.
+				key, err := convertEncryptionKey(slab.Key)
+				s := modules.Slab{
+					Key:       key,
+					MinShards: slab.MinShards,
+					Offset:    0,
+					Length:    uint64(slab.MinShards) * rhpv2.SectorSize,
+				}
+				for _, shard := range slab.Shards {
+					var ss modules.Shard
+					copy(ss.Host[:], shard.Host[:])
+					copy(ss.Root[:], shard.Root[:])
+					s.Shards = append(s.Shards, ss)
+				}
+				err = m.contractor.updateSlab(s)
+
 				// Send a response.
-				responses <- jobResponse{j.renterKey, err == nil}
+				select {
+				case responses <- jobResponse{j.renterKey, err == nil}:
+				}
 			}
 		}()
 	}
@@ -311,19 +360,19 @@ func (c *Contractor) managedCheckFileHealth() (toRepair []slabInfo, err error) {
 				continue
 			}
 			if !host.ScanHistory[len(host.ScanHistory)-1].Success {
-				// Host is offline.
-				continue
-			}
-			// Check if the renter has a contract with this host.
-			var found bool
-			for _, contract := range contracts {
-				if contract.HostPublicKey == shard.Host {
-					found = true
-					break
+				// Host is offline. Check the second to last scan.
+				if len(host.ScanHistory) < 2 || !host.ScanHistory[len(host.ScanHistory)-2].Success {
+					continue
 				}
 			}
-			if found {
-				numShards++
+			// Check if the renter has a contract with this host.
+			for _, contract := range contracts {
+				if contract.HostPublicKey == shard.Host {
+					if cu, ok := c.managedContractUtility(contract.ID); ok && cu.GoodForRenew {
+						numShards++
+					}
+					break
+				}
 			}
 		}
 
@@ -447,8 +496,6 @@ func (c *Contractor) migrateSlab(ctx context.Context, rpk types.PublicKey, s *ob
 	for i, si := range shardIndices {
 		s.Shards[si] = uploaded[i]
 	}
-
-	// TODO Update the balance and spendings.
 
 	return nil
 }

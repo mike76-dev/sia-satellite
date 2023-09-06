@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -652,12 +653,30 @@ func (c *Contractor) updateSlab(slab modules.Slab) error {
 	return tx.Commit()
 }
 
+// encryptionKey is a helper function that converts a types.Hash256
+// to an object.EncryptionKey.
+func encryptionKey(id types.Hash256) (key object.EncryptionKey, err error) {
+	keyStr := hex.EncodeToString(id[:])
+	err = key.UnmarshalText([]byte(keyStr))
+	if err != nil {
+		return object.EncryptionKey{}, err
+	}
+	return
+}
+
+// convertEncryptionKey converts an object.EncryptionKey to a
+// types.Hash256.
+func convertEncryptionKey(key object.EncryptionKey) (id types.Hash256, err error) {
+	s := strings.TrimPrefix(key.String(), "key:")
+	b, err := hex.DecodeString(s)
+	copy(id[:], b)
+	return
+}
+
 // getSlab tries to find a slab by the encryption key.
 func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
 	// Unmarshal encryption key first.
-	var key object.EncryptionKey
-	keyStr := hex.EncodeToString(id[:])
-	err = key.UnmarshalText([]byte(keyStr))
+	key, err := encryptionKey(id)
 	if err != nil {
 		return object.Slab{}, modules.AddContext(err, "couldn't unmarshal key")
 	}
@@ -693,7 +712,12 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
 
 	// Load the slab.
 	var minShards uint8
-	err = tx.QueryRow("SELECT min_shards FROM ctr_slabs WHERE enc_key = ?", id[:]).Scan(&minShards)
+	var offset, length uint32
+	err = tx.QueryRow(`
+		SELECT min_shards, offset, len
+		FROM ctr_slabs
+		WHERE enc_key = ?
+	`, id[:]).Scan(&minShards, &offset, &length)
 	if err != nil {
 		tx.Rollback()
 		return object.Slab{}, modules.AddContext(err, "couldn't load slab")
