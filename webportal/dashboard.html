@@ -711,30 +711,31 @@
 							</div>
 						</section>
 						<section>
-							<h2>Opt-In Settings:*</h2>
+							<h2>Opt-In Settings*:</h2>
 							<div class="content">
 								<div class="content-item">
 									<p class="content-label">Auto Renew Contracts</p>
 									<label class="checkbox">
-										<input id="settings-autorenew" type="checkbox" disabled>
+										<input id="settings-autorenew" type="checkbox" disabled onchange="settingsChange(this)">
 										<span class="checkmark"></span>
 									</label>
 								</div>
 								<div class="content-item">
 									<p class="content-label">Backup File Metadata</p>
 									<label class="checkbox">
-										<input id="settings-metadata" type="checkbox" disabled>
+										<input id="settings-metadata" type="checkbox" disabled onchange="settingsChange(this)">
 										<span class="checkmark"></span>
 									</label>
 								</div>
 								<div class="content-item">
 									<p class="content-label">Auto Repair Files</p>
 									<label class="checkbox">
-										<input id="settings-autorepair" type="checkbox" disabled>
+										<input id="settings-autorepair" type="checkbox" disabled onchange="settingsChange(this)">
 										<span class="checkmark"></span>
 									</label>
 								</div>
-								<p class="fineprint">*Can be adjusted in the renting software.</p>
+								<p class="fineprint">*By deselecting a checkbox you opt out of this feature.
+									<br>You can opt in again from the renting software.</p>
 							</div>
 						</section>
 						<section>

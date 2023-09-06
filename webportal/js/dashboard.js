@@ -1038,8 +1038,11 @@ function getSettings() {
 				let md = document.getElementById('settings-metadata');
 				let fr = document.getElementById('settings-autorepair');
 				ar.checked = data.autorenew;
+				ar.disabled = !data.autorenew;
 				md.checked = data.backupmetadata;
+				md.disabled = !data.backupmetadata;
 				fr.checked = data.autorepair;
+				fr.disabled = !data.autorepair;
 			}
 		})
 		.catch(error => console.log(error));
@@ -1204,4 +1207,59 @@ function sortByPaymentTime() {
 	default:
 	}
 	renderPayments();
+}
+
+function settingsChange(e) {
+	updateSettings();
+	switch (e.id) {
+	case 'settings-autorenew':
+		if (!e.checked) {
+			document.getElementById('settings-autorepair').checked = false;
+			document.getElementById('settings-autorepair').disabled = true;
+			e.disabled = true;
+		}
+		break;
+	case 'settings-metadata':
+		if (!e.checked) {
+			document.getElementById('settings-autorepair').checked = false;
+			document.getElementById('settings-autorepair').disabled = true;
+			e.disabled = true;
+		}
+		break;
+	case 'settings-autorepair':
+		if (!e.checked) {
+			e.disabled = true;
+		}
+		break;
+	default:
+	}
+}
+
+function updateSettings() {
+	let data = {
+		autorenew: document.getElementById('settings-autorenew').checked,
+		backupmetadata: document.getElementById('settings-metadata').checked,
+		autorepair: document.getElementById('settings-autorepair').checked
+	}
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		},
+		body: JSON.stringify(data)
+	}
+	fetch(apiBaseURL + '/dashboard/settings', options)
+		.then(response => {
+			if (response.status == 204) {
+				return '';
+			} else {
+				return response.json();
+			}
+		})
+		.then(data => {
+			if (data) {
+				console.log(data);
+			}
+		})
+		.catch(error => console.log(error));
 }

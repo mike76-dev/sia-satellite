@@ -739,3 +739,50 @@ func (api *portalAPI) versionHandlerGET(w http.ResponseWriter, _ *http.Request, 
 		Version string `json:"version"`
 	}{Version: build.NodeVersion})
 }
+
+// settingsHandlerPOST handles the POST /dashboard/settings requests.
+func (api *portalAPI) settingsHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Decode the request body.
+	dec, err := prepareDecoder(w, req)
+	if err != nil {
+		return
+	}
+
+	var settings modules.RenterSettings
+	hdErr, code := api.handleDecodeError(w, dec.Decode(&settings))
+	if code != http.StatusOK {
+		writeError(w, hdErr, code)
+		return
+	}
+
+	// Get the renter.
+	var renter modules.Renter
+	renters := api.portal.manager.Renters()
+	for _, r := range renters {
+		if r.Email == email {
+			renter = r
+			break
+		}
+	}
+
+	// Update the settings.
+	err = api.portal.manager.UpdateRenterSettings(renter.PublicKey, settings, types.PrivateKey{}, types.PrivateKey{})
+	if err != nil {
+		api.portal.log.Printf("ERROR: couldn't update settings: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeSuccess(w)
+}

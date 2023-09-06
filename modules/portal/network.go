@@ -122,6 +122,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.GET("/dashboard/settings", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.settingsHandlerGET(w, req, ps)
 	})
+	router.POST("/dashboard/settings", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.settingsHandlerPOST(w, req, ps)
+	})
 	router.GET("/dashboard/files", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.filesHandlerGET(w, req, ps)
 	})
