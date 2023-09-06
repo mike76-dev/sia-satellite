@@ -162,24 +162,6 @@ func (c *FileContract) DecodeFrom(d *types.Decoder) {
 	c.header.Utility.Locked = d.ReadBool()
 }
 
-// CommitPaymentIntent will commit the intent to pay a host for an rpc by
-// committing the signed txn in the contract's header.
-func (c *FileContract) CommitPaymentIntent(signedTxn types.Transaction, amount types.Currency, details modules.SpendingDetails) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Construct new header.
-	newHeader := c.header
-	newHeader.Transaction = signedTxn
-	newHeader.FundAccountSpending = newHeader.FundAccountSpending.Add(details.FundAccountSpending)
-	newHeader.MaintenanceSpending = newHeader.MaintenanceSpending.Add(details.MaintenanceSpending)
-
-	c.header = newHeader
-
-	// Update the database.
-	return c.saveContract(types.PublicKey{})
-}
-
 // LastRevision returns the most recent revision.
 func (c *FileContract) LastRevision() types.FileContractRevision {
 	c.mu.Lock()
@@ -212,24 +194,6 @@ func (c *FileContract) Metadata() modules.RenterContract {
 		SiafundFee:          h.SiafundFee,
 		Utility:             h.Utility,
 	}
-}
-
-// RecordPaymentIntent will records the changes we are about to make to the
-// revision in order to pay a host for an RPC.
-func (c *FileContract) RecordPaymentIntent(rev types.FileContractRevision, amount types.Currency, details modules.SpendingDetails) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	newHeader := c.header
-	newHeader.Transaction.FileContractRevisions = []types.FileContractRevision{rev}
-	newHeader.Transaction.Signatures = nil
-	newHeader.FundAccountSpending = newHeader.FundAccountSpending.Add(details.FundAccountSpending)
-	newHeader.MaintenanceSpending = newHeader.MaintenanceSpending.Add(details.MaintenanceSpending)
-
-	c.header = newHeader
-
-	// Update the database.
-	return c.saveContract(types.PublicKey{})
 }
 
 // UpdateUtility updates the utility field of a contract.
@@ -337,7 +301,9 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 		// the revision reported by the host. So, to ensure things are
 		// consistent, we blindly overwrite our revision with the host's.
 		c.header.Transaction.FileContractRevisions[0] = rev
-		c.header.Transaction.Signatures = sigs
+		if len(sigs) != 0 {
+			c.header.Transaction.Signatures = sigs
+		}
 		return nil
 	}
 
@@ -356,8 +322,9 @@ func (c *FileContract) managedSyncRevision(rev types.FileContractRevision, sigs 
 	// claiming. Worst case, certain contract metadata (e.g. UploadSpending)
 	// will be incorrect.
 	c.header.Transaction.FileContractRevisions[0] = rev
-	c.header.Transaction.Signatures = sigs
-
+	if len(sigs) != 0 {
+		c.header.Transaction.Signatures = sigs
+	}
 	return c.saveContract(types.PublicKey{})
 }
 
@@ -396,9 +363,9 @@ func (cs *ContractSet) managedInsertContract(h contractHeader, rpk types.PublicK
 	}
 
 	cs.contracts[fc.header.ID()] = fc
-	cs.pubKeys[h.RenterPublicKey().String() + h.HostPublicKey().String()] = fc.header.ID()
+	cs.pubKeys[h.RenterPublicKey().String()+h.HostPublicKey().String()] = fc.header.ID()
 	cs.mu.Unlock()
-	
+
 	return fc.Metadata(), fc.saveContract(rpk)
 }
 
