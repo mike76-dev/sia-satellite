@@ -632,6 +632,9 @@ func (s *slabDownload) nextRequest(ctx context.Context, resps *sectorResponses, 
 		}
 
 		// Pick a new host from the list.
+		if len(hosts) == 0 {
+			return nil
+		}
 		s.curr = hosts[0]
 		s.used[s.curr] = struct{}{}
 
