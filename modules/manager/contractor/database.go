@@ -526,7 +526,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 		// If the object is present in the map and hasn't been updated
 		// since the last retrieval, skip it.
 		if _, exists := po[path]; exists {
-			if updated <= retrieved {
+			if retrieved == 0 || updated <= retrieved {
 				continue
 			}
 		}
