@@ -451,7 +451,7 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 	_, err = tx.Exec(`
 		INSERT INTO ctr_metadata (enc_key, filepath, renter_pk, updated, retrieved)
 		VALUES (?, ?, ?, ?, ?)
-	`, fm.Key[:], fm.Path, pk[:], uint64(time.Now().Unix()), 0)
+	`, fm.Key[:], fm.Path, pk[:], uint64(time.Now().Unix()), uint64(time.Now().Unix()))
 	if err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "unable to store object")
@@ -526,7 +526,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 		// If the object is present in the map and hasn't been updated
 		// since the last retrieval, skip it.
 		if _, exists := po[path]; exists {
-			if retrieved == 0 || updated <= retrieved {
+			if updated <= retrieved {
 				continue
 			}
 		}
