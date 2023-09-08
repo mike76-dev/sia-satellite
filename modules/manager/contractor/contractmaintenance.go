@@ -388,6 +388,7 @@ func (c *Contractor) threadedContractMaintenance() {
 	// list.
 	var renewSet []fileContractRenewal
 	var refreshSet []fileContractRenewal
+	_, maxFee := c.tpool.FeeEstimation()
 	for _, contract := range c.staticContracts.ViewAll() {
 		renter, err := c.managedFindRenter(contract.ID)
 		if err != nil {
@@ -421,6 +422,19 @@ func (c *Contractor) threadedContractMaintenance() {
 		// Check if the contract needs to be renewed because it is about to
 		// expire.
 		if blockHeight+renter.Allowance.RenewWindow >= contract.EndHeight {
+			// Fetch the price table.
+			pt, err := proto.FetchPriceTable(host)
+			if err != nil {
+				c.log.Printf("WARN: unable to fetch price table from %s: %v\n", host.Settings.NetAddress, err)
+				continue
+			}
+
+			// Check if the host is gouging.
+			if err := modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, maxFee); err != nil {
+				c.log.Printf("WARN: gouging detected at host %s: %v\n", host.Settings.NetAddress, err)
+				continue
+			}
+
 			renewAmount, err := c.managedEstimateRenewFundingRequirements(contract, blockHeight, renter.Allowance)
 			if err != nil {
 				c.log.Println("WARN: contract skipped because there was an error estimating renew funding requirements", renewAmount, err)
@@ -453,6 +467,19 @@ func (c *Contractor) threadedContractMaintenance() {
 		sectorPrice := sectorStoragePrice.Add(sectorBandwidthPrice)
 		percentRemaining, _ := big.NewRat(0, 1).SetFrac(contract.RenterFunds.Big(), contract.TotalCost.Big()).Float64()
 		if contract.RenterFunds.Cmp(sectorPrice.Mul64(3)) < 0 || percentRemaining < minContractFundRenewalThreshold {
+			// Fetch the price table.
+			pt, err := proto.FetchPriceTable(host)
+			if err != nil {
+				c.log.Printf("WARN: unable to fetch price table from %s: %v\n", host.Settings.NetAddress, err)
+				continue
+			}
+
+			// Check if the host is gouging.
+			if err := modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, maxFee); err != nil {
+				c.log.Printf("WARN: gouging detected at host %s: %v\n", host.Settings.NetAddress, err)
+				continue
+			}
+
 			// Renew the contract with double the amount of funds that the
 			// contract had previously. The reason that we double the funding
 			// instead of doing anything more clever is that we don't know what
@@ -694,7 +721,6 @@ func (c *Contractor) threadedContractMaintenance() {
 		}
 
 		// Calculate the anticipated transaction fee.
-		_, maxFee := c.tpool.FeeEstimation()
 		txnFee := maxFee.Mul64(modules.EstimatedFileContractTransactionSetSize)
 
 		// Form contracts with the hosts one at a time, until we have enough
@@ -721,7 +747,7 @@ func (c *Contractor) threadedContractMaintenance() {
 			}
 
 			// Check if the host is gouging.
-			err = modules.CheckGouging(renter.Allowance, blockHeight, nil, &pt, txnFee)
+			err = modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, maxFee)
 			if err != nil {
 				c.log.Printf("WARN: gouging detected at %s: %v\n", host.Settings.NetAddress, err)
 				continue
