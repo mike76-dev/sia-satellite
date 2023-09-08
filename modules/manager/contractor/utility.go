@@ -104,7 +104,7 @@ func (c *Contractor) managedMarkContractUtility(contract modules.RenterContract,
 
 	// Check the host scorebreakdown against the minimum accepted scores.
 	u, utilityUpdateStatus := c.managedCheckHostScore(contract, sb, minScoreGFR, minScoreGFU)
-	if utilityUpdateStatus == necessaryUtilityUpdate {
+	if utilityUpdateStatus == necessaryUtilityUpdate || utilityUpdateStatus == suggestedUtilityUpdate {
 		err = c.managedUpdateContractUtility(sc, u)
 		if err != nil {
 			c.log.Println("ERROR: unable to acquire and update contract utility:", err)
