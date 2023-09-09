@@ -640,7 +640,7 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Ex
 		}
 	}
 
-	// Update the hostdb to include the new contract.
+	// Update the hostdb to include the new contracts.
 	err := c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
 		c.log.Println("ERROR: unable to update hostdb contracts:", err)
