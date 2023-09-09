@@ -613,11 +613,17 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Ex
 		}
 
 		// Insert the contract.
-		_, err = c.staticContracts.InsertContract(transaction, contract.StartHeight, contract.TotalCost, contractFee, txnFee, tax, rpk)
+		rc, err := c.staticContracts.InsertContract(transaction, contract.StartHeight, contract.TotalCost, contractFee, txnFee, tax, rpk)
 		if err != nil {
 			c.log.Printf("ERROR: couldn't accept contract %s: %v\n", id, err)
 			continue
 		}
+
+		// Add a mapping from the contract's id to the public keys of the host
+		// and the renter.
+		c.mu.Lock()
+		c.pubKeysToContractID[rc.RenterPublicKey.String()+rc.HostPublicKey.String()] = id
+		c.mu.Unlock()
 
 		// Update the spendings.
 		err = c.UpdateContract(contract.Contract.Revision, contract.Contract.Signatures[:], contract.UploadSpending, contract.DownloadSpending, contract.FundAccountSpending)
@@ -632,5 +638,11 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Ex
 				c.log.Println("ERROR: couldn't update renewal history:", err)
 			}
 		}
+	}
+
+	// Update the hostdb to include the new contract.
+	err := c.hdb.UpdateContracts(c.staticContracts.ViewAll())
+	if err != nil {
+		c.log.Println("ERROR: unable to update hostdb contracts:", err)
 	}
 }
