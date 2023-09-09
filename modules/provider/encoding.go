@@ -281,53 +281,6 @@ func (ur *updateRequest) EncodeTo(e *types.Encoder) {
 	ur.FundAccount.EncodeTo(e)
 }
 
-// extendedContract contains the contract and its metadata.
-type extendedContract struct {
-	contract            rhpv2.ContractRevision
-	startHeight         uint64
-	totalCost           types.Currency
-	uploadSpending      types.Currency
-	downloadSpending    types.Currency
-	fundAccountSpending types.Currency
-	renewedFrom         types.FileContractID
-}
-
-// EncodeTo implements requestBody.
-func (ec extendedContract) EncodeTo(e *types.Encoder) {
-	ec.contract.Revision.EncodeTo(e)
-	ec.contract.Signatures[0].EncodeTo(e)
-	ec.contract.Signatures[1].EncodeTo(e)
-	e.WriteUint64(ec.startHeight)
-	ec.totalCost.EncodeTo(e)
-	ec.uploadSpending.EncodeTo(e)
-	ec.downloadSpending.EncodeTo(e)
-	ec.fundAccountSpending.EncodeTo(e)
-	ec.renewedFrom.EncodeTo(e)
-}
-
-// DecodeFrom implements requestBody.
-func (ec extendedContract) DecodeFrom(d *types.Decoder) {
-	// Nothing to do here.
-}
-
-// extendedContractSet is a collection of extendedContracts.
-type extendedContractSet struct {
-	contracts []extendedContract
-}
-
-// EncodeTo implements requestBody.
-func (ecs extendedContractSet) EncodeTo(e *types.Encoder) {
-	e.WritePrefix(len(ecs.contracts))
-	for _, ec := range ecs.contracts {
-		ec.EncodeTo(e)
-	}
-}
-
-// DecodeFrom implements requestBody.
-func (ecs extendedContractSet) DecodeFrom(d *types.Decoder) {
-	// Nothing to do here.
-}
-
 // formContractRequest is used when forming a contract with a single
 // host using the new Renter-Satellite protocol.
 type formContractRequest struct {
@@ -634,4 +587,31 @@ func (usr *updateSlabRequest) DecodeFrom(d *types.Decoder) {
 func (usr *updateSlabRequest) EncodeTo(e *types.Encoder) {
 	e.Write(usr.PubKey[:])
 	usr.Slab.EncodeTo(e)
+}
+
+// shareRequest is used when the renter submits a set of contracts.
+type shareRequest struct {
+	PubKey    types.PublicKey
+	Contracts []modules.ExtendedContract
+
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (sr *shareRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(sr.PubKey[:])
+	sr.Contracts = make([]modules.ExtendedContract, d.ReadPrefix())
+	for i := 0; i < len(sr.Contracts); i++ {
+		sr.Contracts[i].DecodeFrom(d)
+	}
+	sr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (sr *shareRequest) EncodeTo(e *types.Encoder) {
+	e.Write(sr.PubKey[:])
+	e.WritePrefix(len(sr.Contracts))
+	for _, contract := range sr.Contracts {
+		contract.EncodeTo(e)
+	}
 }

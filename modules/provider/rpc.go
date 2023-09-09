@@ -43,20 +43,20 @@ func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
 
 	// Get the contracts.
 	contracts := p.m.ContractsByRenter(rr.PubKey)
-	ecs := extendedContractSet{
-		contracts: make([]extendedContract, 0, len(contracts)),
+	ecs := modules.ExtendedContractSet{
+		Contracts: make([]modules.ExtendedContract, 0, len(contracts)),
 	}
 
 	for _, contract := range contracts {
 		cr := convertContract(contract)
-		ecs.contracts = append(ecs.contracts, extendedContract{
-			contract:            cr,
-			startHeight:         contract.StartHeight,
-			totalCost:           contract.TotalCost,
-			uploadSpending:      contract.UploadSpending,
-			downloadSpending:    contract.DownloadSpending,
-			fundAccountSpending: contract.FundAccountSpending,
-			renewedFrom:         p.m.RenewedFrom(contract.ID),
+		ecs.Contracts = append(ecs.Contracts, modules.ExtendedContract{
+			Contract:            cr,
+			StartHeight:         contract.StartHeight,
+			TotalCost:           contract.TotalCost,
+			UploadSpending:      contract.UploadSpending,
+			DownloadSpending:    contract.DownloadSpending,
+			FundAccountSpending: contract.FundAccountSpending,
+			RenewedFrom:         p.m.RenewedFrom(contract.ID),
 		})
 	}
 
@@ -120,8 +120,8 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 		return err
 	}
 
-	ecs := extendedContractSet{
-		contracts: make([]extendedContract, 0, fr.Hosts),
+	ecs := modules.ExtendedContractSet{
+		Contracts: make([]modules.ExtendedContract, 0, fr.Hosts),
 	}
 
 	// Create an allowance.
@@ -156,10 +156,10 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 
 	for _, contract := range contracts {
 		cr := convertContract(contract)
-		ecs.contracts = append(ecs.contracts, extendedContract{
-			contract:    cr,
-			startHeight: contract.StartHeight,
-			totalCost:   contract.TotalCost,
+		ecs.Contracts = append(ecs.Contracts, modules.ExtendedContract{
+			Contract:    cr,
+			StartHeight: contract.StartHeight,
+			TotalCost:   contract.TotalCost,
 		})
 	}
 
@@ -222,8 +222,8 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 		return err
 	}
 
-	ecs := extendedContractSet{
-		contracts: make([]extendedContract, 0, len(rr.Contracts)),
+	ecs := modules.ExtendedContractSet{
+		Contracts: make([]modules.ExtendedContract, 0, len(rr.Contracts)),
 	}
 
 	// Create an allowance.
@@ -258,10 +258,10 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 
 	for _, contract := range contracts {
 		cr := convertContract(contract)
-		ecs.contracts = append(ecs.contracts, extendedContract{
-			contract:    cr,
-			startHeight: contract.StartHeight,
-			totalCost:   contract.TotalCost,
+		ecs.Contracts = append(ecs.Contracts, modules.ExtendedContract{
+			Contract:    cr,
+			StartHeight: contract.StartHeight,
+			TotalCost:   contract.TotalCost,
 		})
 	}
 
@@ -392,10 +392,10 @@ func (p *Provider) managedFormContract(s *modules.RPCSession) error {
 		return err
 	}
 
-	ec := extendedContract{
-		contract:    convertContract(contract),
-		startHeight: contract.StartHeight,
-		totalCost:   contract.TotalCost,
+	ec := modules.ExtendedContract{
+		Contract:    convertContract(contract),
+		StartHeight: contract.StartHeight,
+		TotalCost:   contract.TotalCost,
 	}
 
 	return s.WriteResponse(&ec)
@@ -461,10 +461,10 @@ func (p *Provider) managedRenewContract(s *modules.RPCSession) error {
 		return err
 	}
 
-	ec := extendedContract{
-		contract:    convertContract(contract),
-		startHeight: contract.StartHeight,
-		totalCost:   contract.TotalCost,
+	ec := modules.ExtendedContract{
+		Contract:    convertContract(contract),
+		StartHeight: contract.StartHeight,
+		TotalCost:   contract.TotalCost,
 	}
 
 	return s.WriteResponse(&ec)
@@ -779,6 +779,41 @@ func (p *Provider) managedUpdateSlab(s *modules.RPCSession) error {
 		s.WriteError(err)
 		return err
 	}
+
+	return s.WriteResponse(nil)
+}
+
+// managedAcceptContracts accepts a set of contracts from the renter.
+func (p *Provider) managedAcceptContracts(s *modules.RPCSession) error {
+	// Extend the deadline.
+	s.Conn.SetDeadline(time.Now().Add(shareContractsTime))
+
+	// Read the request.
+	var sr shareRequest
+	hash, err := s.ReadRequest(&sr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	if ok := sr.PubKey.VerifyHash(hash, sr.Signature); !ok {
+		err = errors.New("could not verify renter signature")
+		s.WriteError(err)
+		return err
+	}
+
+	// Check if we know this renter.
+	_, err = p.m.GetRenter(sr.PubKey)
+	if err != nil {
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Accept the contracts.
+	p.m.AcceptContracts(sr.PubKey, sr.Contracts)
 
 	return s.WriteResponse(nil)
 }

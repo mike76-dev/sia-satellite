@@ -557,3 +557,80 @@ func (c *Contractor) UpdateSlab(slab modules.Slab) error {
 	}
 	return err
 }
+
+// AcceptContracts accepts a set of contracts from the renter
+// and adds them to the contract set.
+func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.ExtendedContract) {
+	// Create a map of existing contracts.
+	existingContracts := c.staticContracts.ByRenter(rpk)
+	existing := make(map[types.FileContractID]struct{})
+	for _, contract := range existingContracts {
+		existing[contract.ID] = struct{}{}
+	}
+
+	// Iterate through the set and add only missing contracts.
+	for _, contract := range contracts {
+		id := contract.Contract.Revision.ParentID
+		if _, exists := existing[id]; exists {
+			continue
+		}
+
+		// Find the contract txn.
+		block, ok := c.cs.BlockAtHeight(contract.StartHeight)
+		if !ok {
+			c.log.Println("ERROR: couldn't find block at height", contract.StartHeight)
+			continue
+		}
+
+		var transaction types.Transaction
+		var found bool
+		for _, txn := range block.Transactions {
+			if len(txn.FileContractRevisions) > 0 && txn.FileContractRevisions[0].ParentID == id {
+				transaction = modules.CopyTransaction(txn)
+				found = true
+				break
+			}
+		}
+		if !found {
+			c.log.Println("ERROR: couldn't find transaction", id)
+			continue
+		}
+
+		// We have no way to get some information from the data
+		// provided, so we have to speculate a bit.
+		txnFee := transaction.MinerFees[0]
+		payout := contract.Contract.Revision.ValidRenterPayout().Add(contract.Contract.Revision.ValidHostPayout())
+		tax := modules.Tax(contract.StartHeight, payout)
+		host, ok, err := c.hdb.Host(contract.Contract.HostKey())
+		if err != nil || !ok {
+			c.log.Println("ERROR: couldn't find host for the contract", id)
+			continue
+		}
+		contractFee := host.Settings.ContractPrice
+		maxContractFee := contract.TotalCost.Sub(txnFee).Sub(tax).Sub(contract.UploadSpending).Sub(contract.DownloadSpending).Sub(contract.FundAccountSpending)
+		if contractFee.Cmp(maxContractFee) > 0 {
+			contractFee = maxContractFee
+		}
+
+		// Insert the contract.
+		_, err = c.staticContracts.InsertContract(transaction, contract.StartHeight, contract.TotalCost, contractFee, txnFee, tax, rpk)
+		if err != nil {
+			c.log.Printf("ERROR: couldn't accept contract %s: %v\n", id, err)
+			continue
+		}
+
+		// Update the spendings.
+		err = c.UpdateContract(contract.Contract.Revision, contract.Contract.Signatures[:], contract.UploadSpending, contract.DownloadSpending, contract.FundAccountSpending)
+		if err != nil {
+			c.log.Println("ERROR: couldn't update contract spendings", err)
+		}
+
+		if contract.RenewedFrom != (types.FileContractID{}) {
+			c.renewedFrom[id] = contract.RenewedFrom
+			err = c.updateRenewedContract(contract.RenewedFrom, id)
+			if err != nil {
+				c.log.Println("ERROR: couldn't update renewal history:", err)
+			}
+		}
+	}
+}

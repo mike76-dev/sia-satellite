@@ -281,6 +281,10 @@ type HostDB interface {
 type Manager interface {
 	Alerter
 
+	// AcceptContracts accepts a set of contracts from the renter
+	// and adds them to the contract set.
+	AcceptContracts(types.PublicKey, []ExtendedContract)
+
 	// ActiveHosts returns an array of HostDB's active hosts.
 	ActiveHosts() ([]HostDBEntry, error)
 

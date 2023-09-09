@@ -38,6 +38,10 @@ type hostContractor interface {
 	// Allowance returns the current allowance of the renter.
 	Allowance(types.PublicKey) modules.Allowance
 
+	// AcceptContracts accepts a set of contracts from the renter
+	// and adds them to the contract set.
+	AcceptContracts(types.PublicKey, []modules.ExtendedContract)
+
 	// Close closes the hostContractor.
 	Close() error
 
@@ -1078,4 +1082,10 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 	us.CurrentSlabsMigrated += 1
 
 	return m.UpdateSpendings(renter.Email, us)
+}
+
+// AcceptContracts accepts a set of contracts from the renter
+// and adds them to the contract set.
+func (m *Manager) AcceptContracts(rpk types.PublicKey, contracts []modules.ExtendedContract) {
+	m.hostContractor.AcceptContracts(rpk, contracts)
 }
