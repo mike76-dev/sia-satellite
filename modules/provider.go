@@ -66,3 +66,42 @@ func (ecs ExtendedContractSet) EncodeTo(e *types.Encoder) {
 func (ecs ExtendedContractSet) DecodeFrom(d *types.Decoder) {
 	// Nothing to do here.
 }
+
+// ContractMetadata contains all metadata needed to re-create
+// a contract.
+type ContractMetadata struct {
+	ID      types.FileContractID
+	HostKey types.PublicKey
+
+	StartHeight uint64
+	RenewedFrom types.FileContractID
+
+	UploadSpending      types.Currency
+	DownloadSpending    types.Currency
+	FundAccountSpending types.Currency
+	TotalCost           types.Currency
+}
+
+// EncodeTo implements requestBody.
+func (cm ContractMetadata) EncodeTo(e *types.Encoder) {
+	e.Write(cm.ID[:])
+	e.Write(cm.HostKey[:])
+	e.WriteUint64(cm.StartHeight)
+	e.Write(cm.RenewedFrom[:])
+	cm.UploadSpending.EncodeTo(e)
+	cm.DownloadSpending.EncodeTo(e)
+	cm.FundAccountSpending.EncodeTo(e)
+	cm.TotalCost.EncodeTo(e)
+}
+
+// DecodeFrom implements requestBody.
+func (cm ContractMetadata) DecodeFrom(d *types.Decoder) {
+	d.Read(cm.ID[:])
+	d.Read(cm.HostKey[:])
+	cm.StartHeight = d.ReadUint64()
+	d.Read(cm.RenewedFrom[:])
+	cm.UploadSpending.DecodeFrom(d)
+	cm.DownloadSpending.DecodeFrom(d)
+	cm.FundAccountSpending.DecodeFrom(d)
+	cm.TotalCost.DecodeFrom(d)
+}

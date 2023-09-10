@@ -592,7 +592,7 @@ func (usr *updateSlabRequest) EncodeTo(e *types.Encoder) {
 // shareRequest is used when the renter submits a set of contracts.
 type shareRequest struct {
 	PubKey    types.PublicKey
-	Contracts []modules.ExtendedContract
+	Contracts []modules.ContractMetadata
 
 	Signature types.Signature
 }
@@ -600,7 +600,7 @@ type shareRequest struct {
 // DecodeFrom implements requestBody.
 func (sr *shareRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(sr.PubKey[:])
-	sr.Contracts = make([]modules.ExtendedContract, d.ReadPrefix())
+	sr.Contracts = make([]modules.ContractMetadata, d.ReadPrefix())
 	for i := 0; i < len(sr.Contracts); i++ {
 		sr.Contracts[i].DecodeFrom(d)
 	}

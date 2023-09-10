@@ -283,7 +283,7 @@ type Manager interface {
 
 	// AcceptContracts accepts a set of contracts from the renter
 	// and adds them to the contract set.
-	AcceptContracts(types.PublicKey, []ExtendedContract)
+	AcceptContracts(types.PublicKey, []ContractMetadata)
 
 	// ActiveHosts returns an array of HostDB's active hosts.
 	ActiveHosts() ([]HostDBEntry, error)

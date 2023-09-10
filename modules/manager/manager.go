@@ -40,7 +40,7 @@ type hostContractor interface {
 
 	// AcceptContracts accepts a set of contracts from the renter
 	// and adds them to the contract set.
-	AcceptContracts(types.PublicKey, []modules.ExtendedContract)
+	AcceptContracts(types.PublicKey, []modules.ContractMetadata)
 
 	// Close closes the hostContractor.
 	Close() error
@@ -1086,6 +1086,6 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 
 // AcceptContracts accepts a set of contracts from the renter
 // and adds them to the contract set.
-func (m *Manager) AcceptContracts(rpk types.PublicKey, contracts []modules.ExtendedContract) {
+func (m *Manager) AcceptContracts(rpk types.PublicKey, contracts []modules.ContractMetadata) {
 	m.hostContractor.AcceptContracts(rpk, contracts)
 }
