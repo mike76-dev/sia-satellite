@@ -47,6 +47,10 @@ const (
 	// update a single slab.
 	updateSlabTime = 15 * time.Second
 
+	// shareContractsTime defines the amount of time that the provider has to
+	// accept a set of contracts from the renter.
+	shareContractsTime = 1 * time.Minute
+
 	// defaultConnectionDeadline is the default read and write deadline which is set
 	// on a connection. This ensures it times out if I/O exceeds this deadline.
 	defaultConnectionDeadline = 5 * time.Minute
@@ -94,4 +98,7 @@ var (
 
 	// updateSlabSpecifier is used to update a single slab.
 	updateSlabSpecifier = types.NewSpecifier("UpdateSlab")
+
+	// shareContractsSpecifier is used when a renter shares their contract set.
+	shareContractsSpecifier = types.NewSpecifier("ShareContracts")
 )
