@@ -9,7 +9,7 @@ endif
 
 ldflags= \
 -X "github.com/mike76-dev/sia-satellite/internal/build.BinaryName=satd" \
--X "github.com/mike76-dev/sia-satellite/internal/build.NodeVersion=0.3.2" \
+-X "github.com/mike76-dev/sia-satellite/internal/build.NodeVersion=0.4.0" \
 -X "github.com/mike76-dev/sia-satellite/internal/build.GitRevision=${GIT_DIRTY}${GIT_REVISION}" \
 -X "github.com/mike76-dev/sia-satellite/internal/build.BuildTime=${BUILD_TIME}"
 
