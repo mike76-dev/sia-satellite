@@ -627,12 +627,8 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Ex
 
 		// Update the spendings.
 		// NOTE: `renterd` doesn't store contract signatures, so we have to
-		// pull them from the transaction.
-		sigs := []types.TransactionSignature{
-			transaction.Signatures[len(transaction.Signatures)-2],
-			transaction.Signatures[len(transaction.Signatures)-1],
-		}
-		err = c.UpdateContract(contract.Contract.Revision, sigs, contract.UploadSpending, contract.DownloadSpending, contract.FundAccountSpending)
+		// pass a nil.
+		err = c.UpdateContract(contract.Contract.Revision, nil, contract.UploadSpending, contract.DownloadSpending, contract.FundAccountSpending)
 		if err != nil {
 			c.log.Println("ERROR: couldn't update contract spendings", err)
 		}
