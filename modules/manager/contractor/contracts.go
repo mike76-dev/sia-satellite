@@ -55,7 +55,7 @@ func (c *Contractor) updatePubKeysToContractIDMap(contracts []modules.RenterCont
 		// Fill out the uniqueGFU map, tracking every contract that is marked as
 		// GoodForUpload.
 		if contracts[i].Utility.GoodForUpload {
-			uniqueGFU[contracts[i].RenterPublicKey.String() + contracts[i].HostPublicKey.String()] = contracts[i].ID
+			uniqueGFU[contracts[i].RenterPublicKey.String()+contracts[i].HostPublicKey.String()] = contracts[i].ID
 		}
 	}
 
@@ -63,7 +63,7 @@ func (c *Contractor) updatePubKeysToContractIDMap(contracts []modules.RenterCont
 	// the pubKeysToContractID map.
 	for pk, fcid := range uniqueGFU {
 		if c.pubKeysToContractID[pk] != fcid {
-			c.log.Critical("contractor is not correctly mapping from pubkey to contract id, missing GFU contracts")
+			c.log.Println("CRITICAL: contractor is not correctly mapping from pubkey to contract id, missing GFU contracts")
 		}
 	}
 }
@@ -77,7 +77,7 @@ func (c *Contractor) tryAddContractToPubKeysMap(newContract modules.RenterContra
 	if exists {
 		gfu, gfr := newContract.Utility.GoodForUpload, newContract.Utility.GoodForRenew
 		if gfu || gfr {
-			c.log.Critical("renewed contract is marked as good for upload or good for renew", gfu, gfr)
+			c.log.Println("CRITICAL: renewed contract is marked as good for upload or good for renew", gfu, gfr)
 		}
 		return
 	}
@@ -88,7 +88,7 @@ func (c *Contractor) tryAddContractToPubKeysMap(newContract modules.RenterContra
 	if exists {
 		// Sanity check - the contractor should not have multiple contract tips for the
 		// same contract.
-		c.log.Critical("contractor has multiple contracts that don't form a renewedTo line for the same host and the same renter")
+		c.log.Println("ERROR: contractor has multiple contracts that don't form a renewedTo line for the same host and the same renter")
 	}
 	c.pubKeysToContractID[pk] = newContract.ID
 }
@@ -123,7 +123,7 @@ func (c *Contractor) OldContractsByRenter(rpk types.PublicKey) []modules.RenterC
 // ContractUtility returns the utility fields for the given contract.
 func (c *Contractor) ContractUtility(rpk, hpk types.PublicKey) (modules.ContractUtility, bool) {
 	c.mu.RLock()
-	id, ok := c.pubKeysToContractID[rpk.String() + hpk.String()]
+	id, ok := c.pubKeysToContractID[rpk.String()+hpk.String()]
 	c.mu.RUnlock()
 	if !ok {
 		return modules.ContractUtility{}, false
