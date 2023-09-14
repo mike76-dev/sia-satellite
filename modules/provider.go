@@ -80,10 +80,12 @@ type ContractMetadata struct {
 	DownloadSpending    types.Currency
 	FundAccountSpending types.Currency
 	TotalCost           types.Currency
+
+	Revision types.FileContractRevision
 }
 
 // EncodeTo implements requestBody.
-func (cm ContractMetadata) EncodeTo(e *types.Encoder) {
+func (cm *ContractMetadata) EncodeTo(e *types.Encoder) {
 	e.Write(cm.ID[:])
 	e.Write(cm.HostKey[:])
 	e.WriteUint64(cm.StartHeight)
@@ -92,10 +94,11 @@ func (cm ContractMetadata) EncodeTo(e *types.Encoder) {
 	cm.DownloadSpending.EncodeTo(e)
 	cm.FundAccountSpending.EncodeTo(e)
 	cm.TotalCost.EncodeTo(e)
+	cm.Revision.EncodeTo(e)
 }
 
 // DecodeFrom implements requestBody.
-func (cm ContractMetadata) DecodeFrom(d *types.Decoder) {
+func (cm *ContractMetadata) DecodeFrom(d *types.Decoder) {
 	d.Read(cm.ID[:])
 	d.Read(cm.HostKey[:])
 	cm.StartHeight = d.ReadUint64()
@@ -104,4 +107,5 @@ func (cm ContractMetadata) DecodeFrom(d *types.Decoder) {
 	cm.DownloadSpending.DecodeFrom(d)
 	cm.FundAccountSpending.DecodeFrom(d)
 	cm.TotalCost.DecodeFrom(d)
+	cm.Revision.DecodeFrom(d)
 }

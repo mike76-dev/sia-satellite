@@ -575,30 +575,29 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 		}
 
 		// Find the contract txn.
-		block, ok := c.cs.BlockAtHeight(contract.StartHeight)
+		block, ok := c.cs.BlockAtHeight(contract.StartHeight + 1)
 		if !ok {
-			c.log.Println("ERROR: couldn't find block at height", contract.StartHeight)
+			c.log.Println("ERROR: couldn't find block at height", contract.StartHeight+1)
 			continue
 		}
 
-		var transaction types.Transaction
+		var txnFee types.Currency
 		var found bool
 		for _, txn := range block.Transactions {
-			if len(txn.FileContractRevisions) > 0 && txn.FileContractRevisions[0].ParentID == contract.ID {
-				transaction = modules.CopyTransaction(txn)
+			if len(txn.FileContracts) > 0 && txn.FileContractID(0) == contract.ID {
+				txnFee = txn.MinerFees[0]
 				found = true
 				break
 			}
 		}
 		if !found {
-			c.log.Println("ERROR: couldn't find transaction", contract.ID)
+			c.log.Println("ERROR: couldn't find transaction for", contract.ID)
 			continue
 		}
 
 		// We have no way to get some information from the data
 		// provided, so we have to speculate a bit.
-		txnFee := transaction.MinerFees[0]
-		rev := transaction.FileContractRevisions[0]
+		rev := contract.Revision
 		payout := rev.ValidRenterPayout().Add(rev.ValidHostPayout())
 		tax := modules.Tax(contract.StartHeight, payout)
 		host, ok, err := c.hdb.Host(contract.HostKey)
@@ -613,7 +612,14 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 		}
 
 		// Insert the contract.
-		rc, err := c.staticContracts.InsertContract(transaction, contract.StartHeight, contract.TotalCost, contractFee, txnFee, tax, rpk)
+		txn := types.Transaction{
+			FileContractRevisions: []types.FileContractRevision{rev},
+			Signatures: []types.TransactionSignature{
+				types.TransactionSignature{},
+				types.TransactionSignature{},
+			},
+		}
+		rc, err := c.staticContracts.InsertContract(txn, contract.StartHeight, contract.TotalCost, contractFee, txnFee, tax, rpk)
 		if err != nil {
 			c.log.Printf("ERROR: couldn't accept contract %s: %v\n", contract.ID, err)
 			continue
@@ -625,20 +631,22 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 		c.pubKeysToContractID[rc.RenterPublicKey.String()+rc.HostPublicKey.String()] = contract.ID
 		c.mu.Unlock()
 
-		// Update the spendings.
-		// NOTE: `renterd` doesn't store contract signatures, so we have to
-		// pass a nil.
-		err = c.UpdateContract(rev, nil, contract.UploadSpending, contract.DownloadSpending, contract.FundAccountSpending)
-		if err != nil {
-			c.log.Println("ERROR: couldn't update contract spendings", err)
-		}
-
 		if contract.RenewedFrom != (types.FileContractID{}) {
 			c.renewedFrom[contract.ID] = contract.RenewedFrom
+			c.renewedTo[contract.RenewedFrom] = contract.ID
 			err = c.updateRenewedContract(contract.RenewedFrom, contract.ID)
 			if err != nil {
 				c.log.Println("ERROR: couldn't update renewal history:", err)
 			}
+		}
+	}
+
+	// Update the spendings.
+	// NOTE: `renterd` doesn't store signatures, so we have to pass a nil.
+	for _, contract := range contracts {
+		err := c.UpdateContract(contract.Revision, nil, contract.UploadSpending, contract.DownloadSpending, contract.FundAccountSpending)
+		if err != nil {
+			c.log.Println("ERROR: couldn't update contract spendings", err)
 		}
 	}
 
