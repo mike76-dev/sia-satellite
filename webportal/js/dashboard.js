@@ -1099,13 +1099,13 @@ function selectFile(obj) {
 }
 
 function selectFiles() {
-	if (selectedFiles.length === files.length) {
-		selectedFiles = [];
-	} else {
+	if (document.getElementById('files-all').checked) {
 		selectedFiles = [];
 		files.forEach((value, index) => {
 			selectedFiles.push(index);
 		})
+	} else {
+		selectedFiles = [];
 	}
 	document.getElementById("files-delete").disabled = selectedFiles.length == 0;
 	renderFiles();
