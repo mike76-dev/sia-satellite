@@ -509,6 +509,7 @@ CREATE TABLE ctr_slabs (
 	min_shards INT UNSIGNED NOT NULL,
 	offset     BIGINT UNSIGNED NOT NULL,
 	len        BIGINT UNSIGNED NOT NULL,
+	num        INT NOT NULL,
 	PRIMARY KEY (enc_key),
 	FOREIGN KEY (object_id) REFERENCES ctr_metadata(enc_key)
 );

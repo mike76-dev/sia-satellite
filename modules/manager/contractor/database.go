@@ -457,11 +457,11 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		return modules.AddContext(err, "unable to store object")
 	}
 
-	for _, s := range fm.Slabs {
+	for i, s := range fm.Slabs {
 		_, err = tx.Exec(`
-			INSERT INTO ctr_slabs (enc_key, object_id, min_shards, offset, len)
-			VALUES (?, ?, ?, ?, ?)
-		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length)
+			INSERT INTO ctr_slabs (enc_key, object_id, min_shards, offset, len, num)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length, i)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "unable to insert slab")
@@ -532,9 +532,10 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 		}
 
 		slabRows, err := c.db.Query(`
-			SELECT enc_key, min_shards, offset, len
+			SELECT enc_key, min_shards, offset, len, num
 			FROM ctr_slabs
 			WHERE object_id = ?
+			ORDER BY num ASC
 		`, objectID)
 		if err != nil {
 			return nil, modules.AddContext(err, "unable to query slabs")
@@ -545,7 +546,8 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 			slabID := make([]byte, 32)
 			var minShards uint8
 			var offset, length uint64
-			if err := slabRows.Scan(&slabID, &minShards, &offset, &length); err != nil {
+			var i int
+			if err := slabRows.Scan(&slabID, &minShards, &offset, &length, &i); err != nil {
 				slabRows.Close()
 				return nil, modules.AddContext(err, "unable to retrieve slab")
 			}
@@ -736,7 +738,11 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
 // getSlabs loads the slabs from the database.
 func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 	// Load slabs.
-	rows, err := c.db.Query("SELECT enc_key, object_id, min_shards, offset, len FROM ctr_slabs")
+	rows, err := c.db.Query(`
+		SELECT enc_key, object_id, min_shards, offset, len, num
+		FROM ctr_slabs
+		ORDER BY num ASC
+	`)
 	if err != nil {
 		return nil, modules.AddContext(err, "unable to query slabs")
 	}
@@ -746,7 +752,8 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 		id := make([]byte, 32)
 		var minShards uint8
 		var offset, length uint64
-		if err := rows.Scan(&key, &id, &minShards, &offset, &length); err != nil {
+		var i int
+		if err := rows.Scan(&key, &id, &minShards, &offset, &length, &i); err != nil {
 			rows.Close()
 			return nil, modules.AddContext(err, "unable to retrieve slab")
 		}
