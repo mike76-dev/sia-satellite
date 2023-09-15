@@ -195,23 +195,26 @@ func (m *migrator) performMigrations(ctx context.Context) {
 					m.contractor.log.Printf("ERROR: failed to migrate slab %d/%d, health: %v, err: %v\n", j.slabIdx+1, j.batchSize, j.health, err)
 				} else {
 					m.contractor.log.Printf("INFO: successfully migrated slab %d/%d\n", j.slabIdx+1, j.batchSize)
-				}
 
-				// Update the slab in the database.
-				key, err := convertEncryptionKey(slab.Key)
-				s := modules.Slab{
-					Key:       key,
-					MinShards: slab.MinShards,
-					Offset:    0,
-					Length:    uint64(slab.MinShards) * rhpv2.SectorSize,
+					// Update the slab in the database.
+					key, _ := convertEncryptionKey(slab.Key)
+					s := modules.Slab{
+						Key:       key,
+						MinShards: slab.MinShards,
+						Offset:    0,
+						Length:    uint64(slab.MinShards) * rhpv2.SectorSize,
+					}
+					for _, shard := range slab.Shards {
+						var ss modules.Shard
+						copy(ss.Host[:], shard.Host[:])
+						copy(ss.Root[:], shard.Root[:])
+						s.Shards = append(s.Shards, ss)
+					}
+					err = m.contractor.updateSlab(s)
+					if err != nil {
+						m.contractor.log.Printf("ERROR: failed to update slab %d/%d, err: %v\n", j.slabIdx+1, j.batchSize, err)
+					}
 				}
-				for _, shard := range slab.Shards {
-					var ss modules.Shard
-					copy(ss.Host[:], shard.Host[:])
-					copy(ss.Root[:], shard.Root[:])
-					s.Shards = append(s.Shards, ss)
-				}
-				err = m.contractor.updateSlab(s)
 
 				// Send a response.
 				select {
