@@ -182,7 +182,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 			defer atomic.AddUint64(&threadsLeft, ^uint64(0))
 
 			for j := range jobs {
-				slab, length, err := m.contractor.getSlab(j.Key)
+				slab, offset, length, err := m.contractor.getSlab(j.Key)
 				if err != nil {
 					m.contractor.log.Printf("ERROR: failed to fetch slab for migration %d/%d, health: %v, err: %v\n", j.slabIdx+1, j.batchSize, j.health, err)
 					continue
@@ -200,7 +200,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 					s := modules.Slab{
 						Key:       key,
 						MinShards: slab.MinShards,
-						Offset:    0,
+						Offset:    uint64(offset),
 						Length:    uint64(length),
 					}
 					for _, shard := range slab.Shards {
