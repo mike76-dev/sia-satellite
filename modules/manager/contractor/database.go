@@ -676,11 +676,11 @@ func convertEncryptionKey(key object.EncryptionKey) (id types.Hash256, err error
 }
 
 // getSlab tries to find a slab by the encryption key.
-func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
+func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, length uint32, err error) {
 	// Unmarshal encryption key first.
 	key, err := encryptionKey(id)
 	if err != nil {
-		return object.Slab{}, modules.AddContext(err, "couldn't unmarshal key")
+		return object.Slab{}, 0, modules.AddContext(err, "couldn't unmarshal key")
 	}
 
 	// Start a transaction.
@@ -693,7 +693,7 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
 	rows, err := tx.Query("SELECT host, merkle_root FROM ctr_shards WHERE slab_id = ?", id[:])
 	if err != nil {
 		tx.Rollback()
-		return object.Slab{}, modules.AddContext(err, "couldn't query shards")
+		return object.Slab{}, 0, modules.AddContext(err, "couldn't query shards")
 	}
 
 	var shards []object.Sector
@@ -703,7 +703,7 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
 		if err := rows.Scan(&h, &r); err != nil {
 			rows.Close()
 			tx.Rollback()
-			return object.Slab{}, modules.AddContext(err, "couldn't retrieve shard")
+			return object.Slab{}, 0, modules.AddContext(err, "couldn't retrieve shard")
 		}
 		var shard object.Sector
 		copy(shard.Host[:], h)
@@ -714,15 +714,14 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, err error) {
 
 	// Load the slab.
 	var minShards uint8
-	var offset, length uint32
 	err = tx.QueryRow(`
-		SELECT min_shards, offset, len
+		SELECT min_shards, len
 		FROM ctr_slabs
 		WHERE enc_key = ?
-	`, id[:]).Scan(&minShards, &offset, &length)
+	`, id[:]).Scan(&minShards, &length)
 	if err != nil {
 		tx.Rollback()
-		return object.Slab{}, modules.AddContext(err, "couldn't load slab")
+		return object.Slab{}, 0, modules.AddContext(err, "couldn't load slab")
 	}
 
 	slab = object.Slab{

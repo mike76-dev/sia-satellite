@@ -10,7 +10,6 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
-	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/core/types"
 	"go.sia.tech/renterd/object"
 )
@@ -183,7 +182,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 			defer atomic.AddUint64(&threadsLeft, ^uint64(0))
 
 			for j := range jobs {
-				slab, err := m.contractor.getSlab(j.Key)
+				slab, length, err := m.contractor.getSlab(j.Key)
 				if err != nil {
 					m.contractor.log.Printf("ERROR: failed to fetch slab for migration %d/%d, health: %v, err: %v\n", j.slabIdx+1, j.batchSize, j.health, err)
 					continue
@@ -202,7 +201,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 						Key:       key,
 						MinShards: slab.MinShards,
 						Offset:    0,
-						Length:    uint64(slab.MinShards) * rhpv2.SectorSize,
+						Length:    uint64(length),
 					}
 					for _, shard := range slab.Shards {
 						var ss modules.Shard
