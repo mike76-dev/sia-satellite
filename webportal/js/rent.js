@@ -77,7 +77,7 @@ if (query.startsWith('?token=')) {
 } else {
 	if (getCookie('satellite') == '') {
 		document.getElementById('cookie').classList.remove('disabled');
-		setStatus('login');
+		setStatus('welcome');
 	} else {
 		setStatus('');
 		let m = document.getElementById('message');
@@ -115,6 +115,7 @@ function deleteCookie(name) {
 }
 
 function setStatus(s) {
+	let welcome = document.getElementById('welcome');
 	let login = document.getElementById('login');
 	let signup = document.getElementById('signup');
 	let reset = document.getElementById('reset');
@@ -124,8 +125,18 @@ function setStatus(s) {
 	status = s;
 	clearErrors();
 	switch (s) {
+		case 'welcome':
+			welcome.classList.remove('disabled');
+			login.classList.add('disabled');
+			signup.classList.add('disabled');
+			reset.classList.add('disabled');
+			resendVerify.classList.add('disabled');
+			resendReset.classList.add('disabled');
+			change.classList.add('disabled');
+			break;
 		case 'login':
 			clearLoginTab();
+			welcome.classList.add('disabled');
 			login.classList.remove('disabled');
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
@@ -135,6 +146,7 @@ function setStatus(s) {
 			break;
 		case 'signup':
 			clearSignupTab();
+			welcome.classList.add('disabled');
 			login.classList.add('disabled');
 			signup.classList.remove('disabled');
 			reset.classList.add('disabled');
@@ -144,6 +156,7 @@ function setStatus(s) {
 			break;
 		case 'reset':
 			clearResetTab();
+			welcome.classList.add('disabled');
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
 			reset.classList.remove('disabled');
@@ -152,6 +165,7 @@ function setStatus(s) {
 			change.classList.add('disabled');
 			break;
 		case 'resend-verify':
+			welcome.classList.add('disabled');
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
@@ -160,6 +174,7 @@ function setStatus(s) {
 			change.classList.add('disabled');
 			break;
 		case 'resend-reset':
+			welcome.classList.add('disabled');
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
@@ -168,6 +183,7 @@ function setStatus(s) {
 			change.classList.add('disabled');
 			break;
 		case 'change':
+			welcome.classList.add('disabled');
 			clearChangeTab();
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
@@ -177,6 +193,7 @@ function setStatus(s) {
 			change.classList.remove('disabled');
 			break;
 		default:
+			welcome.classList.add('disabled');
 			login.classList.add('disabled');
 			signup.classList.add('disabled');
 			reset.classList.add('disabled');
@@ -184,6 +201,12 @@ function setStatus(s) {
 			resendReset.classList.add('disabled');
 			change.classList.add('disabled');
 	}
+}
+
+function proceed() {
+	setTimeout(function() {
+		setStatus('login');
+	}, 1000);
 }
 
 function clearErrors() {
