@@ -715,7 +715,7 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, offset, length
 	// Load the slab.
 	var minShards uint8
 	err = tx.QueryRow(`
-		SELECT min_shards, len
+		SELECT min_shards, offset, len
 		FROM ctr_slabs
 		WHERE enc_key = ?
 	`, id[:]).Scan(&minShards, &offset, &length)
