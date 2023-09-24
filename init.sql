@@ -495,7 +495,7 @@ CREATE TABLE ctr_watchdog (
 
 CREATE TABLE ctr_metadata (
 	enc_key   BINARY(32) NOT NULL,
-	filepath  VARCHAR(255) NOT NULL UNIQUE,
+	filepath  VARCHAR(255) NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
 	updated   BIGINT UNSIGNED NOT NULL,
 	retrieved BIGINT UNSIGNED NOT NULL,
