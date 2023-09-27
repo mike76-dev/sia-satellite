@@ -8,6 +8,7 @@ import (
 	"time"
 
 	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
+	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/contractor"
 	"github.com/mike76-dev/sia-satellite/modules/manager/hostdb"
@@ -19,6 +20,7 @@ import (
 var (
 	// Nil dependency errors.
 	errNilDB      = errors.New("manager cannot use a nil database")
+	errNilMail    = errors.New("manager cannot use a nil mail client")
 	errNilCS      = errors.New("manager cannot use a nil state")
 	errNilTpool   = errors.New("manager cannot use a nil transaction pool")
 	errNilWallet  = errors.New("manager cannot use a nil wallet")
@@ -158,6 +160,7 @@ type blockTimestamp struct {
 type Manager struct {
 	// Dependencies.
 	db             *sql.DB
+	ms             mail.MailSender
 	cs             modules.ConsensusSet
 	hostContractor hostContractor
 	hostDB         modules.HostDB
@@ -174,6 +177,10 @@ type Manager struct {
 	currentMonth blockTimestamp
 	prevMonth    blockTimestamp
 
+	// Email preferences.
+	email         string
+	warnThreshold types.Currency
+
 	// A global DB transaction.
 	dbTx    *sql.Tx
 	syncing bool
@@ -186,12 +193,16 @@ type Manager struct {
 }
 
 // New returns an initialized Manager.
-func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, dir string) (*Manager, <-chan error) {
+func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, dir string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
 
 	// Check that all the dependencies were provided.
 	if db == nil {
 		errChan <- errNilDB
+		return nil, errChan
+	}
+	if ms == nil {
+		errChan <- errNilMail
 		return nil, errChan
 	}
 	if cs == nil {
@@ -218,13 +229,20 @@ func New(db *sql.DB, cs modules.ConsensusSet, g modules.Gateway, tpool modules.T
 		return nil, errChan
 	}
 
+	// Convert warn threshold to a currency.
+	warnThreshold, _ := types.ParseCurrency(config.WarnThreshold)
+
 	// Create the Manager object.
 	m := &Manager{
 		cs:     cs,
 		db:     db,
+		ms:     ms,
 		hostDB: hdb,
 		tpool:  tpool,
 		wallet: wallet,
+
+		email:         config.Email,
+		warnThreshold: warnThreshold,
 
 		exchRates: make(map[string]float64),
 

@@ -17,6 +17,7 @@ import (
 var (
 	// Nil dependency errors.
 	errNilDB       = errors.New("portal cannot use a nil database")
+	errNilMail     = errors.New("portal cannot use a nil mail client")
 	errNilManager  = errors.New("portal cannot use a nil manager")
 	errNilProvider = errors.New("portal cannot use a nil provider")
 )
@@ -52,6 +53,9 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, m modules.M
 	// Check that all the dependencies were provided.
 	if db == nil {
 		return nil, errNilDB
+	}
+	if ms == nil {
+		return nil, errNilMail
 	}
 	if m == nil {
 		return nil, errNilManager
