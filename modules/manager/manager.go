@@ -3,6 +3,7 @@ package manager
 import (
 	"database/sql"
 	"errors"
+	"io"
 	"sync"
 	"time"
 
@@ -78,6 +79,9 @@ type hostContractor interface {
 
 	// DeleteObject deletes the saved file metadata object.
 	DeleteObject(types.PublicKey, string) error
+
+	// DownloadObject downloads an object and returns it.
+	DownloadObject(io.Writer, types.PublicKey, string) error
 
 	// UpdateMetadata updates the file metadata in the database.
 	UpdateMetadata(types.PublicKey, modules.FileMetadata) error
@@ -1088,4 +1092,9 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 // and adds them to the contract set.
 func (m *Manager) AcceptContracts(rpk types.PublicKey, contracts []modules.ContractMetadata) {
 	m.hostContractor.AcceptContracts(rpk, contracts)
+}
+
+// DownloadObject downloads an object and returns it.
+func (m *Manager) DownloadObject(w io.Writer, rpk types.PublicKey, path string) error {
+	return m.hostContractor.DownloadObject(w, rpk, path)
 }

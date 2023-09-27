@@ -1,9 +1,11 @@
 package contractor
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sync"
 	"time"
@@ -655,4 +657,31 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 	if err != nil {
 		c.log.Println("ERROR: unable to update hostdb contracts:", err)
 	}
+}
+
+// DownloadObject downloads an object and returns it.
+func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, path string) error {
+	// Retrieve the object.
+	obj, err := c.getObject(rpk, path)
+	if err != nil {
+		return err
+	}
+
+	// Calculate the object length.
+	var length uint64
+	for _, slab := range obj.Slabs {
+		length += uint64(slab.Length)
+	}
+
+	// Get the contracts.
+	contracts := c.staticContracts.ByRenter(rpk)
+
+	// Create the context and set up its cancelling.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Download the object.
+	err = c.dm.managedDownloadObject(ctx, w, rpk, obj, 0, length, contracts)
+
+	return err
 }

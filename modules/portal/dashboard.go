@@ -90,6 +90,7 @@ type (
 	// savedFile contains the information about saved file metadata.
 	savedFile struct {
 		Path     string `json:"path"`
+		Size     uint64 `json:"size"`
 		Slabs    int    `json:"slabs"`
 		Uploaded uint64 `json:"uploaded"`
 	}
@@ -785,4 +786,45 @@ func (api *portalAPI) settingsHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	writeSuccess(w)
+}
+
+// fileHandlerGET handles the GET /dashboard/file requests.
+func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Get the renter.
+	var renter modules.Renter
+	renters := api.portal.manager.Renters()
+	for _, r := range renters {
+		if r.Email == email {
+			renter = r
+			break
+		}
+	}
+
+	// Download the file.
+	path := req.FormValue("path")
+	if path == "" {
+		writeError(w,
+			Error{
+				Code:    httpErrorBadRequest,
+				Message: "path not specified",
+			}, http.StatusBadRequest)
+		return
+	}
+	err = api.portal.manager.DownloadObject(w, renter.PublicKey, path)
+	if err != nil {
+		api.portal.log.Printf("ERROR: couldn't download file: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
 }

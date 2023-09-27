@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"io"
 	"time"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
@@ -314,6 +315,9 @@ type Manager interface {
 
 	// DeleteRenter deletes the renter data from the memory.
 	DeleteRenter(string)
+
+	// DownloadObject downloads an object and returns it.
+	DownloadObject(io.Writer, types.PublicKey, string) error
 
 	// FeeEstimation returns the minimum and the maximum estimated fees for
 	// a transaction.

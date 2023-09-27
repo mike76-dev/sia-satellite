@@ -80,6 +80,7 @@ var contractsFrom = 1;
 var contractsStep = 10;
 var files = [];
 var selectedFiles = [];
+var downloads = [];
 var filesFrom = 1;
 var filesStep = 10;
 
@@ -626,17 +627,16 @@ function renderPayments() {
 		paymentsFrom = 1;
 		return;
 	}
-	let tr;
 	payments.forEach((row, i) => {
 		if (i < paymentsFrom - 1) return;
 		if (i >= paymentsFrom + paymentsStep - 1) return;
 		timestamp = new Date(row.timestamp * 1000);
-		tr = document.createElement('tr');
-		tr.innerHTML = '<td>' + (i + 1) + '</td>';
-		tr.innerHTML += '<td>' + timestamp.toLocaleString() + '</td>';
-		tr.innerHTML += '<td>' + row.amount.toFixed(2) + '</td>';
-		tr.innerHTML += '<td>' + row.currency + '</td>';
-		tr.innerHTML += '<td>' + row.amountsc.toFixed(2) + ' SC</td>';
+		let tr = document.createElement('tr');
+		tr.innerHTML = `<td>${i + 1}</td>`;
+		tr.innerHTML += `<td>${timestamp.toLocaleString()}</td>`;
+		tr.innerHTML += `<td>${row.amount.toFixed(2)}</td>`;
+		tr.innerHTML += `<td>${row.currency}</td>`;
+		tr.innerHTML += `<td>${row.amountsc.toFixed(2)} SC</td>`;
 		tbody.appendChild(tr);
 	});
 	document.getElementById('history-empty').classList.add('disabled');
@@ -780,19 +780,18 @@ function renderContracts() {
 		contractsFrom = 1;
 		return;
 	}
-	let tr;
 	contracts.forEach((row, i) => {
 		if (i < contractsFrom - 1) return;
 		if (i >= contractsFrom + contractsStep - 1) return;
-		tr = document.createElement('tr');
-		tr.innerHTML = '<td>' + (i + 1) + '</td>';
-		tr.innerHTML += '<td class="cell-overflow">' + row.id.slice(row.id.indexOf(':') + 1) + '</td>';
-		tr.innerHTML += '<td>' + row.startheight + '</td>';
-		tr.innerHTML += '<td>' + row.endheight + '</td>';
-		tr.innerHTML += '<td class="cell-overflow">' + row.netaddress + '</td>';
-		tr.innerHTML += '<td>' + row.size + '</td>';
-		tr.innerHTML += '<td>' + row.totalcost + '</td>';
-		tr.innerHTML += '<td>' + row.status + '</td>';
+		let tr = document.createElement('tr');
+		tr.innerHTML = `<td>${i + 1}</td>`;
+		tr.innerHTML += `<td class="cell-overflow">${row.id.slice(row.id.indexOf(':') + 1)}</td>`;
+		tr.innerHTML += `<td>${row.startheight}</td>`;
+		tr.innerHTML += `<td>${row.endheight}</td>`;
+		tr.innerHTML += `<td class="cell-overflow">${row.netaddress}</td>`;
+		tr.innerHTML += `<td>${row.size}</td>`;
+		tr.innerHTML += `<td>${row.totalcost}</td>`;
+		tr.innerHTML += `<td>${row.status}</td>`;
 		tr.index = i;
 		tr.addEventListener("click", expandContract);
 		tbody.appendChild(tr);
@@ -1054,6 +1053,16 @@ function changeFilesStep(s) {
 	renderFiles();
 }
 
+function convertSize(size) {
+	if (size == 0) {
+		return '0 B';
+	}
+	const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+	let i = Math.floor(Math.log10(size) / 3);
+	let s = '' + size / Math.pow(10, 3 * i);
+	return s.slice(0, s.indexOf('.') + i + 1) + ' ' + sizes[i];
+}
+
 function renderFiles() {
 	let tbody = document.getElementById('files-table');
 	tbody.innerHTML = '';
@@ -1065,25 +1074,111 @@ function renderFiles() {
 		filesFrom = 1;
 		return;
 	}
-	let tr;
 	files.forEach((row, i) => {
 		if (i < filesFrom - 1) return;
 		if (i >= filesFrom + filesStep - 1) return;
 		timestamp = new Date(row.uploaded * 1000);
-		tr = document.createElement('tr');
+		let index = downloads.findIndex(item => item.path == row.path);
+		let tr = document.createElement('tr');
 		tr.innerHTML = '<td><label class="checkbox" style="margin-left: 0.5rem"><input type="checkbox" onchange="selectFile(this)"><span class="checkmark"></span></label></td>';
-		tr.innerHTML += '<td>' + (i + 1) + '</td>';
-		tr.innerHTML += '<td class="cell-overflow">' + row.path.slice(1) + '</td>';
-		tr.innerHTML += '<td>' + row.slabs + '</td>';
-		tr.innerHTML += '<td>' + timestamp.toLocaleString() + '</td>';
+		tr.innerHTML += `<td>${i + 1}</td>`;
+		if (index >= 0) {
+			tr.innerHTML += `<td id=${'path-' + encodeURI(row.path)} class="cell-link" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
+			let loaded = (downloads[index].loaded == 0 || downloads[index].loaded == row.size) ? '...' :
+				(downloads[index].loaded / row.size * 100).toFixed(0) + '%';
+			tr.innerHTML += `<td id=${'size-' + encodeURI(row.path)}>${loaded}</td>`;
+			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.path)}><span id=${'cancel-' + encodeURI(row.path)} class="cancel">&#9421;<div class="hint">cancel</div></span></td>`;
+		} else {
+			tr.innerHTML += `<td id=${'path-' + encodeURI(row.path)} class="cell-link hint-spot" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
+			tr.innerHTML += `<td id=${'size-' + encodeURI(row.path)}>${convertSize(row.size)}</td>`;
+			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.path)}>${row.slabs}</td>`;
+		}
+		tr.innerHTML += `<td>${timestamp.toLocaleString()}</td>`;
 		tr.children[0].children[0].children[0].setAttribute('index', i);
 		tr.children[0].children[0].children[0].checked = selectedFiles.includes(i);
 		tbody.appendChild(tr);
+		if (index >= 0) {
+			document.getElementById('cancel-' + encodeURI(row.path)).addEventListener('click', () => {
+				downloads[index].controller.abort();
+			});
+		}
 	});
 	document.getElementById('files-empty').classList.add('disabled');
 	document.getElementById('files-non-empty').classList.remove('disabled');
 	document.getElementById('files-prev').disabled = filesFrom == 1;
 	document.getElementById('files-next').disabled = files.length < filesFrom + filesStep;
+}
+
+function downloadFile(index) {
+	const file = files[index];
+	if (downloads.find(item => item.path == file.path)) {
+		return;
+	}
+	const controller = new AbortController();
+	const signal = controller.signal;
+	downloads.push({
+		path: file.path,
+		loaded: 0,
+		controller: controller,
+	});
+	let options = {
+		method: 'GET',
+		signal: signal,
+	}
+	document.getElementById('path-' + encodeURI(file.path)).classList.remove('hint-spot');
+	document.getElementById('size-' + encodeURI(file.path)).innerHTML = '...';
+	document.getElementById('slabs-' + encodeURI(file.path)).innerHTML = `<span id=${'cancel-' + encodeURI(file.path)} class="cancel">&#9421;<div class="hint">cancel</div></span>`;
+	document.getElementById('cancel-' + encodeURI(file.path)).addEventListener('click', () => {
+		controller.abort();
+	});
+	fetch(apiBaseURL + '/dashboard/file?path=' + file.path, options)
+		.then(async (response) => {
+			if (response.status == 200) {
+				const reader = response.body.getReader();
+				let loaded = 0;
+				let percent = 0;
+				let chunks = [];
+				while(true) {
+					const {done, value} = await reader.read();
+					if (done) {
+						break;
+					}
+					chunks.push(value);
+					loaded += value.length;
+					downloads[downloads.findIndex(item => item.path == file.path)].loaded = loaded;
+					if (file.size > 0) {
+						percent = loaded / file.size * 100;
+					}
+					document.getElementById('size-' + encodeURI(file.path)).innerHTML = percent.toFixed(0) + '%';
+				}
+				return new Blob(chunks);
+			} else {
+				return response.json();
+			}
+		})
+		.then(blob => {
+			if (blob.code) {
+				console.log(blob.message);
+				return;
+			}
+			document.getElementById('size-' + encodeURI(file.path)).innerHTML = '...';
+			let url = window.URL.createObjectURL(blob);
+			let a = document.createElement("a");
+			a.href = url;
+			a.setAttribute("download", file.path.slice(1));
+			a.click();
+			window.URL.revokeObjectURL(url);
+		})
+		.catch(error => console.log(error))
+		.finally(() => {
+			document.getElementById('cancel-' + encodeURI(file.path)).removeEventListener('click', () => {
+				controller.abort();
+			});
+			document.getElementById('slabs-' + encodeURI(file.path)).innerHTML = file.slabs;
+			document.getElementById('size-' + encodeURI(file.path)).innerHTML = convertSize(file.size);
+			document.getElementById('path-' + encodeURI(file.path)).classList.add('hint-spot');
+			downloads.splice(downloads.findIndex(item => item.path == file.path), 1);
+		});
 }
 
 function selectFile(obj) {
@@ -1144,6 +1239,12 @@ function filesNext() {
 }
 
 function deleteFiles() {
+	selectedFiles.forEach((index) => {
+		let file = downloads.find(item => item.path == files[index].path);
+		if (file) {
+			file.controller.abort();
+		}
+	});
 	let data = {
 		files: selectedFiles
 	}

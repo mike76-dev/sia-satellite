@@ -485,37 +485,50 @@ func (p *Portal) loadCredits() error {
 }
 
 // getFiles retrieves the information about the stored file metadata.
-func (p *Portal) getFiles(pk types.PublicKey) (sf []savedFile, err error) {
+func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 	rows, err := p.db.Query(`
 		SELECT enc_key, filepath, updated
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 	`, pk[:])
 	if err != nil {
-		return
+		return nil, modules.AddContext(err, "couldn't retrieve metadata")
 	}
 	defer rows.Close()
 
+	var sf []savedFile
 	for rows.Next() {
 		var path string
 		var timestamp uint64
 		id := make([]byte, 32)
 		if err = rows.Scan(&id, &path, &timestamp); err != nil {
-			return
+			return nil, modules.AddContext(err, "couldn't retrieve object")
+		}
+		slabRows, err := p.db.Query("SELECT len FROM ctr_slabs WHERE object_id = ?", id)
+		if err != nil {
+			return nil, modules.AddContext(err, "couldn't retrieve slabs")
 		}
 		var count int
-		err = p.db.QueryRow("SELECT COUNT(*) FROM ctr_slabs WHERE object_id = ?", id).Scan(&count)
-		if err != nil {
-			return
+		var size uint64
+		for slabRows.Next() {
+			var length uint64
+			if err := slabRows.Scan(&length); err != nil {
+				slabRows.Close()
+				return nil, modules.AddContext(err, "couldn't retrieve slab")
+			}
+			count++
+			size += length
 		}
+		slabRows.Close()
 		sf = append(sf, savedFile{
 			Path:     path,
+			Size:     size,
 			Slabs:    count,
 			Uploaded: timestamp,
 		})
 	}
 
-	return
+	return sf, nil
 }
 
 // deleteFiles deletes the specified metadata from the database.

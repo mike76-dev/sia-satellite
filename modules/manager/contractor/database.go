@@ -800,3 +800,116 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 
 	return
 }
+
+// getObject tries to find an object by its path.
+func (c *Contractor) getObject(pk types.PublicKey, path string) (object.Object, error) {
+	// Start a transaction.
+	tx, err := c.db.Begin()
+	if err != nil {
+		return object.Object{}, err
+	}
+
+	// Find the object ID.
+	objectID := make([]byte, 32)
+	err = tx.QueryRow(`
+		SELECT enc_key
+		FROM ctr_metadata
+		WHERE filepath = ? AND renter_pk = ?
+	`, path, pk[:]).Scan(&objectID)
+	if err != nil {
+		tx.Rollback()
+		return object.Object{}, modules.AddContext(err, "couldn't find object")
+	}
+	var key types.Hash256
+	copy(key[:], objectID)
+	objectKey, err := encryptionKey(key)
+	if err != nil {
+		tx.Rollback()
+		return object.Object{}, modules.AddContext(err, "couldn't unmarshal object key")
+	}
+
+	// Load slabs.
+	rows, err := tx.Query(`
+		SELECT enc_key, min_shards, offset, len, num
+		FROM ctr_slabs
+		WHERE object_id = ?
+		ORDER BY num ASC
+	`, objectID)
+	if err != nil {
+		tx.Rollback()
+		return object.Object{}, modules.AddContext(err, "couldn't load slabs")
+	}
+
+	var slabs []object.SlabSlice
+	for rows.Next() {
+		slabID := make([]byte, 32)
+		var minShards uint8
+		var offset, length uint64
+		var n int
+		if err = rows.Scan(&slabID, &minShards, &offset, &length, &n); err != nil {
+			rows.Close()
+			tx.Rollback()
+			return object.Object{}, modules.AddContext(err, "couldn't load slab")
+		}
+		copy(key[:], slabID)
+		var slabKey object.EncryptionKey
+		slabKey, err = encryptionKey(key)
+		if err != nil {
+			rows.Close()
+			tx.Rollback()
+			return object.Object{}, modules.AddContext(err, "couldn't unmarshal slab key")
+		}
+		slabs = append(slabs, object.SlabSlice{
+			Slab: object.Slab{
+				Key:       slabKey,
+				MinShards: minShards,
+			},
+			Offset: uint32(offset),
+			Length: uint32(length),
+		})
+	}
+	rows.Close()
+
+	// Load shards.
+	for index := range slabs {
+		var id types.Hash256
+		id, err = convertEncryptionKey(slabs[index].Key)
+		if err != nil {
+			tx.Rollback()
+			return object.Object{}, modules.AddContext(err, "couldn't marshal encryption key")
+		}
+		rows, err = tx.Query(`
+			SELECT host, merkle_root
+			FROM ctr_shards
+			WHERE slab_id = ?
+		`, id[:])
+		if err != nil {
+			tx.Rollback()
+			return object.Object{}, modules.AddContext(err, "couldn't load shards")
+		}
+
+		for rows.Next() {
+			host := make([]byte, 32)
+			root := make([]byte, 32)
+			if err = rows.Scan(&host, &root); err != nil {
+				rows.Close()
+				tx.Rollback()
+				return object.Object{}, modules.AddContext(err, "couldn't load shard")
+			}
+			var shard object.Sector
+			copy(shard.Host[:], host)
+			copy(shard.Root[:], root)
+			slabs[index].Shards = append(slabs[index].Shards, shard)
+		}
+		rows.Close()
+	}
+
+	// Construct the object.
+	obj := object.Object{
+		Key:   objectKey,
+		Slabs: slabs,
+	}
+
+	tx.Commit()
+	return obj, nil
+}

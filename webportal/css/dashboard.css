@@ -221,7 +221,26 @@ button {
 	white-space: normal;
 }
 
-.hint-button:hover .hint {
+.hint-spot {
+	position: relative;
+}
+
+.cancel {
+	color: #af3f00;
+	font-weight: bold;
+	cursor: pointer;
+	position: relative;
+}
+
+.hint-spot .hint,
+.cancel .hint {
+	min-width: 0;
+	left: 1rem;
+}
+
+.hint-button:hover .hint,
+.hint-spot:hover .hint,
+.cancel:hover .hint {
 	display: initial;
 }
 
@@ -348,6 +367,11 @@ tbody > tr:nth-child(odd) {
 	overflow: visible;
 	position: absolute;
 	background-color: #7f7f7f;
+}
+
+.cell-link:hover {
+	font-weight: bold;
+	cursor: pointer;
 }
 
 .history-button {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -144,6 +145,7 @@ type (
 		used          map[types.PublicKey]struct{}
 
 		sectors [][]byte
+		errs    hostErrorSet
 	}
 
 	// slabDownloadResponse contains a response to a slab download.
@@ -166,6 +168,36 @@ type (
 		downloaders          map[string]downloaderStats
 	}
 )
+
+// hostError associates an error with a given host.
+type hostError struct {
+	HostKey types.PublicKey
+	Err     error
+}
+
+// Error implements error.
+func (he hostError) Error() string {
+	return fmt.Sprintf("%x: %v", he.HostKey[:4], he.Err.Error())
+}
+
+// Unwrap returns the underlying error.
+func (he hostError) Unwrap() error {
+	return he.Err
+}
+
+// A hostErrorSet is a collection of errors from various hosts.
+type hostErrorSet []*hostError
+
+// Error implements error.
+func (hes hostErrorSet) Error() string {
+	strs := make([]string, len(hes))
+	for i := range strs {
+		strs[i] = hes[i].Error()
+	}
+	// Include a leading newline so that the first error isn't printed on the
+	// same line as the error context.
+	return "\n" + strings.Join(strs, "\n")
+}
 
 // newDownloadManager returns an initialized download manager.
 func newDownloadManager(c *Contractor, maxOverdrive uint64, overdriveTimeout time.Duration) *downloadManager {
@@ -887,9 +919,6 @@ func (s *slabDownload) nextRequest(ctx context.Context, resps *sectorResponses, 
 		}
 
 		// make the fastest host the current host
-		if len(hosts) == 0 {
-			return nil
-		}
 		s.curr = s.mgr.fastest(s.renterKey, hosts)
 		s.used[s.curr] = struct{}{}
 
@@ -1079,6 +1108,7 @@ func (s *slabDownload) receive(resp sectorDownloadResp) (finished bool, next boo
 	// Failed reqs can't complete the upload.
 	s.numInflight--
 	if resp.err != nil {
+		s.errs = append(s.errs, &hostError{resp.hk, resp.err})
 		return false, false
 	}
 
@@ -1243,7 +1273,7 @@ func (c *Contractor) managedDownloadSector(ctx context.Context, rpk, hpk types.P
 	// Initiate the protocol.
 	err = proto.WithTransportV3(ctx, siamuxAddr, hpk, func(t *rhpv3.Transport) (err error) {
 		// Get the cost estimation.
-		cost, err := readSectorCost(host.PriceTable, uint64(length))
+		cost, err := proto.ReadSectorCost(host.PriceTable, uint64(length))
 		if err != nil {
 			return modules.AddContext(err, "unable to estimate costs")
 		}
@@ -1266,18 +1296,4 @@ func (c *Contractor) managedDownloadSector(ctx context.Context, rpk, hpk types.P
 	})
 
 	return err
-}
-
-// readSectorCost returns an overestimate for the cost of reading a sector from a host.
-func readSectorCost(pt rhpv3.HostPriceTable, length uint64) (types.Currency, error) {
-	rc := pt.BaseCost()
-	rc = rc.Add(pt.ReadSectorCost(length))
-	cost, _ := rc.Total()
-
-	// Overestimate the cost by 5%.
-	cost, overflow := cost.Mul64WithOverflow(21)
-	if overflow {
-		return types.ZeroCurrency, errors.New("overflow occurred while adding leeway to read sector cost")
-	}
-	return cost.Div64(20), nil
 }

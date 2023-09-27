@@ -656,17 +656,51 @@ func RPCAppendSector(ctx context.Context, t *rhpv3.Transport, renterKey types.Pr
 	return
 }
 
+// padBandwitdh pads the bandwidth to the next multiple of 1460 bytes.  1460
+// bytes is the maximum size of a TCP packet when using IPv4.
+// TODO: once hostd becomes the only host implementation we can simplify this.
+func padBandwidth(pt rhpv3.HostPriceTable, rc rhpv3.ResourceCost) rhpv3.ResourceCost {
+	padCost := func(cost, paddingSize types.Currency) types.Currency {
+		if paddingSize.IsZero() {
+			return cost // Might happen if bandwidth is free.
+		}
+		return cost.Add(paddingSize).Sub(types.NewCurrency64(1)).Div(paddingSize).Mul(paddingSize)
+	}
+	minPacketSize := uint64(1460)
+	minIngress := pt.UploadBandwidthCost.Mul64(minPacketSize)
+	minEgress := pt.DownloadBandwidthCost.Mul64(3*minPacketSize + responseLeeway)
+	rc.Ingress = padCost(rc.Ingress, minIngress)
+	rc.Egress = padCost(rc.Egress, minEgress)
+	return rc
+}
+
+// ReadSectorCost returns an overestimate for the cost of reading a sector from a host.
+func ReadSectorCost(pt rhpv3.HostPriceTable, length uint64) (types.Currency, error) {
+	rc := pt.BaseCost()
+	rc = rc.Add(pt.ReadSectorCost(length))
+	rc = padBandwidth(pt, rc)
+	cost, _ := rc.Total()
+
+	// Overestimate the cost by 10%.
+	cost, overflow := cost.Mul64WithOverflow(11)
+	if overflow {
+		return types.ZeroCurrency, errors.New("overflow occurred while adding leeway to read sector cost")
+	}
+	return cost.Div64(10), nil
+}
+
 // UploadSectorCost returns an overestimate for the cost of uploading a sector
 // to a host.
 func UploadSectorCost(pt rhpv3.HostPriceTable, windowEnd uint64) (cost, collateral, storage types.Currency, _ error) {
 	rc := pt.BaseCost()
 	rc = rc.Add(pt.AppendSectorCost(windowEnd - pt.HostBlockHeight))
+	rc = padBandwidth(pt, rc)
 	cost, collateral = rc.Total()
 
-	// Overestimate the cost by 5%.
-	cost, overflow := cost.Mul64WithOverflow(21)
+	// Overestimate the cost by 10%.
+	cost, overflow := cost.Mul64WithOverflow(11)
 	if overflow {
 		return types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, errors.New("overflow occurred while adding leeway to read sector cost")
 	}
-	return cost.Div64(20), collateral, rc.Storage, nil
+	return cost.Div64(10), collateral, rc.Storage, nil
 }
