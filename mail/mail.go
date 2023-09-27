@@ -58,7 +58,7 @@ func (mc *mailClient) SendMail(from, to, subject string, body *bytes.Buffer) err
 	b.Write([]byte("\r\n"))
 
 	// Send the email.
-  return smtp.SendMail(mc.smtpHost+":"+mc.smtpPort, auth, mc.from, rec, b.Bytes())
+	return smtp.SendMail(mc.smtpHost+":"+mc.smtpPort, auth, mc.from, rec, b.Bytes())
 }
 
 // New returns an initialized mail client.
@@ -82,23 +82,23 @@ func New(configPath string) (MailSender, error) {
 
 	// Initialize the client.
 	switch typ {
-		case "smtp":
-			var data smtpConfigData
-			if err := dec.Decode(&data); err != nil {
-				return nil, fmt.Errorf("unable to read the configuration: %s", err)
-			}
-			pw := os.Getenv("SATD_MAIL_PASSWORD")
-			if pw == "" {
-				return nil, errors.New("could not fetch mail password")
-			}
-			mc := &mailClient{
-				from:     data.From,
-				password: pw,
-				smtpHost: data.Host,
-				smtpPort: data.Port,
-			}
-			return mc, nil
-		default:
-			return nil, errors.New("unsupported mail client type")
+	case "smtp":
+		var data smtpConfigData
+		if err := dec.Decode(&data); err != nil {
+			return nil, fmt.Errorf("unable to read the configuration: %s", err)
+		}
+		pw := os.Getenv("SATD_MAIL_PASSWORD")
+		if pw == "" {
+			return nil, errors.New("could not fetch mail password")
+		}
+		mc := &mailClient{
+			from:     data.From,
+			password: pw,
+			smtpHost: data.Host,
+			smtpPort: data.Port,
+		}
+		return mc, nil
+	default:
+		return nil, errors.New("unsupported mail client type")
 	}
 }

@@ -46,7 +46,7 @@ type Portal struct {
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, db *sql.DB, m modules.Manager, p modules.Provider, dir string) (*Portal, error) {
+func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, m modules.Manager, p modules.Provider, dir string) (*Portal, error) {
 	var err error
 
 	// Check that all the dependencies were provided.
@@ -63,6 +63,7 @@ func New(config *persist.SatdConfig, db *sql.DB, m modules.Manager, p modules.Pr
 	// Create the portal object.
 	pt := &Portal{
 		db:       db,
+		ms:       ms,
 		manager:  m,
 		provider: p,
 
@@ -97,12 +98,6 @@ func New(config *persist.SatdConfig, db *sql.DB, m modules.Manager, p modules.Pr
 		}
 	})
 	pt.log.Println("INFO: portal created, started logging")
-
-	// Create the mail client.
-	pt.ms, err = mail.New(config.Dir)
-	if err != nil {
-		pt.log.Println("ERROR: could not create mail client", err)
-	}
 
 	// Load the portal persistence.
 	if err = pt.load(); err != nil {
@@ -140,7 +135,7 @@ func New(config *persist.SatdConfig, db *sql.DB, m modules.Manager, p modules.Pr
 func (p *Portal) Close() error {
 	// Shut down the listener.
 	p.closeChan <- 1
-	
+
 	if err := p.tg.Stop(); err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/consensus"
 	"github.com/mike76-dev/sia-satellite/modules/gateway"
@@ -22,7 +23,10 @@ import (
 // Node represents a satellite node containing all required modules.
 type Node struct {
 	// MySQL database.
-	DB         *sql.DB
+	DB *sql.DB
+
+	// Mail client.
+	ms *mail.MailSender
 
 	// The modules of the node.
 	ConsensusSet    modules.ConsensusSet
@@ -86,9 +90,16 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 		return nil, errChan
 	}
 
+	// Create a mail client.
+	fmt.Println("Creating mail client...")
+	ms, err := mail.New(config.Dir)
+	if err != nil {
+		log.Fatalf("ERROR: could not create mail client: %v\n", err)
+	}
+
 	// Connect to the database.
 	fmt.Println("Connecting to the SQL database...")
-	cfg := mysql.Config {
+	cfg := mysql.Config{
 		User:                 config.DBUser,
 		Passwd:               dbPassword,
 		Net:                  "tcp",
@@ -158,7 +169,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 
 	// Load portal.
 	fmt.Println("Loading portal...")
-	pt, err := portal.New(config, db, m, p, d)
+	pt, err := portal.New(config, db, ms, m, p, d)
 	if err != nil {
 		errChan <- modules.AddContext(err, "unable to create portal")
 		return nil, errChan
