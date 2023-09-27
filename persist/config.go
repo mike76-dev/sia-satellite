@@ -26,8 +26,6 @@ type SatdConfig struct {
 	DBUser        string `json:"dbUser"`
 	DBName        string `json:"dbName"`
 	PortalPort    string `json:"portal"`
-	Email         string `json:"email"`
-	WarnThreshold string `json:"warnThreshold"`
 }
 
 // satdMetadata contains the header and version strings that identify the

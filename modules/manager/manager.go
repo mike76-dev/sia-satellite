@@ -193,7 +193,7 @@ type Manager struct {
 }
 
 // New returns an initialized Manager.
-func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, dir string) (*Manager, <-chan error) {
+func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, dir string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
 
 	// Check that all the dependencies were provided.
@@ -229,9 +229,6 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 		return nil, errChan
 	}
 
-	// Convert warn threshold to a currency.
-	warnThreshold, _ := types.ParseCurrency(config.WarnThreshold)
-
 	// Create the Manager object.
 	m := &Manager{
 		cs:     cs,
@@ -240,9 +237,6 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 		hostDB: hdb,
 		tpool:  tpool,
 		wallet: wallet,
-
-		email:         config.Email,
-		warnThreshold: warnThreshold,
 
 		exchRates: make(map[string]float64),
 

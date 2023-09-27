@@ -327,10 +327,19 @@ CREATE TABLE pt_credits (
 
 /* manager */
 
+DROP TABLE IF EXISTS mg_email;
 DROP TABLE IF EXISTS mg_timestamp;
 DROP TABLE IF EXISTS mg_averages;
 DROP TABLE IF EXISTS mg_spendings;
 DROP TABLE IF EXISTS mg_balances;
+
+CREATE TABLE mg_email (
+	id        INT NOT NULL AUTO_INCREMENT,
+	email     VARCHAR(64) NOT NULL,
+	threshold VARBINARY(24) NOT NULL,
+	time_sent BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (id)
+);
 
 CREATE TABLE mg_timestamp (
 	id     INT NOT NULL AUTO_INCREMENT,

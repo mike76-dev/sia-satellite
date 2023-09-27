@@ -22,8 +22,6 @@ var defaultConfig = persist.SatdConfig{
 	DBUser:        "",
 	DBName:        "satellite",
 	PortalPort:    ":8080",
-	Email:         "",
-	WarnThreshold: "1 KS",
 }
 
 var config persist.SatdConfig
@@ -87,8 +85,6 @@ func main() {
 	dbUser := flag.String("db-user", "", "username for accessing the database")
 	dbName := flag.String("db-name", "", "name of MYSQL database")
 	portalPort := flag.String("portal", "", "port number the portal server listens at")
-	email := flag.String("email", "", "email address of the admin")
-	warnThreshold := flag.String("warn-threshold", "1 KS", "wallet balance threshold to receive a warning email")
 	flag.Parse()
 	if *userAgent != "" {
 		config.UserAgent = *userAgent
@@ -114,12 +110,6 @@ func main() {
 	}
 	if *portalPort != "" {
 		config.PortalPort = *portalPort
-	}
-	if *email != "" {
-		config.Email = *email
-	}
-	if *warnThreshold != "" {
-		config.WarnThreshold = *warnThreshold
 	}
 
 	// Save the configuration.

@@ -153,7 +153,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 
 	// Load manager.
 	fmt.Println("Loading manager...")
-	m, errChanM := manager.New(config, db, ms, cs, g, tp, w, d)
+	m, errChanM := manager.New(db, ms, cs, g, tp, w, d)
 	if err := modules.PeekErr(errChanM); err != nil {
 		errChan <- modules.AddContext(err, "unable to create manager")
 		return nil, errChan

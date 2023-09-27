@@ -77,6 +77,12 @@ func (m *Manager) initPersist(dir string) error {
 		}
 	})
 
+	// Load email preferences.
+	err = m.getEmailPreferences()
+	if err != nil {
+		return modules.AddContext(err, "unable to load email preferences")
+	}
+
 	// Create the global tx that will be used for most persist actions.
 	m.dbTx, err = m.db.Begin()
 	if err != nil {
@@ -84,7 +90,8 @@ func (m *Manager) initPersist(dir string) error {
 	}
 	m.tg.AfterStop(func() {
 		m.mu.Lock()
-		for m.syncing {}
+		for m.syncing {
+		}
 		err := m.dbTx.Commit()
 		m.mu.Unlock()
 		if err != nil {

@@ -247,3 +247,41 @@ func (m *Manager) numSlabs(pk types.PublicKey) (count int, err error) {
 
 	return
 }
+
+// getEmailPreferences retrieves the email preferences.
+func (m *Manager) getEmailPreferences() error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	var email, threshold string
+	err = tx.QueryRow(`
+		SELECT email, threshold
+		FROM mg_email
+		WHERE id = 1
+	`).Scan(&email, &threshold)
+	if errors.Is(err, sql.ErrNoRows) {
+		_, err = tx.Exec(`
+			INSERT INTO mg_email (email, threshold, time_sent)
+			VALUES (?, ?, ?)
+		`, "", "", 0)
+		if err != nil {
+			tx.Rollback()
+			return err
+		} else {
+			return tx.Commit()
+		}
+	}
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	curr, _ := types.ParseCurrency(threshold)
+	m.mu.Lock()
+	m.email = email
+	m.warnThreshold = curr
+	m.mu.Unlock()
+	tx.Commit()
+	return nil
+}

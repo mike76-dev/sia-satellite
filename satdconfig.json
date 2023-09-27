@@ -9,7 +9,5 @@
 	"bootstrap": true,
 	"dbUser": "",
 	"dbName": "",
-	"portal": ":8080",
-	"email": "",
-	"warnThreshold": "1 KS"
+	"portal": ":8080"
 }
