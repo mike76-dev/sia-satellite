@@ -17,13 +17,13 @@ var defaultConfig = persist.SatdConfig{
 	GatewayAddr:   ":0",
 	APIAddr:       "localhost:9990",
 	SatelliteAddr: ":9992",
-	SiamuxAddr:    ":0",
-	SiamuxWSAddr:  ":0",
 	Dir:           ".",
 	Bootstrap:     true,
 	DBUser:        "",
 	DBName:        "satellite",
 	PortalPort:    ":8080",
+	Email:         "",
+	WarnThreshold: "1 KS",
 }
 
 var config persist.SatdConfig
@@ -82,13 +82,13 @@ func main() {
 	gatewayAddr := flag.String("addr", "", "address to listen on for peer connections")
 	apiAddr := flag.String("api-addr", "", "address to serve API on")
 	satelliteAddr := flag.String("sat-addr", "", "address to listen on for renter requests")
-	siamuxAddr := flag.String("siamux-addr", "", "address that Siamux listens on")
-	siamuxWSAddr := flag.String("siamux-ws-addr", "", "websockets address for Siamux")
 	dir := flag.String("dir", "", "directory to store node state in")
 	bootstrap := flag.Bool("bootstrap", true, "bootstrap the gateway and consensus modules")
 	dbUser := flag.String("db-user", "", "username for accessing the database")
 	dbName := flag.String("db-name", "", "name of MYSQL database")
 	portalPort := flag.String("portal", "", "port number the portal server listens at")
+	email := flag.String("email", "", "email address of the admin")
+	warnThreshold := flag.String("warn-threshold", "1 KS", "wallet balance threshold to receive a warning email")
 	flag.Parse()
 	if *userAgent != "" {
 		config.UserAgent = *userAgent
@@ -102,12 +102,6 @@ func main() {
 	if *satelliteAddr != "" {
 		config.SatelliteAddr = *satelliteAddr
 	}
-	if *siamuxAddr != "" {
-		config.SiamuxAddr = *siamuxAddr
-	}
-	if *siamuxWSAddr != "" {
-		config.SiamuxWSAddr = *siamuxWSAddr
-	}
 	if *dir != "" {
 		config.Dir = *dir
 	}
@@ -120,6 +114,12 @@ func main() {
 	}
 	if *portalPort != "" {
 		config.PortalPort = *portalPort
+	}
+	if *email != "" {
+		config.Email = *email
+	}
+	if *warnThreshold != "" {
+		config.WarnThreshold = *warnThreshold
 	}
 
 	// Save the configuration.

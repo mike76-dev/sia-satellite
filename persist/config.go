@@ -2,10 +2,10 @@ package persist
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -21,13 +21,13 @@ type SatdConfig struct {
 	GatewayAddr   string `json:"gateway"`
 	APIAddr       string `json:"api"`
 	SatelliteAddr string `json:"satellite"`
-	SiamuxAddr    string `json:"siamux"`
-	SiamuxWSAddr  string `json:"siamuxws"`
 	Dir           string `json:"dir"`
 	Bootstrap     bool   `json:"bootstrap"`
-	DBUser        string `json:"dbuser"`
-	DBName        string `json:"dbname"`
-	PortalPort    string `json:"portalport"`
+	DBUser        string `json:"dbUser"`
+	DBName        string `json:"dbName"`
+	PortalPort    string `json:"portal"`
+	Email         string `json:"email"`
+	WarnThreshold string `json:"warnThreshold"`
 }
 
 // satdMetadata contains the header and version strings that identify the
@@ -40,7 +40,7 @@ type satdMetadata = struct {
 // metadata contains the actual values.
 var metadata = satdMetadata{
 	Header:  "Satd Configuration",
-	Version: "0.1.0",
+	Version: "0.2.0",
 }
 
 // Load loads the configuration from disk.
@@ -96,13 +96,13 @@ func loadJSON(meta satdMetadata, object interface{}, filename string) error {
 	}
 
 	// Read everything else.
-	remainingBytes, err := ioutil.ReadAll(dec.Buffered())
+	remainingBytes, err := io.ReadAll(dec.Buffered())
 	if err != nil {
 		return fmt.Errorf("unable to read persisted json object data: %s", err)
 	}
 	// The buffer may or may not have read the rest of the file, read the rest
 	// of the file to be certain.
-	remainingBytesExtra, err := ioutil.ReadAll(file)
+	remainingBytesExtra, err := io.ReadAll(file)
 	if err != nil {
 		return fmt.Errorf("unable to read persisted json object data: %s", err)
 	}
