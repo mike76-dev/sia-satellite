@@ -449,9 +449,9 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 	}
 
 	_, err = tx.Exec(`
-		INSERT INTO ctr_metadata (enc_key, filepath, renter_pk, updated, retrieved)
-		VALUES (?, ?, ?, ?, ?)
-	`, fm.Key[:], fm.Path, pk[:], uint64(time.Now().Unix()), uint64(time.Now().Unix()))
+		INSERT INTO ctr_metadata (enc_key, filepath, renter_pk, uploaded, modified, retrieved)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, fm.Key[:], fm.Path, pk[:], uint64(time.Now().Unix()), uint64(time.Now().Unix()), uint64(time.Now().Unix()))
 	if err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "unable to store object")
@@ -505,7 +505,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 	}
 
 	rows, err := c.db.Query(`
-		SELECT enc_key, filepath, updated, retrieved
+		SELECT enc_key, filepath, modified, retrieved
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 	`, pk[:])
@@ -518,15 +518,15 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 		var slabs []modules.Slab
 		objectID := make([]byte, 32)
 		var path string
-		var updated, retrieved uint64
-		if err := rows.Scan(&objectID, &path, &updated, &retrieved); err != nil {
+		var modified, retrieved uint64
+		if err := rows.Scan(&objectID, &path, &modified, &retrieved); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
 		// If the object is present in the map and hasn't been updated
 		// since the last retrieval, skip it.
 		if _, exists := po[path]; exists {
-			if updated <= retrieved {
+			if modified <= retrieved {
 				continue
 			}
 		}
@@ -644,7 +644,7 @@ func (c *Contractor) updateSlab(slab modules.Slab) error {
 
 	_, err = tx.Exec(`
 		UPDATE ctr_metadata
-		SET updated = ?
+		SET modified = ?
 		WHERE enc_key = ?
 	`, uint64(time.Now().Unix()), id)
 	if err != nil {
