@@ -254,12 +254,13 @@ func (m *Manager) getEmailPreferences() error {
 	if err != nil {
 		return err
 	}
-	var email, threshold string
+	var email string
+	b := make([]byte, 0, 24)
 	err = tx.QueryRow(`
 		SELECT email, threshold
 		FROM mg_email
 		WHERE id = 1
-	`).Scan(&email, &threshold)
+	`).Scan(&email, &b)
 	if errors.Is(err, sql.ErrNoRows) {
 		_, err = tx.Exec(`
 			INSERT INTO mg_email (email, threshold, time_sent)
@@ -277,11 +278,34 @@ func (m *Manager) getEmailPreferences() error {
 		return err
 	}
 
-	curr, _ := types.ParseCurrency(threshold)
+	buf := bytes.NewBuffer(b)
+	d := types.NewDecoder(io.LimitedReader{R: buf, N: 24})
+	var threshold types.Currency
+	threshold.DecodeFrom(d)
 	m.mu.Lock()
 	m.email = email
-	m.warnThreshold = curr
+	m.warnThreshold = threshold
 	m.mu.Unlock()
 	tx.Commit()
 	return nil
+}
+
+// setEmailPreferences changes the email preferences.
+func (m *Manager) setEmailPreferences(email string, threshold types.Currency) error {
+	m.mu.Lock()
+	m.email = email
+	m.warnThreshold = threshold
+	m.mu.Unlock()
+
+	var buf bytes.Buffer
+	e := types.NewEncoder(&buf)
+	threshold.EncodeTo(e)
+	e.Flush()
+	_, err := m.db.Exec(`
+		UPDATE mg_email
+		SET email = ?, threshold = ?, time_sent = ?
+		WHERE id = 1
+	`, email, buf.Bytes(), 0)
+
+	return err
 }

@@ -16,7 +16,7 @@ import (
 var (
 	// General Flags.
 	alertSuppress bool
-	verbose       bool   // Display additional information.
+	verbose       bool // Display additional information.
 
 	// Module Specific Flags.
 	//
@@ -174,7 +174,6 @@ func initCmds() *cobra.Command {
 	// Daemon Commands.
 	root.AddCommand(alertsCmd, stopCmd, versionCmd)
 
-
 	// Create command tree (alphabetized by root command).
 	root.AddCommand(consensusCmd)
 
@@ -190,6 +189,8 @@ func initCmds() *cobra.Command {
 	managerCmd.AddCommand(managerRateCmd)
 	managerCmd.AddCommand(managerAveragesCmd)
 	managerCmd.AddCommand(managerRentersCmd, managerRenterCmd, managerBalanceCmd, managerContractsCmd)
+	managerCmd.AddCommand(managerPreferencesCmd)
+	managerCmd.AddCommand(managerSetPreferencesCmd)
 
 	root.AddCommand(portalCmd)
 	portalCmd.AddCommand(portalSetCmd)

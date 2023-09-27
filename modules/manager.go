@@ -338,6 +338,9 @@ type Manager interface {
 	// GetBalance retrieves the balance information on the account.
 	GetBalance(string) (UserBalance, error)
 
+	// GetEmailPreferences returns the email preferences.
+	GetEmailPreferences() (string, types.Currency)
+
 	// GetExchangeRate returns the exchange rate of a given currency.
 	GetExchangeRate(string) (float64, error)
 
@@ -403,6 +406,9 @@ type Manager interface {
 
 	// SetAllowance sets the renter's allowance.
 	SetAllowance(types.PublicKey, Allowance) error
+
+	// SetEmailPreferences changes the email preferences.
+	SetEmailPreferences(string, types.Currency) error
 
 	// SetFilterMode sets the HostDB's filter mode.
 	SetFilterMode(FilterMode, []types.PublicKey, []string) error

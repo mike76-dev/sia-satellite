@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/spf13/cobra"
+	"go.sia.tech/core/types"
 )
 
 var (
@@ -57,6 +59,20 @@ var (
 		Short: "Display host network averages",
 		Long:  "Display the host network averages in the given currency. Both fiat currencies (as a 3-letter code) and SC are supported. Default is SC.",
 		Run:   wrap(manageraveragescmd),
+	}
+
+	managerPreferencesCmd = &cobra.Command{
+		Use:   "preferences",
+		Short: "Display email preferences",
+		Long:  "Display the chosen email preferences such as the email address and the warning threshold.",
+		Run:   wrap(managerpreferencescmd),
+	}
+
+	managerSetPreferencesCmd = &cobra.Command{
+		Use:   "setpreferences [email] [warning_threshold]",
+		Short: "Change email preferences",
+		Long:  "Set the email preferences such as the email address and the warning threshold. Pass 'none' as the email address to remove it.",
+		Run:   wrap(managersetpreferencescmd),
 	}
 )
 
@@ -385,4 +401,43 @@ func managercmd() {
 	fmt.Printf(`Renters:          %v
 Active Contracts: %v
 `, len(renters.Renters), len(contracts.ActiveContracts))
+}
+
+// managerpreferencescmd is the handler for the command `satc manager preferences`.
+// Prints the email preferences.
+func managerpreferencescmd() {
+	ep, err := httpClient.ManagerPreferencesGet()
+	if err != nil {
+		die(err)
+	}
+
+	if ep.Email == "" {
+		ep.Email = "Not set"
+	}
+	fmt.Printf(`Email:             %v
+Warning Threshold: %v
+`, ep.Email, ep.WarnThreshold)
+}
+
+// managersetpreferencescmd is the handler for the command
+// `satc manager setpreferences [email] [warning_threshold]`.
+// Changes the email preferences.
+func managersetpreferencescmd(email, wt string) {
+	if email == "none" {
+		email = ""
+	}
+	threshold, err := types.ParseCurrency(wt)
+	if err != nil {
+		die(err)
+	}
+
+	err = httpClient.ManagerPreferencesPost(api.EmailPreferences{
+		Email:         email,
+		WarnThreshold: threshold,
+	})
+	if err != nil {
+		die(err)
+	}
+
+	fmt.Println("Email preferences updated")
 }

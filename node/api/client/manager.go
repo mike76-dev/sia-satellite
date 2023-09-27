@@ -1,6 +1,8 @@
 package client
 
 import (
+	"encoding/json"
+
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 )
@@ -47,4 +49,21 @@ func (c *Client) ManagerBalanceGet(key string) (ub modules.UserBalance, err erro
 func (c *Client) ManagerRentersGet() (rg api.RentersGET, err error) {
 	err = c.get("/manager/renters", &rg)
 	return
+}
+
+// ManagerPreferencesGet requests the /manager/preferences resource.
+func (c *Client) ManagerPreferencesGet() (ep api.EmailPreferences, err error) {
+	err = c.get("/manager/preferences", &ep)
+	return
+}
+
+// ManagerPreferencesPost uses the /manager/preferences resource to change
+// the email preferences.
+func (c *Client) ManagerPreferencesPost(ep api.EmailPreferences) error {
+	json, err := json.Marshal(ep)
+	if err != nil {
+		return err
+	}
+	err = c.post("/manager/preferences", string(json), nil)
+	return err
 }

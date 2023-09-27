@@ -1110,3 +1110,19 @@ func (m *Manager) AcceptContracts(rpk types.PublicKey, contracts []modules.Contr
 func (m *Manager) DownloadObject(w io.Writer, rpk types.PublicKey, path string) error {
 	return m.hostContractor.DownloadObject(w, rpk, path)
 }
+
+// GetEmailPreferences returns the email preferences.
+func (m *Manager) GetEmailPreferences() (string, types.Currency) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.email, m.warnThreshold
+}
+
+// SetEmailPreferences changes the email preferences.
+func (m *Manager) SetEmailPreferences(email string, threshold types.Currency) error {
+	err := m.setEmailPreferences(email, threshold)
+	if err != nil {
+		m.log.Println("ERROR: couldn't save email preferences:", err)
+	}
+	return err
+}

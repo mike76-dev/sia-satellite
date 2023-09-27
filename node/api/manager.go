@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -91,6 +92,12 @@ type (
 		DisabledContracts         []RenterContract `json:"disabledcontracts"`
 		ExpiredContracts          []RenterContract `json:"expiredcontracts"`
 		ExpiredRefreshedContracts []RenterContract `json:"expiredrefreshedcontracts"`
+	}
+
+	// EmailPreferences contains the email preferences.
+	EmailPreferences struct {
+		Email         string         `json:"email"`
+		WarnThreshold types.Currency `json:"threshold"`
 	}
 )
 
@@ -379,4 +386,34 @@ func (api *API) managerContractsHandlerGET(w http.ResponseWriter, _ *http.Reques
 	}
 
 	WriteJSON(w, rc)
+}
+
+// managerPreferencesHandlerGET handles the API call to /manager/preferences.
+func (api *API) managerPreferencesHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
+	email, threshold := api.manager.GetEmailPreferences()
+	ep := EmailPreferences{
+		Email:         email,
+		WarnThreshold: threshold,
+	}
+
+	WriteJSON(w, ep)
+}
+
+// managerPreferencesHandlerPOST handles the API call to /manager/preferences.
+func (api *API) managerPreferencesHandlerPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	// Parse parameters.
+	var ep EmailPreferences
+	err := json.NewDecoder(req.Body).Decode(&ep)
+	if err != nil {
+		WriteError(w, Error{"invalid parameters: " + err.Error()}, http.StatusBadRequest)
+		return
+	}
+
+	// Set the preferences.
+	if err := api.manager.SetEmailPreferences(ep.Email, ep.WarnThreshold); err != nil {
+		WriteError(w, Error{"failed to change the preferences: " + err.Error()}, http.StatusInternalServerError)
+		return
+	}
+
+	WriteSuccess(w)
 }
