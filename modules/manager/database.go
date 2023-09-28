@@ -307,20 +307,18 @@ func (m *Manager) setEmailPreferences(email string, threshold types.Currency) er
 	return err
 }
 
-const (
-	// warningTemplate contains the text send by email when the wallet
-	// balance falls below the set threshold.
-	warningTemplate = `
-		<!-- template.html -->
-		<!DOCTYPE html>
-		<html>
-		<body>
-    	<h2>Please Check Your Wallet Balance</h2>
-	    <p>Your wallet balance is {{.Balance}}, which is below the threshold of {{.Threshold}}.</p>
-		</body>
-		</html>
-	`
-)
+// warningTemplate contains the text send by email when the wallet
+// balance falls below the set threshold.
+const warningTemplate = `
+	<!-- template.html -->
+	<!DOCTYPE html>
+	<html>
+	<body>
+   	<h2>Please Check Your Wallet Balance</h2>
+    <p>Your wallet balance is {{.Balance}}, which is below the threshold of {{.Threshold}}.</p>
+	</body>
+	</html>
+`
 
 // sendWarning sends a warning email to the satellite operator.
 func (m *Manager) sendWarning() {

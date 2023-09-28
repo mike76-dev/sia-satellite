@@ -1,7 +1,10 @@
 package manager
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"text/template"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/external"
@@ -233,6 +236,47 @@ func (m *Manager) GetExchangeRate(currency string) (float64, error) {
 	return rate, nil
 }
 
+// reportTemplate contains the monthly report send by email.
+const reportTemplate = `
+	<!-- template.html -->
+	<!DOCTYPE html>
+	<html>
+	<head>
+	<style>td {padding-right: 10px;}</style>
+	</head>
+	<body>
+   	<h2>Your Monthly Report</h2>
+    <p>Your monthly report for {{.Month}} {{.Year}} is ready.</p>
+	<table>
+	<tr>
+	<td>Total renters</td><td>{{.NumRenters}}</td><td></td>
+	</tr>
+	<tr>
+	<td>Contracts formed</td><td>{{.NumFormed}}</td><td>{{.FeeFormed}}</td>
+	</tr>
+	<tr>
+	<td>Contracts renewed</td><td>{{.NumRenewed}}</td><td>{{.FeeRenewed}}</td>
+	</tr>
+	<tr>
+	<td>Slabs stored</td><td>{{.NumStored}}</td><td>{{.FeeStored}}</td>
+	</tr>
+	<tr>
+	<td>Slabs saved</td><td>{{.NumSaved}}</td><td>{{.FeeSaved}}</td>
+	</tr>
+	<tr>
+	<td>Slabs retrieved</td><td>{{.NumRetrieved}}</td><td>{{.FeeRetrieved}}</td>
+	</tr>
+	<tr>
+	<td>Slabs migrated</td><td>{{.NumMigrated}}</td><td>{{.FeeMigrated}}</td>
+	</tr>
+	<tr>
+	<td><strong>Total revenue</strong></td><td></td><td><strong>{{.Revenue}}</strong></td>
+	</tr>
+	</table>
+	</body>
+	</html>
+`
+
 // ProcessConsensusChange gets called to inform Manager about the
 // changes in the consensus set.
 func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
@@ -240,6 +284,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 	for _, block := range cc.AppliedBlocks {
 		m.mu.RLock()
 		currentMonth := m.currentMonth.Timestamp.Month()
+		currentYear := m.currentMonth.Timestamp.Year()
 		m.mu.RUnlock()
 		newMonth := block.Timestamp.Month()
 		if newMonth != currentMonth {
@@ -257,12 +302,24 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 
 			// Move the current spendings of each renter to the previous ones.
 			renters := m.Renters()
+			var formed, renewed, stored, saved, retrieved, migrated uint64
+			var formedFee, renewedFee, storedFee, savedFee, retrievedFee, migratedFee float64
 			for _, renter := range renters {
 				us, err := m.GetSpendings(renter.Email)
 				if err != nil {
 					m.log.Println("ERROR: couldn't retrieve renter spendings:", err)
 					continue
 				}
+				formed += us.CurrentFormed
+				formedFee += float64(us.CurrentFormed) * modules.FormContractFee
+				renewed += us.CurrentRenewed
+				renewedFee += float64(us.CurrentRenewed) * modules.FormContractFee
+				saved += us.CurrentSlabsSaved
+				savedFee += float64(us.CurrentSlabsSaved) * modules.SaveMetadataFee
+				retrieved += us.CurrentSlabsRetrieved
+				retrievedFee += float64(us.CurrentSlabsRetrieved) * modules.RetrieveMetadataFee
+				migrated += us.CurrentSlabsMigrated
+				migratedFee += float64(us.CurrentSlabsMigrated) * modules.MigrateSlabFee
 				us.PrevLocked = us.CurrentLocked
 				us.PrevUsed = us.CurrentUsed
 				us.PrevOverhead = us.CurrentOverhead
@@ -285,6 +342,8 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					continue
 				}
 				fee := float64(modules.StoreMetadataFee * count)
+				stored += uint64(count)
+				storedFee += fee
 				us.PrevUsed += fee
 				us.PrevOverhead += fee
 				err = m.UpdateSpendings(renter.Email, us)
@@ -307,6 +366,61 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					m.log.Println("ERROR: couldn't update balance", err)
 				}
 			}
+
+			// Send a monthly report by email.
+			func() {
+				if m.email == "" {
+					return
+				}
+				type report struct {
+					Month        string
+					Year         int
+					NumRenters   int
+					NumFormed    uint64
+					FeeFormed    string
+					NumRenewed   uint64
+					FeeRenewed   string
+					NumStored    uint64
+					FeeStored    string
+					NumSaved     uint64
+					FeeSaved     string
+					NumRetrieved uint64
+					FeeRetrieved string
+					NumMigrated  uint64
+					FeeMigrated  string
+					Revenue      string
+				}
+				revenue := formedFee + renewedFee + storedFee + savedFee + retrievedFee + migratedFee
+				t := template.New("report")
+				t, err := t.Parse(reportTemplate)
+				if err != nil {
+					m.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+					return
+				}
+				var b bytes.Buffer
+				t.Execute(&b, report{
+					Month:        currentMonth.String(),
+					Year:         currentYear,
+					NumRenters:   len(renters),
+					NumFormed:    formed,
+					FeeFormed:    fmt.Sprintf("%.2f SC", formedFee),
+					NumRenewed:   renewed,
+					FeeRenewed:   fmt.Sprintf("%.2f SC", renewedFee),
+					NumStored:    stored,
+					FeeStored:    fmt.Sprintf("%.2f SC", storedFee),
+					NumSaved:     saved,
+					FeeSaved:     fmt.Sprintf("%.2f SC", savedFee),
+					NumRetrieved: retrieved,
+					FeeRetrieved: fmt.Sprintf("%.2f SC", retrievedFee),
+					NumMigrated:  migrated,
+					FeeMigrated:  fmt.Sprintf("%.2f SC", migratedFee),
+					Revenue:      fmt.Sprintf("%.2f SC", revenue),
+				})
+				err = m.ms.SendMail("Sia Satellite", m.email, "Your Monthly Report", &b)
+				if err != nil {
+					m.log.Println("ERROR: unable to send a monthly report:", err)
+				}
+			}()
 
 			m.syncDB()
 			break
