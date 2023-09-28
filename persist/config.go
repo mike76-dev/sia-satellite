@@ -17,6 +17,7 @@ const configFilename = "satdconfig.json"
 
 // SatdConfig contains the fields that are passed on to the new node.
 type SatdConfig struct {
+	Name          string `json:"name"`
 	UserAgent     string `json:"agent"`
 	GatewayAddr   string `json:"gateway"`
 	APIAddr       string `json:"api"`

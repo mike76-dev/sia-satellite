@@ -178,6 +178,7 @@ type Manager struct {
 	prevMonth    blockTimestamp
 
 	// Email preferences.
+	name          string // Name of the satellite node.
 	email         string
 	warnThreshold types.Currency
 
@@ -193,7 +194,7 @@ type Manager struct {
 }
 
 // New returns an initialized Manager.
-func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, dir string) (*Manager, <-chan error) {
+func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, dir string, name string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
 
 	// Check that all the dependencies were provided.
@@ -231,6 +232,7 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gate
 
 	// Create the Manager object.
 	m := &Manager{
+		name:   name,
 		cs:     cs,
 		db:     db,
 		ms:     ms,

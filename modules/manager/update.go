@@ -246,7 +246,7 @@ const reportTemplate = `
 	</head>
 	<body>
    	<h2>Your Monthly Report</h2>
-    <p>Your monthly report for {{.Month}} {{.Year}} is ready.</p>
+    <p>Your monthly report on <strong>{{.Name}}</strong> for {{.Month}} {{.Year}} is ready.</p>
 	<table>
 	<tr>
 	<td>Total renters</td><td>{{.NumRenters}}</td><td></td>
@@ -373,6 +373,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					return
 				}
 				type report struct {
+					Name         string
 					Month        string
 					Year         int
 					NumRenters   int
@@ -399,6 +400,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				}
 				var b bytes.Buffer
 				t.Execute(&b, report{
+					Name:         m.name,
 					Month:        currentMonth.String(),
 					Year:         currentYear,
 					NumRenters:   len(renters),

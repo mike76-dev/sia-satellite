@@ -13,6 +13,7 @@ import (
 
 // Default config values.
 var defaultConfig = persist.SatdConfig{
+	Name:          "",
 	UserAgent:     "Sat-Agent",
 	GatewayAddr:   ":0",
 	APIAddr:       "localhost:9990",
@@ -76,6 +77,7 @@ func main() {
 	}
 
 	// Parse command line flags. If set, they override the loaded config.
+	name := flag.String("name", "", "name of the satellite node")
 	userAgent := flag.String("agent", "", "custom agent used for API calls")
 	gatewayAddr := flag.String("addr", "", "address to listen on for peer connections")
 	apiAddr := flag.String("api-addr", "", "address to serve API on")
@@ -86,6 +88,9 @@ func main() {
 	dbName := flag.String("db-name", "", "name of MYSQL database")
 	portalPort := flag.String("portal", "", "port number the portal server listens at")
 	flag.Parse()
+	if *name != "" {
+		config.Name = *name
+	}
 	if *userAgent != "" {
 		config.UserAgent = *userAgent
 	}

@@ -315,7 +315,8 @@ const warningTemplate = `
 	<html>
 	<body>
    	<h2>Please Check Your Wallet Balance</h2>
-    <p>Your wallet balance is {{.Balance}}, which is below the threshold of {{.Threshold}}.</p>
+    <p>The wallet balance of <strong>{{.Name}}</strong> is <strong>{{.Balance}}</strong>,
+	which is below the threshold of <strong>{{.Threshold}}</strong>.</p>
 	</body>
 	</html>
 `
@@ -359,6 +360,7 @@ func (m *Manager) sendWarning() {
 
 	// Send a warning.
 	type warning struct {
+		Name      string
 		Balance   types.Currency
 		Threshold types.Currency
 	}
@@ -371,6 +373,7 @@ func (m *Manager) sendWarning() {
 	}
 	var b bytes.Buffer
 	t.Execute(&b, warning{
+		Name:      m.name,
 		Balance:   balance,
 		Threshold: m.warnThreshold,
 	})
