@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"text/template"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -282,20 +283,16 @@ func (m *Manager) getEmailPreferences() error {
 	d := types.NewDecoder(io.LimitedReader{R: buf, N: 24})
 	var threshold types.Currency
 	threshold.DecodeFrom(d)
-	m.mu.Lock()
 	m.email = email
 	m.warnThreshold = threshold
-	m.mu.Unlock()
 	tx.Commit()
 	return nil
 }
 
 // setEmailPreferences changes the email preferences.
 func (m *Manager) setEmailPreferences(email string, threshold types.Currency) error {
-	m.mu.Lock()
 	m.email = email
 	m.warnThreshold = threshold
-	m.mu.Unlock()
 
 	var buf bytes.Buffer
 	e := types.NewEncoder(&buf)
@@ -308,4 +305,97 @@ func (m *Manager) setEmailPreferences(email string, threshold types.Currency) er
 	`, email, buf.Bytes(), 0)
 
 	return err
+}
+
+const (
+	// warningTemplate contains the text send by email when the wallet
+	// balance falls below the set threshold.
+	warningTemplate = `
+		<!-- template.html -->
+		<!DOCTYPE html>
+		<html>
+		<body>
+    	<h2>Please Check Your Wallet Balance</h2>
+	    <p>Your wallet balance is {{.Balance}}, which is below the threshold of {{.Threshold}}.</p>
+		</body>
+		</html>
+	`
+)
+
+// sendWarning sends a warning email to the satellite operator.
+func (m *Manager) sendWarning() {
+	// Check if the email is set.
+	if m.email == "" {
+		return
+	}
+
+	// Check the wallet balance.
+	balance, _, _, err := m.wallet.ConfirmedBalance()
+	if err != nil {
+		m.log.Println("ERROR: couldn't retrieve wallet balance:", err)
+		return
+	}
+	if balance.Cmp(m.warnThreshold) >= 0 {
+		return
+	}
+
+	// Balance is low; check if a warning has been sent today.
+	tx, err := m.db.Begin()
+	if err != nil {
+		m.log.Println("ERROR: couldn't start transaction:", err)
+		return
+	}
+	var timestamp uint64
+	err = tx.QueryRow("SELECT time_sent FROM mg_email WHERE id = 1").Scan(&timestamp)
+	if err != nil {
+		m.log.Println("ERROR: couldn't retrieve timestamp:", err)
+		tx.Rollback()
+		return
+	}
+	daySent := time.Unix(int64(timestamp), 0).Day()
+	dayNow := time.Now().Day()
+	if timestamp > 0 && daySent == dayNow {
+		tx.Rollback()
+		return
+	}
+
+	// Send a warning.
+	type warning struct {
+		Balance   types.Currency
+		Threshold types.Currency
+	}
+	t := template.New("warning")
+	t, err = t.Parse(warningTemplate)
+	if err != nil {
+		m.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		tx.Rollback()
+		return
+	}
+	var b bytes.Buffer
+	t.Execute(&b, warning{
+		Balance:   balance,
+		Threshold: m.warnThreshold,
+	})
+	err = m.ms.SendMail("Sia Satellite", m.email, "Warning: Balance Low", &b)
+	if err != nil {
+		m.log.Println("ERROR: unable to send a warning:", err)
+		tx.Rollback()
+		return
+	}
+
+	// Update the database.
+	_, err = tx.Exec(`
+		UPDATE mg_email
+		SET time_sent = ?
+		WHERE id = 1
+	`, time.Now().Unix())
+	if err != nil {
+		m.log.Println("ERROR: couldn't update database:", err)
+		tx.Rollback()
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		m.log.Println("ERROR: couldn't commit the changes:", err)
+	}
 }

@@ -312,4 +312,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 			break
 		}
 	}
+
+	// Send a warning email if the wallet balance becomes low.
+	m.sendWarning()
 }

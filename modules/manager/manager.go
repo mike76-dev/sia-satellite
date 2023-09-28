@@ -1113,8 +1113,6 @@ func (m *Manager) DownloadObject(w io.Writer, rpk types.PublicKey, path string) 
 
 // GetEmailPreferences returns the email preferences.
 func (m *Manager) GetEmailPreferences() (string, types.Currency) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	return m.email, m.warnThreshold
 }
 
