@@ -16,11 +16,11 @@ You will also need an email account, from which the users will be receiving emai
 
 ## To Start With
 
-Log into your server and download the Satellite files. This guide assumes that you will use the version `0.1.0-beta` for an x86 CPU:
+Log into your server and download the Satellite files. This guide assumes that you will use the version `0.5.0` for an x86 CPU:
 ```
 mkdir ~/satellite
 cd ~/satellite
-wget -q https://github.com/mike76-dev/satellite/releases/download/v0.1.0-beta/satellite_linux_amd64.zip
+wget -q https://github.com/mike76-dev/satellite/releases/download/v0.5.0/satellite_linux_amd64.zip
 unzip satellite_linux_amd64.zip
 rm satellite_linux_amd64.zip
 ```
@@ -412,21 +412,20 @@ Open the `satdconfig.json` file:
 ```
 $ nano satdconfig.json
 ```
-Fill in the `dbuser` and `dbname` fields with the MySQL user name (`satuser`) and the database name (`satellite`). Set the directory to store the `satd` metadata and log files (here it is `/usr/local/etc/satd`). You can also change the default portal API port number (`:8080`) as well as the other ports:
+First, choose a `name` of your satellite node (Hint: it makes sense to use your domain name for it). This is required to receive email reports later on. Fill in the `dbUser` and `dbName` fields with the MySQL user name (`satuser`) and the database name (`satellite`). Set the directory to store the `satd` metadata and log files (here it is `/usr/local/etc/satd`). You can also change the default portal API port number (`:8080`) as well as the other ports:
 ```
 "Satd Configuration"
-"0.1.0"
+"0.2.0"
 {
+  "name": "your_chosen_name",
 	"agent": "Sat-Agent",
 	"gateway": ":0",
 	"api": "localhost:9990",
 	"satellite": ":9992",
-	"siamux": "",
-	"siamuxws": "",
 	"dir": "/usr/local/etc/satd",
 	"bootstrap": true,
-	"dbuser": "satuser",
-	"dbname": "satellite",
+	"dbUser": "satuser",
+	"dbName": "satellite",
 	"portal": ":8080"
 }
 ```
@@ -528,9 +527,10 @@ Jul 31 15:16:17 <host> systemd[1]: Started satd.
 Jul 31 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
 Jul 31 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
 Jul 31 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
-Jul 31 15:16:17 <host> satd[226480]: satd v0.3.0
-Jul 31 15:16:17 <host> satd[226480]: Git Revision c9352a6
+Jul 31 15:16:17 <host> satd[226480]: satd v0.5.0
+Jul 31 15:16:17 <host> satd[226480]: Git Revision 2f5a918
 Jul 31 15:16:17 <host> satd[226480]: Loading...
+Jul 31 15:16:17 <host> satd[226480]: Creating mail client...
 Jul 31 15:16:17 <host> satd[226480]: Connecting to the SQL database...
 Jul 31 15:16:17 <host> satd[226480]: Loading gateway...
 Jul 31 15:16:17 <host> satd[226480]: Loading consensus...
@@ -604,6 +604,15 @@ Output:
 Created new address: <address>
 ```
 You can now send Siacoin to this address to fund the Satellite, however the funds will not show up until you are fully synced.
+
+Last, you may want to sign up for receiving monthly email reports as well as alerts about the low wallet balance. To do this, run
+```
+$ satc manager setpreferences <your_email_address> 1KS --apipassword <api_password>
+```
+Here, `1KS` is the balance threshold, after which you will be receiving daily email alerts. You can choose any other value. If you want to unsubscribe, run
+```
+$ satc manager setpreferences none 0 --apipassword <api_password>
+```
 
 ## Setting Up the Web Portal
 

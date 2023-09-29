@@ -42,3 +42,18 @@ Renter Seed: the renter seed displayed on the Account page of the Satellite port
 When you have finished, enable the Satellite and save the config.
 
 Now you're all set!
+
+## Opt-In Settings
+
+There is a number of settings on the Satellite page, which enable or disable some additional features. Most of them imply sharing a derived (non-master) private key with the Satellite. When you disable an option, any sensitive information is removed from the Satellite.
+
+### Auto Renew Contracts
+When you enable this, the Satellite will try to renew any contract that is about to expire. The autopilot of `renterd` will import any renewed contracts on startup as well as during each contract maintenance. This allows you to run `renterd` less frequently, but you need to keep in mind that only `renterd` can still form new contracts, so if the renewals eventually fail, your contract set and the data stored will slowly degrade.
+
+### Backup File Metadata
+By enabling this option, `renterd` will save any file metadata on the Satellite when you upload a file. Then, if you delete a file accidentally in `renterd`, or if your data becomes corrupt, `renterd` will import the file back from the satellite. If you want to delete a file permanently, you need to do it also in the Satellite dashboard.
+
+### File Auto Repair
+This option needs both _Auto Renew Contracts_ and _Backup File Metadata_ to be enabled to work. When you enable it, the Satellite takes over almost all contract maintenance: contract formations, renewals, and refreshes, as well as monitoring the file health and migrating unhealthy slabs to new hosts. Enabling this option allows you to turn on `renterd` only if you need to upload or download files, which you can do as often as you like, even once in a few years. The only thing you need to care of is maintaining a positive balance with the Satellite.
+
+IMPORTANT: Please note that S3 interface and upload packing are not supported yet.
