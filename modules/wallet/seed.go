@@ -1,7 +1,6 @@
 package wallet
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/binary"
 	"errors"
@@ -9,10 +8,9 @@ import (
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"golang.org/x/crypto/blake2b"
 
 	"go.sia.tech/core/types"
-
-	"golang.org/x/crypto/ed25519"
 
 	"lukechampine.com/frand"
 )
@@ -38,16 +36,18 @@ type (
 // generateSpendableKey creates the keys and unlock conditions for seed at a
 // given index.
 func generateSpendableKey(seed modules.Seed, index uint64) spendableKey {
-	h := types.NewHasher()
-	h.E.Write(seed[:])
-	h.E.WriteUint64(index)
-	entropy := h.Sum()
-	pk, sk, _ := ed25519.GenerateKey(bytes.NewReader(entropy[:]))
+	h := blake2b.Sum256(seed[:])
+	buf := make([]byte, 32+8)
+	copy(buf[:32], h[:])
+	binary.LittleEndian.PutUint64(buf[32:], index)
+	s := blake2b.Sum256(buf)
+	sk := types.NewPrivateKeyFromSeed(s[:])
+	pk := sk.PublicKey()
 	return spendableKey{
 		UnlockConditions: types.UnlockConditions{
-			PublicKeys:         []types.UnlockKey{{
+			PublicKeys: []types.UnlockKey{{
 				Algorithm: types.SpecifierEd25519,
-				Key:       pk,
+				Key:       pk[:],
 			}},
 			SignaturesRequired: 1,
 		},
@@ -68,7 +68,7 @@ func generateKeys(seed modules.Seed, start, n uint64) []spendableKey {
 				// NOTE: don't bother trying to optimize generateSpendableKey;
 				// profiling shows that ed25519 key generation consumes far
 				// more CPU time than encoding or hashing.
-				keys[i] = generateSpendableKey(seed, start + i)
+				keys[i] = generateSpendableKey(seed, start+i)
 			}
 		}(uint64(cpu))
 	}
@@ -118,7 +118,7 @@ func (w *Wallet) regenerateLookahead(start uint64) {
 	maxKeys := maxLookahead(start)
 	existingKeys := uint64(len(w.lookahead))
 
-	for i, k := range generateKeys(w.primarySeed, start + existingKeys, maxKeys - existingKeys) {
+	for i, k := range generateKeys(w.primarySeed, start+existingKeys, maxKeys-existingKeys) {
 		w.lookahead[k.UnlockConditions.UnlockHash()] = start + existingKeys + uint64(i)
 	}
 }
@@ -155,7 +155,7 @@ func (w *Wallet) nextPrimarySeedAddresses(tx *sql.Tx, n uint64) ([]types.UnlockC
 		if err != nil {
 			return []types.UnlockConditions{}, err
 		}
-		if err = dbPutPrimarySeedProgress(tx, progress + n); err != nil {
+		if err = dbPutPrimarySeedProgress(tx, progress+n); err != nil {
 			return []types.UnlockConditions{}, err
 		}
 
@@ -394,7 +394,7 @@ func (w *Wallet) LoadSeed(masterKey modules.WalletKey, seed modules.Seed) error 
 		_, err = w.dbTx.Exec("DELETE FROM wt_txn")
 		if err != nil {
 			return err
-		} 
+		}
 		w.unconfirmedProcessedTransactions = processedTransactionList{}
 
 		// Reset the consensus change ID and height in preparation for rescan.
@@ -501,7 +501,7 @@ func (w *Wallet) SweepSeed(seed modules.Seed) (coins types.Currency, funds uint6
 		siacoinOutputs = siacoinOutputs[n:]
 
 		// Process up to (maxOutputs-n) siafundOutputs.
-		txnSiafundOutputs := make([]scannedOutput, maxOutputs - n)
+		txnSiafundOutputs := make([]scannedOutput, maxOutputs-n)
 		n = copy(txnSiafundOutputs, siafundOutputs)
 		txnSiafundOutputs = txnSiafundOutputs[:n]
 		siafundOutputs = siafundOutputs[n:]
