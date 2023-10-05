@@ -18,7 +18,12 @@ func (p *Portal) load() error {
 		return err
 	}
 
-	return p.loadCredits()
+	err = p.loadCredits()
+	if err != nil {
+		return err
+	}
+
+	return p.loadTransactions()
 }
 
 // save saves the Portal's persistent data to disk.

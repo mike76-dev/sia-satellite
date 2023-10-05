@@ -116,6 +116,10 @@ function setActiveMenuIndex(ind) {
 	if (ind == 3) {
 		getSpendings();
 	}
+	if (ind == 4) {
+		document.getElementById('sc-generate').innerText = 'Show Address';
+		document.getElementById('sc-address').value = '';
+	}
 	if (ind == 5) {
 		getPayments();
 	}
@@ -637,6 +641,11 @@ function renderPayments() {
 		tr.innerHTML += `<td>${row.amount.toFixed(2)}</td>`;
 		tr.innerHTML += `<td>${row.currency}</td>`;
 		tr.innerHTML += `<td>${row.amountsc.toFixed(2)} SC</td>`;
+		if (row.confirmations > 0) {
+			tr.innerHTML += `<td>${6-row.confirmations}/6 confirmations</td>`;
+		} else {
+			tr.innerHTML += '<td></td>';
+		}
 		tbody.appendChild(tr);
 	});
 	document.getElementById('history-empty').classList.add('disabled');
@@ -1360,6 +1369,40 @@ function settingsChange(e) {
 		.then(data => {
 			if (data) {
 				console.log(data);
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function showAddress() {
+	let g = document.getElementById('sc-generate');
+	let a = document.getElementById('sc-address');
+	if (g.innerText == 'Copy') {
+		g.disabled = true;
+		a.select();
+		a.setSelectionRange(0, 99);
+		navigator.clipboard.writeText(a.value);
+		g.innerText = 'Copied!';
+		window.setTimeout(function() {
+			g.innerText = 'Copy';
+			g.disabled = false;
+		}, 1000);
+		return;
+	}
+	g.disabled = true;
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/address', options)
+		.then(response => response.json())
+		.then(data => {
+			if (data.address) {
+				a.value = data.address;
+				g.innerText = 'Copy';
+				g.disabled = false;
 			}
 		})
 		.catch(error => console.log(error));

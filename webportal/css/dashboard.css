@@ -421,7 +421,7 @@ tbody > tr:nth-child(odd) {
 	fill: #ffffff;
 }
 
-#reveal > div {
+#reveal > div, #sc > div {
 	width: 100%;
 }
 

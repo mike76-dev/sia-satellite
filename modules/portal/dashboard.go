@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/internal/build"
@@ -57,10 +58,11 @@ type (
 	// userPayment contains the details of a payment made by the user
 	// account.
 	userPayment struct {
-		Amount    float64 `json:"amount"`
-		Currency  string  `json:"currency"`
-		AmountSC  float64 `json:"amountsc"`
-		Timestamp uint64  `json:"timestamp"`
+		Amount            float64 `json:"amount"`
+		Currency          string  `json:"currency"`
+		AmountSC          float64 `json:"amountsc"`
+		Timestamp         uint64  `json:"timestamp"`
+		ConfirmationsLeft int     `json:"confirmations"`
 	}
 
 	// renterContract represents a contract formed by the renter.
@@ -827,4 +829,30 @@ func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _
 			}, http.StatusInternalServerError)
 		return
 	}
+}
+
+// addressHandlerGET handles the GET /dashboard/address requests.
+func (api *portalAPI) addressHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Get the wallet address.
+	address, err := api.portal.getSiacoinAddress(email)
+	if err != nil {
+		api.portal.log.Printf("ERROR: error getting payment address: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, struct {
+		Address string `json:"address"`
+	}{Address: strings.TrimPrefix(address.String(), "addr:")})
 }

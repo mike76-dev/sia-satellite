@@ -137,6 +137,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.GET("/dashboard/file", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.fileHandlerGET(w, req, ps)
 	})
+	router.GET("/dashboard/address", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.addressHandlerGET(w, req, ps)
+	})
 
 	// /stripe requests.
 	router.POST("/stripe/create-payment-intent", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {

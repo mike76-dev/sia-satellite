@@ -293,6 +293,7 @@ CREATE TABLE pt_accounts (
 	verified      BOOL NOT NULL,
 	time          BIGINT UNSIGNED NOT NULL,
 	nonce         BINARY(16) NOT NULL,
+	sc_address    BINARY(32) NOT NULL,
 	PRIMARY KEY (id)
 );
 
@@ -303,6 +304,8 @@ CREATE TABLE pt_payments (
 	currency  VARCHAR(8) NOT NULL,
 	amount_sc DOUBLE NOT NULL,
 	made_at   INT NOT NULL,
+	conf_left INT NOT NULL,
+	txid      BINARY(32) NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );

@@ -590,6 +590,14 @@
 							</section>
 						</div>
 					</section>
+					<section id="sc">
+						<h2>Rather pay in Siacoin? No problem!</h2>
+						<div class="content">
+							<label for="sc-address" class="content-label">Payment Address</label>
+							<input id="sc-address" class="input" type="text" readonly>
+							<button id="sc-generate" onclick="showAddress()">Show Address</button>
+						</div>
+					</section>
 					<section id="payment" class="disabled">
 						<p>You are going to make a payment of</p>
 						<h2 id="to-pay"></h2>.
@@ -649,7 +657,8 @@
 											</th>
 											<th style="width: 5rem">Amount</th>
 											<th style="width: 6rem">Currency</th>
-											<th>SC Equivalent</th>
+											<th style="width: 8rem">SC Equivalent</th>
+											<th></th>
 										</tr>
 									</thead>
 									<tbody id="history-table">

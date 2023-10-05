@@ -12,12 +12,15 @@ import (
 	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
+	"go.sia.tech/core/types"
 )
 
 var (
 	// Nil dependency errors.
 	errNilDB       = errors.New("portal cannot use a nil database")
 	errNilMail     = errors.New("portal cannot use a nil mail client")
+	errNilCS       = errors.New("portal cannot use a nil state")
+	errNilWallet   = errors.New("portal cannot use a nil wallet")
 	errNilManager  = errors.New("portal cannot use a nil manager")
 	errNilProvider = errors.New("portal cannot use a nil provider")
 )
@@ -26,6 +29,8 @@ var (
 type Portal struct {
 	// Dependencies.
 	db       *sql.DB
+	cs       modules.ConsensusSet
+	w        modules.Wallet
 	manager  modules.Manager
 	provider modules.Provider
 
@@ -35,6 +40,9 @@ type Portal struct {
 	// Atomic stats.
 	authStats map[string]authenticationStats
 	credits   modules.CreditData
+
+	// Watch list of SC payment transactions.
+	transactions map[types.TransactionID]types.Address
 
 	// Utilities.
 	listener      net.Listener
@@ -47,7 +55,7 @@ type Portal struct {
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, m modules.Manager, p modules.Provider, dir string) (*Portal, error) {
+func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wallet, m modules.Manager, p modules.Provider, dir string) (*Portal, error) {
 	var err error
 
 	// Check that all the dependencies were provided.
@@ -56,6 +64,12 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, m modules.M
 	}
 	if ms == nil {
 		return nil, errNilMail
+	}
+	if cs == nil {
+		return nil, errNilCS
+	}
+	if w == nil {
+		return nil, errNilWallet
 	}
 	if m == nil {
 		return nil, errNilManager
@@ -68,12 +82,15 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, m modules.M
 	pt := &Portal{
 		db:       db,
 		ms:       ms,
+		cs:       cs,
+		w:        w,
 		manager:  m,
 		provider: p,
 
 		apiPort: config.PortalPort,
 
-		authStats: make(map[string]authenticationStats),
+		authStats:    make(map[string]authenticationStats),
+		transactions: make(map[types.TransactionID]types.Address),
 
 		staticAlerter: modules.NewAlerter("portal"),
 		closeChan:     make(chan int, 1),
@@ -117,6 +134,9 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, m modules.M
 	// Spawn the thread to periodically prune the unverified accounts.
 	go pt.threadedPruneUnverifiedAccounts()
 
+	// Spawn the thread to periodically check the wallet.
+	go pt.threadedWatchForNewTxns()
+
 	// Make sure that the portal saves after shutdown.
 	pt.tg.AfterStop(func() {
 		pt.mu.Lock()
@@ -131,6 +151,23 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, m modules.M
 		pt.log.Println("ERROR: unable to start the portal server:", err)
 		return nil, err
 	}
+
+	// Subscribe to the consensus set using the most recent consensus change.
+	go func() {
+		err := pt.cs.ConsensusSetSubscribe(pt, modules.ConsensusChangeRecent, pt.tg.StopChan())
+		if modules.ContainsError(err, siasync.ErrStopped) {
+			return
+		}
+		if err != nil {
+			pt.log.Critical(err)
+			return
+		}
+	}()
+	pt.tg.OnStop(func() {
+		pt.cs.Unsubscribe(pt)
+		// We don't want any recently made payments to go unnoticed.
+		pt.managedCheckWallet()
+	})
 
 	return pt, nil
 }

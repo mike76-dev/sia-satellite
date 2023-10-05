@@ -67,8 +67,8 @@ func (p *Portal) updateAccount(email, password string, verified bool) error {
 		}
 		pwHash := passwordHash(password)
 		_, err := p.db.Exec(`
-			INSERT INTO pt_accounts (email, password_hash, verified, time, nonce)
-			VALUES (?, ?, ?, ?, ?)`, email, pwHash[:], false, time.Now().Unix(), []byte{})
+			INSERT INTO pt_accounts (email, password_hash, verified, time, nonce, sc_address)
+			VALUES (?, ?, ?, ?, ?, ?)`, email, pwHash[:], false, time.Now().Unix(), []byte{}, []byte{})
 		return err
 	}
 
@@ -201,22 +201,38 @@ func (p *Portal) deleteAccount(email string) error {
 }
 
 // putPayment inserts a payment into the database.
-func (p *Portal) putPayment(email string, amount float64, currency string) error {
-	// Convert the amount to SC.
-	rate, err := p.manager.GetSiacoinRate(currency)
-	if err != nil {
-		return err
-	}
-	if rate == 0 {
-		return errors.New("unable to get SC exchange rate")
+func (p *Portal) putPayment(email string, amount float64, currency string, txid types.TransactionID) error {
+	// Check if the currency is SC.
+	var amountSC float64
+	var left int
+	if currency == "SC" {
+		amountSC = amount
+		left = 6
+	} else {
+		// Convert the amount to SC.
+		rate, err := p.manager.GetSiacoinRate(currency)
+		if err != nil {
+			return err
+		}
+		if rate == 0 {
+			return errors.New("unable to get SC exchange rate")
+		}
+		amountSC = amount / rate
 	}
 
 	// Insert the payment.
-	amountSC := amount / rate
 	timestamp := time.Now().Unix()
-	_, err = p.db.Exec(`
-		INSERT INTO pt_payments (email, amount, currency, amount_sc, made_at)
-		VALUES (?, ?, ?, ?, ?)`, email, amount, currency, amountSC, timestamp)
+	_, err := p.db.Exec(`
+		INSERT INTO pt_payments (email, amount, currency, amount_sc, made_at, conf_left, txid)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		email,
+		amount,
+		currency,
+		amountSC,
+		timestamp,
+		left,
+		txid[:],
+	)
 
 	return err
 }
@@ -263,7 +279,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	}
 
 	// Update the payments table.
-	if err = p.putPayment(email, amount, currency); err != nil {
+	if err = p.putPayment(email, amount, currency, types.TransactionID{}); err != nil {
 		return err
 	}
 
@@ -307,6 +323,137 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 		}
 	}
 
+	return nil
+}
+
+// addSiacoinPayment adds a new payment in Siacoin.
+func (p *Portal) addSiacoinPayment(email string, amount types.Currency, txid types.TransactionID) error {
+	// Sanity check.
+	if amount.IsZero() {
+		return errors.New("zero payment amount provided")
+	}
+
+	// Update the payments table.
+	amt := modules.Float64(amount) / modules.Float64(types.HastingsPerSiacoin)
+	if err := p.putPayment(email, amt, "SC", txid); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// confirmSiacoinPayment decrements the number of remaining payment
+// confirmations.
+func (p *Portal) confirmSiacoinPayment(txid types.TransactionID) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// Fetch the payment.
+	var email string
+	var amount float64
+	var left int
+	err = tx.QueryRow(`
+		SELECT email, amount, conf_left
+		FROM pt_payments
+		WHERE txid = ?
+	`, txid[:]).Scan(&email, &amount, &left)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		tx.Rollback()
+		return modules.AddContext(err, "couldn't fetch payment")
+	}
+
+	// Sanity check.
+	if left == 0 {
+		tx.Commit()
+		return nil
+	}
+
+	// Update the payments table.
+	left--
+	_, err = tx.Exec("UPDATE pt_payments SET conf_left = ? WHERE txid = ?", left, txid[:])
+	if err != nil {
+		return modules.AddContext(err, "couldn't update payment")
+	}
+
+	// If the tx is confirmed, increase the account balance.
+	if left == 0 {
+		// Delete from the map.
+		p.mu.Lock()
+		delete(p.transactions, txid)
+		p.mu.Unlock()
+
+		// Fetch the account.
+		var c, id string
+		var s bool
+		var b, l float64
+		err := tx.QueryRow(`
+			SELECT subscribed, sc_balance, sc_locked, currency, stripe_id
+			FROM mg_balances WHERE email = ?
+		`, email).Scan(&s, &b, &l, &c, &id)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't fetch account balance")
+		}
+
+		// Calculate the new balance.
+		ub := modules.UserBalance{
+			IsUser:     true,
+			Subscribed: s,
+			Balance:    b,
+			Locked:     l,
+			Currency:   c,
+			StripeID:   id,
+		}
+		ub.Balance += amount
+		if ub.Currency == "" {
+			ub.Currency = "USD"
+		}
+
+		// Update the balances table.
+		_, err = tx.Exec(`
+			REPLACE INTO mg_balances
+			(email, subscribed, sc_balance, sc_locked, currency, stripe_id)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't update account balance")
+		}
+
+		// Create a new renter if needed.
+		var count int
+		err = tx.QueryRow("SELECT COUNT(*) FROM ctr_renters WHERE email = ?", email).Scan(&count)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't fetch renters")
+		}
+		if count == 0 {
+			// New renter, need to create a new record.
+			seed, err := p.manager.GetWalletSeed()
+			defer frand.Read(seed[:])
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			renterSeed := modules.DeriveRenterSeed(seed, email)
+			defer frand.Read(renterSeed)
+			pk := types.NewPrivateKeyFromSeed(renterSeed).PublicKey()
+			if err = p.createNewRenter(email, pk); err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+// revertSiacoinPayment cancels a payment if the corresponding tx
+// is reverted.
+func (p *Portal) revertSiacoinPayment(txid types.TransactionID) error {
+	_, err := p.db.Exec("DELETE FROM pt_payments WHERE txid = ?", txid[:])
 	return err
 }
 
@@ -314,7 +461,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 // history.
 func (p *Portal) getPayments(email string) ([]userPayment, error) {
 	rows, err := p.db.Query(`
-		SELECT amount, currency, amount_sc, made_at FROM pt_payments
+		SELECT amount, currency, amount_sc, made_at, conf_left FROM pt_payments
 		WHERE email = ?
 	`, email)
 	if err != nil {
@@ -326,7 +473,7 @@ func (p *Portal) getPayments(email string) ([]userPayment, error) {
 	var payment userPayment
 
 	for rows.Next() {
-		err := rows.Scan(&payment.Amount, &payment.Currency, &payment.AmountSC, &payment.Timestamp)
+		err := rows.Scan(&payment.Amount, &payment.Currency, &payment.AmountSC, &payment.Timestamp, &payment.ConfirmationsLeft)
 		if err != nil {
 			return nil, err
 		}
@@ -547,6 +694,101 @@ func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
 		if err := p.manager.DeleteObject(pk, sf[index].Path); err != nil {
 			return modules.AddContext(err, "couldn't delete file")
 		}
+	}
+
+	return nil
+}
+
+// getSiacoinAddress returns the SC payment address of an account.
+func (p *Portal) getSiacoinAddress(email string) (address types.Address, err error) {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return
+	}
+
+	addr := make([]byte, 32)
+	err = tx.QueryRow("SELECT sc_address FROM pt_accounts WHERE email = ?", email).Scan(&addr)
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+
+	// Generate a new address if there is none yet.
+	b := make([]byte, 32)
+	if bytes.Equal(addr, b) {
+		var uc types.UnlockConditions
+		uc, err = p.w.NextAddress()
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+		address = uc.UnlockHash()
+		_, err = tx.Exec("UPDATE pt_accounts SET sc_address = ? WHERE email = ?", address[:], email)
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+	} else {
+		copy(address[:], addr)
+	}
+
+	tx.Commit()
+	return
+}
+
+// getSiacoinAddresses returns a map of SC addresses to the emails.
+func (p *Portal) getSiacoinAddresses() (addrs map[types.Address]string, err error) {
+	rows, err := p.db.Query("SELECT email, sc_address FROM pt_accounts")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	addrs = make(map[types.Address]string)
+	for rows.Next() {
+		a := make([]byte, 32)
+		var email string
+		var addr types.Address
+		if err = rows.Scan(&email, &a); err != nil {
+			return
+		}
+		copy(addr[:], a)
+		if (addr != types.Address{}) {
+			addrs[addr] = email
+		}
+	}
+
+	return
+}
+
+// loadTransactions loads the watch list of the SC payment transactions.
+func (p *Portal) loadTransactions() error {
+	rows, err := p.db.Query(`
+		SELECT txid, sc_address
+		FROM pt_payments
+		INNER JOIN pt_accounts
+		ON pt_payments.email = pt_accounts.email
+		WHERE conf_left > 0
+	`)
+	if err != nil {
+		return modules.AddContext(err, "couldn't query transactions")
+	}
+	defer rows.Close()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for rows.Next() {
+		t := make([]byte, 32)
+		a := make([]byte, 32)
+		var txid types.TransactionID
+		var addr types.Address
+		if err := rows.Scan(&t, &a); err != nil {
+			return modules.AddContext(err, "couldn't scan transaction")
+		}
+
+		copy(txid[:], t)
+		copy(addr[:], a)
+		p.transactions[txid] = addr
 	}
 
 	return nil
