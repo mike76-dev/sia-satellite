@@ -584,16 +584,27 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 		}
 
 		var txnFee types.Currency
+		var endHeight uint64
 		var found bool
 		for _, txn := range block.Transactions {
 			if len(txn.FileContracts) > 0 && txn.FileContractID(0) == contract.ID {
 				txnFee = txn.MinerFees[0]
+				endHeight = txn.FileContracts[0].WindowStart
 				found = true
 				break
 			}
 		}
 		if !found {
 			c.log.Println("ERROR: couldn't find transaction for", contract.ID)
+			continue
+		}
+
+		// Sanity check: the end height should not be in the past.
+		// We use consensusset.Height instead of c.blockHeight here, because
+		// the contractor may not be synced yet.
+		height := c.cs.Height()
+		if endHeight <= height {
+			c.log.Printf("WARN: a contract was submitted with the end height in the past: %v <= %v\n", endHeight, height)
 			continue
 		}
 
