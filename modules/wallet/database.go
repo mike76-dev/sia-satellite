@@ -365,7 +365,10 @@ func dbAppendProcessedTransaction(tx *sql.Tx, pt modules.ProcessedTransaction) e
 	e := types.NewEncoder(&buf)
 	pt.EncodeTo(e)
 	e.Flush()
-	_, err := tx.Exec("INSERT INTO wt_txn (txid, bytes) VALUES (?, ?)", pt.TransactionID[:], buf.Bytes())
+	_, err := tx.Exec(`
+		INSERT INTO wt_txn (txid, bytes) VALUES (?, ?) AS new
+		ON DUPLICATE KEY UPDATE bytes = new.bytes
+	`, pt.TransactionID[:], buf.Bytes())
 	if err != nil {
 		return modules.AddContext(err, "failed to store processed txn in database")
 	}

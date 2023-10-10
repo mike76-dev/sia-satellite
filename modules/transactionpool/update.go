@@ -178,7 +178,7 @@ func (tp *TransactionPool) ProcessConsensusChange(cc modules.ConsensusChange) {
 	// being provided to us correctly.
 	resetSanityCheck := false
 	recentID, err := tp.getRecentBlockID()
-	if modules.ContainsError(err, errNilRecentBlock) || cc.BlockHeight < tp.blockHeight {
+	if modules.ContainsError(err, errNilRecentBlock) || cc.BlockHeight <= tp.blockHeight {
 		// This almost certainly means that the database hasn't been initialized
 		// yet with a recent block.
 		resetSanityCheck = true

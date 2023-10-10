@@ -39,12 +39,9 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 	}
 
 	// Check if the block is already known.
-	_, exists, err = findBlockByID(tx, id)
+	_, _, err = findBlockByID(tx, id)
 	if err != nil {
 		return nil, errDatabaseError
-	}
-	if exists {
-		return nil, modules.ErrBlockKnown
 	}
 
 	// Check for the parent.
@@ -88,12 +85,9 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	}
 
 	// Check if the block is already known.
-	_, exists, err = findBlockByID(tx, id)
+	_, _, err = findBlockByID(tx, id)
 	if err != nil {
 		return errDatabaseError
-	}
-	if exists {
-		return modules.ErrBlockKnown
 	}
 
 	// Check for the parent.
