@@ -850,7 +850,6 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 	if err != nil {
 		return err
 	}
-	m.log.Printf("DEBUG: locked %v SC for %v\n", amount, email) // TODO remove
 
 	// Update the spendings.
 	us, err := m.GetSpendings(email)
@@ -899,7 +898,6 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 	if err != nil {
 		return err
 	}
-	m.log.Printf("DEBUG: unlocked %v SC out of %v for %v\n", unlocked, unlocked+burned, email) // TODO remove
 
 	// Update the spendings.
 	m.mu.Lock()
