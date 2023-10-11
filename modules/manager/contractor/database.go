@@ -320,6 +320,12 @@ func (w *watchdog) load() error {
 			return err
 		}
 		w.contracts[fcid] = fcs
+
+		// Add all parent outputs the formation txn.
+		parentOutputs := getParentOutputIDs(fcs.formationTxnSet)
+		for _, oid := range parentOutputs {
+			w.addOutputDependency(oid, fcid)
+		}
 	}
 
 	rows.Close()
