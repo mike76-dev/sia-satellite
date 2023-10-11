@@ -259,7 +259,7 @@ OUTER:
 				continue
 			}
 			fee := float64(num) * modules.MigrateSlabFee
-			if ub.Balance < fee {
+			if !ub.Subscribed && ub.Balance < fee {
 				m.contractor.log.Println("WARN: skipping slab migrations due to an insufficient account balance:", renter.Email)
 				numSlabs[rpk] = 0
 			}

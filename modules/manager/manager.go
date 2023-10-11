@@ -680,7 +680,7 @@ func (m *Manager) FormContracts(rpk types.PublicKey, rsk types.PrivateKey, a mod
 	if err != nil {
 		return nil, err
 	}
-	if ub.Balance < estimation {
+	if !ub.Subscribed && ub.Balance < estimation {
 		return nil, errors.New("insufficient account balance")
 	}
 
@@ -713,7 +713,7 @@ func (m *Manager) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, a mo
 	if err != nil {
 		return nil, err
 	}
-	if ub.Balance < estimation {
+	if !ub.Subscribed && ub.Balance < estimation {
 		return nil, errors.New("insufficient account balance")
 	}
 
@@ -773,7 +773,7 @@ func (m *Manager) FormContract(s *modules.RPCSession, rpk types.PublicKey, epk t
 	if err != nil {
 		return modules.RenterContract{}, err
 	}
-	if ub.Balance < estimation {
+	if !ub.Subscribed && ub.Balance < estimation {
 		return modules.RenterContract{}, errors.New("insufficient account balance")
 	}
 
@@ -806,7 +806,7 @@ func (m *Manager) RenewContract(s *modules.RPCSession, rpk types.PublicKey, fcid
 	if err != nil {
 		return modules.RenterContract{}, err
 	}
-	if ub.Balance < estimation {
+	if !ub.Subscribed && ub.Balance < estimation {
 		return modules.RenterContract{}, errors.New("insufficient account balance")
 	}
 
@@ -836,7 +836,7 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 
 	// Include the Satellite fee.
 	amountWithFee := amount * (1 + modules.FormContractFee)
-	if amountWithFee > ub.Balance {
+	if !ub.Subscribed && amountWithFee > ub.Balance {
 		m.log.Println("WARN: trying to lock more than the available balance")
 		amountWithFee = ub.Balance
 	}
@@ -850,6 +850,7 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 	if err != nil {
 		return err
 	}
+	m.log.Printf("DEBUG: locked %v SC for %v\n", amount, email) // TODO remove
 
 	// Update the spendings.
 	us, err := m.GetSpendings(email)
@@ -898,6 +899,7 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 	if err != nil {
 		return err
 	}
+	m.log.Printf("DEBUG: unlocked %v SC out of %v for %v\n", unlocked, unlocked+burned, email) // TODO remove
 
 	// Update the spendings.
 	m.mu.Lock()
@@ -976,7 +978,7 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 		return err
 	}
 	fee := float64(len(fm.Slabs)) * modules.SaveMetadataFee
-	if ub.Balance < fee {
+	if !ub.Subscribed && ub.Balance < fee {
 		return errors.New("insufficient account balance")
 	}
 
@@ -1035,7 +1037,7 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 		fee += float64(len(fm.Slabs)) * modules.RetrieveMetadataFee
 		numRetrieved += uint64(len(fm.Slabs))
 	}
-	if ub.Balance < fee {
+	if !ub.Subscribed && ub.Balance < fee {
 		return nil, errors.New("insufficient account balance")
 	}
 	ub.Balance -= fee
@@ -1073,7 +1075,7 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 		return err
 	}
 	fee := modules.MigrateSlabFee
-	if ub.Balance < fee {
+	if !ub.Subscribed && ub.Balance < fee {
 		return errors.New("insufficient account balance")
 	}
 

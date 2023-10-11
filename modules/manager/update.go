@@ -355,7 +355,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				if err != nil {
 					m.log.Println("ERROR: couldn't retrieve balance:", err)
 				}
-				if ub.Balance < fee {
+				if !ub.Subscribed && ub.Balance < fee {
 					// Insufficient balance, delete the file metadata.
 					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
 					m.DeleteMetadata(renter.PublicKey)

@@ -551,7 +551,7 @@ func (c *Contractor) threadedContractMaintenance() {
 			continue
 		}
 		cost := modules.Float64(renewal.amount)
-		if ub.Balance < cost/hastings {
+		if !ub.Subscribed && ub.Balance < cost/hastings {
 			c.log.Println("INFO: renewal skipped, because renter balance is insufficient")
 			continue
 		}
@@ -626,7 +626,7 @@ func (c *Contractor) threadedContractMaintenance() {
 			continue
 		}
 		cost := modules.Float64(renewal.amount)
-		if ub.Balance < cost/hastings {
+		if !ub.Subscribed && ub.Balance < cost/hastings {
 			c.log.Println("INFO: renewal skipped, because renter balance is insufficient")
 			continue
 		}
@@ -775,7 +775,7 @@ func (c *Contractor) threadedContractMaintenance() {
 				continue
 			}
 			cost := modules.Float64(contractFunds)
-			if ub.Balance < cost/hastings {
+			if !ub.Subscribed && ub.Balance < cost/hastings {
 				c.log.Println("INFO: contract formation skipped, because renter balance is insufficient")
 				continue
 			}
