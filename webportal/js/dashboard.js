@@ -297,6 +297,14 @@ function deleteClick() {
 		})
 		.then(data => {
 			switch (data.code) {
+				case 2:
+					m.innerHTML = 'Your account balance is negative. Please refill your account balance and try again.';
+					m.classList.remove('disabled');
+					window.setTimeout(function() {
+						m.classList.add('disabled');
+						m.innerHTML = '';
+					}, 3000);
+					break;
 				case 40:
 					m.innerHTML = 'Unknown error. Recommended to clear the cookies and reload the page.';
 					m.classList.remove('disabled');

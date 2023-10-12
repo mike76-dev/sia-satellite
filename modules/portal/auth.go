@@ -57,13 +57,13 @@ func checkEmail(address string) (string, Error) {
 	_, err := mail.ParseAddress(address)
 	if err != nil {
 		return "", Error{
-			Code: httpErrorEmailInvalid,
+			Code:    httpErrorEmailInvalid,
 			Message: "the email address is invalid",
 		}
 	}
 	if len(address) > 64 {
 		return "", Error{
-			Code: httpErrorEmailTooLong,
+			Code:    httpErrorEmailTooLong,
 			Message: "the email address is too long",
 		}
 	}
@@ -75,33 +75,33 @@ func checkEmail(address string) (string, Error) {
 func checkPassword(pwd string) Error {
 	if len(pwd) < 8 {
 		return Error{
-			Code: httpErrorPasswordTooShort,
+			Code:    httpErrorPasswordTooShort,
 			Message: "the password is too short",
 		}
 	}
 	if len(pwd) > 255 {
 		return Error{
-			Code: httpErrorPasswordTooLong,
+			Code:    httpErrorPasswordTooLong,
 			Message: "the password is too long",
 		}
 	}
 	var smalls, caps, digits, specials bool
 	for _, c := range pwd {
 		switch {
-			case unicode.IsNumber(c):
-				digits = true
-			case unicode.IsLower(c):
-				smalls = true
-			case unicode.IsUpper(c):
-				caps = true
-			case unicode.IsPunct(c) || unicode.IsSymbol(c):
-				specials = true
-			default:
+		case unicode.IsNumber(c):
+			digits = true
+		case unicode.IsLower(c):
+			smalls = true
+		case unicode.IsUpper(c):
+			caps = true
+		case unicode.IsPunct(c) || unicode.IsSymbol(c):
+			specials = true
+		default:
 		}
 	}
 	if !smalls || !caps || !digits || !specials {
 		return Error{
-			Code: httpErrorPasswordNotCompliant,
+			Code:    httpErrorPasswordNotCompliant,
 			Message: "insecure password",
 		}
 	}
@@ -115,7 +115,9 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	var data struct{Email string `json:"email"`}
+	var data struct {
+		Email string `json:"email"`
+	}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -130,7 +132,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -141,14 +143,14 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		if err := api.portal.checkAndUpdateFailedLogins(getRemoteHost(req)); err != nil {
 			writeError(w,
 				Error{
-					Code: httpErrorTooManyRequests,
+					Code:    httpErrorTooManyRequests,
 					Message: "too many failed login attempts",
 				}, http.StatusTooManyRequests)
 			return
 		}
 		writeError(w,
 			Error{
-				Code: httpErrorWrongCredentials,
+				Code:    httpErrorWrongCredentials,
 				Message: "invalid combination of email and password",
 			}, http.StatusBadRequest)
 		return
@@ -160,7 +162,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -172,7 +174,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		if err := api.portal.checkAndUpdateFailedLogins(getRemoteHost(req)); err != nil {
 			writeError(w,
 				Error{
-					Code: httpErrorTooManyRequests,
+					Code:    httpErrorTooManyRequests,
 					Message: "too many failed login attempts",
 				}, http.StatusTooManyRequests)
 			return
@@ -180,7 +182,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 		writeError(w,
 			Error{
-				Code: httpErrorWrongCredentials,
+				Code:    httpErrorWrongCredentials,
 				Message: "invalid combination of email and password",
 			}, http.StatusBadRequest)
 		return
@@ -193,7 +195,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 		api.portal.log.Printf("ERROR: error generating token: %v\n", tErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -218,14 +220,16 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	var data struct{Email string `json:"email"`}
+	var data struct {
+		Email string `json:"email"`
+	}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
 	}
 
-	// Check request fields for validity.	
+	// Check request fields for validity.
 	email, err := checkEmail(data.Email)
 	if err.Code != httpErrorNone {
 		writeError(w, err, http.StatusBadRequest)
@@ -243,7 +247,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -255,7 +259,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 			writeError(w,
 				Error{
-					Code: httpErrorInternal,
+					Code:    httpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -265,7 +269,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		if verified {
 			writeError(w,
 				Error{
-					Code: httpErrorEmailUsed,
+					Code:    httpErrorEmailUsed,
 					Message: "email address already used",
 				}, http.StatusBadRequest)
 			return
@@ -277,7 +281,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 			if cErr := api.portal.checkAndUpdateFailedLogins(getRemoteHost(req)); cErr != nil {
 				writeError(w,
 					Error{
-						Code: httpErrorTooManyRequests,
+						Code:    httpErrorTooManyRequests,
 						Message: "too many failed login attempts",
 					}, http.StatusTooManyRequests)
 				return
@@ -285,7 +289,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 
 			writeError(w,
 				Error{
-					Code: httpErrorWrongCredentials,
+					Code:    httpErrorWrongCredentials,
 					Message: "invalid combination of email and password",
 				}, http.StatusBadRequest)
 			return
@@ -297,7 +301,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -318,19 +322,19 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 	if err := api.portal.checkAndUpdateVerifications(getRemoteHost(req)); err != nil {
 		writeError(w,
 			Error{
-				Code: httpErrorTooManyRequests,
+				Code:    httpErrorTooManyRequests,
 				Message: "too many verification requests",
 			}, http.StatusTooManyRequests)
 		return false
 	}
 
 	// Generate a verification link.
-	token, err := api.portal.generateToken(verifyPrefix, email, time.Now().Add(24 * time.Hour))
+	token, err := api.portal.generateToken(verifyPrefix, email, time.Now().Add(24*time.Hour))
 	if err != nil {
 		api.portal.log.Printf("ERROR: error generating token: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return false
@@ -340,7 +344,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 		api.portal.log.Printf("ERROR: unable to fetch referer URL")
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "unable to fetch referer URL",
 			}, http.StatusInternalServerError)
 		return false
@@ -357,7 +361,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "unable to send verification link",
 			}, http.StatusInternalServerError)
 		return false
@@ -371,7 +375,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 		api.portal.log.Printf("ERROR: unable to send verification link: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "unable to send verification link",
 			}, http.StatusInternalServerError)
 		return false
@@ -389,7 +393,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 		api.portal.log.Printf("ERROR: error generating token: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return false
@@ -399,7 +403,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 		api.portal.log.Printf("ERROR: unable to fetch referer URL")
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "unable to fetch referer URL",
 			}, http.StatusInternalServerError)
 		return false
@@ -416,7 +420,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "unable to send password reset link",
 			}, http.StatusInternalServerError)
 		return false
@@ -430,7 +434,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 		api.portal.log.Printf("ERROR: unable to send password reset link: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "unable to send password reset link",
 			}, http.StatusInternalServerError)
 		return false
@@ -447,7 +451,9 @@ func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http
 		return
 	}
 
-	var data struct {Email string `json:"email"`}
+	var data struct {
+		Email string `json:"email"`
+	}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -471,7 +477,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 	if tErr != nil {
 		writeError(w,
 			Error{
-				Code: httpErrorTokenInvalid,
+				Code:    httpErrorTokenInvalid,
 				Message: "unable to decode token",
 			}, http.StatusBadRequest)
 		return
@@ -482,10 +488,10 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 		// A verify token received. Check the validity.
 		if expires.Before(time.Now()) {
 			writeError(w,
-			Error{
-				Code: httpErrorTokenExpired,
-				Message: "link already expired",
-			}, http.StatusBadRequest)
+				Error{
+					Code:    httpErrorTokenExpired,
+					Message: "link already expired",
+				}, http.StatusBadRequest)
 			return
 		}
 
@@ -494,7 +500,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 		if err != nil {
 			writeError(w,
 				Error{
-					Code: httpErrorInternal,
+					Code:    httpErrorInternal,
 					Message: "unable to verify account",
 				}, http.StatusInternalServerError)
 			return
@@ -510,10 +516,10 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 		// A password reset token received. Check the validity.
 		if expires.Before(time.Now()) {
 			writeError(w,
-			Error{
-				Code: httpErrorTokenExpired,
-				Message: "link already expired",
-			}, http.StatusBadRequest)
+				Error{
+					Code:    httpErrorTokenExpired,
+					Message: "link already expired",
+				}, http.StatusBadRequest)
 			return
 		}
 
@@ -523,7 +529,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 			writeError(w,
 				Error{
-					Code: httpErrorInternal,
+					Code:    httpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -534,7 +540,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 			// the account was deleted.
 			writeError(w,
 				Error{
-					Code: httpErrorNotFound,
+					Code:    httpErrorNotFound,
 					Message: "email address not found",
 				}, http.StatusBadRequest)
 			return
@@ -548,7 +554,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 			api.portal.log.Printf("ERROR: error generating token: %v\n", err)
 			writeError(w,
 				Error{
-					Code: httpErrorInternal,
+					Code:    httpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -564,7 +570,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 	default:
 		writeError(w,
 			Error{
-				Code: httpErrorTokenInvalid,
+				Code:    httpErrorTokenInvalid,
 				Message: "prefix not supported",
 			}, http.StatusBadRequest)
 		return
@@ -579,7 +585,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 	if cErr := api.portal.checkAndUpdatePasswordResets(getRemoteHost(req)); cErr != nil {
 		writeError(w,
 			Error{
-				Code: httpErrorTooManyRequests,
+				Code:    httpErrorTooManyRequests,
 				Message: "too many password reset requests",
 			}, http.StatusTooManyRequests)
 		return
@@ -591,7 +597,9 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	var data struct {Email string `json:"email"`}
+	var data struct {
+		Email string `json:"email"`
+	}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -604,7 +612,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -631,7 +639,7 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 	if err := api.portal.checkAndUpdatePasswordResets(getRemoteHost(req)); err != nil {
 		writeError(w,
 			Error{
-				Code: httpErrorTooManyRequests,
+				Code:    httpErrorTooManyRequests,
 				Message: "too many password reset requests",
 			}, http.StatusTooManyRequests)
 		return
@@ -643,7 +651,9 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 		return
 	}
 
-	var data struct {Email string `json:"email"`}
+	var data struct {
+		Email string `json:"email"`
+	}
 	err, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
@@ -660,7 +670,7 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 
 // changeHandlerPOST handles the POST /auth/change requests.
 func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// Check password for validity.	
+	// Check password for validity.
 	password := req.Header.Get("Satellite-Password")
 	if err := checkPassword(password); err.Code != httpErrorNone {
 		writeError(w, err, http.StatusBadRequest)
@@ -679,7 +689,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	if tErr != nil || (reset && prefix != changePrefix) || (!reset && prefix != cookiePrefix) {
 		writeError(w,
 			Error{
-				Code: httpErrorTokenInvalid,
+				Code:    httpErrorTokenInvalid,
 				Message: "invalid token",
 			}, http.StatusBadRequest)
 		return
@@ -687,10 +697,10 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 
 	if expires.Before(time.Now()) {
 		writeError(w,
-		Error{
-			Code: httpErrorTokenExpired,
-			Message: "token already expired",
-		}, http.StatusBadRequest)
+			Error{
+				Code:    httpErrorTokenExpired,
+				Message: "token already expired",
+			}, http.StatusBadRequest)
 		return
 	}
 
@@ -700,7 +710,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -710,7 +720,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	if !exists {
 		writeError(w,
 			Error{
-				Code: httpErrorNotFound,
+				Code:    httpErrorNotFound,
 				Message: "no such account",
 			}, http.StatusBadRequest)
 		return
@@ -723,7 +733,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -741,14 +751,33 @@ func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	// TODO Check if the account is allowed to be deleted.
+	// Check if the account is allowed to be deleted.
+	ub, err := api.portal.manager.GetBalance(email)
+	if err != nil {
+		api.portal.log.Printf("ERROR: couldn't get account balance: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	if ub.Balance+ub.Locked < 0 {
+		writeError(w,
+			Error{
+				Code:    httpErrorBadRequest,
+				Message: "balance negative",
+			}, http.StatusBadRequest)
+		return
+	}
 
 	// Remove the account from the database.
 	if err = api.portal.deleteAccount(email); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -767,7 +796,7 @@ func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email s
 	if err != nil || prefix != cookiePrefix {
 		writeError(w,
 			Error{
-				Code: httpErrorTokenInvalid,
+				Code:    httpErrorTokenInvalid,
 				Message: "invalid token",
 			}, http.StatusBadRequest)
 		return
@@ -776,10 +805,10 @@ func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email s
 	// Check if the token has expired.
 	if expires.Before(time.Now()) {
 		writeError(w,
-		Error{
-			Code: httpErrorTokenExpired,
-			Message: "token already expired",
-		}, http.StatusBadRequest)
+			Error{
+				Code:    httpErrorTokenExpired,
+				Message: "token already expired",
+			}, http.StatusBadRequest)
 		err = errors.New("token already expired")
 		return
 	}
@@ -790,7 +819,7 @@ func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email s
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -800,7 +829,7 @@ func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email s
 	if !exists {
 		writeError(w,
 			Error{
-				Code: httpErrorNotFound,
+				Code:    httpErrorNotFound,
 				Message: "no such account",
 			}, http.StatusBadRequest)
 		err = errors.New("no such account")
