@@ -47,6 +47,7 @@ type contractHeader struct {
 	TxnFee              types.Currency
 	SiafundFee          types.Currency
 	Utility             modules.ContractUtility
+	Imported            bool
 }
 
 // validate returns an error if the contractHeader is invalid.
@@ -193,6 +194,7 @@ func (c *FileContract) Metadata() modules.RenterContract {
 		TxnFee:              h.TxnFee,
 		SiafundFee:          h.SiafundFee,
 		Utility:             h.Utility,
+		Imported:            h.Imported,
 	}
 }
 
@@ -370,7 +372,7 @@ func (cs *ContractSet) managedInsertContract(h contractHeader, rpk types.PublicK
 }
 
 // InsertContract prepares a new contract header and adds it to the set.
-func (cs *ContractSet) InsertContract(revisionTxn types.Transaction, startHeight uint64, totalCost, contractFee, txnFee, siafundFee types.Currency, rpk types.PublicKey) (modules.RenterContract, error) {
+func (cs *ContractSet) InsertContract(revisionTxn types.Transaction, startHeight uint64, totalCost, contractFee, txnFee, siafundFee types.Currency, rpk types.PublicKey, imported bool) (modules.RenterContract, error) {
 	header := contractHeader{
 		Transaction: revisionTxn,
 		StartHeight: startHeight,
@@ -382,6 +384,7 @@ func (cs *ContractSet) InsertContract(revisionTxn types.Transaction, startHeight
 			GoodForUpload: true,
 			GoodForRenew:  true,
 		},
+		Imported: imported,
 	}
 
 	return cs.managedInsertContract(header, rpk)

@@ -261,7 +261,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 			FileContractRevisions: []types.FileContractRevision{rev.Revision},
 			Signatures:            []types.TransactionSignature{rev.Signatures[0], rev.Signatures[1]},
 		}
-		newContract, err = c.staticContracts.InsertContract(revisionTxn, blockHeight, fundsSpent, contractPrice, minerFee, siafundFee, rpk)
+		newContract, err = c.staticContracts.InsertContract(revisionTxn, blockHeight, fundsSpent, contractPrice, minerFee, siafundFee, rpk, false)
 		if err != nil {
 			c.staticContracts.Return(oldFC)
 			return fundsSpent, modules.RenterContract{}, modules.AddContext(err, "couldn't add the new contract to the contract set")
@@ -773,7 +773,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 			FileContractRevisions: []types.FileContractRevision{rev.Revision},
 			Signatures:            []types.TransactionSignature{rev.Signatures[0], rev.Signatures[1]},
 		}
-		newContract, err = c.staticContracts.InsertContract(revisionTxn, blockHeight, fundsSpent, contractPrice, minerFee, siafundFee, rpk)
+		newContract, err = c.staticContracts.InsertContract(revisionTxn, blockHeight, fundsSpent, contractPrice, minerFee, siafundFee, rpk, false)
 		if err != nil {
 			c.staticContracts.Return(oldFC)
 			return fundsSpent, modules.RenterContract{}, modules.AddContext(err, "couldn't add the new contract to the contract set")

@@ -538,6 +538,9 @@ type RenterContract struct {
 	ContractFee types.Currency
 	TxnFee      types.Currency
 	SiafundFee  types.Currency
+
+	// Imported indicates if the contract was imported via RPCShareContracts.
+	Imported bool
 }
 
 // Size returns the contract size.

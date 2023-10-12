@@ -201,7 +201,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		FileContractRevisions: []types.FileContractRevision{rev.Revision},
 		Signatures:            []types.TransactionSignature{rev.Signatures[0], rev.Signatures[1]},
 	}
-	contract, err := c.staticContracts.InsertContract(revisionTxn, blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk)
+	contract, err := c.staticContracts.InsertContract(revisionTxn, blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk, false)
 	if err != nil {
 		c.log.Println("ERROR: couldn't add the new contract to the contract set:", err)
 		return types.ZeroCurrency, modules.RenterContract{}, err
@@ -530,7 +530,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 		FileContractRevisions: []types.FileContractRevision{rev.Revision},
 		Signatures:            []types.TransactionSignature{rev.Signatures[0], rev.Signatures[1]},
 	}
-	contract, err := c.staticContracts.InsertContract(revisionTxn, blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk)
+	contract, err := c.staticContracts.InsertContract(revisionTxn, blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk, false)
 	if err != nil {
 		c.log.Println("ERROR: couldn't add the new contract to the contract set:", err)
 		return types.ZeroCurrency, modules.RenterContract{}, err

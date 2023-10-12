@@ -480,6 +480,7 @@ CREATE TABLE ctr_contracts (
 	renter_pk    BINARY(32) NOT NULL,
 	renewed_from BINARY(32) NOT NULL,
 	renewed_to   BINARY(32) NOT NULL,
+	imported     BOOL NOT NULL,
 	bytes        BLOB NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)

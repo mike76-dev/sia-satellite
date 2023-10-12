@@ -37,11 +37,11 @@ func (fc *FileContract) saveContract(rpk types.PublicKey) error {
 
 	// Insert the contract. If it already exists, it will be updated.
 	_, err = fc.db.Exec(`
-		INSERT INTO ctr_contracts (id, renter_pk, renewed_from, renewed_to, bytes)
-		VALUES (?, ?, ?, ?, ?) AS new
+		INSERT INTO ctr_contracts (id, renter_pk, renewed_from, renewed_to, imported, bytes)
+		VALUES (?, ?, ?, ?, ?, ?) AS new
 		ON DUPLICATE KEY UPDATE
 		renter_pk = new.renter_pk, bytes = new.bytes
-	`, id[:], renterKey[:], []byte{}, []byte{}, buf.Bytes())
+	`, id[:], renterKey[:], []byte{}, []byte{}, fc.header.Imported, buf.Bytes())
 
 	return err
 }
@@ -55,7 +55,7 @@ func deleteContract(fcid types.FileContractID, db *sql.DB) error {
 // loadContracts loads the entire ctr_contracts table into the contract set.
 func (cs *ContractSet) loadContracts(height uint64) error {
 	// Load the contracts.
-	rows, err := cs.db.Query("SELECT id, renewed_to, bytes FROM ctr_contracts")
+	rows, err := cs.db.Query("SELECT id, renewed_to, imported, bytes FROM ctr_contracts")
 	if err != nil {
 		return err
 	}
@@ -65,9 +65,10 @@ func (cs *ContractSet) loadContracts(height uint64) error {
 	var fcid, renewedTo types.FileContractID
 	id := make([]byte, 32)
 	renewed := make([]byte, 32)
+	var imported bool
 	var fcBytes []byte
 	for rows.Next() {
-		if err := rows.Scan(&id, &renewed, &fcBytes); err != nil {
+		if err := rows.Scan(&id, &renewed, &imported, &fcBytes); err != nil {
 			cs.log.Println("ERROR: unable to load file contract:", err)
 			continue
 		}
@@ -82,6 +83,7 @@ func (cs *ContractSet) loadContracts(height uint64) error {
 		}
 		copy(fcid[:], id)
 		copy(renewedTo[:], renewed)
+		fc.header.Imported = imported
 
 		// Check if the contract has expired.
 		if renewedTo == (types.FileContractID{}) && fc.header.EndHeight() >= height+modules.BlocksPerDay {

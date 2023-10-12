@@ -632,7 +632,7 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 				types.TransactionSignature{},
 			},
 		}
-		rc, err := c.staticContracts.InsertContract(txn, contract.StartHeight, contract.TotalCost, contractFee, txnFee, tax, rpk)
+		rc, err := c.staticContracts.InsertContract(txn, contract.StartHeight, contract.TotalCost, contractFee, txnFee, tax, rpk, true)
 		if err != nil {
 			c.log.Printf("ERROR: couldn't accept contract %s: %v\n", contract.ID, err)
 			continue
