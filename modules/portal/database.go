@@ -286,6 +286,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	// Calculate the new balance.
 	ub := modules.UserBalance{
 		IsUser:     true,
+		IsRenter:   true,
 		Subscribed: s,
 		Balance:    b,
 		Locked:     l,
@@ -400,6 +401,7 @@ func (p *Portal) confirmSiacoinPayment(txid types.TransactionID) error {
 		// Calculate the new balance.
 		ub := modules.UserBalance{
 			IsUser:     true,
+			IsRenter:   true,
 			Subscribed: s,
 			Balance:    b,
 			Locked:     l,

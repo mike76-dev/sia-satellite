@@ -379,7 +379,9 @@ function retrieveBalance() {
 				if (!paying) {
 					document.getElementById('select').classList.remove('disabled');
 				}
-				document.getElementById('reveal').classList.remove('disabled');
+				if (data.isrenter) {
+					document.getElementById('reveal').classList.remove('disabled');
+				}
 			}
 		})
 		.catch(error => console.log(error));

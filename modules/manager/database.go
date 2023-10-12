@@ -118,8 +118,18 @@ func (m *Manager) GetBalance(email string) (modules.UserBalance, error) {
 		return modules.UserBalance{}, scErr
 	}
 
+	renters := m.Renters()
+	var found bool
+	for _, renter := range renters {
+		if renter.Email == email {
+			found = true
+			break
+		}
+	}
+
 	ub := modules.UserBalance{
 		IsUser:     !errors.Is(err, sql.ErrNoRows),
+		IsRenter:   found,
 		Subscribed: sub,
 		Balance:    b,
 		Locked:     l,

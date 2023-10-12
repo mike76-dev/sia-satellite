@@ -53,6 +53,7 @@ func (ha *HostAverages) DecodeFrom(d *types.Decoder) {
 // the data on the chosen payment scheme.
 type UserBalance struct {
 	IsUser     bool    `json:"isuser"`
+	IsRenter   bool    `json:"isrenter"`
 	Subscribed bool    `json:"subscribed"`
 	Balance    float64 `json:"balance"`
 	Locked     float64 `json:"locked"`
