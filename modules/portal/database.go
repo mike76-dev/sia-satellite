@@ -795,3 +795,16 @@ func (p *Portal) loadTransactions() error {
 
 	return nil
 }
+
+// changePaymentPlan switches the user's payment plan between
+// 'Pre-Payment' and 'Invoicing'.
+// Invoicing allows the balance to become negative. Then, at the
+// end of each month, the negative balance is settled using Stripe.
+func (p *Portal) changePaymentPlan(email string) error {
+	_, err := p.db.Exec(`
+		UPDATE mg_balances
+		SET subscribed = NOT subscribed
+		WHERE email = ?
+	`, email)
+	return err
+}

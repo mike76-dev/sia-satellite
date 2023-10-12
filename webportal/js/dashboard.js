@@ -391,7 +391,7 @@ function retrieveBalance() {
 				if (data.isrenter) {
 					document.getElementById('reveal').classList.remove('disabled');
 				}
-				if (data.subscribed || data.isrenter) {
+				if ((data.subscribed || data.isrenter) && data.stripeid != '') {
 					sc.disabled = false;
 				}
 				sc.innerHTML = data.subscribed ? 'Switch to Pre-Payment' : 'Switch to Invoicing';
@@ -1418,6 +1418,34 @@ function showAddress() {
 				a.value = data.address;
 				g.innerText = 'Copy';
 				g.disabled = false;
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function changePaymentPlan() {
+	let sc = document.getElementById('select-change');
+	sc.disabled = true;
+	let options = {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/plan', options)
+		.then(response => {
+			if (response.status == 204) {
+				sc.innerHTML = 'Success!';
+				window.setTimeout(function() {
+					retrieveBalance();
+				}, 1000);
+			} else {
+				return response.json()
+			}
+		})
+		.then(data => {
+			if (data && data.code) {
+				console.log(data.message);
 			}
 		})
 		.catch(error => console.log(error));

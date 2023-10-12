@@ -856,3 +856,27 @@ func (api *portalAPI) addressHandlerGET(w http.ResponseWriter, req *http.Request
 		Address string `json:"address"`
 	}{Address: strings.TrimPrefix(address.String(), "addr:")})
 }
+
+// planHandlerPOST handles the POST /dashboard/plan requests.
+func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Decode and verify the token.
+	token := getCookie(req, "satellite")
+	email, err := api.verifyCookie(w, token)
+	if err != nil {
+		return
+	}
+
+	// Change the payment plan.
+	err = api.portal.changePaymentPlan(email)
+	if err != nil {
+		api.portal.log.Printf("ERROR: error changing payment plan: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeSuccess(w)
+}
