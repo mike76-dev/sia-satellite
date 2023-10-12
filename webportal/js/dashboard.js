@@ -354,6 +354,7 @@ function retrieveBalance() {
 				let bs = document.getElementById('balance-secondary');
 				let lp = document.getElementById('locked-primary');
 				let ls = document.getElementById('locked-secondary');
+				let sc = document.getElementById('select-change');
 				let c = data.currency == '' ? 'USD' : data.currency;
 				bp.innerHTML = (data.balance * data.scrate).toFixed(2) + ' ' + c;
 				bs.innerHTML = data.balance.toFixed(2) + ' SC';
@@ -365,7 +366,7 @@ function retrieveBalance() {
 					retrieveAverages();
 				}
 				document.getElementById('select-plan').innerHTML =
-					(data.subscribed ? 'Subscription' : 'Pre-payment');
+					(data.subscribed ? 'Invoicing' : 'Pre-payment');
 				document.getElementById('select-balance-primary').innerHTML = 
 					(data.balance * data.scrate).toFixed(2) + ' ' + c;
 				document.getElementById('select-balance-secondary').innerHTML = 
@@ -382,6 +383,10 @@ function retrieveBalance() {
 				if (data.isrenter) {
 					document.getElementById('reveal').classList.remove('disabled');
 				}
+				if (data.subscribed || data.isrenter) {
+					sc.disabled = false;
+				}
+				sc.innerHTML = data.subscribed ? 'Switch to Pre-Payment' : 'Switch to Invoicing';
 			}
 		})
 		.catch(error => console.log(error));
