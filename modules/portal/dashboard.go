@@ -866,6 +866,27 @@ func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 
+	// Check if the change is allowed.
+	ub, err := api.portal.manager.GetBalance(email)
+	if err != nil {
+		api.portal.log.Printf("ERROR: error getting account balance: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+	if !ub.IsRenter {
+		api.portal.log.Printf("ERROR: changing payment plan not allowed")
+		writeError(w,
+			Error{
+				Code:    httpErrorBadRequest,
+				Message: "change not allowed",
+			}, http.StatusBadRequest)
+		return
+	}
+
 	// Change the payment plan.
 	err = api.portal.changePaymentPlan(email)
 	if err != nil {
