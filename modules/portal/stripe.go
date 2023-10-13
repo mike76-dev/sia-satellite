@@ -3,17 +3,17 @@ package portal
 import (
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/stripe/stripe-go/v74"
-	"github.com/stripe/stripe-go/v74/customer"
-	"github.com/stripe/stripe-go/v74/paymentintent"
-	"github.com/stripe/stripe-go/v74/webhook"
+	"github.com/stripe/stripe-go/v75"
+	"github.com/stripe/stripe-go/v75/customer"
+	"github.com/stripe/stripe-go/v75/paymentintent"
+	"github.com/stripe/stripe-go/v75/webhook"
 )
 
 // maxBodyBytes specifies the maximum body size for /webhook requests.
@@ -28,12 +28,12 @@ func calculateOrderAmount(id string) (int64, string, error) {
 	if len(id) < 4 {
 		return 0, "", errors.New("wrong item length")
 	}
-	amt := id[:len(id) - 3]
+	amt := id[:len(id)-3]
 	amount, err := strconv.ParseFloat(amt, 64)
 	if err != nil {
 		return 0, "", err
 	}
-	currency := strings.ToLower(id[len(id) - 3:])
+	currency := strings.ToLower(id[len(id)-3:])
 
 	return int64(amount * 100), currency, nil
 }
@@ -53,7 +53,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 		api.portal.log.Println("ERROR: Could not fetch account balance:", cErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -67,7 +67,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 			api.portal.log.Println("ERROR: Could not get customer:", cErr)
 			writeError(w,
 				Error{
-					Code: httpErrorInternal,
+					Code:    httpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -81,7 +81,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 			api.portal.log.Println("ERROR: Could not create customer:", cErr)
 			writeError(w,
 				Error{
-					Code: httpErrorInternal,
+					Code:    httpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -95,7 +95,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 			api.portal.log.Println("ERROR: Could not update balance:", cErr)
 			writeError(w,
 				Error{
-					Code: httpErrorInternal,
+					Code:    httpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -118,13 +118,19 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Create a PaymentIntent with amount and currency.
+	var sfu *string
 	id := data.Items[0].ID
+	if strings.HasPrefix(id, "default:") {
+		// An indication that this is the default payment method.
+		sfu = stripe.String("off_session")
+		id = strings.TrimPrefix(id, "default:")
+	}
 	amount, currency, pErr := calculateOrderAmount(id)
 	if pErr != nil {
 		api.portal.log.Println("ERROR: couldn't read pending payment:", pErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -136,6 +142,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
 			Enabled: stripe.Bool(true),
 		},
+		SetupFutureUsage: sfu,
 	}
 
 	pi, pErr := paymentintent.New(params)
@@ -143,7 +150,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 		api.portal.log.Println("ERROR: pi.New:", pErr)
 		writeError(w,
 			Error{
-				Code: httpErrorInternal,
+				Code:    httpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -161,7 +168,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Read the request body.
 	req.Body = http.MaxBytesReader(w, req.Body, maxBodyBytes)
-	payload, err := ioutil.ReadAll(req.Body)
+	payload, err := io.ReadAll(req.Body)
 	if err != nil {
 		api.portal.log.Println("Error reading request body:", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -202,7 +209,7 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 // handlePaymentIntentSucceeded handless a successful payment.
 func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	cust := pi.Customer
-	err := p.addPayment(cust.ID, float64(pi.Amount / 100), strings.ToUpper(string(pi.Currency)))
+	err := p.addPayment(cust.ID, float64(pi.Amount/100), strings.ToUpper(string(pi.Currency)))
 	if err != nil {
 		p.log.Println("ERROR: Could not add payment:", err)
 	}
@@ -210,4 +217,5 @@ func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 
 func init() {
 	stripe.Key = os.Getenv("SATD_STRIPE_KEY")
+
 }

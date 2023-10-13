@@ -615,7 +615,7 @@ function toPayment() {
 	let a = document.getElementById('payment-actual');
 	paymentAmount = parseFloat(a.value);
 	paymentCurrency = averages.currency;
-	initialize();
+	initialize(false);
 	paying = true;
 	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
 		paymentCurrency;
