@@ -209,7 +209,8 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 // handlePaymentIntentSucceeded handless a successful payment.
 func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	cust := pi.Customer
-	err := p.addPayment(cust.ID, float64(pi.Amount/100), strings.ToUpper(string(pi.Currency)))
+	def := pi.SetupFutureUsage == "off_session"
+	err := p.addPayment(cust.ID, float64(pi.Amount/100), strings.ToUpper(string(pi.Currency)), def)
 	if err != nil {
 		p.log.Println("ERROR: Could not add payment:", err)
 	}
@@ -217,5 +218,4 @@ func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 
 func init() {
 	stripe.Key = os.Getenv("SATD_STRIPE_KEY")
-
 }

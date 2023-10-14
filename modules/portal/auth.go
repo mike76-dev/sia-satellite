@@ -850,7 +850,7 @@ func (p *Portal) creditAccount(email string) error {
 	}
 
 	// Credit the account.
-	err := p.addPayment(email, p.credits.Amount, "USD")
+	err := p.addPayment(email, p.credits.Amount, "USD", false)
 	if err != nil {
 		return err
 	}

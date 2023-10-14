@@ -238,7 +238,7 @@ func (p *Portal) putPayment(email string, amount float64, currency string, txid 
 }
 
 // addPayment updates the payments and balances tables with a new payment.
-func (p *Portal) addPayment(id string, amount float64, currency string) error {
+func (p *Portal) addPayment(id string, amount float64, currency string, def bool) error {
 	// Sanity checks.
 	if id == "" || currency == "" || amount == 0 {
 		return errors.New("one or more empty parameters provided")
@@ -287,7 +287,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string) error {
 	ub := modules.UserBalance{
 		IsUser:     true,
 		IsRenter:   true,
-		Subscribed: s,
+		Subscribed: s || def,
 		Balance:    b,
 		Locked:     l,
 		Currency:   currency,
@@ -796,14 +796,12 @@ func (p *Portal) loadTransactions() error {
 	return nil
 }
 
-// changePaymentPlan switches the user's payment plan between
-// 'Pre-Payment' and 'Invoicing'.
-// Invoicing allows the balance to become negative. Then, at the
-// end of each month, the negative balance is settled using Stripe.
+// changePaymentPlan switches the user's payment plan from
+// 'Invoicing' back to 'Pre-Payment'.
 func (p *Portal) changePaymentPlan(email string) error {
 	_, err := p.db.Exec(`
 		UPDATE mg_balances
-		SET subscribed = NOT subscribed
+		SET subscribed = FALSE
 		WHERE email = ?
 	`, email)
 	return err

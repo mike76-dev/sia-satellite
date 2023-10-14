@@ -620,6 +620,7 @@ function toPayment() {
 	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
 		paymentCurrency;
 	document.getElementById('select').classList.add('disabled');
+	document.getElementById('sc').classList.add('disabled');
 	document.getElementById('payment').classList.remove('disabled');
 }
 
@@ -627,6 +628,7 @@ function backToSelect() {
 	paying = false;
 	document.getElementById('payment').classList.add('disabled');
 	document.getElementById('select').classList.remove('disabled');
+	document.getElementById('sc').classList.remove('disabled');
 }
 
 function changePaymentsStep(s) {
@@ -1424,29 +1426,41 @@ function showAddress() {
 }
 
 function changePaymentPlan() {
-	let sc = document.getElementById('select-change');
-	sc.disabled = true;
-	let options = {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json;charset=utf-8'
+	if (document.getElementById('select-plan').innerHTML == 'Invoicing') {
+		let sc = document.getElementById('select-change');
+		sc.disabled = true;
+		let options = {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json;charset=utf-8'
+			}
 		}
+		fetch(apiBaseURL + '/dashboard/plan', options)
+			.then(response => {
+				if (response.status == 204) {
+					sc.innerHTML = 'Success!';
+					window.setTimeout(function() {
+						retrieveBalance();
+					}, 1000);
+				} else {
+					return response.json()
+				}
+			})
+			.then(data => {
+				if (data && data.code) {
+					console.log(data.message);
+				}
+			})
+			.catch(error => console.log(error));
+		return;
 	}
-	fetch(apiBaseURL + '/dashboard/plan', options)
-		.then(response => {
-			if (response.status == 204) {
-				sc.innerHTML = 'Success!';
-				window.setTimeout(function() {
-					retrieveBalance();
-				}, 1000);
-			} else {
-				return response.json()
-			}
-		})
-		.then(data => {
-			if (data && data.code) {
-				console.log(data.message);
-			}
-		})
-		.catch(error => console.log(error));
+	paymentAmount = 1;
+	paymentCurrency = averages.currency;
+	initialize(true);
+	paying = true;
+	document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
+		paymentCurrency;
+	document.getElementById('select').classList.add('disabled');
+	document.getElementById('sc').classList.add('disabled');
+	document.getElementById('payment').classList.remove('disabled');
 }
