@@ -79,6 +79,17 @@ func isZeroDecimal(currency string) bool {
 	return false
 }
 
+// MinimumChargeableAmount is a helper function that returns the
+// minimum amount chargeable by Stripe for the given currency.
+func MinimumChargeableAmount(currency string) float64 {
+	for _, cur := range allowedCurrencies.Currencies {
+		if cur.Name == currency {
+			return float64(cur.MinimumAmount)
+		}
+	}
+	return 0
+}
+
 // calculateOrderAmount returns the amount to charge the user from.
 func calculateOrderAmount(id string) (int64, string, error) {
 	if len(id) < 4 {

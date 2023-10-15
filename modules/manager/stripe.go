@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/modules/portal"
 	"github.com/stripe/stripe-go/v75"
 	"github.com/stripe/stripe-go/v75/invoice"
 	"github.com/stripe/stripe-go/v75/invoiceitem"
@@ -34,6 +35,12 @@ func (m *Manager) threadedSettleAccounts() {
 
 		// Skip if the balance is not negative.
 		if ub.Balance+ub.Locked >= 0 {
+			continue
+		}
+
+		// Skip if the amount to pay is below the minimum chargeable
+		// amount.
+		if -ub.Balance < portal.MinimumChargeableAmount(ub.Currency) {
 			continue
 		}
 
