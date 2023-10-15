@@ -424,6 +424,9 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				}
 			}()
 
+			// Spin a thread to invoice the subscribed accounts.
+			go m.threadedSettleAccounts()
+
 			m.syncDB()
 			break
 		}
