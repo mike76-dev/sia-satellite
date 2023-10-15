@@ -28,11 +28,6 @@ func (m *Manager) threadedSettleAccounts() {
 			continue
 		}
 
-		// Skip if not subscribed for invoicing.
-		if !ub.Subscribed {
-			continue
-		}
-
 		// Skip if the balance is not negative.
 		if ub.Balance+ub.Locked >= 0 {
 			continue
@@ -40,7 +35,7 @@ func (m *Manager) threadedSettleAccounts() {
 
 		// Skip if the amount to pay is below the minimum chargeable
 		// amount.
-		if -ub.Balance < portal.MinimumChargeableAmount(ub.Currency) {
+		if -ub.Balance*ub.SCRate < portal.MinimumChargeableAmount(ub.Currency) {
 			continue
 		}
 
@@ -51,7 +46,7 @@ func (m *Manager) threadedSettleAccounts() {
 		}
 
 		// Issue an invoice.
-		err = m.managedCreateInvoice(ub.StripeID, ub.Currency, -ub.Balance)
+		err = m.managedCreateInvoice(ub.StripeID, ub.Currency, -ub.Balance*ub.SCRate)
 		if err != nil {
 			m.log.Printf("ERROR: couldn't create invoice for %v: %v\n", renter.Email, err)
 		}
