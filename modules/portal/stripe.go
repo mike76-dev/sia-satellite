@@ -23,6 +23,62 @@ type item struct {
 	ID string `json:"id"`
 }
 
+type (
+	// stripeCurrency lists the properties of a Stripe currency.
+	stripeCurrency struct {
+		Name          string  `json:"name"`
+		MinimumAmount float32 `json:"minimum"`
+		ZeroDecimal   bool    `json:"zerodecimal"`
+	}
+
+	// stripeCurrencies contains a list of currencies.
+	stripeCurrencies struct {
+		Currencies []stripeCurrency `json:"currencies"`
+	}
+)
+
+// allowedCurrencies lists all available currencies.
+var allowedCurrencies = stripeCurrencies{
+	Currencies: []stripeCurrency{
+		{
+			Name:          "USD",
+			MinimumAmount: 0.5,
+			ZeroDecimal:   false,
+		},
+		{
+			Name:          "EUR",
+			MinimumAmount: 0.5,
+			ZeroDecimal:   false,
+		},
+		{
+			Name:          "GBP",
+			MinimumAmount: 0.3,
+			ZeroDecimal:   false,
+		},
+		{
+			Name:          "CAD",
+			MinimumAmount: 0.5,
+			ZeroDecimal:   false,
+		},
+	},
+}
+
+// currenciesHandlerGET handles the GET /stripe/currencies requests.
+func (api *portalAPI) currenciesHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	writeJSON(w, allowedCurrencies)
+}
+
+// isZeroDecimal is a helper function that returns if the specified
+// currency is zero-decimal.
+func isZeroDecimal(currency string) bool {
+	for _, cur := range allowedCurrencies.Currencies {
+		if cur.Name == currency {
+			return cur.ZeroDecimal
+		}
+	}
+	return false
+}
+
 // calculateOrderAmount returns the amount to charge the user from.
 func calculateOrderAmount(id string) (int64, string, error) {
 	if len(id) < 4 {
@@ -33,9 +89,12 @@ func calculateOrderAmount(id string) (int64, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	currency := strings.ToLower(id[len(id)-3:])
+	currency := id[len(id)-3:]
+	if !isZeroDecimal(currency) {
+		amount = amount * 100
+	}
 
-	return int64(amount * 100), currency, nil
+	return int64(amount), strings.ToLower(currency), nil
 }
 
 // paymentHandlerPOST handles the POST /stripe/create-payment-intent requests.
@@ -210,7 +269,12 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	cust := pi.Customer
 	def := pi.SetupFutureUsage == "off_session"
-	err := p.addPayment(cust.ID, float64(pi.Amount/100), strings.ToUpper(string(pi.Currency)), def)
+	currency := strings.ToUpper(string(pi.Currency))
+	amount := float64(pi.Amount)
+	if !isZeroDecimal(currency) {
+		amount = amount / 100
+	}
+	err := p.addPayment(cust.ID, amount, currency, def)
 	if err != nil {
 		p.log.Println("ERROR: Could not add payment:", err)
 	}

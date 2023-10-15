@@ -57,6 +57,7 @@ var averages = {
 	rate: 0.0
 }
 
+var currencies = [];
 var paymentEstimation;
 var paymentAmount = 0.0;
 var paymentCurrency = 'USD';
@@ -64,6 +65,7 @@ var processing = false;
 var paying = false;
 
 getVersion();
+getCurrencies();
 retrieveBlockHeight();
 retrieveBalance();
 retrieveAverages();
@@ -1317,6 +1319,28 @@ function getVersion() {
 		.catch(error => console.log(error));
 }
 
+function getCurrencies() {
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/stripe/currencies', options)
+		.then(response => response.json())
+		.then(data => {
+			currencies = data.currencies;
+			let sc = document.getElementById('select-currency');
+			currencies.forEach((cur) => {
+				let op = document.createElement('option');
+				op.value = cur.name;
+				op.innerHTML = cur.name;
+				sc.appendChild(op);
+			});
+		})
+		.catch(error => console.log(error));
+}
+
 function sortByPaymentTime() {
 	switch (sortByTimestamp) {
 	case 'ascending':
@@ -1451,8 +1475,8 @@ function changePaymentPlan() {
 				return;
 			}
 			if (data && data.dpm == false) {
-				paymentAmount = 1;
 				paymentCurrency = averages.currency;
+				paymentAmount = currencies.find(cur => cur.name == paymentCurrency).minimum;
 				initialize(true);
 				paying = true;
 				document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +

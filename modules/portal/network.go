@@ -151,6 +151,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.POST("/stripe/webhook", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.webhookHandlerPOST(w, req, ps)
 	})
+	router.GET("/stripe/currencies", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.currenciesHandlerGET(w, req, ps)
+	})
 
 	api.routerMu.Lock()
 	api.router = router
