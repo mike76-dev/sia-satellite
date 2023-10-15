@@ -7,6 +7,9 @@ let elements;
 async function initialize(def) {
 	document.getElementById('payment-submit').classList.add('disabled');
 	document.getElementById('payment-back').classList.add('disabled');
+	document.getElementById('payment-header').innerHTML = 
+		def ? 'You need to set up the default payment method. For this you will be charged the minimum amount of' :
+		'You are going to make a payment of';
 	let amount = (def ? 'default:' : '') + paymentAmount.toFixed(2) + paymentCurrency;
 	let items = [{ id: amount }];
 	const response = await fetch(apiBaseURL + '/stripe/create-payment-intent', {
