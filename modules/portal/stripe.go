@@ -214,6 +214,19 @@ func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	if err != nil {
 		p.log.Println("ERROR: Could not add payment:", err)
 	}
+
+	// If a default payment method was specified, update the customer.
+	if def {
+		params := &stripe.CustomerParams{
+			InvoiceSettings: &stripe.CustomerInvoiceSettingsParams{
+				DefaultPaymentMethod: stripe.String(pi.PaymentMethod.ID),
+			},
+		}
+		_, err = customer.Update(pi.Customer.ID, params)
+		if err != nil {
+			p.log.Println("ERROR: couldn't update customer:", err)
+		}
+	}
 }
 
 func init() {
