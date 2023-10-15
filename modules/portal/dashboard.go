@@ -878,13 +878,32 @@ func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 	if !ub.IsRenter {
-		api.portal.log.Printf("ERROR: changing payment plan not allowed")
 		writeError(w,
 			Error{
 				Code:    httpErrorBadRequest,
 				Message: "change not allowed",
 			}, http.StatusBadRequest)
 		return
+	}
+
+	// If no default payment method is set, respond with a code.
+	if !ub.Subscribed {
+		dpm, err := isDefaultPaymentMethodSet(ub.StripeID)
+		if err != nil {
+			api.portal.log.Println("ERROR: wrong Stripe ID:", email, ub.StripeID)
+			writeError(w,
+				Error{
+					Code:    httpErrorBadRequest,
+					Message: "wrong Stripe ID",
+				}, http.StatusBadRequest)
+			return
+		}
+		if !dpm {
+			writeJSON(w, struct {
+				DefaultPaymentMethod bool `json:"dpm"`
+			}{false})
+			return
+		}
 	}
 
 	// Change the payment plan.

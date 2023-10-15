@@ -229,6 +229,17 @@ func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	}
 }
 
+// isDefaultPaymentMethodSet returns true if the Stripe customer
+// has a default payment method set.
+func isDefaultPaymentMethodSet(id string) (bool, error) {
+	cust, err := customer.Get(id, nil)
+	if err != nil {
+		return false, err
+	}
+
+	return cust.InvoiceSettings.DefaultPaymentMethod != nil, nil
+}
+
 func init() {
 	stripe.Key = os.Getenv("SATD_STRIPE_KEY")
 }
