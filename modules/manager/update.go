@@ -361,6 +361,12 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					m.DeleteMetadata(renter.PublicKey)
 					continue
 				}
+				if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+					// Account on hold, delete the file metadata.
+					m.log.Println("WARN: account on hold, deleting stored metadata")
+					m.DeleteMetadata(renter.PublicKey)
+					continue
+				}
 				ub.Balance -= fee
 				if err := m.UpdateBalance(renter.Email, ub); err != nil {
 					m.log.Println("ERROR: couldn't update balance", err)

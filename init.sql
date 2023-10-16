@@ -386,6 +386,8 @@ CREATE TABLE mg_balances (
 	sc_locked  DOUBLE NOT NULL,
 	currency   VARCHAR(8) NOT NULL,
 	stripe_id  VARCHAR(32) NOT NULL,
+	invoice    VARCHAR(32) NOT NULL,
+	on_hold    BIGINT UNSIGNED NOT NULL,
 	PRIMARY KEY (email),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );

@@ -60,6 +60,8 @@ type UserBalance struct {
 	Currency   string  `json:"currency"`
 	SCRate     float64 `json:"scrate"`
 	StripeID   string  `json:"stripeid"`
+	Invoice    string  `json:"-"`
+	OnHold     uint64  `json:"-"`
 }
 
 // UserSpendings contains the spendings in the current and the

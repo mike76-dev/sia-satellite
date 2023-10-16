@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"fmt"
 	"runtime"
+	"text/template"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -252,13 +254,14 @@ func (p *Portal) addPayment(id string, amount float64, currency string, def bool
 	}
 
 	// Fetch the account.
-	var email string
+	var email, in string
 	var s bool
 	var b, l float64
+	var oh uint64
 	err = p.db.QueryRow(`
-		SELECT email, subscribed, sc_balance, sc_locked
+		SELECT email, subscribed, sc_balance, sc_locked, invoice, on_hold
 		FROM mg_balances WHERE stripe_id = ?
-	`, id).Scan(&email, &s, &b, &l)
+	`, id).Scan(&email, &s, &b, &l, &in, &oh)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -294,12 +297,18 @@ func (p *Portal) addPayment(id string, amount float64, currency string, def bool
 		Locked:     l,
 		Currency:   currency,
 		StripeID:   id,
+		Invoice:    in,
+		OnHold:     oh,
 	}
 	if credit {
 		ub.StripeID = ""
 	}
 	if !def {
 		ub.Balance += amount / rate
+		// Remove the hold if there was any.
+		if amount >= getInvoiceAmount(in) {
+			ub.OnHold = 0
+		}
 	}
 
 	// Update the balances table.
@@ -390,13 +399,14 @@ func (p *Portal) confirmSiacoinPayment(txid types.TransactionID) error {
 		p.mu.Unlock()
 
 		// Fetch the account.
-		var c, id string
+		var c, id, in string
 		var s bool
 		var b, l float64
+		var oh uint64
 		err := tx.QueryRow(`
-			SELECT subscribed, sc_balance, sc_locked, currency, stripe_id
+			SELECT subscribed, sc_balance, sc_locked, currency, stripe_id, invoice, on_hold
 			FROM mg_balances WHERE email = ?
-		`, email).Scan(&s, &b, &l, &c, &id)
+		`, email).Scan(&s, &b, &l, &c, &id, &in, &oh)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't fetch account balance")
@@ -411,18 +421,24 @@ func (p *Portal) confirmSiacoinPayment(txid types.TransactionID) error {
 			Locked:     l,
 			Currency:   c,
 			StripeID:   id,
+			Invoice:    in,
+			OnHold:     oh,
 		}
 		ub.Balance += amount
 		if ub.Currency == "" {
 			ub.Currency = "USD"
 		}
+		// Remove the hold if there was any.
+		if ub.Balance >= 0 {
+			ub.OnHold = 0
+		}
 
 		// Update the balances table.
 		_, err = tx.Exec(`
 			REPLACE INTO mg_balances
-			(email, subscribed, sc_balance, sc_locked, currency, stripe_id)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID)
+			(email, subscribed, sc_balance, sc_locked, currency, stripe_id, invoice, on_hold)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID, ub.Invoice, ub.OnHold)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't update account balance")
@@ -811,4 +827,86 @@ func (p *Portal) changePaymentPlan(email string) error {
 		WHERE email = ?
 	`, email)
 	return err
+}
+
+// requestTemplate contains the text send by email when an invoice
+// payment fails.
+const requestTemplate = `
+	<!-- template.html -->
+	<!DOCTYPE html>
+	<html>
+	<body>
+   	<h2>Invoice Not Paid</h2>
+    <p>There was an issue paying the monthly invoice of <strong>{{.Amount}}</strong>
+	on behalf of <strong>{{.Name}}</strong>.</p>
+	<p>Please visit your dashboard and make a payment.</p>
+	<p>If no payment is received within 24 hours, your account will be put on hold.</p>
+	</body>
+	</html>
+`
+
+// requestPayment notifies the user about a failed invoice payment and
+// puts a hold on the account.
+func (p *Portal) requestPayment(id string, invoice string, amount float64, currency string) (err error) {
+	// Get the balance record.
+	var email, in string
+	err = p.db.QueryRow(`
+		SELECT email, invoice
+		FROM mg_balances
+		WHERE stripe_id = ?
+	`, id).Scan(&email, &in)
+	if err != nil {
+		return fmt.Errorf("unable to get user email: %s, %v", id, err)
+	}
+
+	// Only send a request if the failed payment comes from the tracked invoice.
+	if in != invoice {
+		return nil
+	}
+
+	// Send a payment request.
+	type request struct {
+		Name   string
+		Amount string
+	}
+	t := template.New("request")
+	t, err = t.Parse(requestTemplate)
+	if err != nil {
+		return modules.AddContext(err, "unable to parse HTML template")
+	}
+
+	var b bytes.Buffer
+	t.Execute(&b, request{
+		Name:   p.name,
+		Amount: fmt.Sprintf("%.2f %s", amount, currency),
+	})
+	err = p.ms.SendMail("Sia Satellite", email, "Action Required", &b)
+	if err != nil {
+		return fmt.Errorf("unable to send request to %s", email)
+	}
+
+	// Place a temporary hold on the account.
+	_, err = p.db.Exec(`
+		UPDATE mg_balances
+		SET on_hold = ?
+		WHERE stripe_id = ?
+	`, uint64(time.Now().Unix()), id)
+	if err != nil {
+		return fmt.Errorf("unable to put a hold on the account: %s, %v", email, err)
+	}
+
+	return nil
+}
+
+// managedCheckOnHoldAccounts puts the accounts in the pre-payment
+// mode if the hold has been in place for a set period.
+func (p *Portal) managedCheckOnHoldAccounts() {
+	_, err := p.db.Exec(`
+		UPDATE mg_balances
+		SET subscribed = FALSE
+		WHERE on_hold > 0 AND on_hold < ?
+	`, uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())))
+	if err != nil {
+		p.log.Println("ERROR: couldn't update account:", err)
+	}
 }

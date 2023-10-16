@@ -44,6 +44,9 @@ type Portal struct {
 	// Watch list of SC payment transactions.
 	transactions map[types.TransactionID]types.Address
 
+	// Name of the satellite node.
+	name string
+
 	// Utilities.
 	listener      net.Listener
 	log           *persist.Logger
@@ -55,7 +58,7 @@ type Portal struct {
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wallet, m modules.Manager, p modules.Provider, dir string) (*Portal, error) {
+func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wallet, m modules.Manager, p modules.Provider, dir string, name string) (*Portal, error) {
 	var err error
 
 	// Check that all the dependencies were provided.
@@ -91,6 +94,7 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 
 		authStats:    make(map[string]authenticationStats),
 		transactions: make(map[types.TransactionID]types.Address),
+		name:         name,
 
 		staticAlerter: modules.NewAlerter("portal"),
 		closeChan:     make(chan int, 1),
@@ -136,6 +140,9 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 
 	// Spawn the thread to periodically check the wallet.
 	go pt.threadedWatchForNewTxns()
+
+	// Spawn the thread to periodically check the accounts that are on hold.
+	go pt.threadedCheckOnHoldAccounts()
 
 	// Make sure that the portal saves after shutdown.
 	pt.tg.AfterStop(func() {

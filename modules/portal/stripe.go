@@ -12,6 +12,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/stripe/stripe-go/v75"
 	"github.com/stripe/stripe-go/v75/customer"
+	"github.com/stripe/stripe-go/v75/invoice"
 	"github.com/stripe/stripe-go/v75/paymentintent"
 	"github.com/stripe/stripe-go/v75/webhook"
 )
@@ -272,6 +273,18 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 		api.portal.handlePaymentIntentSucceeded(paymentIntent)
 		return
 
+	case "payment_intent.payment_failed":
+		var paymentIntent stripe.PaymentIntent
+		err := json.Unmarshal(event.Data.Raw, &paymentIntent)
+		if err != nil {
+			api.portal.log.Println("Error parsing webhook JSON:", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		api.portal.handlePaymentIntentFailed(paymentIntent)
+		return
+
 	default:
 		api.portal.log.Printf("Unhandled event type: %s\n", event.Type)
 	}
@@ -279,7 +292,7 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
-// handlePaymentIntentSucceeded handless a successful payment.
+// handlePaymentIntentSucceeded handles a successful payment.
 func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	cust := pi.Customer
 	def := pi.SetupFutureUsage == "off_session"
@@ -290,7 +303,7 @@ func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	}
 	err := p.addPayment(cust.ID, amount, currency, def)
 	if err != nil {
-		p.log.Println("ERROR: Could not add payment:", err)
+		p.log.Println("ERROR: could not add payment:", err)
 	}
 
 	// If a default payment method was specified, update the customer.
@@ -307,6 +320,26 @@ func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	}
 }
 
+// handlePaymentIntentFailed handles a failed payment.
+func (p *Portal) handlePaymentIntentFailed(pi stripe.PaymentIntent) {
+	in := pi.Invoice
+	if in == nil {
+		return
+	}
+
+	id := pi.Customer.ID
+	currency := strings.ToUpper(string(pi.Currency))
+	amount := float64(pi.Amount)
+	if !isZeroDecimal(currency) {
+		amount = amount / 100
+	}
+
+	err := p.requestPayment(id, in.ID, amount, currency)
+	if err != nil {
+		p.log.Println("ERROR: could not request payment:", err)
+	}
+}
+
 // isDefaultPaymentMethodSet returns true if the Stripe customer
 // has a default payment method set.
 func isDefaultPaymentMethodSet(id string) (bool, error) {
@@ -320,4 +353,19 @@ func isDefaultPaymentMethodSet(id string) (bool, error) {
 
 func init() {
 	stripe.Key = os.Getenv("SATD_STRIPE_KEY")
+}
+
+// getInvoiceAmount is a helper function that retrieves the due
+// amount of an invoice.
+func getInvoiceAmount(id string) float64 {
+	in, err := invoice.Get(id, &stripe.InvoiceParams{})
+	if err != nil {
+		return 0
+	}
+	curr := strings.ToUpper(string(in.Currency))
+	amount := float64(in.AmountDue)
+	if !isZeroDecimal(curr) {
+		amount = amount / 100
+	}
+	return amount
 }

@@ -262,6 +262,11 @@ OUTER:
 			if !ub.Subscribed && ub.Balance < fee {
 				m.contractor.log.Println("WARN: skipping slab migrations due to an insufficient account balance:", renter.Email)
 				numSlabs[rpk] = 0
+				continue
+			}
+			if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+				m.contractor.log.Println("WARN: skipping slab migrations due to the account being on hold:", renter.Email)
+				numSlabs[rpk] = 0
 			}
 		}
 		for _, slab := range toRepair {

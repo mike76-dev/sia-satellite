@@ -99,11 +99,12 @@ func dbPutAverages(tx *sql.Tx, avg modules.HostAverages) error {
 func (m *Manager) GetBalance(email string) (modules.UserBalance, error) {
 	var sub bool
 	var b, l float64
-	var c, id string
+	var c, id, in string
+	var oh uint64
 	err := m.db.QueryRow(`
-		SELECT subscribed, sc_balance, sc_locked, currency, stripe_id
+		SELECT subscribed, sc_balance, sc_locked, currency, stripe_id, invoice, on_hold
 		FROM mg_balances WHERE email = ?
-	`, email).Scan(&sub, &b, &l, &c, &id)
+	`, email).Scan(&sub, &b, &l, &c, &id, &in, &oh)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return modules.UserBalance{}, err
 	}
@@ -136,6 +137,8 @@ func (m *Manager) GetBalance(email string) (modules.UserBalance, error) {
 		Currency:   c,
 		StripeID:   id,
 		SCRate:     scRate,
+		Invoice:    in,
+		OnHold:     oh,
 	}
 
 	return ub, nil
@@ -145,9 +148,9 @@ func (m *Manager) GetBalance(email string) (modules.UserBalance, error) {
 func (m *Manager) UpdateBalance(email string, ub modules.UserBalance) error {
 	_, err := m.db.Exec(`
 		REPLACE INTO mg_balances
-		(email, subscribed, sc_balance, sc_locked, currency, stripe_id)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID)
+		(email, subscribed, sc_balance, sc_locked, currency, stripe_id, invoice, on_hold)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, ub.Subscribed, ub.Balance, ub.Locked, ub.Currency, ub.StripeID, ub.Invoice, ub.OnHold)
 
 	return err
 }
@@ -409,4 +412,10 @@ func (m *Manager) sendWarning() {
 	if err := tx.Commit(); err != nil {
 		m.log.Println("ERROR: couldn't commit the changes:", err)
 	}
+}
+
+// putInvoice puts the specified invoice ID in the balance record.
+func (m *Manager) putInvoice(id string, invoice string) error {
+	_, err := m.db.Exec("UPDATE mg_balances SET invoice = ? WHERE stripe_id = ?", invoice, id)
+	return err
 }

@@ -683,6 +683,9 @@ func (m *Manager) FormContracts(rpk types.PublicKey, rsk types.PrivateKey, a mod
 	if !ub.Subscribed && ub.Balance < estimation {
 		return nil, errors.New("insufficient account balance")
 	}
+	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+		return nil, errors.New("account on hold")
+	}
 
 	// Set the allowance.
 	err = m.SetAllowance(rpk, a)
@@ -715,6 +718,9 @@ func (m *Manager) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, a mo
 	}
 	if !ub.Subscribed && ub.Balance < estimation {
 		return nil, errors.New("insufficient account balance")
+	}
+	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+		return nil, errors.New("account on hold")
 	}
 
 	// Set the allowance.
@@ -776,6 +782,9 @@ func (m *Manager) FormContract(s *modules.RPCSession, rpk types.PublicKey, epk t
 	if !ub.Subscribed && ub.Balance < estimation {
 		return modules.RenterContract{}, errors.New("insufficient account balance")
 	}
+	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+		return modules.RenterContract{}, errors.New("account on hold")
+	}
 
 	// Form the contract.
 	contract, err := m.hostContractor.FormContract(s, rpk, epk, hpk, funding, endHeight)
@@ -808,6 +817,9 @@ func (m *Manager) RenewContract(s *modules.RPCSession, rpk types.PublicKey, fcid
 	}
 	if !ub.Subscribed && ub.Balance < estimation {
 		return modules.RenterContract{}, errors.New("insufficient account balance")
+	}
+	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+		return modules.RenterContract{}, errors.New("account on hold")
 	}
 
 	// Renew the contract.
@@ -892,6 +904,11 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 	}
 	ub.Locked -= (unlocked + burned)
 	ub.Balance += unlocked
+
+	// Remove the hold if there was any.
+	if ub.Balance >= 0 {
+		ub.OnHold = 0
+	}
 
 	// Save the new balance.
 	err = m.UpdateBalance(email, ub)
@@ -979,6 +996,9 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	if !ub.Subscribed && ub.Balance < fee {
 		return errors.New("insufficient account balance")
 	}
+	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+		return errors.New("account on hold")
+	}
 
 	// Update the metadata.
 	err = m.hostContractor.UpdateMetadata(pk, fm)
@@ -1038,6 +1058,9 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 	if !ub.Subscribed && ub.Balance < fee {
 		return nil, errors.New("insufficient account balance")
 	}
+	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+		return nil, errors.New("account on hold")
+	}
 	ub.Balance -= fee
 	err = m.UpdateBalance(renter.Email, ub)
 	if err != nil {
@@ -1075,6 +1098,9 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 	fee := modules.MigrateSlabFee
 	if !ub.Subscribed && ub.Balance < fee {
 		return errors.New("insufficient account balance")
+	}
+	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+		return errors.New("account on hold")
 	}
 
 	// Update the slab.

@@ -3,6 +3,7 @@ package contractor
 import (
 	"errors"
 	"math/big"
+	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/contractor/contractset"
@@ -555,6 +556,10 @@ func (c *Contractor) threadedContractMaintenance() {
 			c.log.Println("INFO: renewal skipped, because renter balance is insufficient")
 			continue
 		}
+		if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+			c.log.Println("INFO: renewal skipped, because renter account is on hold")
+			continue
+		}
 
 		// Renew one contract. The error is ignored because the renew function
 		// already will have logged the error, and in the event of an error,
@@ -628,6 +633,10 @@ func (c *Contractor) threadedContractMaintenance() {
 		cost := modules.Float64(renewal.amount)
 		if !ub.Subscribed && ub.Balance < cost/hastings {
 			c.log.Println("INFO: renewal skipped, because renter balance is insufficient")
+			continue
+		}
+		if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+			c.log.Println("INFO: renewal skipped, because renter account is on hold")
 			continue
 		}
 
@@ -777,6 +786,10 @@ func (c *Contractor) threadedContractMaintenance() {
 			cost := modules.Float64(contractFunds)
 			if !ub.Subscribed && ub.Balance < cost/hastings {
 				c.log.Println("INFO: contract formation skipped, because renter balance is insufficient")
+				continue
+			}
+			if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+				c.log.Println("INFO: contract formation skipped, because renter account is on hold")
 				continue
 			}
 

@@ -11,6 +11,10 @@ import (
 // for new transactions.
 const walletCheckInterval = time.Minute
 
+// onHoldCheckInterval determines how often the accounts, which are
+// on hold, are checked.
+const onHoldCheckInterval = 30 * time.Minute
+
 // threadedWatchForNewTxns performs the wallet checks with set
 // intervals.
 func (p *Portal) threadedWatchForNewTxns() {
@@ -94,5 +98,23 @@ func (p *Portal) ProcessConsensusChange(cc modules.ConsensusChange) {
 				p.log.Println("ERROR: couldn't confirm SC payment:", err)
 			}
 		}
+	}
+}
+
+// threadedCheckOnHoldAccounts performs the account checks with set
+// intervals.
+func (p *Portal) threadedCheckOnHoldAccounts() {
+	if err := p.tg.Add(); err != nil {
+		return
+	}
+	defer p.tg.Done()
+
+	for {
+		select {
+		case <-p.tg.StopChan():
+			return
+		case <-time.After(onHoldCheckInterval):
+		}
+		p.managedCheckOnHoldAccounts()
 	}
 }

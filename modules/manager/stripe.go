@@ -97,5 +97,11 @@ func (m *Manager) managedCreateInvoice(id string, currency string, amount float6
 		return modules.AddContext(err, "unable to create invoice item")
 	}
 
+	// Save the invoice ID for tracking.
+	err = m.putInvoice(id, in.ID)
+	if err != nil {
+		return modules.AddContext(err, "unable to save invoice ID")
+	}
+
 	return nil
 }
