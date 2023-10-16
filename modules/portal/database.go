@@ -279,8 +279,10 @@ func (p *Portal) addPayment(id string, amount float64, currency string, def bool
 	}
 
 	// Update the payments table.
-	if err = p.putPayment(email, amount, currency, types.TransactionID{}); err != nil {
-		return err
+	if !def {
+		if err = p.putPayment(email, amount, currency, types.TransactionID{}); err != nil {
+			return err
+		}
 	}
 
 	// Calculate the new balance.
@@ -296,7 +298,9 @@ func (p *Portal) addPayment(id string, amount float64, currency string, def bool
 	if credit {
 		ub.StripeID = ""
 	}
-	ub.Balance += amount / rate
+	if !def {
+		ub.Balance += amount / rate
+	}
 
 	// Update the balances table.
 	if err = p.manager.UpdateBalance(email, ub); err != nil {

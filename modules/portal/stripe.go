@@ -188,12 +188,14 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	}
 
 	// Create a PaymentIntent with amount and currency.
-	var sfu *string
+	var sfu, cm *string
 	id := data.Items[0].ID
 	if strings.HasPrefix(id, "default:") {
 		// An indication that this is the default payment method.
 		sfu = stripe.String("off_session")
 		id = strings.TrimPrefix(id, "default:")
+		// An indication to authorize the amount only.
+		cm = stripe.String(string(stripe.PaymentIntentCaptureMethodManual))
 	}
 	amount, currency, pErr := calculateOrderAmount(id)
 	if pErr != nil {
@@ -213,6 +215,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 			Enabled: stripe.Bool(true),
 		},
 		SetupFutureUsage: sfu,
+		CaptureMethod:    cm,
 	}
 
 	pi, pErr := paymentintent.New(params)

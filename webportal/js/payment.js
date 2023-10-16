@@ -8,7 +8,7 @@ async function initialize(def) {
 	document.getElementById('payment-submit').classList.add('disabled');
 	document.getElementById('payment-back').classList.add('disabled');
 	document.getElementById('payment-header').innerHTML = 
-		def ? 'You need to set up the default payment method. For this you will be charged the minimum amount of' :
+		def ? 'You need to set up the default payment method. For this, a small amount will be temporarily authorized on your card:' :
 		'You are going to make a payment of';
 	let amount = (def ? 'default:' : '') + paymentAmount.toFixed(2) + paymentCurrency;
 	let items = [{ id: amount }];
@@ -101,6 +101,9 @@ async function checkStatus() {
 			break;
 		case 'requires_payment_method':
 			showTextAndReload('Your payment was not successful, please try again.');
+			break;
+		case 'requires_capture':
+			showTextAndReload('Authorization succeeded!');
 			break;
 		default:
 			showTextAndReload('Something went wrong.');
