@@ -419,3 +419,76 @@ func (m *Manager) putInvoice(id string, invoice string) error {
 	_, err := m.db.Exec("UPDATE mg_balances SET invoice = ? WHERE stripe_id = ?", invoice, id)
 	return err
 }
+
+// UpdatePrices updates the pricing table in the database.
+func (m *Manager) UpdatePrices(prices modules.Pricing) error {
+	_, err := m.db.Exec(`
+		REPLACE INTO mg_prices (
+			id,
+			form_contract_prepayment,
+			form_contract_invoicing,
+			save_metadata_prepayment,
+			save_metadata_invoicing,
+			store_metadata_prepayment,
+			store_metadata_invoicing,
+			retrieve_metadata_prepayment,
+			retrieve_metadata_invoicing,
+			migrate_slab_prepayment,
+			migrate_slab_invoicing
+		)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		prices.FormContract.PrePayment,
+		prices.FormContract.Invoicing,
+		prices.SaveMetadata.PrePayment,
+		prices.SaveMetadata.Invoicing,
+		prices.StoreMetadata.PrePayment,
+		prices.StoreMetadata.Invoicing,
+		prices.RetrieveMetadata.PrePayment,
+		prices.RetrieveMetadata.Invoicing,
+		prices.MigrateSlab.PrePayment,
+		prices.MigrateSlab.Invoicing,
+	)
+	return err
+}
+
+// loadPrices loads the prices from the database. If no prices are
+// stored yet, default prices are taken.
+func (m *Manager) loadPrices() error {
+	err := m.db.QueryRow(`
+		SELECT
+			form_contract_prepayment,
+			form_contract_invoicing,
+			save_metadata_prepayment,
+			save_metadata_invoicing,
+			store_metadata_prepayment,
+			store_metadata_invoicing,
+			retrieve_metadata_prepayment,
+			retrieve_metadata_invoicing,
+			migrate_slab_prepayment,
+			migrate_slab_invoicing
+		FROM mg_prices
+		WHERE id = 1
+	`).Scan(
+		&modules.StaticPricing.FormContract.PrePayment,
+		&modules.StaticPricing.FormContract.Invoicing,
+		&modules.StaticPricing.SaveMetadata.PrePayment,
+		&modules.StaticPricing.SaveMetadata.Invoicing,
+		&modules.StaticPricing.StoreMetadata.PrePayment,
+		&modules.StaticPricing.StoreMetadata.Invoicing,
+		&modules.StaticPricing.RetrieveMetadata.PrePayment,
+		&modules.StaticPricing.RetrieveMetadata.Invoicing,
+		&modules.StaticPricing.MigrateSlab.PrePayment,
+		&modules.StaticPricing.MigrateSlab.Invoicing,
+	)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	if err != nil {
+		modules.StaticPricing = modules.DefaultPricing
+		return m.UpdatePrices(modules.DefaultPricing)
+	}
+
+	return nil
+}

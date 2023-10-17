@@ -373,7 +373,7 @@ func (m *Manager) OldContractsByRenter(rpk types.PublicKey) []modules.RenterCont
 // PriceEstimation estimates the cost in siacoins of forming contracts with
 // the hosts. The estimation will be done using the provided allowance.
 // The final allowance used will be returned.
-func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules.Allowance, error) {
+func (m *Manager) PriceEstimation(allowance modules.Allowance, invoicing bool) (float64, modules.Allowance, error) {
 	if err := m.tg.Add(); err != nil {
 		return 0, modules.Allowance{}, err
 	}
@@ -552,7 +552,13 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 	est := totalContractCost.Add(totalDownloadCost)
 	est = est.Add(totalStorageCost)
 	est = est.Add(totalUploadCost)
-	cost := modules.Float64(est) * (1 + modules.FormContractFee)
+	var fee float64
+	if invoicing {
+		fee = modules.StaticPricing.FormContract.Invoicing
+	} else {
+		fee = modules.StaticPricing.FormContract.PrePayment
+	}
+	cost := modules.Float64(est) * (1 + fee)
 	h := modules.Float64(types.HastingsPerSiacoin)
 	allowance.Funds = totalCost
 
@@ -565,7 +571,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance) (float64, modules
 
 // ContractPriceEstimation estimates the cost in siacoins of forming a contract
 // with the given host.
-func (m *Manager) ContractPriceEstimation(hpk types.PublicKey, endHeight uint64, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (types.Currency, float64, error) {
+func (m *Manager) ContractPriceEstimation(hpk types.PublicKey, endHeight uint64, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64, invoicing bool) (types.Currency, float64, error) {
 	if err := m.tg.Add(); err != nil {
 		return types.ZeroCurrency, 0, err
 	}
@@ -641,7 +647,13 @@ func (m *Manager) ContractPriceEstimation(hpk types.PublicKey, endHeight uint64,
 	est := contractCost.Add(downloadCost)
 	est = est.Add(storageCost)
 	est = est.Add(uploadCost)
-	cost := modules.Float64(est) * (1 + modules.FormContractFee)
+	var fee float64
+	if invoicing {
+		fee = modules.StaticPricing.FormContract.Invoicing
+	} else {
+		fee = modules.StaticPricing.FormContract.PrePayment
+	}
+	cost := modules.Float64(est) * (1 + fee)
 	h := modules.Float64(types.HastingsPerSiacoin)
 
 	return funding, cost / h, nil
@@ -665,13 +677,7 @@ func (m *Manager) CreateNewRenter(email string, pk types.PublicKey) {
 // FormContracts forms the specified number of contracts with the hosts
 // and returns them.
 func (m *Manager) FormContracts(rpk types.PublicKey, rsk types.PrivateKey, a modules.Allowance) ([]modules.RenterContract, error) {
-	// Get the estimated costs and update the allowance with them.
-	estimation, a, err := m.PriceEstimation(a)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if the user balance is sufficient to cover the costs.
+	// Get the user balance.
 	renter, err := m.GetRenter(rpk)
 	if err != nil {
 		return nil, err
@@ -680,6 +686,14 @@ func (m *Manager) FormContracts(rpk types.PublicKey, rsk types.PrivateKey, a mod
 	if err != nil {
 		return nil, err
 	}
+
+	// Get the estimated costs and update the allowance with them.
+	estimation, a, err := m.PriceEstimation(a, ub.Subscribed)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the balance is sufficient to cover the costs.
 	if !ub.Subscribed && ub.Balance < estimation {
 		return nil, errors.New("insufficient account balance")
 	}
@@ -701,13 +715,7 @@ func (m *Manager) FormContracts(rpk types.PublicKey, rsk types.PrivateKey, a mod
 
 // RenewContracts renews a set of contracts and returns a new set.
 func (m *Manager) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, a modules.Allowance, contracts []types.FileContractID) ([]modules.RenterContract, error) {
-	// Get the estimated costs and update the allowance with them.
-	estimation, a, err := m.PriceEstimation(a)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if the user balance is sufficient to cover the costs.
+	// Get the user balance.
 	renter, err := m.GetRenter(rpk)
 	if err != nil {
 		return nil, err
@@ -716,6 +724,14 @@ func (m *Manager) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, a mo
 	if err != nil {
 		return nil, err
 	}
+
+	// Get the estimated costs and update the allowance with them.
+	estimation, a, err := m.PriceEstimation(a, ub.Subscribed)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the balance is sufficient to cover the costs.
 	if !ub.Subscribed && ub.Balance < estimation {
 		return nil, errors.New("insufficient account balance")
 	}
@@ -764,13 +780,7 @@ func (m *Manager) Contract(fcid types.FileContractID) (modules.RenterContract, b
 // FormContract creates a contract with a single host using the new
 // Renter-Satellite protocol.
 func (m *Manager) FormContract(s *modules.RPCSession, rpk types.PublicKey, epk types.PublicKey, hpk types.PublicKey, endHeight uint64, storage uint64, upload uint64, download uint64, minShards uint64, totalShards uint64) (modules.RenterContract, error) {
-	// Get the estimated costs.
-	funding, estimation, err := m.ContractPriceEstimation(hpk, endHeight, storage, upload, download, minShards, totalShards)
-	if err != nil {
-		return modules.RenterContract{}, err
-	}
-
-	// Check if the user balance is sufficient to cover the costs.
+	// Get the user balance.
 	renter, err := m.GetRenter(rpk)
 	if err != nil {
 		return modules.RenterContract{}, err
@@ -779,6 +789,14 @@ func (m *Manager) FormContract(s *modules.RPCSession, rpk types.PublicKey, epk t
 	if err != nil {
 		return modules.RenterContract{}, err
 	}
+
+	// Get the estimated costs.
+	funding, estimation, err := m.ContractPriceEstimation(hpk, endHeight, storage, upload, download, minShards, totalShards, ub.Subscribed)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+
+	// Check if the balance is sufficient to cover the costs.
 	if !ub.Subscribed && ub.Balance < estimation {
 		return modules.RenterContract{}, errors.New("insufficient account balance")
 	}
@@ -800,13 +818,7 @@ func (m *Manager) RenewContract(s *modules.RPCSession, rpk types.PublicKey, fcid
 		return modules.RenterContract{}, errors.New("contract not found")
 	}
 
-	// Get the estimated costs.
-	funding, estimation, err := m.ContractPriceEstimation(contract.HostPublicKey, endHeight, storage, upload, download, minShards, totalShards)
-	if err != nil {
-		return modules.RenterContract{}, err
-	}
-
-	// Check if the user balance is sufficient to cover the costs.
+	// Get the user balance.
 	renter, err := m.GetRenter(rpk)
 	if err != nil {
 		return modules.RenterContract{}, err
@@ -815,6 +827,14 @@ func (m *Manager) RenewContract(s *modules.RPCSession, rpk types.PublicKey, fcid
 	if err != nil {
 		return modules.RenterContract{}, err
 	}
+
+	// Get the estimated costs.
+	funding, estimation, err := m.ContractPriceEstimation(contract.HostPublicKey, endHeight, storage, upload, download, minShards, totalShards, ub.Subscribed)
+	if err != nil {
+		return modules.RenterContract{}, err
+	}
+
+	// Check if the balance is sufficient to cover the costs.
 	if !ub.Subscribed && ub.Balance < estimation {
 		return modules.RenterContract{}, errors.New("insufficient account balance")
 	}
@@ -847,7 +867,13 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 	}
 
 	// Include the Satellite fee.
-	amountWithFee := amount * (1 + modules.FormContractFee)
+	var fee float64
+	if ub.Subscribed {
+		fee = modules.StaticPricing.FormContract.Invoicing
+	} else {
+		fee = modules.StaticPricing.FormContract.PrePayment
+	}
+	amountWithFee := amount * (1 + fee)
 	if !ub.Subscribed && amountWithFee > ub.Balance {
 		m.log.Println("WARN: trying to lock more than the available balance")
 		amountWithFee = ub.Balance
@@ -888,7 +914,13 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 	}
 
 	// Include the Satellite fee.
-	totalWithFee := total * (1 + modules.FormContractFee)
+	var fee float64
+	if ub.Subscribed {
+		fee = modules.StaticPricing.FormContract.Invoicing
+	} else {
+		fee = modules.StaticPricing.FormContract.PrePayment
+	}
+	totalWithFee := total * (1 + fee)
 
 	// Calculate the new balance.
 	unlocked := amount
@@ -992,8 +1024,14 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	if err != nil {
 		return err
 	}
-	fee := float64(len(fm.Slabs)) * modules.SaveMetadataFee
-	if !ub.Subscribed && ub.Balance < fee {
+	var fee float64
+	if ub.Subscribed {
+		fee = modules.StaticPricing.SaveMetadata.Invoicing
+	} else {
+		fee = modules.StaticPricing.SaveMetadata.PrePayment
+	}
+	cost := float64(len(fm.Slabs)) * fee
+	if !ub.Subscribed && ub.Balance < cost {
 		return errors.New("insufficient account balance")
 	}
 	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
@@ -1007,7 +1045,7 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	}
 
 	// Deduct from the account balance.
-	ub.Balance -= fee
+	ub.Balance -= cost
 	err = m.UpdateBalance(renter.Email, ub)
 	if err != nil {
 		return err
@@ -1018,8 +1056,8 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	if err != nil {
 		return err
 	}
-	us.CurrentUsed += fee
-	us.CurrentOverhead += fee
+	us.CurrentUsed += cost
+	us.CurrentOverhead += cost
 	us.CurrentSlabsSaved += uint64(len(fm.Slabs))
 
 	return m.UpdateSpendings(renter.Email, us)
@@ -1049,19 +1087,25 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 	}
 
 	// Deduct from the balance.
-	var fee float64
+	var cost float64
 	var numRetrieved uint64
+	var fee float64
+	if ub.Subscribed {
+		fee = modules.StaticPricing.RetrieveMetadata.Invoicing
+	} else {
+		fee = modules.StaticPricing.RetrieveMetadata.PrePayment
+	}
 	for _, fm := range md {
-		fee += float64(len(fm.Slabs)) * modules.RetrieveMetadataFee
+		cost += float64(len(fm.Slabs)) * fee
 		numRetrieved += uint64(len(fm.Slabs))
 	}
-	if !ub.Subscribed && ub.Balance < fee {
+	if !ub.Subscribed && ub.Balance < cost {
 		return nil, errors.New("insufficient account balance")
 	}
 	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
 		return nil, errors.New("account on hold")
 	}
-	ub.Balance -= fee
+	ub.Balance -= cost
 	err = m.UpdateBalance(renter.Email, ub)
 	if err != nil {
 		return nil, err
@@ -1072,8 +1116,8 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modu
 	if err != nil {
 		return nil, err
 	}
-	us.CurrentUsed += fee
-	us.CurrentOverhead += fee
+	us.CurrentUsed += cost
+	us.CurrentOverhead += cost
 	us.CurrentSlabsRetrieved += numRetrieved
 
 	err = m.UpdateSpendings(renter.Email, us)
@@ -1095,7 +1139,12 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 	if err != nil {
 		return err
 	}
-	fee := modules.MigrateSlabFee
+	var fee float64
+	if ub.Subscribed {
+		fee = modules.StaticPricing.MigrateSlab.Invoicing
+	} else {
+		fee = modules.StaticPricing.MigrateSlab.PrePayment
+	}
 	if !ub.Subscribed && ub.Balance < fee {
 		return errors.New("insufficient account balance")
 	}

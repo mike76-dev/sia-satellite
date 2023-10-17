@@ -151,8 +151,14 @@ func (m *migrator) performMigrations(ctx context.Context) {
 				m.contractor.log.Println("ERROR: couldn't get renter balance:", err)
 				continue
 			}
-			fee := float64(num) * modules.MigrateSlabFee
-			ub.Balance -= fee
+			var fee float64
+			if ub.Subscribed {
+				fee = modules.StaticPricing.MigrateSlab.Invoicing
+			} else {
+				fee = modules.StaticPricing.MigrateSlab.PrePayment
+			}
+			cost := float64(num) * fee
+			ub.Balance -= cost
 			err = m.contractor.m.UpdateBalance(renter.Email, ub)
 			if err != nil {
 				m.contractor.log.Println("ERROR: couldn't update renter balance:", err)
@@ -165,7 +171,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 				m.contractor.log.Println("ERROR: couldn't retrieve renter spendings:", err)
 				continue
 			}
-			us.CurrentOverhead += fee
+			us.CurrentOverhead += cost
 			us.CurrentSlabsMigrated += num
 
 			err = m.contractor.m.UpdateSpendings(renter.Email, us)
@@ -258,8 +264,14 @@ OUTER:
 				numSlabs[rpk] = 0
 				continue
 			}
-			fee := float64(num) * modules.MigrateSlabFee
-			if !ub.Subscribed && ub.Balance < fee {
+			var fee float64
+			if ub.Subscribed {
+				fee = modules.StaticPricing.MigrateSlab.Invoicing
+			} else {
+				fee = modules.StaticPricing.MigrateSlab.PrePayment
+			}
+			cost := float64(num) * fee
+			if !ub.Subscribed && ub.Balance < cost {
 				m.contractor.log.Println("WARN: skipping slab migrations due to an insufficient account balance:", renter.Email)
 				numSlabs[rpk] = 0
 				continue

@@ -83,6 +83,12 @@ func (m *Manager) initPersist(dir string) error {
 		return modules.AddContext(err, "unable to load email preferences")
 	}
 
+	// Load prices.
+	err = m.loadPrices()
+	if err != nil {
+		return modules.AddContext(err, "unable to load prices")
+	}
+
 	// Create the global tx that will be used for most persist actions.
 	m.dbTx, err = m.db.Begin()
 	if err != nil {

@@ -430,6 +430,9 @@ type Manager interface {
 	// UpdateMetadata updates the file metadata in the database.
 	UpdateMetadata(types.PublicKey, FileMetadata) error
 
+	// UpdatePrices updates the pricing table in the database.
+	UpdatePrices(prices Pricing) error
+
 	// UpdateRenterSettings updates the renter's opt-in settings.
 	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey, types.PrivateKey) error
 

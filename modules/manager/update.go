@@ -305,21 +305,46 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 			var formed, renewed, stored, saved, retrieved, migrated uint64
 			var formedFee, renewedFee, storedFee, savedFee, retrievedFee, migratedFee float64
 			for _, renter := range renters {
+				ub, err := m.GetBalance(renter.Email)
+				if err != nil {
+					m.log.Println("ERROR: couldn't retrieve balance:", err)
+					continue
+				}
 				us, err := m.GetSpendings(renter.Email)
 				if err != nil {
 					m.log.Println("ERROR: couldn't retrieve renter spendings:", err)
 					continue
 				}
 				formed += us.CurrentFormed
-				formedFee += float64(us.CurrentFormed) * modules.FormContractFee
+				if ub.Subscribed {
+					formedFee += float64(us.CurrentFormed) * modules.StaticPricing.FormContract.Invoicing
+				} else {
+					formedFee += float64(us.CurrentFormed) * modules.StaticPricing.FormContract.PrePayment
+				}
 				renewed += us.CurrentRenewed
-				renewedFee += float64(us.CurrentRenewed) * modules.FormContractFee
+				if ub.Subscribed {
+					renewedFee += float64(us.CurrentRenewed) * modules.StaticPricing.FormContract.Invoicing
+				} else {
+					renewedFee += float64(us.CurrentRenewed) * modules.StaticPricing.FormContract.PrePayment
+				}
 				saved += us.CurrentSlabsSaved
-				savedFee += float64(us.CurrentSlabsSaved) * modules.SaveMetadataFee
+				if ub.Subscribed {
+					savedFee += float64(us.CurrentSlabsSaved) * modules.StaticPricing.SaveMetadata.Invoicing
+				} else {
+					savedFee += float64(us.CurrentSlabsSaved) * modules.StaticPricing.SaveMetadata.PrePayment
+				}
 				retrieved += us.CurrentSlabsRetrieved
-				retrievedFee += float64(us.CurrentSlabsRetrieved) * modules.RetrieveMetadataFee
+				if ub.Subscribed {
+					retrievedFee += float64(us.CurrentSlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.Invoicing
+				} else {
+					retrievedFee += float64(us.CurrentSlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.PrePayment
+				}
 				migrated += us.CurrentSlabsMigrated
-				migratedFee += float64(us.CurrentSlabsMigrated) * modules.MigrateSlabFee
+				if ub.Subscribed {
+					migratedFee += float64(us.CurrentSlabsMigrated) * modules.StaticPricing.MigrateSlab.Invoicing
+				} else {
+					migratedFee += float64(us.CurrentSlabsMigrated) * modules.StaticPricing.MigrateSlab.PrePayment
+				}
 				us.PrevLocked = us.CurrentLocked
 				us.PrevUsed = us.CurrentUsed
 				us.PrevOverhead = us.CurrentOverhead
@@ -341,21 +366,23 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					m.log.Println("ERROR: couldn't retrieve slab count:", err)
 					continue
 				}
-				fee := float64(modules.StoreMetadataFee * count)
+				var fee float64
+				if ub.Subscribed {
+					fee = modules.StaticPricing.StoreMetadata.Invoicing
+				} else {
+					fee = modules.StaticPricing.StoreMetadata.PrePayment
+				}
+				cost := fee * float64(count)
 				stored += uint64(count)
-				storedFee += fee
-				us.PrevUsed += fee
-				us.PrevOverhead += fee
+				storedFee += cost
+				us.PrevUsed += cost
+				us.PrevOverhead += cost
 				err = m.UpdateSpendings(renter.Email, us)
 				if err != nil {
 					m.log.Println("ERROR: couldn't update spendings:", err)
 				}
 				// Deduct from the account balance.
-				ub, err := m.GetBalance(renter.Email)
-				if err != nil {
-					m.log.Println("ERROR: couldn't retrieve balance:", err)
-				}
-				if !ub.Subscribed && ub.Balance < fee {
+				if !ub.Subscribed && ub.Balance < cost {
 					// Insufficient balance, delete the file metadata.
 					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
 					m.DeleteMetadata(renter.PublicKey)
@@ -367,7 +394,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					m.DeleteMetadata(renter.PublicKey)
 					continue
 				}
-				ub.Balance -= fee
+				ub.Balance -= cost
 				if err := m.UpdateBalance(renter.Email, ub); err != nil {
 					m.log.Println("ERROR: couldn't update balance", err)
 				}

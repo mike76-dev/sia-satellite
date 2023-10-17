@@ -335,6 +335,7 @@ DROP TABLE IF EXISTS mg_timestamp;
 DROP TABLE IF EXISTS mg_averages;
 DROP TABLE IF EXISTS mg_spendings;
 DROP TABLE IF EXISTS mg_balances;
+DROP TABLE IF EXISTS mg_prices;
 
 CREATE TABLE mg_email (
 	id        INT NOT NULL AUTO_INCREMENT,
@@ -391,6 +392,21 @@ CREATE TABLE mg_balances (
 	PRIMARY KEY (email),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );
+
+CREATE TABLE mg_prices (
+	id INT NOT NULL AUTO_INCREMENT,
+	form_contract_prepayment     DOUBLE NOT NULL,
+	form_contract_invoicing      DOUBLE NOT NULL,
+	save_metadata_prepayment     DOUBLE NOT NULL,
+	save_metadata_invoicing      DOUBLE NOT NULL,
+	store_metadata_prepayment    DOUBLE NOT NULL,
+	store_metadata_invoicing     DOUBLE NOT NULL,
+	retrieve_metadata_prepayment DOUBLE NOT NULL,
+	retrieve_metadata_invoicing  DOUBLE NOT NULL,
+	migrate_slab_prepayment      DOUBLE NOT NULL,
+	migrate_slab_invoicing       DOUBLE NOT NULL,
+	PRIMARY KEY (id)
+)
 
 /* hostdb */
 
