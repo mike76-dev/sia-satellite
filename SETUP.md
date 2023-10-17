@@ -16,11 +16,11 @@ You will also need an email account, from which the users will be receiving emai
 
 ## To Start With
 
-Log into your server and download the Satellite files. This guide assumes that you will use the version `0.5.0` for an x86 CPU:
+Log into your server and download the Satellite files. This guide assumes that you will use the version `0.6.0` for an x86 CPU:
 ```
 mkdir ~/satellite
 cd ~/satellite
-wget -q https://github.com/mike76-dev/satellite/releases/download/v0.5.0/satellite_linux_amd64.zip
+wget -q https://github.com/mike76-dev/satellite/releases/download/v0.6.0/satellite_linux_amd64.zip
 unzip satellite_linux_amd64.zip
 rm satellite_linux_amd64.zip
 ```
@@ -387,7 +387,7 @@ In general, it is recommended to respond to any requests as soon as possible. If
 Once you have an account with Stripe, go to the "Developers" section of the Dashboard. You need to do three things there:
 1. Switch off the "Test mode" (the slider on the right-hand side).
 2. Go to the "API keys" tab and request the Publishable key and the Secret key. Take a note of both.
-3. Go to the "Webhooks" tab and add a new endpoint with the URL `https://your_domain/api/stripe/webhook` listening for `payment_intent.succeeded` events. Reveal the signing secret and take a note of it.
+3. Go to the "Webhooks" tab and add a new endpoint with the URL `https://your_domain/api/stripe/webhook` listening for `payment_intent.succeeded` and `payment_intent.payment_failed` events. Reveal the signing secret and take a note of it.
 
 ## Checking the Siacoin Exchange Rate API
 
@@ -527,7 +527,7 @@ Jul 31 15:16:17 <host> systemd[1]: Started satd.
 Jul 31 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
 Jul 31 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
 Jul 31 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
-Jul 31 15:16:17 <host> satd[226480]: satd v0.5.0
+Jul 31 15:16:17 <host> satd[226480]: satd v0.6.0
 Jul 31 15:16:17 <host> satd[226480]: Git Revision 2f5a918
 Jul 31 15:16:17 <host> satd[226480]: Loading...
 Jul 31 15:16:17 <host> satd[226480]: Creating mail client...
