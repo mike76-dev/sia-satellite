@@ -406,7 +406,7 @@ CREATE TABLE mg_prices (
 	migrate_slab_prepayment      DOUBLE NOT NULL,
 	migrate_slab_invoicing       DOUBLE NOT NULL,
 	PRIMARY KEY (id)
-)
+);
 
 /* hostdb */
 
