@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1"/>
+	<link rel="icon" href="assets/satellite-icon.png">
+    <script src="js/config.js"></script>
+    <script defer src="js/fees.js"></script>
+	<title>Sia Satellite - Fees</title>
+    <style>
+        table, th, td {
+            border: 1px solid black;
+        }
+
+        th, td {
+            padding: 10px;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        select {
+            margin-bottom: 10px;
+        }
+
+        .bold {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+	<h1>Current Fees</h1>
+    <label for="select">Choose your Currency:</label>
+    <select id="select" onchange="renderFees()"></select>
+    <br>
+	<table>
+        <tr>
+            <th></th>
+            <th colspan="2">Chosen Payment Plan</th>
+        </tr>
+        <tr>
+            <th></th>
+            <th>Pre-Payment</th>
+            <th>Invoicing</th>
+        </tr>
+        <tr>
+            <td class="bold">Form or Renew a Contract</td>
+            <td><span id="form-pp"></span> of the contract amount</td>
+            <td><span id="form-in"></span> of the contract amount</td>
+        </tr>
+        <tr>
+            <td class="bold">Backup File Metadata</td>
+            <td><span id="save-pp"></span> for a single slab*</td>
+            <td><span id="save-in"></span> for a single slab*</td>
+        </tr>
+        <tr>
+            <td class="bold">Restore File Metadata</td>
+            <td><span id="retrieve-pp"></span> for a single slab*</td>
+            <td><span id="retrieve-in"></span> for a single slab*</td>
+        </tr>
+        <tr>
+            <td class="bold">Store File Metadata</td>
+            <td><span id="store-pp"></span> for a single slab* per month</td>
+            <td><span id="store-in"></span> for a single slab* per month</td>
+        </tr>
+        <tr>
+            <td class="bold">Repair a File</td>
+            <td><span id="migrate-pp"></span> for a single slab*</td>
+            <td><span id="migrate-in"></span> for a single slab*</td>
+        </tr>
+    </table>
+    <p>
+        *Files stored on Sia consist of one or more slabs. A slab is raw data that has been
+        erasure-encoded into sector-sized shards. A sector is the minimum amount of data
+        that can be uploaded to a single host at a time, and it equals to 4MiB.
+    </p>
+    <p>
+        Example: if you upload a 120MiB file to Sia with the default redundancy settings
+        (10-of-30 shards), this file is split into 120/(4*10) = 3 slabs.
+    </p>
+</body>
+</html>

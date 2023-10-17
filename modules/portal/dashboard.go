@@ -921,3 +921,8 @@ func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 	writeSuccess(w)
 }
+
+// feesHandlerGET handles the GET /dashboard/fees requests.
+func (api *portalAPI) feesHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	writeJSON(w, modules.StaticPricing)
+}
