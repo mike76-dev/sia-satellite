@@ -449,6 +449,11 @@ func (m *Manager) UpdatePrices(prices modules.Pricing) error {
 		prices.MigrateSlab.PrePayment,
 		prices.MigrateSlab.Invoicing,
 	)
+
+	if err == nil {
+		modules.StaticPricing = prices
+	}
+
 	return err
 }
 

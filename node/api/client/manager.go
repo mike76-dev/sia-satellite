@@ -67,3 +67,20 @@ func (c *Client) ManagerPreferencesPost(ep api.EmailPreferences) error {
 	err = c.post("/manager/preferences", string(json), nil)
 	return err
 }
+
+// ManagerPricesGet requests the /manager/prices resource.
+func (c *Client) ManagerPricesGet() (prices modules.Pricing, err error) {
+	err = c.get("/manager/prices", &prices)
+	return
+}
+
+// ManagerPricesPost uses the /manager/prices resource to change
+// the current prices.
+func (c *Client) ManagerPricesPost(prices modules.Pricing) error {
+	json, err := json.Marshal(prices)
+	if err != nil {
+		return err
+	}
+	err = c.post("/manager/prices", string(json), nil)
+	return err
+}

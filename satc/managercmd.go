@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -73,6 +75,28 @@ var (
 		Short: "Change email preferences",
 		Long:  "Set the email preferences such as the email address and the warning threshold. Pass 'none' as the email address to remove it.",
 		Run:   wrap(managersetpreferencescmd),
+	}
+
+	managerPricesCmd = &cobra.Command{
+		Use:   "prices",
+		Short: "Display current prices",
+		Long:  "Display the current prices.",
+		Run:   wrap(managerpricescmd),
+	}
+
+	managerSetPricesCmd = &cobra.Command{
+		Use:   "setprices [type] [payment_plan] [value]",
+		Short: "Change current prices",
+		Long: `Change the current prices. Following types are accepted:
+
+formcontract:     fee for forming or renewing a single contract (fraction of the contract amount),
+savemetadata:     fee for backing up a single slab (in SC),
+retrievemetadata: fee for retrieving a single slab (in SC),
+storemetadata:    fee for storing a single slab for one month (in SC),
+migrateslab:      fee for repairing a single slab (in SC),
+
+For payment_plan, either 'prepayment' or 'invoicing' are accepted.`,
+		Run: wrap(managersetpricescmd),
 	}
 )
 
@@ -440,4 +464,103 @@ func managersetpreferencescmd(email, wt string) {
 	}
 
 	fmt.Println("Email preferences updated")
+}
+
+// managerpricescmd is the handler for the command `satc manager prices`.
+// Prints the current prices.
+func managerpricescmd() {
+	prices, err := httpClient.ManagerPricesGet()
+	if err != nil {
+		die(err)
+	}
+
+	fmt.Printf(`Current Prices:
+Form or Renew Contract (fraction of the contract amount):
+  Pre-Payment:    %v
+  Invoicing:      %v
+Backup a Slab (in SC):
+  Pre-Payment:    %v
+  Invoicing:      %v
+Restore a Slab (in SC):
+  Pre-Payment:    %v
+  Invoicing:      %v
+Store a Slab (in SC per month):
+  Pre-Payment:    %v
+  Invoicing:      %v
+Repair a Slab (in SC):
+  Pre-Payment:    %v
+  Invoicing:      %v
+`,
+		prices.FormContract.PrePayment,
+		prices.FormContract.Invoicing,
+		prices.SaveMetadata.PrePayment,
+		prices.SaveMetadata.Invoicing,
+		prices.RetrieveMetadata.PrePayment,
+		prices.RetrieveMetadata.Invoicing,
+		prices.StoreMetadata.PrePayment,
+		prices.StoreMetadata.Invoicing,
+		prices.MigrateSlab.PrePayment,
+		prices.MigrateSlab.Invoicing,
+	)
+}
+
+// managersetpricescmd is the handler for the command
+// `satc manager setprices [type] [payment_plan] [value]`.
+// Changes the current prices.
+func managersetpricescmd(typ, plan, v string) {
+	prices, err := httpClient.ManagerPricesGet()
+	if err != nil {
+		die(err)
+	}
+
+	if plan != "prepayment" && plan != "invoicing" {
+		die(errors.New("invalid payment plan"))
+	}
+
+	value, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		die(err)
+	}
+
+	switch typ {
+	case "formcontract":
+		if plan == "prepayment" {
+			prices.FormContract.PrePayment = value
+		} else {
+			prices.FormContract.Invoicing = value
+		}
+	case "savemetadata":
+		if plan == "prepayment" {
+			prices.SaveMetadata.PrePayment = value
+		} else {
+			prices.SaveMetadata.Invoicing = value
+		}
+	case "retrievemetadata":
+		if plan == "prepayment" {
+			prices.RetrieveMetadata.PrePayment = value
+		} else {
+			prices.RetrieveMetadata.Invoicing = value
+		}
+	case "storemetadata":
+		if plan == "prepayment" {
+			prices.StoreMetadata.PrePayment = value
+		} else {
+			prices.StoreMetadata.Invoicing = value
+		}
+	case "migrateslab":
+		if plan == "prepayment" {
+			prices.MigrateSlab.PrePayment = value
+		} else {
+			prices.MigrateSlab.Invoicing = value
+		}
+	default:
+		die(errors.New("invalid price type"))
+	}
+
+	err = httpClient.ManagerPricesPost(prices)
+	if err != nil {
+		die(err)
+	}
+
+	fmt.Println("Prices updated successfully")
 }

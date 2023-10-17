@@ -417,3 +417,27 @@ func (api *API) managerPreferencesHandlerPOST(w http.ResponseWriter, req *http.R
 
 	WriteSuccess(w)
 }
+
+// managerPricesHandlerGET handles the API call to /manager/prices.
+func (api *API) managerPricesHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
+	WriteJSON(w, modules.StaticPricing)
+}
+
+// managerPricesHandlerPOST handles the API call to /manager/prices.
+func (api *API) managerPricesHandlerPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	// Parse parameters.
+	var prices modules.Pricing
+	err := json.NewDecoder(req.Body).Decode(&prices)
+	if err != nil {
+		WriteError(w, Error{"invalid parameters: " + err.Error()}, http.StatusBadRequest)
+		return
+	}
+
+	// Set the prices.
+	if err := api.manager.UpdatePrices(prices); err != nil {
+		WriteError(w, Error{"failed to change the prices: " + err.Error()}, http.StatusInternalServerError)
+		return
+	}
+
+	WriteSuccess(w)
+}
