@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/internal/build"
@@ -877,7 +878,7 @@ func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, 
 			}, http.StatusInternalServerError)
 		return
 	}
-	if !ub.IsRenter {
+	if !ub.IsRenter || (ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds()))) {
 		writeError(w,
 			Error{
 				Code:    httpErrorBadRequest,
