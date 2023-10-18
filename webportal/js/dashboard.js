@@ -674,6 +674,8 @@ function renderPayments() {
 }
 
 function getPayments() {
+	let loading = document.getElementById('history-loading');
+	loading.classList.remove('disabled');
 	let options = {
 		method: 'GET',
 		headers: {
@@ -688,6 +690,7 @@ function getPayments() {
 			} else {
 				payments = data;
 				renderPayments();
+				loading.classList.add('disabled');
 			}
 		})
 		.catch(error => console.log(error));
@@ -860,6 +863,8 @@ function expandContract(e) {
 function getContracts() {
 	let current = document.getElementById('contracts-current').checked;
 	let old = document.getElementById('contracts-old').checked;
+	let loading = document.getElementById('contracts-loading');
+	loading.classList.remove('disabled');
 	let options = {
 		method: 'GET',
 		headers: {
@@ -872,6 +877,7 @@ function getContracts() {
 			if (!data) {
 				contracts = [];
 				renderContracts();
+				loading.classList.add('disabled');
 				return;
 			}
 			if (data.code) {
@@ -891,6 +897,7 @@ function getContracts() {
 					contracts = contracts.sort((a, b) => b.endheight - a.endheight);
 				}
 				renderContracts();
+				loading.classList.add('disabled');
 			}
 		})
 		.catch(error => console.log(error));
@@ -1235,6 +1242,8 @@ function selectFiles() {
 }
 
 function getFiles() {
+	let loading = document.getElementById('files-loading');
+	loading.classList.remove('disabled');
 	let options = {
 		method: 'GET',
 		headers: {
@@ -1250,6 +1259,7 @@ function getFiles() {
 			} else {
 				files = data;
 				renderFiles();
+				loading.classList.add('disabled');
 			}
 		})
 		.catch(error => console.log(error));
