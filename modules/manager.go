@@ -314,13 +314,13 @@ type Manager interface {
 	DeleteMetadata(types.PublicKey)
 
 	// DeleteObject deletes the saved file metadata object.
-	DeleteObject(types.PublicKey, string) error
+	DeleteObject(types.PublicKey, string, string) error
 
 	// DeleteRenter deletes the renter data from the memory.
 	DeleteRenter(string)
 
 	// DownloadObject downloads an object and returns it.
-	DownloadObject(io.Writer, types.PublicKey, string) error
+	DownloadObject(io.Writer, types.PublicKey, string, string) error
 
 	// FeeEstimation returns the minimum and the maximum estimated fees for
 	// a transaction.
@@ -399,7 +399,7 @@ type Manager interface {
 	Renters() []Renter
 
 	// RetrieveMetadata retrieves the file metadata from the database.
-	RetrieveMetadata(types.PublicKey, []string) ([]FileMetadata, error)
+	RetrieveMetadata(types.PublicKey, []BucketFiles) ([]FileMetadata, error)
 
 	// RetrieveSpendings retrieves the user's spendings.
 	RetrieveSpendings(string, string) (UserSpendings, error)
@@ -421,7 +421,7 @@ type Manager interface {
 	UnlockSiacoins(string, float64, float64, uint64) error
 
 	// UpdateBalance updates the balance information on the account.
-	UpdateBalance(email string, ub UserBalance) error
+	UpdateBalance(string, UserBalance) error
 
 	// UpdateContract updates the contract with the new revision and spending
 	// details.
@@ -431,7 +431,7 @@ type Manager interface {
 	UpdateMetadata(types.PublicKey, FileMetadata) error
 
 	// UpdatePrices updates the pricing table in the database.
-	UpdatePrices(prices Pricing) error
+	UpdatePrices(Pricing) error
 
 	// UpdateRenterSettings updates the renter's opt-in settings.
 	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey, types.PrivateKey) error
@@ -751,9 +751,12 @@ func (r *Renter) ContractEndHeight() uint64 {
 
 // FileMetadata contains the uploaded file metadata.
 type FileMetadata struct {
-	Key   types.Hash256 `json:"key"`
-	Path  string        `json:"path"`
-	Slabs []Slab        `json:"slabs"`
+	Key      types.Hash256 `json:"key"`
+	Bucket   string        `json:"bucket"`
+	Path     string        `json:"path"`
+	ETag     string        `json:"etag"`
+	MimeType string        `json:"mime"`
+	Slabs    []Slab        `json:"slabs"`
 }
 
 // Slab is a collection of shards.
@@ -810,7 +813,10 @@ func (s *Slab) DecodeFrom(d *types.Decoder) {
 // EncodeTo implements types.ProtocolObject.
 func (fm *FileMetadata) EncodeTo(e *types.Encoder) {
 	fm.Key.EncodeTo(e)
+	e.WriteString(fm.Bucket)
 	e.WriteString(fm.Path)
+	e.WriteString(fm.ETag)
+	e.WriteString(fm.MimeType)
 	e.WritePrefix(len(fm.Slabs))
 	for _, s := range fm.Slabs {
 		s.EncodeTo(e)
@@ -820,9 +826,36 @@ func (fm *FileMetadata) EncodeTo(e *types.Encoder) {
 // DecodeFrom implements types.ProtocolObject.
 func (fm *FileMetadata) DecodeFrom(d *types.Decoder) {
 	fm.Key.DecodeFrom(d)
+	fm.Bucket = d.ReadString()
 	fm.Path = d.ReadString()
+	fm.ETag = d.ReadString()
+	fm.MimeType = d.ReadString()
 	fm.Slabs = make([]Slab, d.ReadPrefix())
 	for i := 0; i < len(fm.Slabs); i++ {
 		fm.Slabs[i].DecodeFrom(d)
+	}
+}
+
+// BucketFiles contains a list of filepaths within a single bucket.
+type BucketFiles struct {
+	Name  string   `json:"name"`
+	Paths []string `json:"paths"`
+}
+
+// EncodeTo implements types.ProtocolObject.
+func (bf *BucketFiles) EncodeTo(e *types.Encoder) {
+	e.WriteString(bf.Name)
+	e.WritePrefix(len(bf.Paths))
+	for _, p := range bf.Paths {
+		e.WriteString(p)
+	}
+}
+
+// DecodeFrom implements types.ProtocolObject.
+func (bf *BucketFiles) DecodeFrom(d *types.Decoder) {
+	bf.Name = d.ReadString()
+	bf.Paths = make([]string, d.ReadPrefix())
+	for i := 0; i < len(bf.Paths); i++ {
+		bf.Paths[i] = d.ReadString()
 	}
 }

@@ -656,10 +656,10 @@ func (p *Portal) loadCredits() error {
 // getFiles retrieves the information about the stored file metadata.
 func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 	rows, err := p.db.Query(`
-		SELECT enc_key, filepath, uploaded
+		SELECT enc_key, bucket, filepath, uploaded
 		FROM ctr_metadata
 		WHERE renter_pk = ?
-		ORDER BY uploaded DESC
+		ORDER BY bucket ASC, uploaded DESC
 	`, pk[:])
 	if err != nil {
 		return nil, modules.AddContext(err, "couldn't retrieve metadata")
@@ -668,10 +668,10 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 
 	var sf []savedFile
 	for rows.Next() {
-		var path string
+		var bucket, path string
 		var timestamp uint64
 		id := make([]byte, 32)
-		if err = rows.Scan(&id, &path, &timestamp); err != nil {
+		if err = rows.Scan(&id, &bucket, &path, &timestamp); err != nil {
 			return nil, modules.AddContext(err, "couldn't retrieve object")
 		}
 		slabRows, err := p.db.Query("SELECT len FROM ctr_slabs WHERE object_id = ?", id)
@@ -691,6 +691,7 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 		}
 		slabRows.Close()
 		sf = append(sf, savedFile{
+			Bucket:   bucket,
 			Path:     path,
 			Size:     size,
 			Slabs:    count,
@@ -713,7 +714,7 @@ func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
 			p.log.Printf("ERROR: index %v out of range (%v)\n", index, len(sf))
 			continue
 		}
-		if err := p.manager.DeleteObject(pk, sf[index].Path); err != nil {
+		if err := p.manager.DeleteObject(pk, sf[index].Bucket, sf[index].Path); err != nil {
 			return modules.AddContext(err, "couldn't delete file")
 		}
 	}

@@ -80,10 +80,10 @@ type hostContractor interface {
 	DeleteMetadata(types.PublicKey)
 
 	// DeleteObject deletes the saved file metadata object.
-	DeleteObject(types.PublicKey, string) error
+	DeleteObject(types.PublicKey, string, string) error
 
 	// DownloadObject downloads an object and returns it.
-	DownloadObject(io.Writer, types.PublicKey, string) error
+	DownloadObject(io.Writer, types.PublicKey, string, string) error
 
 	// UpdateMetadata updates the file metadata in the database.
 	UpdateMetadata(types.PublicKey, modules.FileMetadata) error
@@ -126,7 +126,7 @@ type hostContractor interface {
 	Renters() []modules.Renter
 
 	// RetrieveMetadata retrieves the file metadata from the database.
-	RetrieveMetadata(types.PublicKey, []string) ([]modules.FileMetadata, error)
+	RetrieveMetadata(types.PublicKey, []modules.BucketFiles) ([]modules.FileMetadata, error)
 
 	// Synced returns a channel that is closed when the contractor is fully
 	// synced with the peer-to-peer network.
@@ -1064,12 +1064,12 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 }
 
 // DeleteObject deletes the saved file metadata object.
-func (m *Manager) DeleteObject(pk types.PublicKey, path string) error {
-	return m.hostContractor.DeleteObject(pk, path)
+func (m *Manager) DeleteObject(pk types.PublicKey, bucket, path string) error {
+	return m.hostContractor.DeleteObject(pk, bucket, path)
 }
 
 // RetrieveMetadata retrieves the file metadata from the database.
-func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []string) ([]modules.FileMetadata, error) {
+func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []modules.BucketFiles) ([]modules.FileMetadata, error) {
 	// Get the account balance.
 	renter, err := m.GetRenter(pk)
 	if err != nil {
@@ -1184,8 +1184,8 @@ func (m *Manager) AcceptContracts(rpk types.PublicKey, contracts []modules.Contr
 }
 
 // DownloadObject downloads an object and returns it.
-func (m *Manager) DownloadObject(w io.Writer, rpk types.PublicKey, path string) error {
-	return m.hostContractor.DownloadObject(w, rpk, path)
+func (m *Manager) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, path string) error {
+	return m.hostContractor.DownloadObject(w, rpk, bucket, path)
 }
 
 // GetEmailPreferences returns the email preferences.

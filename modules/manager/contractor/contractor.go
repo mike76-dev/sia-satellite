@@ -543,7 +543,7 @@ func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 }
 
 // RetrieveMetadata retrieves the file metadata from the database.
-func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []string) (fm []modules.FileMetadata, err error) {
+func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []modules.BucketFiles) (fm []modules.FileMetadata, err error) {
 	fm, err = c.retrieveMetadata(pk, present)
 	if err != nil {
 		c.log.Println("ERROR: couldn't retrieve metadata:", err)
@@ -671,9 +671,9 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 }
 
 // DownloadObject downloads an object and returns it.
-func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, path string) error {
+func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, path string) error {
 	// Retrieve the object.
-	obj, err := c.getObject(rpk, path)
+	obj, err := c.getObject(rpk, bucket, path)
 	if err != nil {
 		return err
 	}

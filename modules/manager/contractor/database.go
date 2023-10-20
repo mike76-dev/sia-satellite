@@ -397,13 +397,13 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 
 // dbDeleteObject deletes a single file metadata object from
 // the database.
-func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, path string) error {
+func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path string) error {
 	objectID := make([]byte, 32)
 	err := tx.QueryRow(`
 		SELECT enc_key
 		FROM ctr_metadata
-		WHERE filepath = ? AND renter_pk = ?
-	`, path, pk[:]).Scan(&objectID)
+		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
+	`, bucket, path, pk[:]).Scan(&objectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -449,15 +449,35 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		return err
 	}
 
-	if err := dbDeleteObject(tx, pk, fm.Path); err != nil {
+	if err := dbDeleteObject(tx, pk, fm.Bucket, fm.Path); err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "unable to delete object")
 	}
 
 	_, err = tx.Exec(`
-		INSERT INTO ctr_metadata (enc_key, filepath, renter_pk, uploaded, modified, retrieved)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, fm.Key[:], fm.Path, pk[:], uint64(time.Now().Unix()), uint64(time.Now().Unix()), uint64(time.Now().Unix()))
+		INSERT INTO ctr_metadata (
+			enc_key,
+			bucket,
+			filepath,
+			etag,
+			mime,
+			renter_pk,
+			uploaded,
+			modified,
+			retrieved
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		fm.Key[:],
+		fm.Bucket,
+		fm.Path,
+		fm.ETag,
+		fm.MimeType,
+		pk[:],
+		uint64(time.Now().Unix()),
+		uint64(time.Now().Unix()),
+		uint64(time.Now().Unix()),
+	)
 	if err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "unable to store object")
@@ -488,13 +508,13 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 }
 
 // DeleteObject deletes the saved file metadata object.
-func (c *Contractor) DeleteObject(pk types.PublicKey, path string) error {
+func (c *Contractor) DeleteObject(pk types.PublicKey, bucket, path string) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return err
 	}
 
-	if err = dbDeleteObject(tx, pk, path); err != nil {
+	if err = dbDeleteObject(tx, pk, bucket, path); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -503,15 +523,27 @@ func (c *Contractor) DeleteObject(pk types.PublicKey, path string) error {
 }
 
 // retrieveMetadata retrieves the file metadata from the database.
-func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm []modules.FileMetadata, err error) {
+func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.BucketFiles) (fm []modules.FileMetadata, err error) {
 	// Create a map of the present objects for convenience.
-	po := make(map[string]struct{})
-	for _, p := range present {
-		po[p] = struct{}{}
+	po := make(map[string]map[string]struct{})
+	for _, bucket := range present {
+		for _, path := range bucket.Paths {
+			if po[bucket.Name] == nil {
+				po[bucket.Name] = make(map[string]struct{})
+			}
+			po[bucket.Name][path] = struct{}{}
+		}
 	}
 
 	rows, err := c.db.Query(`
-		SELECT enc_key, filepath, modified, retrieved
+		SELECT
+			enc_key,
+			bucket,
+			filepath,
+			etag,
+			mime,
+			modified,
+			retrieved
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 	`, pk[:])
@@ -523,17 +555,19 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 	for rows.Next() {
 		var slabs []modules.Slab
 		objectID := make([]byte, 32)
-		var path string
+		var bucket, path, eTag, mime string
 		var modified, retrieved uint64
-		if err := rows.Scan(&objectID, &path, &modified, &retrieved); err != nil {
+		if err := rows.Scan(&objectID, &bucket, &path, &eTag, &mime, &modified, &retrieved); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
 		// If the object is present in the map and hasn't been updated
 		// since the last retrieval, skip it.
-		if _, exists := po[path]; exists {
-			if modified <= retrieved {
-				continue
+		if files, exists := po[bucket]; exists {
+			if _, exists := files[path]; exists {
+				if modified <= retrieved {
+					continue
+				}
 			}
 		}
 
@@ -589,7 +623,10 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []string) (fm 
 		slabRows.Close()
 		var md modules.FileMetadata
 		copy(md.Key[:], objectID)
+		md.Bucket = bucket
 		md.Path = path
+		md.ETag = eTag
+		md.MimeType = mime
 		md.Slabs = slabs
 		fm = append(fm, md)
 
@@ -808,7 +845,7 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 }
 
 // getObject tries to find an object by its path.
-func (c *Contractor) getObject(pk types.PublicKey, path string) (object.Object, error) {
+func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.Object, error) {
 	// Start a transaction.
 	tx, err := c.db.Begin()
 	if err != nil {
@@ -820,8 +857,8 @@ func (c *Contractor) getObject(pk types.PublicKey, path string) (object.Object, 
 	err = tx.QueryRow(`
 		SELECT enc_key
 		FROM ctr_metadata
-		WHERE filepath = ? AND renter_pk = ?
-	`, path, pk[:]).Scan(&objectID)
+		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
+	`, bucket, path, pk[:]).Scan(&objectID)
 	if err != nil {
 		tx.Rollback()
 		return object.Object{}, modules.AddContext(err, "couldn't find object")

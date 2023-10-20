@@ -92,6 +92,7 @@ type (
 
 	// savedFile contains the information about saved file metadata.
 	savedFile struct {
+		Bucket   string `json:"bucket"`
 		Path     string `json:"path"`
 		Size     uint64 `json:"size"`
 		Slabs    int    `json:"slabs"`
@@ -811,6 +812,10 @@ func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _
 	}
 
 	// Download the file.
+	bucket := req.FormValue("bucket")
+	if bucket == "" {
+		bucket = "default"
+	}
 	path := req.FormValue("path")
 	if path == "" {
 		writeError(w,
@@ -820,7 +825,7 @@ func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _
 			}, http.StatusBadRequest)
 		return
 	}
-	err = api.portal.manager.DownloadObject(w, renter.PublicKey, path)
+	err = api.portal.manager.DownloadObject(w, renter.PublicKey, bucket, path)
 	if err != nil {
 		api.portal.log.Printf("ERROR: couldn't download file: %v\n", err)
 		writeError(w,

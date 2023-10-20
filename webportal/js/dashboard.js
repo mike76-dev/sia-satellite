@@ -1113,27 +1113,28 @@ function renderFiles() {
 		if (i < filesFrom - 1) return;
 		if (i >= filesFrom + filesStep - 1) return;
 		timestamp = new Date(row.uploaded * 1000);
-		let index = downloads.findIndex(item => item.path == row.path);
+		let index = downloads.findIndex(item => item.bucket == row.bucket && item.path == row.path);
 		let tr = document.createElement('tr');
 		tr.innerHTML = '<td><label class="checkbox" style="margin-left: 0.5rem"><input type="checkbox" onchange="selectFile(this)"><span class="checkmark"></span></label></td>';
 		tr.innerHTML += `<td>${i + 1}</td>`;
+		tr.innerHTML += `<td id=${'bucket-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${row.bucket}<div class="hint">select</div></td>`;
 		if (index >= 0) {
-			tr.innerHTML += `<td id=${'path-' + encodeURI(row.path)} class="cell-link" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
+			tr.innerHTML += `<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
 			let loaded = (downloads[index].loaded == 0 || downloads[index].loaded == row.size) ? '...' :
 				(downloads[index].loaded / row.size * 100).toFixed(0) + '%';
-			tr.innerHTML += `<td id=${'size-' + encodeURI(row.path)}>${loaded}</td>`;
-			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.path)}><span id=${'cancel-' + encodeURI(row.path)} class="cancel">&#9421;<div class="hint">cancel</div></span></td>`;
+			tr.innerHTML += `<td id=${'size-' + encodeURI(row.bucket) + encodeURI(row.path)}>${loaded}</td>`;
+			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.bucket) + encodeURI(row.path)}><span id=${'cancel-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cancel">&#9421;<div class="hint">cancel</div></span></td>`;
 		} else {
-			tr.innerHTML += `<td id=${'path-' + encodeURI(row.path)} class="cell-link hint-spot" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
-			tr.innerHTML += `<td id=${'size-' + encodeURI(row.path)}>${convertSize(row.size)}</td>`;
-			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.path)}>${row.slabs}</td>`;
+			tr.innerHTML += `<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
+			tr.innerHTML += `<td id=${'size-' + encodeURI(row.bucket) + encodeURI(row.path)}>${convertSize(row.size)}</td>`;
+			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.bucket) + encodeURI(row.path)}>${row.slabs}</td>`;
 		}
 		tr.innerHTML += `<td>${timestamp.toLocaleString()}</td>`;
 		tr.children[0].children[0].children[0].setAttribute('index', i);
 		tr.children[0].children[0].children[0].checked = selectedFiles.includes(i);
 		tbody.appendChild(tr);
 		if (index >= 0) {
-			document.getElementById('cancel-' + encodeURI(row.path)).addEventListener('click', () => {
+			document.getElementById('cancel-' + encodeURI(row.bucket) + encodeURI(row.path)).addEventListener('click', () => {
 				downloads[index].controller.abort();
 			});
 		}
@@ -1146,12 +1147,13 @@ function renderFiles() {
 
 function downloadFile(index) {
 	const file = files[index];
-	if (downloads.find(item => item.path == file.path)) {
+	if (downloads.find(item => item.bucket == file.bucket && item.path == file.path)) {
 		return;
 	}
 	const controller = new AbortController();
 	const signal = controller.signal;
 	downloads.push({
+		bucket: file.bucket,
 		path: file.path,
 		loaded: 0,
 		controller: controller,
@@ -1160,13 +1162,13 @@ function downloadFile(index) {
 		method: 'GET',
 		signal: signal,
 	}
-	document.getElementById('path-' + encodeURI(file.path)).classList.remove('hint-spot');
-	document.getElementById('size-' + encodeURI(file.path)).innerHTML = '...';
-	document.getElementById('slabs-' + encodeURI(file.path)).innerHTML = `<span id=${'cancel-' + encodeURI(file.path)} class="cancel">&#9421;<div class="hint">cancel</div></span>`;
-	document.getElementById('cancel-' + encodeURI(file.path)).addEventListener('click', () => {
+	document.getElementById('path-' + encodeURI(file.bucket) + encodeURI(file.path)).classList.remove('hint-spot');
+	document.getElementById('size-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = '...';
+	document.getElementById('slabs-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = `<span id=${'cancel-' + encodeURI(file.bucket) + encodeURI(file.path)} class="cancel">&#9421;<div class="hint">cancel</div></span>`;
+	document.getElementById('cancel-' + encodeURI(file.bucket) + encodeURI(file.path)).addEventListener('click', () => {
 		controller.abort();
 	});
-	fetch(apiBaseURL + '/dashboard/file?path=' + file.path, options)
+	fetch(apiBaseURL + '/dashboard/file?bucket=' + file.bucket + '&path=' + file.path, options)
 		.then(async (response) => {
 			if (response.status == 200) {
 				const reader = response.body.getReader();
@@ -1180,11 +1182,11 @@ function downloadFile(index) {
 					}
 					chunks.push(value);
 					loaded += value.length;
-					downloads[downloads.findIndex(item => item.path == file.path)].loaded = loaded;
+					downloads[downloads.findIndex(item => item.bucket == file.bucket && item.path == file.path)].loaded = loaded;
 					if (file.size > 0) {
 						percent = loaded / file.size * 100;
 					}
-					document.getElementById('size-' + encodeURI(file.path)).innerHTML = percent.toFixed(0) + '%';
+					document.getElementById('size-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = percent.toFixed(0) + '%';
 				}
 				return new Blob(chunks);
 			} else {
@@ -1196,7 +1198,7 @@ function downloadFile(index) {
 				console.log(blob.message);
 				return;
 			}
-			document.getElementById('size-' + encodeURI(file.path)).innerHTML = '...';
+			document.getElementById('size-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = '...';
 			let url = window.URL.createObjectURL(blob);
 			let a = document.createElement("a");
 			a.href = url;
@@ -1206,13 +1208,13 @@ function downloadFile(index) {
 		})
 		.catch(error => console.log(error))
 		.finally(() => {
-			document.getElementById('cancel-' + encodeURI(file.path)).removeEventListener('click', () => {
+			document.getElementById('cancel-' + encodeURI(file.bucket) + encodeURI(file.path)).removeEventListener('click', () => {
 				controller.abort();
 			});
-			document.getElementById('slabs-' + encodeURI(file.path)).innerHTML = file.slabs;
-			document.getElementById('size-' + encodeURI(file.path)).innerHTML = convertSize(file.size);
-			document.getElementById('path-' + encodeURI(file.path)).classList.add('hint-spot');
-			downloads.splice(downloads.findIndex(item => item.path == file.path), 1);
+			document.getElementById('slabs-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = file.slabs;
+			document.getElementById('size-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = convertSize(file.size);
+			document.getElementById('path-' + encodeURI(file.bucket) + encodeURI(file.path)).classList.add('hint-spot');
+			downloads.splice(downloads.findIndex(item => item.bucket == file.bucket && item.path == file.path), 1);
 		});
 }
 
@@ -1238,6 +1240,36 @@ function selectFiles() {
 		selectedFiles = [];
 	}
 	document.getElementById("files-delete").disabled = selectedFiles.length == 0;
+	renderFiles();
+}
+
+function selectBucket(bucket) {
+	let total = 0;
+	let selected = 0;
+	files.forEach((value, index) => {
+		if (value.bucket == bucket) {
+			total++;
+			if (selectedFiles.includes(index)) {
+				selected++;
+			}
+		}
+	});
+	files.forEach((value, index) => {
+		if (value.bucket == bucket) {
+			if (selected < total) {
+				if (selectedFiles.indexOf(index) < 0) {
+					selectedFiles.push(index);
+				}
+			} else {
+				let i = selectedFiles.indexOf(index);
+				if (i >= 0) {
+					selectedFiles.splice(i, 1);
+				}
+			}
+		}
+	});
+	document.getElementById('files-delete').disabled = selectedFiles.length == 0;
+	document.getElementById('files-all').checked = selectedFiles.length == files.length;
 	renderFiles();
 }
 
@@ -1278,7 +1310,7 @@ function filesNext() {
 
 function deleteFiles() {
 	selectedFiles.forEach((index) => {
-		let file = downloads.find(item => item.path == files[index].path);
+		let file = downloads.find(item => item.bucket == files[index].bucket && item.path == files[index].path);
 		if (file) {
 			file.controller.abort();
 		}
@@ -1298,6 +1330,8 @@ function deleteFiles() {
 			if (response.status == 204) {
 				selectedFiles = [];
 				getFiles();
+				document.getElementById('files-delete').disabled = true;
+				document.getElementById('files-all').checked = false;
 			} else {
 				return response.json();
 			}

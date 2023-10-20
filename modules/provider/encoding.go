@@ -528,16 +528,20 @@ func (smr *saveMetadataRequest) EncodeTo(e *types.Encoder) {
 // requestMetadataRequest is used to retrieve file metadata.
 type requestMetadataRequest struct {
 	PubKey         types.PublicKey
-	PresentObjects []string
+	PresentObjects []modules.BucketFiles
 	Signature      types.Signature
 }
 
 // DecodeFrom implements requestBody.
 func (rmr *requestMetadataRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(rmr.PubKey[:])
-	rmr.PresentObjects = make([]string, d.ReadPrefix())
+	rmr.PresentObjects = make([]modules.BucketFiles, d.ReadPrefix())
 	for i := 0; i < len(rmr.PresentObjects); i++ {
-		rmr.PresentObjects[i] = d.ReadString()
+		rmr.PresentObjects[i].Name = d.ReadString()
+		rmr.PresentObjects[i].Paths = make([]string, d.ReadPrefix())
+		for j := 0; j < len(rmr.PresentObjects[i].Paths); j++ {
+			rmr.PresentObjects[i].Paths[j] = d.ReadString()
+		}
 	}
 	rmr.Signature.DecodeFrom(d)
 }
@@ -547,7 +551,11 @@ func (rmr *requestMetadataRequest) EncodeTo(e *types.Encoder) {
 	e.Write(rmr.PubKey[:])
 	e.WritePrefix(len(rmr.PresentObjects))
 	for _, po := range rmr.PresentObjects {
-		e.WriteString(po)
+		e.WriteString(po.Name)
+		e.WritePrefix(len(po.Paths))
+		for _, p := range po.Paths {
+			e.WriteString(p)
+		}
 	}
 }
 
