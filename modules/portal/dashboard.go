@@ -931,3 +931,26 @@ func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, 
 func (api *portalAPI) feesHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	writeJSON(w, modules.StaticPricing)
 }
+
+// announcementHandlerGET handles the GET /dashboard/announcement requests.
+func (api *portalAPI) announcementHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Get the current announcement.
+	text, err := api.portal.GetAnnouncement()
+	if err != nil {
+		api.portal.log.Printf("ERROR: error getting announcement: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	// Check if a maintenance is running.
+	maintenance := api.portal.manager.Maintenance()
+
+	writeJSON(w, struct {
+		Announcement string `json:"announcement"`
+		Maintenance  bool   `json:"maintenance"`
+	}{Announcement: text, Maintenance: maintenance})
+}
