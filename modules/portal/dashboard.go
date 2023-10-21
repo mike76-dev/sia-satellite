@@ -935,7 +935,7 @@ func (api *portalAPI) feesHandlerGET(w http.ResponseWriter, _ *http.Request, _ h
 // announcementHandlerGET handles the GET /dashboard/announcement requests.
 func (api *portalAPI) announcementHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Get the current announcement.
-	text, err := api.portal.GetAnnouncement()
+	text, _, err := api.portal.GetAnnouncement()
 	if err != nil {
 		api.portal.log.Printf("ERROR: error getting announcement: %v\n", err)
 		writeError(w,

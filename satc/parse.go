@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/big"
 	"os"
@@ -173,7 +172,7 @@ func yesNo(b bool) string {
 // to a file containing either encoding.
 func parseTxn(s string) (types.Transaction, error) {
 	// First assume s is a file.
-	txnBytes, err := ioutil.ReadFile(s)
+	txnBytes, err := os.ReadFile(s)
 	if os.IsNotExist(err) {
 		// Assume s is a literal encoding.
 		txnBytes = []byte(s)

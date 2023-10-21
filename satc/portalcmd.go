@@ -3,9 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/spf13/cobra"
@@ -41,10 +41,11 @@ var (
 	}
 
 	portalAnnouncementSetCmd = &cobra.Command{
-		Use:   "set [path]",
+		Use:   "set [path] [validity]",
 		Short: "Set portal announcement",
-		Long:  "Set a new portal announcement.",
-		Run:   wrap(portalannouncementsetcmd),
+		Long: `Set a new portal announcement. [path] is the path of the file containing the announcement.
+Examples of [validity] include '0.5h', '1d', '2w', or 'noexpire' for a non-expiring announcement.`,
+		Run: wrap(portalannouncementsetcmd),
 	}
 
 	portalAnnouncementRemoveCmd = &cobra.Command{
@@ -62,7 +63,7 @@ func portalcmd() {
 	if err != nil {
 		die(err)
 	}
-	a, err := httpClient.PortalAnnouncementGet()
+	a, _, err := httpClient.PortalAnnouncementGet()
 	if err != nil {
 		die(err)
 	}
@@ -125,36 +126,45 @@ func portalcreditssetcmd(num, amt string) {
 // portalannouncementcmd is the handler for the command `satc portal announcement`.
 // Prints the current portal announcement.
 func portalannouncementcmd() {
-	a, err := httpClient.PortalAnnouncementGet()
+	text, expires, err := httpClient.PortalAnnouncementGet()
 	if err != nil {
 		die(err)
 	}
 
-	if a == "" {
+	if text == "" {
 		fmt.Println("Announcement not set")
 		return
 	}
 	fmt.Println("Current Announcement:")
-	fmt.Printf("%s\n", a)
+	fmt.Println(text)
+	if expires == 0 {
+		fmt.Println("Expires: never")
+	} else {
+		fmt.Println("Expires:", time.Unix(int64(expires), 0))
+	}
 }
 
 // portalannouncementsetcmd is the handler for the command `satc portal announcement set
-// [path]`. Sets a new portal announcement.
-func portalannouncementsetcmd(path string) {
-	file, err := os.Open(path)
+// [path] [validity]`. Sets a new portal announcement.
+func portalannouncementsetcmd(path, validity string) {
+	var expires uint64
+	if validity != "noexpire" {
+		v, err := parsePeriod(validity)
+		if err != nil {
+			die(err)
+		}
+		blocks, _ := strconv.ParseUint(v, 10, 64)
+		expires = uint64(time.Now().Unix()) + blocks*10*60
+	}
+	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		die(errors.New("file not found"))
 	}
 	if err != nil {
 		die(err)
 	}
-	defer file.Close()
-	b, err := io.ReadAll(file)
-	if err != nil {
-		die(err)
-	}
 
-	err = httpClient.PortalAnnouncementPost(string(b))
+	err = httpClient.PortalAnnouncementPost(string(b), expires)
 	if err != nil {
 		die(err)
 	}
@@ -164,7 +174,7 @@ func portalannouncementsetcmd(path string) {
 // portalannouncementremovecmd is the handler for the command `satc portal announcement
 // remove`. Clears the portal announcement.
 func portalannouncementremovecmd() {
-	err := httpClient.PortalAnnouncementPost("")
+	err := httpClient.PortalAnnouncementPost("", 0)
 	if err != nil {
 		die(err)
 	}

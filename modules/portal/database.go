@@ -913,12 +913,12 @@ func (p *Portal) managedCheckOnHoldAccounts() {
 }
 
 // GetAnnouncement returns the current portal announcement.
-func (p *Portal) GetAnnouncement() (text string, err error) {
+func (p *Portal) GetAnnouncement() (text string, expires uint64, err error) {
 	err = p.db.QueryRow(`
-		SELECT announcement
+		SELECT announcement, expires
 		FROM pt_announcement
 		WHERE id = 1
-	`).Scan(&text)
+	`).Scan(&text, &expires)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
 	}
@@ -926,10 +926,23 @@ func (p *Portal) GetAnnouncement() (text string, err error) {
 }
 
 // SetAnnouncement sets a new portal announcement.
-func (p *Portal) SetAnnouncement(text string) error {
+func (p *Portal) SetAnnouncement(text string, expires uint64) error {
 	_, err := p.db.Exec(`
-		REPLACE INTO pt_announcement (id, announcement)
-		VALUES (1, ?)
-	`, text)
+		REPLACE INTO pt_announcement (id, announcement, expires)
+		VALUES (1, ?, ?)
+	`, text, expires)
 	return err
+}
+
+// managedCheckAnnouncement clears an announcement if it has expired.
+func (p *Portal) managedCheckAnnouncement() {
+	timestamp := uint64(time.Now().Unix())
+	_, err := p.db.Exec(`
+		UPDATE pt_announcement
+		SET announcement = "", expires = 0
+		WHERE expires > 0 AND expires <= ?
+	`, timestamp)
+	if err != nil {
+		p.log.Println("ERROR: unable to expire announcement:", err)
+	}
 }

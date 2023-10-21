@@ -15,6 +15,10 @@ const walletCheckInterval = time.Minute
 // on hold, are checked.
 const onHoldCheckInterval = 30 * time.Minute
 
+// announcementCheckInterval determines how often the check is done
+// if the portal announcement has expired.
+const announcementCheckInterval = 10 * time.Minute
+
 // threadedWatchForNewTxns performs the wallet checks with set
 // intervals.
 func (p *Portal) threadedWatchForNewTxns() {
@@ -116,5 +120,23 @@ func (p *Portal) threadedCheckOnHoldAccounts() {
 		case <-time.After(onHoldCheckInterval):
 		}
 		p.managedCheckOnHoldAccounts()
+	}
+}
+
+// threadedCheckAnnouncement performs the announcement checks with set
+// intervals.
+func (p *Portal) threadedCheckAnnouncement() {
+	if err := p.tg.Add(); err != nil {
+		return
+	}
+	defer p.tg.Done()
+
+	for {
+		select {
+		case <-p.tg.StopChan():
+			return
+		case <-time.After(announcementCheckInterval):
+		}
+		p.managedCheckAnnouncement()
 	}
 }

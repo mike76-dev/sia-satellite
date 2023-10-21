@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/node/api"
 )
 
 // PortalCreditsGet requests the /portal/credits resource.
@@ -24,24 +25,22 @@ func (c *Client) PortalCreditsPost(credits modules.CreditData) (err error) {
 }
 
 // PortalAnnouncementGet requests the /portal/announcement resource.
-func (c *Client) PortalAnnouncementGet() (string, error) {
+func (c *Client) PortalAnnouncementGet() (string, uint64, error) {
 	url := "/portal/announcement"
-	var req struct {
-		Text string `json:"text"`
-	}
+	var req api.Announcement
 	err := c.get(url, &req)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return req.Text, nil
+	return req.Text, req.Expires, nil
 }
 
 // PortalAnnouncementPost requests the /portal/announcement resource.
-func (c *Client) PortalAnnouncementPost(text string) (err error) {
-	var req struct {
-		Text string `json:"text"`
+func (c *Client) PortalAnnouncementPost(text string, expires uint64) (err error) {
+	req := api.Announcement{
+		Text:    text,
+		Expires: expires,
 	}
-	req.Text = text
 	data, err := json.Marshal(req)
 	if err != nil {
 		return err

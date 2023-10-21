@@ -332,6 +332,7 @@ CREATE TABLE pt_credits (
 CREATE TABLE pt_announcement (
 	id           INT NOT NULL AUTO_INCREMENT,
 	announcement TEXT NOT NULL,
+	expires      BIGINT UNSIGNED NOT NULL,
 	PRIMARY KEY (id)
 );
 

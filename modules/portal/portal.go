@@ -144,6 +144,9 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 	// Spawn the thread to periodically check the accounts that are on hold.
 	go pt.threadedCheckOnHoldAccounts()
 
+	// Spawn the thread to periodically check the portal announcement.
+	go pt.threadedCheckAnnouncement()
+
 	// Make sure that the portal saves after shutdown.
 	pt.tg.AfterStop(func() {
 		pt.mu.Lock()

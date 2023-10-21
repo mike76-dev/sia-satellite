@@ -8,6 +8,12 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 )
 
+// Announcement contains the information about a portal announcement.
+type Announcement struct {
+	Text    string `json:"text"`
+	Expires uint64 `json:"expires"`
+}
+
 // portalCreditsHandlerGET handles the API call to /portal/credits.
 func (api *API) portalCreditsHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	c := api.portal.GetCredits()
@@ -32,22 +38,21 @@ func (api *API) portalCreditsHandlerPOST(w http.ResponseWriter, req *http.Reques
 
 // portalAnnouncementHandlerGET handles the API call to /portal/announcement.
 func (api *API) portalAnnouncementHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	a, err := api.portal.GetAnnouncement()
+	text, expires, err := api.portal.GetAnnouncement()
 	if err != nil {
 		WriteError(w, Error{"internal error: " + err.Error()}, http.StatusInternalServerError)
 		return
 	}
-	WriteJSON(w, struct {
-		Text string `json:"text"`
-	}{Text: a})
+	WriteJSON(w, Announcement{
+		Text:    text,
+		Expires: expires,
+	})
 }
 
 // portalAnnouncementHandlerPOST handles the API call to /portal/announcement.
 func (api *API) portalAnnouncementHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse parameters.
-	var params struct {
-		Text string `json:"text"`
-	}
+	var params Announcement
 	err := json.NewDecoder(req.Body).Decode(&params)
 	if err != nil {
 		WriteError(w, Error{"invalid parameters: " + err.Error()}, http.StatusBadRequest)
@@ -55,7 +60,7 @@ func (api *API) portalAnnouncementHandlerPOST(w http.ResponseWriter, req *http.R
 	}
 
 	// Set the announcement.
-	err = api.portal.SetAnnouncement(params.Text)
+	err = api.portal.SetAnnouncement(params.Text, params.Expires)
 	if err != nil {
 		WriteError(w, Error{"internal error: " + err.Error()}, http.StatusInternalServerError)
 		return
