@@ -336,6 +336,7 @@ DROP TABLE IF EXISTS mg_averages;
 DROP TABLE IF EXISTS mg_spendings;
 DROP TABLE IF EXISTS mg_balances;
 DROP TABLE IF EXISTS mg_prices;
+DROP TABLE IF EXISTS mg_maintenance;
 
 CREATE TABLE mg_email (
 	id        INT NOT NULL AUTO_INCREMENT,
@@ -405,6 +406,12 @@ CREATE TABLE mg_prices (
 	retrieve_metadata_invoicing  DOUBLE NOT NULL,
 	migrate_slab_prepayment      DOUBLE NOT NULL,
 	migrate_slab_invoicing       DOUBLE NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE mg_maintenance (
+	id          INT NOT NULL AUTO_INCREMENT,
+	maintenance BOOL NOT NULL,
 	PRIMARY KEY (id)
 );
 

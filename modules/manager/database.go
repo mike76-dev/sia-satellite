@@ -497,3 +497,38 @@ func (m *Manager) loadPrices() error {
 
 	return nil
 }
+
+// StartMaintenance switches the maintenance mode on and off.
+func (m *Manager) StartMaintenance(start bool) error {
+	_, err := m.db.Exec(`
+		REPLACE INTO mg_maintenance (id, maintenance)
+		VALUES (1, ?)
+	`, start)
+	if err != nil {
+		return modules.AddContext(err, "couldn't set maintenance flag")
+	}
+	m.mu.Lock()
+	m.maintenance = start
+	m.mu.Unlock()
+	return nil
+}
+
+// loadMaintenance loads the maintenance flag from the database.
+func (m *Manager) loadMaintenance() error {
+	var maintenance bool
+	err := m.db.QueryRow(`
+		SELECT maintenance
+		FROM mg_maintenance
+		WHERE id = 1
+	`).Scan(&maintenance)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.maintenance = maintenance
+	m.mu.Unlock()
+	return nil
+}

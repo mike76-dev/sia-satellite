@@ -89,6 +89,12 @@ func (m *Manager) initPersist(dir string) error {
 		return modules.AddContext(err, "unable to load prices")
 	}
 
+	// Load maintenance flag.
+	err = m.loadMaintenance()
+	if err != nil {
+		return modules.AddContext(err, "couldn't load maintenance flag")
+	}
+
 	// Create the global tx that will be used for most persist actions.
 	m.dbTx, err = m.db.Begin()
 	if err != nil {

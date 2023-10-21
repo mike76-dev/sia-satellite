@@ -98,6 +98,27 @@ migrateslab:      fee for repairing a single slab (in SC),
 For payment_plan, either 'prepayment' or 'invoicing' are accepted.`,
 		Run: wrap(managersetpricescmd),
 	}
+
+	managerMaintenanceCmd = &cobra.Command{
+		Use:   "maintenance",
+		Short: "Perform maintenance actions",
+		Long:  "Start or stop a satellite maintenance.",
+		Run:   wrap(managermaintenancecmd),
+	}
+
+	managerMaintenanceStartCmd = &cobra.Command{
+		Use:   "start",
+		Short: "Start maintenance",
+		Long:  "Start a satellite maintenance.",
+		Run:   wrap(managermaintenancestartcmd),
+	}
+
+	managerMaintenanceStopCmd = &cobra.Command{
+		Use:   "stop",
+		Short: "Stop maintenance",
+		Long:  "Stop a running satellite maintenance.",
+		Run:   wrap(managermaintenancestopcmd),
+	}
 )
 
 // managerratecmd is the handler for the command `satc manager rate [currency]`.
@@ -421,10 +442,15 @@ func managercmd() {
 	if err != nil {
 		die(err)
 	}
+	maintenance, err := httpClient.ManagerMaintenanceGet()
+	if err != nil {
+		die(err)
+	}
 
 	fmt.Printf(`Renters:          %v
 Active Contracts: %v
-`, len(renters.Renters), len(contracts.ActiveContracts))
+Maintenance:      %v
+`, len(renters.Renters), len(contracts.ActiveContracts), yesNo(maintenance))
 }
 
 // managerpreferencescmd is the handler for the command `satc manager preferences`.
@@ -563,4 +589,39 @@ func managersetpricescmd(typ, plan, v string) {
 	}
 
 	fmt.Println("Prices updated successfully")
+}
+
+// managermaintenancecmd is the handler for the command `satc manager maintenance`.
+// Prints the information about the satellite maintenance.
+func managermaintenancecmd() {
+	maintenance, err := httpClient.ManagerMaintenanceGet()
+	if err != nil {
+		die(err)
+	}
+
+	fmt.Println("Maintenance:", yesNo(maintenance))
+}
+
+// managermaintenancestartcmd is the handler for the command
+// `satc manager maintenance start`.
+// Starts a satellite maintenance.
+func managermaintenancestartcmd() {
+	err := httpClient.ManagerMaintenancePost(true)
+	if err != nil {
+		die(err)
+	}
+
+	fmt.Println("Maintenance started")
+}
+
+// managermaintenancestopcmd is the handler for the command
+// `satc manager maintenance stop`.
+// Stops a running satellite maintenance.
+func managermaintenancestopcmd() {
+	err := httpClient.ManagerMaintenancePost(false)
+	if err != nil {
+		die(err)
+	}
+
+	fmt.Println("Maintenance stopped")
 }

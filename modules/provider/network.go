@@ -173,6 +173,12 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		conn.Close()
 	}()
 
+	// Skip if a satellite maintenance is running.
+	if p.m.Maintenance() {
+		p.log.Println("INFO: closing inbound connection because satellite maintenance is running")
+		return
+	}
+
 	// Set an initial duration that is generous, but finite. RPCs can extend
 	// this if desired.
 	err = conn.SetDeadline(time.Now().Add(defaultConnectionDeadline))
@@ -340,7 +346,6 @@ func generateX25519KeyPair() (xsk [32]byte, xpk [32]byte) {
 // key. Derivation is via ScalarMult of the private and public keys, followed
 // by a 256-bit unkeyed blake2b hash.
 func deriveSharedSecret(xsk [32]byte, xpk [32]byte) (secret [32]byte) {
-	var dst [32]byte
-	curve25519.ScalarMult(&dst, &xsk, &xpk)
-	return blake2b.Sum256(dst[:])
+	dst, _ := curve25519.X25519(xsk[:], xpk[:])
+	return blake2b.Sum256(dst)
 }

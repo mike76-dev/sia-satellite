@@ -389,7 +389,7 @@ func (api *API) managerContractsHandlerGET(w http.ResponseWriter, _ *http.Reques
 }
 
 // managerPreferencesHandlerGET handles the API call to /manager/preferences.
-func (api *API) managerPreferencesHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
+func (api *API) managerPreferencesHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	email, threshold := api.manager.GetEmailPreferences()
 	ep := EmailPreferences{
 		Email:         email,
@@ -400,7 +400,7 @@ func (api *API) managerPreferencesHandlerGET(w http.ResponseWriter, _ *http.Requ
 }
 
 // managerPreferencesHandlerPOST handles the API call to /manager/preferences.
-func (api *API) managerPreferencesHandlerPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) managerPreferencesHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse parameters.
 	var ep EmailPreferences
 	err := json.NewDecoder(req.Body).Decode(&ep)
@@ -419,12 +419,12 @@ func (api *API) managerPreferencesHandlerPOST(w http.ResponseWriter, req *http.R
 }
 
 // managerPricesHandlerGET handles the API call to /manager/prices.
-func (api *API) managerPricesHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
+func (api *API) managerPricesHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	WriteJSON(w, modules.StaticPricing)
 }
 
 // managerPricesHandlerPOST handles the API call to /manager/prices.
-func (api *API) managerPricesHandlerPOST(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+func (api *API) managerPricesHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Parse parameters.
 	var prices modules.Pricing
 	err := json.NewDecoder(req.Body).Decode(&prices)
@@ -440,4 +440,31 @@ func (api *API) managerPricesHandlerPOST(w http.ResponseWriter, req *http.Reques
 	}
 
 	WriteSuccess(w)
+}
+
+// managerMaintenanceHandlerPOST handles the API call to /manager/maintenance.
+func (api *API) managerMaintenanceHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	var start struct {
+		Start bool `json:"start"`
+	}
+	err := json.NewDecoder(req.Body).Decode(&start)
+	if err != nil {
+		WriteError(w, Error{"invalid parameter: " + err.Error()}, http.StatusBadRequest)
+		return
+	}
+
+	err = api.manager.StartMaintenance(start.Start)
+	if err != nil {
+		WriteError(w, Error{"couldn't set maintenance flag: " + err.Error()}, http.StatusInternalServerError)
+		return
+	}
+
+	WriteSuccess(w)
+}
+
+// managerMaintenanceHandlerGET handles the API call to /manager/maintenance.
+func (api *API) managerMaintenanceHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	WriteJSON(w, struct {
+		Maintenance bool `json:"maintenance"`
+	}{Maintenance: api.manager.Maintenance()})
 }

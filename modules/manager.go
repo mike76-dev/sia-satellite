@@ -372,6 +372,9 @@ type Manager interface {
 	// LockSiacoins moves a part of the balance to "locked".
 	LockSiacoins(string, float64) error
 
+	// Maintenance returns true if the maintenance mode is active.
+	Maintenance() bool
+
 	// OldContracts returns the contracts that have expired.
 	OldContracts() []RenterContract
 
@@ -415,6 +418,9 @@ type Manager interface {
 
 	// SetFilterMode sets the HostDB's filter mode.
 	SetFilterMode(FilterMode, []types.PublicKey, []string) error
+
+	// StartMaintenance switches the maintenance mode on and off.
+	StartMaintenance(bool) error
 
 	// UnlockSiacoins moves a part of the amount from "locked" to "available",
 	// while the other part (fees and other spent funds) is "burned".

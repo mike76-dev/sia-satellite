@@ -332,6 +332,12 @@ func (c *Contractor) threadedContractMaintenance() {
 	}
 	defer c.tg.Done()
 
+	// Skip if a satellite maintenance is running.
+	if c.m.Maintenance() {
+		c.log.Println("INFO: skipping contract maintenance because satellite maintenance is running")
+		return
+	}
+
 	// No contract maintenance unless contractor is synced.
 	if !c.managedSynced() {
 		c.log.Println("INFO: skipping contract maintenance since consensus isn't synced yet")

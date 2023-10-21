@@ -172,6 +172,7 @@ type Manager struct {
 	lastEstimationHosts []modules.HostDBEntry
 	exchRates           map[string]float64
 	scusdRate           float64
+	maintenance         bool
 
 	// Block heights at the start of the current and the previous months.
 	currentMonth blockTimestamp
@@ -1200,4 +1201,11 @@ func (m *Manager) SetEmailPreferences(email string, threshold types.Currency) er
 		m.log.Println("ERROR: couldn't save email preferences:", err)
 	}
 	return err
+}
+
+// Maintenance returns true if the maintenance mode is active.
+func (m *Manager) Maintenance() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.maintenance
 }

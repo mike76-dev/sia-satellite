@@ -74,6 +74,8 @@ func (api *API) buildHTTPRoutes() {
 		router.POST("/manager/preferences", RequirePassword(api.managerPreferencesHandlerPOST, requiredPassword))
 		router.GET("/manager/prices", api.managerPricesHandlerGET)
 		router.POST("/manager/prices", RequirePassword(api.managerPricesHandlerPOST, requiredPassword))
+		router.GET("/manager/maintenance", api.managerMaintenanceHandlerGET)
+		router.POST("/manager/maintenance", RequirePassword(api.managerMaintenanceHandlerPOST, requiredPassword))
 	}
 
 	// Portal API Calls.

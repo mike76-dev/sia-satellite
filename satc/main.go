@@ -193,6 +193,9 @@ func initCmds() *cobra.Command {
 	managerCmd.AddCommand(managerSetPreferencesCmd)
 	managerCmd.AddCommand(managerPricesCmd)
 	managerCmd.AddCommand(managerSetPricesCmd)
+	managerCmd.AddCommand(managerMaintenanceCmd)
+	managerMaintenanceCmd.AddCommand(managerMaintenanceStartCmd)
+	managerMaintenanceCmd.AddCommand(managerMaintenanceStopCmd)
 
 	root.AddCommand(portalCmd)
 	portalCmd.AddCommand(portalSetCmd)

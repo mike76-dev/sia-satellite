@@ -84,3 +84,29 @@ func (c *Client) ManagerPricesPost(prices modules.Pricing) error {
 	err = c.post("/manager/prices", string(json), nil)
 	return err
 }
+
+// ManagerMaintenanceGet requests the /manager/maintenance resource.
+func (c *Client) ManagerMaintenanceGet() (maintenance bool, err error) {
+	var req struct {
+		Maintenance bool `json:"maintenance"`
+	}
+	err = c.get("/manager/maintenance", &req)
+	if err != nil {
+		return false, err
+	}
+	return req.Maintenance, nil
+}
+
+// ManagerMaintenancePost uses the /manager/maintenance resource to set
+// or clear the maintenance flag.
+func (c *Client) ManagerMaintenancePost(start bool) error {
+	req := struct {
+		Start bool `json:"start"`
+	}{Start: start}
+	json, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+	err = c.post("/manager/maintenance", string(json), nil)
+	return err
+}
