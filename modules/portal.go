@@ -19,8 +19,14 @@ type Portal interface {
 	// Close safely shuts down the portal.
 	Close() error
 
+	// GetAnnouncement returns the current portal announcement.
+	GetAnnouncement() (string, error)
+
 	// GetCredits retrieves the promotion data.
 	GetCredits() CreditData
+
+	// SetAnnouncement sets a new portal announcement.
+	SetAnnouncement(string) error
 
 	// SetCredits updates the promotion data.
 	SetCredits(CreditData)

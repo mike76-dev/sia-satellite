@@ -82,6 +82,8 @@ func (api *API) buildHTTPRoutes() {
 	if api.portal != nil {
 		router.GET("/portal/credits", RequirePassword(api.portalCreditsHandlerGET, requiredPassword))
 		router.POST("/portal/credits", RequirePassword(api.portalCreditsHandlerPOST, requiredPassword))
+		router.GET("/portal/announcement", api.portalAnnouncementHandlerGET)
+		router.POST("/portal/announcement", RequirePassword(api.portalAnnouncementHandlerPOST, requiredPassword))
 	}
 
 	// Apply UserAgent middleware and return the Router.

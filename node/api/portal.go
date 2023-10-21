@@ -29,3 +29,37 @@ func (api *API) portalCreditsHandlerPOST(w http.ResponseWriter, req *http.Reques
 
 	WriteSuccess(w)
 }
+
+// portalAnnouncementHandlerGET handles the API call to /portal/announcement.
+func (api *API) portalAnnouncementHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	a, err := api.portal.GetAnnouncement()
+	if err != nil {
+		WriteError(w, Error{"internal error: " + err.Error()}, http.StatusInternalServerError)
+		return
+	}
+	WriteJSON(w, struct {
+		Text string `json:"text"`
+	}{Text: a})
+}
+
+// portalAnnouncementHandlerPOST handles the API call to /portal/announcement.
+func (api *API) portalAnnouncementHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Parse parameters.
+	var params struct {
+		Text string `json:"text"`
+	}
+	err := json.NewDecoder(req.Body).Decode(&params)
+	if err != nil {
+		WriteError(w, Error{"invalid parameters: " + err.Error()}, http.StatusBadRequest)
+		return
+	}
+
+	// Set the announcement.
+	err = api.portal.SetAnnouncement(params.Text)
+	if err != nil {
+		WriteError(w, Error{"internal error: " + err.Error()}, http.StatusInternalServerError)
+		return
+	}
+
+	WriteSuccess(w)
+}

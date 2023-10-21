@@ -285,6 +285,7 @@ DROP TABLE IF EXISTS pt_payments;
 DROP TABLE IF EXISTS pt_accounts;
 DROP TABLE IF EXISTS pt_stats;
 DROP TABLE IF EXISTS pt_credits;
+DROP TABLE IF EXISTS pt_announcement;
 
 CREATE TABLE pt_accounts (
 	id            INT NOT NULL AUTO_INCREMENT,
@@ -325,6 +326,12 @@ CREATE TABLE pt_credits (
 	id        INT NOT NULL AUTO_INCREMENT,
 	amount    DOUBLE NOT NULL,
 	remaining BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE pt_announcement (
+	id           INT NOT NULL AUTO_INCREMENT,
+	announcement TEXT NOT NULL,
 	PRIMARY KEY (id)
 );
 

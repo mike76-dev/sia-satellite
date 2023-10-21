@@ -198,7 +198,11 @@ func initCmds() *cobra.Command {
 	managerMaintenanceCmd.AddCommand(managerMaintenanceStopCmd)
 
 	root.AddCommand(portalCmd)
-	portalCmd.AddCommand(portalSetCmd)
+	portalCmd.AddCommand(portalCreditsCmd)
+	portalCmd.AddCommand(portalAnnouncementCmd)
+	portalCreditsCmd.AddCommand(portalCreditsSetCmd)
+	portalAnnouncementCmd.AddCommand(portalAnnouncementSetCmd)
+	portalAnnouncementCmd.AddCommand(portalAnnouncementRemoveCmd)
 
 	root.AddCommand(walletCmd)
 	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangePasswordCmd, walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd, walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)

@@ -911,3 +911,25 @@ func (p *Portal) managedCheckOnHoldAccounts() {
 		p.log.Println("ERROR: couldn't update account:", err)
 	}
 }
+
+// GetAnnouncement returns the current portal announcement.
+func (p *Portal) GetAnnouncement() (text string, err error) {
+	err = p.db.QueryRow(`
+		SELECT announcement
+		FROM pt_announcement
+		WHERE id = 1
+	`).Scan(&text)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	return
+}
+
+// SetAnnouncement sets a new portal announcement.
+func (p *Portal) SetAnnouncement(text string) error {
+	_, err := p.db.Exec(`
+		REPLACE INTO pt_announcement (id, announcement)
+		VALUES (1, ?)
+	`, text)
+	return err
+}
