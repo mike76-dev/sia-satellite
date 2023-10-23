@@ -83,6 +83,11 @@ const (
 	// minimumSupportedRenterHostProtocolVersion is the minimum version of Sia
 	// that supports the currently used version of the renter-host protocol.
 	minimumSupportedRenterHostProtocolVersion = "1.4.1"
+
+	// hostBufferForRenewals is how many more hosts may be in the renter's
+	// contract set than required by the allowance. If there are more hosts,
+	// extra contracts stop being renewed.
+	hostBufferForRenewals = 3
 )
 
 var (

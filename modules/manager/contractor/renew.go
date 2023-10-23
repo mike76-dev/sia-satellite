@@ -24,6 +24,7 @@ type (
 		amount       types.Currency
 		renterPubKey types.PublicKey
 		secretKey    types.PrivateKey
+		hostScore    types.Currency
 	}
 )
 

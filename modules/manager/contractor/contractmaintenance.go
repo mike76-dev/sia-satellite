@@ -3,6 +3,7 @@ package contractor
 import (
 	"errors"
 	"math/big"
+	"slices"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -442,6 +443,13 @@ func (c *Contractor) threadedContractMaintenance() {
 				continue
 			}
 
+			// Calculate the host's score.
+			sb, err := c.hdb.EstimateHostScore(renter.Allowance, host)
+			if err != nil {
+				c.log.Printf("ERROR: unable to calculate host score of %s: %v\n", host.Settings.NetAddress, err)
+				continue
+			}
+
 			renewAmount, err := c.managedEstimateRenewFundingRequirements(contract, blockHeight, renter.Allowance)
 			if err != nil {
 				c.log.Println("WARN: contract skipped because there was an error estimating renew funding requirements", renewAmount, err)
@@ -452,6 +460,7 @@ func (c *Contractor) threadedContractMaintenance() {
 				amount:       renewAmount,
 				renterPubKey: renter.PublicKey,
 				secretKey:    renter.PrivateKey,
+				hostScore:    sb.Score,
 			})
 			continue
 		}
@@ -531,6 +540,11 @@ func (c *Contractor) threadedContractMaintenance() {
 	c.numFailedRenews = newFirstFailedRenew
 	c.mu.Unlock()
 
+	// Sort the renew set by the host score.
+	slices.SortFunc(renewSet, func(a, b fileContractRenewal) int {
+		return b.hostScore.Cmp(a.hostScore)
+	})
+
 	// Go through the contracts we've assembled for renewal and refreshment.
 	hastings := modules.Float64(types.HastingsPerSiacoin)
 	for _, renewal := range renewSet {
@@ -564,6 +578,21 @@ func (c *Contractor) threadedContractMaintenance() {
 		}
 		if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
 			c.log.Println("INFO: renewal skipped, because renter account is on hold")
+			continue
+		}
+
+		// Skip the renewal if the renter has already more good contracts
+		// than required.
+		contracts := c.staticContracts.ByRenter(renter.PublicKey)
+		var goodContracts int
+		for _, contract := range contracts {
+			utility, ok := c.managedContractUtility(contract.ID)
+			if ok && utility.GoodForRenew && utility.GoodForUpload {
+				goodContracts++
+			}
+		}
+		if goodContracts > int(renter.Allowance.Hosts)+hostBufferForRenewals {
+			c.log.Printf("INFO: renewal skipped, because renter has already enough contracts: %v > %v", goodContracts, renter.Allowance.Hosts)
 			continue
 		}
 
