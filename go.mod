@@ -1,6 +1,6 @@
 module github.com/mike76-dev/sia-satellite
 
-go 1.18
+go 1.21
 
 require (
 	github.com/dchest/threefish v0.0.0-20120919164726-3ecf4c494abf
