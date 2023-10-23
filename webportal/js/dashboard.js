@@ -800,6 +800,8 @@ function changeContractsStep(s) {
 	renderContracts();
 }
 
+var contractsClick;
+
 function renderContracts() {
 	let tbody = document.getElementById('contracts-table');
 	tbody.innerHTML = '';
@@ -824,7 +826,12 @@ function renderContracts() {
 		tr.innerHTML += `<td>${row.totalcost}</td>`;
 		tr.innerHTML += `<td>${row.status}</td>`;
 		tr.index = i;
-		tr.addEventListener("click", expandContract);
+		tr.addEventListener("mousedown", (e) => {
+			contractsClick = {x: e.clientX, y: e.clientY};
+		});
+		tr.addEventListener("mouseup", (e) => {
+			if (contractsClick.x == e.clientX && contractsClick.y == e.clientY) expandContract(e);
+		});
 		tbody.appendChild(tr);
 	});
 	document.getElementById('contracts-empty').classList.add('disabled');
