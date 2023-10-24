@@ -33,6 +33,18 @@ function deleteCookie(name) {
 	document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/';
 }
 
+var userData = {
+	paymentsStep:     10,
+	contractsStep:    10,
+	filesStep:        10,
+	currentContracts: false,
+	oldContracts:     false,
+	sortByStart:      'inactive',
+	sortByEnd:        'inactive',
+	sortByTimestamp:  'ascending',
+	activeMenuIndex:  0,
+}
+
 var menu = document.getElementById('menu');
 var pages = document.getElementById('pages');
 for (let i = 0; i < menu.childElementCount; i++) {
@@ -40,8 +52,6 @@ for (let i = 0; i < menu.childElementCount; i++) {
 		setActiveMenuIndex(e.target.getAttribute('index'));
 	});
 }
-
-setActiveMenuIndex(0);
 
 var averages = {
 	currency: 'USD',
@@ -57,6 +67,17 @@ var averages = {
 	rate: 0.0
 }
 
+var payments = [];
+var paymentsFrom = 1;
+var contracts = [];
+var contractsFrom = 1;
+var files = [];
+var selectedFiles = [];
+var downloads = [];
+var filesFrom = 1;
+
+var expandedContract = -1;
+
 var currencies = [];
 var paymentEstimation;
 var paymentAmount = 0.0;
@@ -64,6 +85,7 @@ var paymentCurrency = 'USD';
 var processing = false;
 var paying = false;
 
+loadFromStorage();
 getVersion();
 getCurrencies();
 retrieveBlockHeight();
@@ -74,27 +96,34 @@ window.setInterval(retrieveBalance, 60000);
 window.setInterval(retrieveAverages, 600000);
 retrieveKey();
 
-var payments = [];
-var paymentsFrom = 1;
-var paymentsStep = 10;
-var contracts = [];
-var contractsFrom = 1;
-var contractsStep = 10;
-var files = [];
-var selectedFiles = [];
-var downloads = [];
-var filesFrom = 1;
-var filesStep = 10;
-
-var sortByStart = 'inactive';
-var sortByEnd = 'inactive';
-var sortByTimestamp = 'ascending';
-
-var expandedContract = -1;
+function loadFromStorage() {
+	let data = window.localStorage.getItem('userData');
+	if (data) userData = JSON.parse(data);
+	document.getElementById('history-rows').value = userData.paymentsStep;
+	document.getElementById('contracts-rows').value = userData.contractsStep;
+	document.getElementById('files-rows').value = userData.filesStep;
+	if (userData.currentContracts) document.getElementById('contracts-current').checked = true;
+	if (userData.oldContracts) document.getElementById('contracts-old').checked = true;
+	if (userData.sortByStart == 'ascending') document.getElementById('contracts-start-asc').classList.add('active');
+	if (userData.sortByStart == 'descending') document.getElementById('contracts-start-desc').classList.add('active');
+	if (userData.sortByEnd == 'ascending') document.getElementById('contracts-end-asc').classList.add('active');
+	if (userData.sortByEnd == 'descending') document.getElementById('contracts-end-desc').classList.add('active');
+	if (userData.sortByTimestamp == 'ascending') {
+		document.getElementById('history-timestamp-asc').classList.add('active');
+		document.getElementById('history-timestamp-desc').classList.remove('active');
+	}
+	if (userData.sortByTimestamp == 'descending') {
+		document.getElementById('history-timestamp-desc').classList.add('active');
+		document.getElementById('history-timestamp-asc').classList.remove('active');
+	}
+	setActiveMenuIndex(userData.activeMenuIndex);
+}
 
 function setActiveMenuIndex(ind) {
 	let li, p;
 	if (ind > menu.childElementCount) return;
+	userData.activeMenuIndex = ind;
+	window.localStorage.setItem('userData', JSON.stringify(userData));
 	for (let i = 0; i < menu.childElementCount; i++) {
 		li = menu.children[i];
 		p = pages.children[i];
@@ -634,8 +663,9 @@ function backToSelect() {
 }
 
 function changePaymentsStep(s) {
-	paymentsStep = parseInt(s.value);
+	userData.paymentsStep = parseInt(s.value);
 	paymentsFrom = 1;
+	window.localStorage.setItem('userData', JSON.stringify(userData));
 	renderPayments();
 }
 
@@ -652,7 +682,7 @@ function renderPayments() {
 	}
 	payments.forEach((row, i) => {
 		if (i < paymentsFrom - 1) return;
-		if (i >= paymentsFrom + paymentsStep - 1) return;
+		if (i >= paymentsFrom + userData.paymentsStep - 1) return;
 		timestamp = new Date(row.timestamp * 1000);
 		let tr = document.createElement('tr');
 		tr.innerHTML = `<td>${i + 1}</td>`;
@@ -670,7 +700,7 @@ function renderPayments() {
 	document.getElementById('history-empty').classList.add('disabled');
 	document.getElementById('history-non-empty').classList.remove('disabled');
 	document.getElementById('history-prev').disabled = paymentsFrom == 1;
-	document.getElementById('history-next').disabled = payments.length < paymentsFrom + paymentsStep;
+	document.getElementById('history-next').disabled = payments.length < paymentsFrom + userData.paymentsStep;
 }
 
 function getPayments() {
@@ -689,6 +719,11 @@ function getPayments() {
 				console.log(data);
 			} else {
 				payments = data;
+				if (userData.sortByTimestamp == 'ascending') {
+					payments = payments.sort((a, b) => a.timestamp - b.timestamp);
+				} else {
+					payments = payments.sort((a, b) => b.timestamp - a.timestamp);
+				}
 				renderPayments();
 				loading.classList.add('disabled');
 			}
@@ -697,13 +732,13 @@ function getPayments() {
 }
 
 function paymentsPrev() {
-	paymentsFrom = paymentsFrom - paymentsStep;
+	paymentsFrom = paymentsFrom - userData.paymentsStep;
 	if (paymentsFrom < 1) paymentsFrom = 1;
 	renderPayments();
 }
 
 function paymentsNext() {
-	paymentsFrom = paymentsFrom + paymentsStep;
+	paymentsFrom = paymentsFrom + userData.paymentsStep;
 	renderPayments();
 }
 
@@ -794,9 +829,10 @@ function retrieveBlockHeight() {
 }
 
 function changeContractsStep(s) {
-	contractsStep = parseInt(s.value);
+	userData.contractsStep = parseInt(s.value);
 	contractsFrom = 1;
 	expandedContract = -1;
+	window.localStorage.setItem('userData', JSON.stringify(userData));
 	renderContracts();
 }
 
@@ -815,7 +851,7 @@ function renderContracts() {
 	}
 	contracts.forEach((row, i) => {
 		if (i < contractsFrom - 1) return;
-		if (i >= contractsFrom + contractsStep - 1) return;
+		if (i >= contractsFrom + userData.contractsStep - 1) return;
 		let tr = document.createElement('tr');
 		tr.innerHTML = `<td>${i + 1}</td>`;
 		tr.innerHTML += `<td class="cell-overflow">${row.id.slice(row.id.indexOf(':') + 1)}</td>`;
@@ -837,7 +873,7 @@ function renderContracts() {
 	document.getElementById('contracts-empty').classList.add('disabled');
 	document.getElementById('contracts-non-empty').classList.remove('disabled');
 	document.getElementById('contracts-prev').disabled = contractsFrom == 1;
-	document.getElementById('contracts-next').disabled = contracts.length < contractsFrom + contractsStep;
+	document.getElementById('contracts-next').disabled = contracts.length < contractsFrom + userData.contractsStep;
 }
 
 function expandContract(e) {
@@ -868,8 +904,8 @@ function expandContract(e) {
 }
 
 function getContracts() {
-	let current = document.getElementById('contracts-current').checked;
-	let old = document.getElementById('contracts-old').checked;
+	let current = userData.currentContracts;
+	let old = userData.oldContracts;
 	let loading = document.getElementById('contracts-loading');
 	loading.classList.remove('disabled');
 	let options = {
@@ -891,16 +927,16 @@ function getContracts() {
 				console.log(data);
 			} else {
 				contracts = data;
-				if (sortByStart == 'ascending') {
+				if (userData.sortByStart == 'ascending') {
 					contracts = contracts.sort((a, b) => a.startheight - b.startheight);
 				}
-				if (sortByStart == 'descending') {
+				if (userData.sortByStart == 'descending') {
 					contracts = contracts.sort((a, b) => b.startheight - a.startheight);
 				}
-				if (sortByEnd == 'ascending') {
+				if (userData.sortByEnd == 'ascending') {
 					contracts = contracts.sort((a, b) => a.endheight - b.endheight);
 				}
-				if (sortByEnd == 'decending') {
+				if (userData.sortByEnd == 'decending') {
 					contracts = contracts.sort((a, b) => b.endheight - a.endheight);
 				}
 				renderContracts();
@@ -911,14 +947,14 @@ function getContracts() {
 }
 
 function contractsPrev() {
-	contractsFrom = contractsFrom - contractsStep;
+	contractsFrom = contractsFrom - userData.contractsStep;
 	if (contractsFrom < 1) contractsFrom = 1;
 	expandedContract = -1;
 	renderContracts();
 }
 
 function contractsNext() {
-	contractsFrom = contractsFrom + contractsStep;
+	contractsFrom = contractsFrom + userData.contractsStep;
 	expandedContract = -1;
 	renderContracts();
 }
@@ -926,27 +962,30 @@ function contractsNext() {
 function contractsChanged() {
 	contractsFrom = 1;
 	expandedContract = -1;
+	userData.currentContracts = document.getElementById('contracts-current').checked;
+	userData.oldContracts = document.getElementById('contracts-old').checked;
+	window.localStorage.setItem('userData', JSON.stringify(userData));
 	getContracts();
 }
 
 function sortByContractStart() {
-	switch (sortByStart) {
+	switch (userData.sortByStart) {
 	case 'inactive':
-		sortByStart = 'ascending';
+		userData.sortByStart = 'ascending';
 		document.getElementById('contracts-start-asc').classList.add('active');
-		sortByEnd = 'inactive';
+		userData.sortByEnd = 'inactive';
 		document.getElementById('contracts-end-desc').classList.remove('active');
 		document.getElementById('contracts-end-asc').classList.remove('active');
 		contracts = contracts.sort((a, b) => a.startheight - b.startheight);
 		break;
 	case 'ascending':
-		sortByStart = 'descending';
+		userData.sortByStart = 'descending';
 		document.getElementById('contracts-start-desc').classList.add('active');
 		document.getElementById('contracts-start-asc').classList.remove('active');
 		contracts = contracts.sort((a, b) => b.startheight - a.startheight);
 		break;
 	case 'descending':
-		sortByStart = 'ascending';
+		userData.sortByStart = 'ascending';
 		document.getElementById('contracts-start-asc').classList.add('active');
 		document.getElementById('contracts-start-desc').classList.remove('active');
 		contracts = contracts.sort((a, b) => a.startheight - b.startheight);
@@ -954,27 +993,28 @@ function sortByContractStart() {
 	default:
 	}
 	expandedContract = -1;
+	window.localStorage.setItem('userData', JSON.stringify(userData));
 	renderContracts();
 }
 
 function sortByContractEnd() {
-	switch (sortByEnd) {
+	switch (userData.sortByEnd) {
 	case 'inactive':
-		sortByEnd = 'ascending';
+		userData.sortByEnd = 'ascending';
 		document.getElementById('contracts-end-asc').classList.add('active');
-		sortByStart = 'inactive';
+		userData.sortByStart = 'inactive';
 		document.getElementById('contracts-start-desc').classList.remove('active');
 		document.getElementById('contracts-start-asc').classList.remove('active');
 		contracts = contracts.sort((a, b) => a.endheight - b.endheight);
 		break;
 	case 'ascending':
-		sortByEnd = 'descending';
+		userData.sortByEnd = 'descending';
 		document.getElementById('contracts-end-desc').classList.add('active');
 		document.getElementById('contracts-end-asc').classList.remove('active');
 		contracts = contracts.sort((a, b) => b.endheight - a.endheight);
 		break;
 	case 'descending':
-		sortByEnd = 'ascending';
+		userData.sortByEnd = 'ascending';
 		document.getElementById('contracts-end-asc').classList.add('active');
 		document.getElementById('contracts-end-desc').classList.remove('active');
 		contracts = contracts.sort((a, b) => a.endheight - b.endheight);
@@ -982,6 +1022,7 @@ function sortByContractEnd() {
 	default:
 	}
 	expandedContract = -1;
+	window.localStorage.setItem('userData', JSON.stringify(userData));
 	renderContracts();
 }
 
@@ -1090,8 +1131,9 @@ function getSettings() {
 }
 
 function changeFilesStep(s) {
-	filesStep = parseInt(s.value);
+	userData.filesStep = parseInt(s.value);
 	filesFrom = 1;
+	window.localStorage.setItem('userData', JSON.stringify(userData));
 	renderFiles();
 }
 
@@ -1118,7 +1160,7 @@ function renderFiles() {
 	}
 	files.forEach((row, i) => {
 		if (i < filesFrom - 1) return;
-		if (i >= filesFrom + filesStep - 1) return;
+		if (i >= filesFrom + userData.filesStep - 1) return;
 		timestamp = new Date(row.uploaded * 1000);
 		let index = downloads.findIndex(item => item.bucket == row.bucket && item.path == row.path);
 		let tr = document.createElement('tr');
@@ -1149,7 +1191,7 @@ function renderFiles() {
 	document.getElementById('files-empty').classList.add('disabled');
 	document.getElementById('files-non-empty').classList.remove('disabled');
 	document.getElementById('files-prev').disabled = filesFrom == 1;
-	document.getElementById('files-next').disabled = files.length < filesFrom + filesStep;
+	document.getElementById('files-next').disabled = files.length < filesFrom + userData.filesStep;
 }
 
 function downloadFile(index) {
@@ -1305,13 +1347,13 @@ function getFiles() {
 }
 
 function filesPrev() {
-	filesFrom = filesFrom - filesStep;
+	filesFrom = filesFrom - userData.filesStep;
 	if (filesFrom < 1) filesFrom = 1;
 	renderFiles();
 }
 
 function filesNext() {
-	filesFrom = filesFrom + filesStep;
+	filesFrom = filesFrom + userData.filesStep;
 	renderFiles();
 }
 
@@ -1393,21 +1435,22 @@ function getCurrencies() {
 }
 
 function sortByPaymentTime() {
-	switch (sortByTimestamp) {
+	switch (userData.sortByTimestamp) {
 	case 'ascending':
-		sortByTimestamp = 'descending';
+		userData.sortByTimestamp = 'descending';
 		document.getElementById('history-timestamp-desc').classList.add('active');
 		document.getElementById('history-timestamp-asc').classList.remove('active');
 		payments = payments.sort((a, b) => b.timestamp - a.timestamp);
 		break;
 	case 'descending':
-		sortByTimestamp = 'ascending';
+		userData.sortByTimestamp = 'ascending';
 		document.getElementById('history-timestamp-asc').classList.add('active');
 		document.getElementById('history-timestamp-desc').classList.remove('active');
 		payments = payments.sort((a, b) => a.timestamp - b.timestamp);
 		break;
 	default:
 	}
+	window.localStorage.setItem('userData', JSON.stringify(userData));
 	renderPayments();
 }
 
