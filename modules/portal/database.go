@@ -182,6 +182,8 @@ func (p *Portal) deleteAccount(email string) error {
 
 	_, err = p.db.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk)
 	errs = append(errs, err)
+	_, err = p.db.Exec("DELETE FROM ctr_buffers WHERE renter_pk = ?", pk)
+	errs = append(errs, err)
 
 	// Delete contracts.
 	_, err = p.db.Exec("DELETE FROM ctr_contracts WHERE renter_pk = ?", pk)

@@ -485,6 +485,7 @@ CREATE TABLE hdb_info (
 /* contractor */
 
 DROP TABLE IF EXISTS ctr_contracts;
+DROP TABLE IF EXISTS ctr_buffers;
 DROP TABLE IF EXISTS ctr_renters;
 DROP TABLE IF EXISTS ctr_info;
 DROP TABLE IF EXISTS ctr_dspent;
@@ -562,6 +563,7 @@ CREATE TABLE ctr_slabs (
 	offset     BIGINT UNSIGNED NOT NULL,
 	len        BIGINT UNSIGNED NOT NULL,
 	num        INT NOT NULL,
+	partial    BOOL NOT NULL,
 	PRIMARY KEY (enc_key),
 	FOREIGN KEY (object_id) REFERENCES ctr_metadata(enc_key)
 );
@@ -571,4 +573,12 @@ CREATE TABLE ctr_shards (
 	host        BINARY(32) NOT NULL,
 	merkle_root BINARY(32) NOT NULL,
 	FOREIGN KEY (slab_id) REFERENCES ctr_slabs(enc_key)
+);
+
+CREATE TABLE ctr_buffers (
+	id        INT NOT NULL AUTO_INCREMENT,
+	renter_pk BINARY(32) NOT NULL,
+	buffer    LONGBLOB NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );

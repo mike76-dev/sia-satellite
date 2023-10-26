@@ -389,6 +389,11 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 		}
 	}
 
+	_, err = c.db.Exec("DELETE FROM ctr_buffers WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		c.log.Println("ERROR: unable to delete buffer", err)
+	}
+
 	_, err = c.db.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk[:])
 	if err != nil {
 		c.log.Println("ERROR: unable to delete metadata", err)
@@ -440,6 +445,8 @@ func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path string) error {
 	}
 	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE enc_key = ?", objectID)
 	return err
+
+	// TODO delete partial slab(s) from the buffer.
 }
 
 // updateMetadata updates the file metadata in the database.
@@ -485,9 +492,10 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 
 	for i, s := range fm.Slabs {
 		_, err = tx.Exec(`
-			INSERT INTO ctr_slabs (enc_key, object_id, min_shards, offset, len, num)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length, i)
+			INSERT INTO ctr_slabs
+				(enc_key, object_id, min_shards, offset, len, num, partial)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length, i, false) //TODO
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "unable to insert slab")
