@@ -704,6 +704,7 @@ function renderPayments() {
 }
 
 function getPayments() {
+	document.getElementById('history-empty').classList.add('disabled');
 	let loading = document.getElementById('history-loading');
 	loading.classList.remove('disabled');
 	let options = {
@@ -906,6 +907,7 @@ function expandContract(e) {
 function getContracts() {
 	let current = userData.currentContracts;
 	let old = userData.oldContracts;
+	document.getElementById('contracts-empty').classList.add('disabled');
 	let loading = document.getElementById('contracts-loading');
 	loading.classList.remove('disabled');
 	let options = {
@@ -1323,6 +1325,7 @@ function selectBucket(bucket) {
 }
 
 function getFiles() {
+	document.getElementById('files-empty').classList.add('disabled');
 	let loading = document.getElementById('files-loading');
 	loading.classList.remove('disabled');
 	let options = {
