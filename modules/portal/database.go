@@ -178,11 +178,11 @@ func (p *Portal) deleteAccount(email string) error {
 	for _, object := range objects {
 		_, err = p.db.Exec("DELETE FROM ctr_slabs WHERE object_id = ?", object[:])
 		errs = append(errs, err)
+		_, err = p.db.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", object[:])
+		errs = append(errs, err)
 	}
 
 	_, err = p.db.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk)
-	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM ctr_buffers WHERE renter_pk = ?", pk)
 	errs = append(errs, err)
 
 	// Delete contracts.

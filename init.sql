@@ -563,7 +563,6 @@ CREATE TABLE ctr_slabs (
 	offset     BIGINT UNSIGNED NOT NULL,
 	len        BIGINT UNSIGNED NOT NULL,
 	num        INT NOT NULL,
-	partial    BOOL NOT NULL,
 	PRIMARY KEY (enc_key),
 	FOREIGN KEY (object_id) REFERENCES ctr_metadata(enc_key)
 );
@@ -577,8 +576,9 @@ CREATE TABLE ctr_shards (
 
 CREATE TABLE ctr_buffers (
 	id        INT NOT NULL AUTO_INCREMENT,
-	renter_pk BINARY(32) NOT NULL,
-	buffer    LONGBLOB NOT NULL,
+	object_id BINARY(32) NOT NULL,
+	len       BIGINT UNSIGNED NOT NULL,
+	data      LONGBLOB NOT NULL,
 	PRIMARY KEY (id),
-	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
+	FOREIGN KEY (object_id) REFERENCES ctr_metadata(enc_key)
 );

@@ -387,11 +387,10 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 		if err != nil {
 			c.log.Println("ERROR: unable to delete slabs", err)
 		}
-	}
-
-	_, err = c.db.Exec("DELETE FROM ctr_buffers WHERE renter_pk = ?", pk[:])
-	if err != nil {
-		c.log.Println("ERROR: unable to delete buffer", err)
+		_, err = c.db.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", object[:])
+		if err != nil {
+			c.log.Println("ERROR: unable to delete buffer", err)
+		}
 	}
 
 	_, err = c.db.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk[:])
@@ -443,10 +442,12 @@ func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path string) error {
 	if err != nil {
 		return err
 	}
+	_, err = tx.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", objectID)
+	if err != nil {
+		return err
+	}
 	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE enc_key = ?", objectID)
 	return err
-
-	// TODO delete partial slab(s) from the buffer.
 }
 
 // updateMetadata updates the file metadata in the database.
