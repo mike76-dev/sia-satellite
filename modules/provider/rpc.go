@@ -651,7 +651,7 @@ func (p *Provider) managedSaveMetadata(s *modules.RPCSession) error {
 
 	// Read the request.
 	var smr saveMetadataRequest
-	hash, err := s.ReadRequest(&smr, 65536)
+	hash, err := s.ReadRequest(&smr, metadataRequestMaxSize)
 	if err != nil {
 		err = fmt.Errorf("could not read renter request: %v", err)
 		s.WriteError(err)

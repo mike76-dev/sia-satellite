@@ -494,9 +494,9 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 	for i, s := range fm.Slabs {
 		_, err = tx.Exec(`
 			INSERT INTO ctr_slabs
-				(enc_key, object_id, min_shards, offset, len, num, partial)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length, i, false) //TODO
+				(enc_key, object_id, min_shards, offset, len, num)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length, i)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "unable to insert slab")
@@ -510,6 +510,17 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 				tx.Rollback()
 				return modules.AddContext(err, "unable to insert shard")
 			}
+		}
+	}
+
+	if len(fm.Data) > 0 {
+		_, err = tx.Exec(`
+			INSERT INTO ctr_buffers (object_id, len, data)
+			VALUES (?, ?, ?)
+		`, fm.Key[:], len(fm.Data), fm.Data)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "unable to save partial data")
 		}
 	}
 

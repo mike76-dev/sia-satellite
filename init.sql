@@ -575,10 +575,8 @@ CREATE TABLE ctr_shards (
 );
 
 CREATE TABLE ctr_buffers (
-	id        INT NOT NULL AUTO_INCREMENT,
 	object_id BINARY(32) NOT NULL,
 	len       BIGINT UNSIGNED NOT NULL,
 	data      LONGBLOB NOT NULL,
-	PRIMARY KEY (id),
 	FOREIGN KEY (object_id) REFERENCES ctr_metadata(enc_key)
 );

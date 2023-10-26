@@ -58,6 +58,10 @@ const (
 	// rpcRatelimit prevents someone from spamming the provider connections,
 	// causing it to spin up enough goroutines to crash.
 	rpcRatelimit = time.Millisecond * 50
+
+	// metadataRequestMaxSize should be high enough to allow uploading or
+	// downloading a partial slab.
+	metadataRequestMaxSize = 1e9
 )
 
 var (
