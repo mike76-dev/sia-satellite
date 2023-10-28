@@ -673,7 +673,7 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 // DownloadObject downloads an object and returns it.
 func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, path string) error {
 	// Retrieve the object.
-	obj, err := c.getObject(rpk, bucket, path)
+	obj, data, err := c.getObject(rpk, bucket, path)
 	if err != nil {
 		return err
 	}
@@ -692,7 +692,7 @@ func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, pa
 	defer cancel()
 
 	// Download the object.
-	err = c.dm.managedDownloadObject(ctx, w, rpk, obj, 0, length, contracts)
+	err = c.dm.managedDownloadObject(ctx, w, rpk, obj, data, 0, length, contracts)
 
 	return err
 }

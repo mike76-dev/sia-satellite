@@ -115,6 +115,7 @@ type (
 	sectorDownloadResp struct {
 		overdrive   bool
 		hk          types.PublicKey
+		root        types.Hash256
 		sectorIndex int
 		sector      []byte
 		err         error
@@ -235,7 +236,7 @@ func newDownloader(c *Contractor, rpk, hpk types.PublicKey) *downloader {
 }
 
 // managedDownloadObject downloads the whole object.
-func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writer, rpk types.PublicKey, o object.Object, offset, length uint64, contracts []modules.RenterContract) (err error) {
+func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writer, rpk types.PublicKey, o object.Object, data []byte, offset, length uint64, contracts []modules.RenterContract) (err error) {
 	// Calculate what slabs we need.
 	var ss []object.SlabSlice
 	for _, s := range o.Slabs {

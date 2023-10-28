@@ -772,6 +772,7 @@ type Slab struct {
 	MinShards uint8         `json:"minShards"`
 	Offset    uint64        `json:"offset"`
 	Length    uint64        `json:"length"`
+	Partial   bool          `json:"partial"`
 	Shards    []Shard       `json:"shards"`
 }
 
@@ -799,6 +800,7 @@ func (s *Slab) EncodeTo(e *types.Encoder) {
 	e.WriteUint64(uint64(s.MinShards))
 	e.WriteUint64(s.Offset)
 	e.WriteUint64(s.Length)
+	e.WriteBool(s.Partial)
 	e.WritePrefix(len(s.Shards))
 	for _, ss := range s.Shards {
 		ss.EncodeTo(e)
@@ -811,6 +813,7 @@ func (s *Slab) DecodeFrom(d *types.Decoder) {
 	s.MinShards = uint8(d.ReadUint64())
 	s.Offset = d.ReadUint64()
 	s.Length = d.ReadUint64()
+	s.Partial = d.ReadBool()
 	s.Shards = make([]Shard, d.ReadPrefix())
 	for i := 0; i < len(s.Shards); i++ {
 		s.Shards[i].DecodeFrom(d)

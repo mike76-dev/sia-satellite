@@ -283,10 +283,13 @@ func (mgr *uploadManager) upload(ctx context.Context, r io.Reader, rpk types.Pub
 	defer cancel()
 
 	// Create the object.
-	o := object.NewObject()
+	o := object.NewObject(object.GenerateEncryptionKey())
 
 	// Create the cipher reader.
-	cr := o.Encrypt(r)
+	cr, err := o.Encrypt(r, 0)
+	if err != nil {
+		return object.Object{}, err
+	}
 
 	// Create the upload.
 	u, err := mgr.newUpload(rpk, int(renter.Allowance.TotalShards), contracts, bh)

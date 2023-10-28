@@ -563,6 +563,7 @@ CREATE TABLE ctr_slabs (
 	offset     BIGINT UNSIGNED NOT NULL,
 	len        BIGINT UNSIGNED NOT NULL,
 	num        INT NOT NULL,
+	partial    BOOL NOT NULL,
 	PRIMARY KEY (enc_key),
 	FOREIGN KEY (object_id) REFERENCES ctr_metadata(enc_key)
 );

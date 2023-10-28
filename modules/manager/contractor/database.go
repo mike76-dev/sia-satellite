@@ -494,9 +494,9 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 	for i, s := range fm.Slabs {
 		_, err = tx.Exec(`
 			INSERT INTO ctr_slabs
-				(enc_key, object_id, min_shards, offset, len, num)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length, i)
+				(enc_key, object_id, min_shards, offset, len, num, partial)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length, i, s.Partial)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "unable to insert slab")
@@ -592,7 +592,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		}
 
 		slabRows, err := c.db.Query(`
-			SELECT enc_key, min_shards, offset, len, num
+			SELECT enc_key, min_shards, offset, len, num, partial
 			FROM ctr_slabs
 			WHERE object_id = ?
 			ORDER BY num ASC
@@ -607,7 +607,8 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 			var minShards uint8
 			var offset, length uint64
 			var i int
-			if err := slabRows.Scan(&slabID, &minShards, &offset, &length, &i); err != nil {
+			var partial bool
+			if err := slabRows.Scan(&slabID, &minShards, &offset, &length, &i, &partial); err != nil {
 				slabRows.Close()
 				return nil, modules.AddContext(err, "unable to retrieve slab")
 			}
@@ -636,6 +637,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 			slab.MinShards = minShards
 			slab.Offset = offset
 			slab.Length = length
+			slab.Partial = partial
 			slab.Shards = shards
 			slabs = append(slabs, slab)
 		}
@@ -865,11 +867,11 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 }
 
 // getObject tries to find an object by its path.
-func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.Object, error) {
+func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.Object, []byte, error) {
 	// Start a transaction.
 	tx, err := c.db.Begin()
 	if err != nil {
-		return object.Object{}, err
+		return object.Object{}, nil, err
 	}
 
 	// Find the object ID.
@@ -881,38 +883,40 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.
 	`, bucket, path, pk[:]).Scan(&objectID)
 	if err != nil {
 		tx.Rollback()
-		return object.Object{}, modules.AddContext(err, "couldn't find object")
+		return object.Object{}, nil, modules.AddContext(err, "couldn't find object")
 	}
 	var key types.Hash256
 	copy(key[:], objectID)
 	objectKey, err := encryptionKey(key)
 	if err != nil {
 		tx.Rollback()
-		return object.Object{}, modules.AddContext(err, "couldn't unmarshal object key")
+		return object.Object{}, nil, modules.AddContext(err, "couldn't unmarshal object key")
 	}
 
 	// Load slabs.
 	rows, err := tx.Query(`
-		SELECT enc_key, min_shards, offset, len, num
+		SELECT enc_key, min_shards, offset, len, num, partial
 		FROM ctr_slabs
 		WHERE object_id = ?
 		ORDER BY num ASC
 	`, objectID)
 	if err != nil {
 		tx.Rollback()
-		return object.Object{}, modules.AddContext(err, "couldn't load slabs")
+		return object.Object{}, nil, modules.AddContext(err, "couldn't load slabs")
 	}
 
 	var slabs []object.SlabSlice
+	var partialSlabs []object.PartialSlab
 	for rows.Next() {
 		slabID := make([]byte, 32)
 		var minShards uint8
 		var offset, length uint64
 		var n int
-		if err = rows.Scan(&slabID, &minShards, &offset, &length, &n); err != nil {
+		var p bool
+		if err = rows.Scan(&slabID, &minShards, &offset, &length, &n, &p); err != nil {
 			rows.Close()
 			tx.Rollback()
-			return object.Object{}, modules.AddContext(err, "couldn't load slab")
+			return object.Object{}, nil, modules.AddContext(err, "couldn't load slab")
 		}
 		copy(key[:], slabID)
 		var slabKey object.EncryptionKey
@@ -920,16 +924,24 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.
 		if err != nil {
 			rows.Close()
 			tx.Rollback()
-			return object.Object{}, modules.AddContext(err, "couldn't unmarshal slab key")
+			return object.Object{}, nil, modules.AddContext(err, "couldn't unmarshal slab key")
 		}
-		slabs = append(slabs, object.SlabSlice{
-			Slab: object.Slab{
-				Key:       slabKey,
-				MinShards: minShards,
-			},
-			Offset: uint32(offset),
-			Length: uint32(length),
-		})
+		if p {
+			partialSlabs = append(partialSlabs, object.PartialSlab{
+				Key:    slabKey,
+				Offset: uint32(offset),
+				Length: uint32(length),
+			})
+		} else {
+			slabs = append(slabs, object.SlabSlice{
+				Slab: object.Slab{
+					Key:       slabKey,
+					MinShards: minShards,
+				},
+				Offset: uint32(offset),
+				Length: uint32(length),
+			})
+		}
 	}
 	rows.Close()
 
@@ -939,7 +951,7 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.
 		id, err = convertEncryptionKey(slabs[index].Key)
 		if err != nil {
 			tx.Rollback()
-			return object.Object{}, modules.AddContext(err, "couldn't marshal encryption key")
+			return object.Object{}, nil, modules.AddContext(err, "couldn't marshal encryption key")
 		}
 		rows, err = tx.Query(`
 			SELECT host, merkle_root
@@ -948,7 +960,7 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.
 		`, id[:])
 		if err != nil {
 			tx.Rollback()
-			return object.Object{}, modules.AddContext(err, "couldn't load shards")
+			return object.Object{}, nil, modules.AddContext(err, "couldn't load shards")
 		}
 
 		for rows.Next() {
@@ -957,7 +969,7 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.
 			if err = rows.Scan(&host, &root); err != nil {
 				rows.Close()
 				tx.Rollback()
-				return object.Object{}, modules.AddContext(err, "couldn't load shard")
+				return object.Object{}, nil, modules.AddContext(err, "couldn't load shard")
 			}
 			var shard object.Sector
 			copy(shard.Host[:], host)
@@ -967,6 +979,18 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.
 		rows.Close()
 	}
 
+	// Load partial data.
+	var data []byte
+	err = tx.QueryRow(`
+		SELECT data
+		FROM ctr_buffers
+		WHERE object_id = ?
+	`, objectID).Scan(&data)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		tx.Rollback()
+		return object.Object{}, nil, modules.AddContext(err, "couldn't load partial data")
+	}
+
 	// Construct the object.
 	obj := object.Object{
 		Key:   objectKey,
@@ -974,5 +998,5 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.
 	}
 
 	tx.Commit()
-	return obj, nil
+	return obj, data, nil
 }
