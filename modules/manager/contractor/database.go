@@ -495,7 +495,12 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		_, err = tx.Exec(`
 			INSERT INTO ctr_slabs
 				(enc_key, object_id, min_shards, offset, len, num, partial)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?) AS new
+			ON DUPLICATE KEY UPDATE
+				object_id = new.object_id,
+				offset = new.offset,
+				len = new.len,
+				num = new.num
 		`, s.Key[:], fm.Key[:], s.MinShards, s.Offset, s.Length, i, s.Partial)
 		if err != nil {
 			tx.Rollback()
@@ -675,7 +680,7 @@ func (c *Contractor) updateSlab(slab modules.Slab) error {
 
 	id := make([]byte, 32)
 	err = tx.QueryRow("SELECT object_id FROM ctr_slabs WHERE enc_key = ?", slab.Key[:]).Scan(&id)
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		tx.Rollback()
 		return modules.AddContext(err, "couldn't find slab")
 	}
@@ -698,10 +703,10 @@ func (c *Contractor) updateSlab(slab modules.Slab) error {
 	}
 
 	_, err = tx.Exec(`
-		UPDATE ctr_slabs
-		SET min_shards = ?, offset = ?, len = ?
-		WHERE enc_key = ?
-	`, slab.MinShards, slab.Offset, slab.Length, slab.Key[:])
+		REPLACE INTO ctr_slabs
+			(enc_key, object_id, min_shards, offset, len, num, partial)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, slab.Key[:], []byte{}, slab.MinShards, slab.Offset, slab.Length, 0, false)
 	if err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "couldn't update slab")

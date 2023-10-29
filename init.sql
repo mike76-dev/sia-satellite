@@ -564,15 +564,13 @@ CREATE TABLE ctr_slabs (
 	len        BIGINT UNSIGNED NOT NULL,
 	num        INT NOT NULL,
 	partial    BOOL NOT NULL,
-	PRIMARY KEY (enc_key),
-	FOREIGN KEY (object_id) REFERENCES ctr_metadata(enc_key)
+	PRIMARY KEY (enc_key)
 );
 
 CREATE TABLE ctr_shards (
 	slab_id     BINARY(32) NOT NULL,
 	host        BINARY(32) NOT NULL,
-	merkle_root BINARY(32) NOT NULL,
-	FOREIGN KEY (slab_id) REFERENCES ctr_slabs(enc_key)
+	merkle_root BINARY(32) NOT NULL
 );
 
 CREATE TABLE ctr_buffers (
