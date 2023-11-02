@@ -730,7 +730,7 @@ func (u *upload) uploadShards(ctx context.Context, shards [][]byte, nextSlabChan
 
 	// Launch all shard uploads.
 	for _, upload := range requests {
-		if err := slab.launch(upload); err != nil {
+		if _, err := slab.launch(upload); err != nil {
 			return nil, err
 		}
 	}
@@ -768,9 +768,11 @@ func (u *upload) uploadShards(ctx context.Context, shards [][]byte, nextSlabChan
 
 		// Relaunch non-overdrive uploads.
 		if !done && resp.err != nil && !resp.req.overdrive {
-			if err := slab.launch(resp.req); err != nil {
+			if overdriving, err := slab.launch(resp.req); err != nil {
 				u.mgr.contractor.log.Println("ERROR: failed to relaunch a sector upload:", err)
-				break // Fail the upload.
+				if !overdriving {
+					break // Fail the upload.
+				}
 			}
 		}
 
@@ -1057,14 +1059,20 @@ func (s *slabUpload) inflight() uint64 {
 }
 
 // launch starts an upload request.
-func (s *slabUpload) launch(req *sectorUploadReq) error {
+func (s *slabUpload) launch(req *sectorUploadReq) (overdriving bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Nothing to do.
+	if req == nil {
+		return false, nil
+	}
+
 	// Launch the req.
-	err := s.mgr.launch(req)
+	err = s.mgr.launch(req)
 	if err != nil {
-		return err
+		overdriving = req.overdrive && s.overdriving[req.sectorIndex] > 0
+		return
 	}
 
 	// Update the state.
@@ -1073,9 +1081,10 @@ func (s *slabUpload) launch(req *sectorUploadReq) error {
 	if req.overdrive {
 		s.lastOverdrive = time.Now()
 		s.overdriving[req.sectorIndex]++
+		overdriving = true
 	}
 
-	return nil
+	return
 }
 
 // overdrive spins up new workers when required.
@@ -1127,10 +1136,7 @@ func (s *slabUpload) overdrive(ctx context.Context, respChan chan sectorUploadRe
 				return
 			case <-timer.C:
 				if canOverdrive() {
-					req := s.nextRequest(respChan)
-					if req != nil {
-						_ = s.launch(req) // Ignore error.
-					}
+					_, _ = s.launch(s.nextRequest(respChan)) // Ignore result.
 				}
 				resetTimer()
 			}
@@ -1194,6 +1200,11 @@ func (s *slabUpload) overdrivePct() float64 {
 func (s *slabUpload) receive(resp sectorUploadResp) (finished bool, next bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Update the state.
+	if resp.req.overdrive {
+		s.overdriving[resp.req.sectorIndex]--
+	}
 
 	// Failed reqs can't complete the upload.
 	s.numInflight--
