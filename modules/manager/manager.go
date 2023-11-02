@@ -139,7 +139,7 @@ type hostContractor interface {
 	UpdateRenterSettings(types.PublicKey, modules.RenterSettings, types.PrivateKey, types.PrivateKey) error
 
 	// UpdateSlab updates a file slab after a successful migration.
-	UpdateSlab(modules.Slab) error
+	UpdateSlab(types.PublicKey, modules.Slab, bool) error
 
 	// RenewedFrom returns the ID of the contract the given contract was
 	// renewed from, if any.
@@ -1130,7 +1130,7 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []modules.BucketF
 }
 
 // UpdateSlab updates a file slab after a successful migration.
-func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
+func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab, packed bool) error {
 	// Get the balance and check if it is sufficient.
 	renter, err := m.GetRenter(pk)
 	if err != nil {
@@ -1154,7 +1154,7 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab) error {
 	}
 
 	// Update the slab.
-	err = m.hostContractor.UpdateSlab(slab)
+	err = m.hostContractor.UpdateSlab(pk, slab, packed)
 	if err != nil {
 		return err
 	}

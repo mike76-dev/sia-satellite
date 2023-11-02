@@ -215,7 +215,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 						copy(ss.Root[:], shard.Root[:])
 						s.Shards = append(s.Shards, ss)
 					}
-					err = m.contractor.updateSlab(s)
+					err = m.contractor.updateSlab(j.renterKey, s, false)
 					if err != nil {
 						m.contractor.log.Printf("ERROR: failed to update slab %d/%d, err: %v\n", j.slabIdx+1, j.batchSize, err)
 					}

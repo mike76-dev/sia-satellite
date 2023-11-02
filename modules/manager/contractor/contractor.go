@@ -552,8 +552,8 @@ func (c *Contractor) RetrieveMetadata(pk types.PublicKey, present []modules.Buck
 }
 
 // UpdateSlab updates a file slab after a successful migration.
-func (c *Contractor) UpdateSlab(slab modules.Slab) error {
-	err := c.updateSlab(slab)
+func (c *Contractor) UpdateSlab(rpk types.PublicKey, slab modules.Slab, packed bool) error {
+	err := c.updateSlab(rpk, slab, packed)
 	if err != nil {
 		c.log.Println("ERROR: couldn't update slab:", err)
 	}
@@ -673,7 +673,7 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 // DownloadObject downloads an object and returns it.
 func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, path string) error {
 	// Retrieve the object.
-	obj, data, err := c.getObject(rpk, bucket, path)
+	obj, err := c.getObject(rpk, bucket, path)
 	if err != nil {
 		return err
 	}
@@ -682,6 +682,9 @@ func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, pa
 	var length uint64
 	for _, slab := range obj.Slabs {
 		length += uint64(slab.Length)
+	}
+	for _, ps := range obj.PartialSlabs {
+		length += uint64(ps.Length)
 	}
 
 	// Get the contracts.
@@ -692,7 +695,7 @@ func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, pa
 	defer cancel()
 
 	// Download the object.
-	err = c.dm.managedDownloadObject(ctx, w, rpk, obj, data, 0, length, contracts)
+	err = c.dm.managedDownloadObject(ctx, w, rpk, obj, 0, length, contracts)
 
 	return err
 }

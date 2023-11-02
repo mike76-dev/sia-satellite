@@ -236,15 +236,43 @@ func newDownloader(c *Contractor, rpk, hpk types.PublicKey) *downloader {
 }
 
 // managedDownloadObject downloads the whole object.
-func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writer, rpk types.PublicKey, o object.Object, data []byte, offset, length uint64, contracts []modules.RenterContract) (err error) {
+func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writer, rpk types.PublicKey, o object.Object, offset, length uint64, contracts []modules.RenterContract) (err error) {
 	// Calculate what slabs we need.
-	var ss []object.SlabSlice
+	var ss []slabSlice
 	for _, s := range o.Slabs {
-		ss = append(ss, s)
+		ss = append(ss, slabSlice{
+			SlabSlice:   s,
+			PartialSlab: false,
+		})
+	}
+	for _, ps := range o.PartialSlabs {
+		// Add a fake slab.
+		ss = append(ss, slabSlice{
+			SlabSlice: object.SlabSlice{
+				Slab: object.Slab{
+					Key: ps.Key,
+				},
+				Offset: ps.Offset,
+				Length: ps.Length,
+			},
+			PartialSlab: true,
+		})
 	}
 	slabs := slabsForDownload(ss, offset, length)
 	if len(slabs) == 0 {
 		return nil
+	}
+
+	// Go through the slabs and fetch any partial slab data.
+	for i := range slabs {
+		if !slabs[i].PartialSlab {
+			continue
+		}
+		data, err := mgr.contractor.getPartialSlab(o.Key)
+		if err != nil {
+			return modules.AddContext(err, "failed to fetch partial slab data")
+		}
+		slabs[i].Data = data
 	}
 
 	// Refresh the downloaders.
@@ -285,6 +313,14 @@ func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writ
 			if slabIndex < len(slabs) && atomic.LoadUint64(&concurrentSlabs) < maxConcurrentSlabsPerDownload {
 				next := slabs[slabIndex]
 
+				// Check if the next slab is a partial slab.
+				if next.PartialSlab {
+					responseChan <- &slabDownloadResponse{index: slabIndex}
+					slabIndex++
+					atomic.AddUint64(&concurrentSlabs, 1)
+					continue // Handle partial slab separately.
+				}
+
 				// Check if we have enough downloaders.
 				var available uint8
 				for _, s := range next.Shards {
@@ -300,7 +336,7 @@ func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writ
 				// Launch the download.
 				wg.Add(1)
 				go func(index int) {
-					mgr.downloadSlab(ctx, rpk, next, index, responseChan, nextSlabChan)
+					mgr.downloadSlab(ctx, rpk, next.SlabSlice, index, responseChan, nextSlabChan)
 					wg.Done()
 				}(slabIndex)
 				atomic.AddUint64(&concurrentSlabs, 1)
@@ -338,11 +374,22 @@ outer:
 			responses[resp.index] = resp
 			for {
 				if next, exists := responses[respIndex]; exists {
-					slabs[respIndex].Decrypt(next.shards)
-					err := slabs[respIndex].Recover(cw, next.shards)
-					if err != nil {
-						mgr.contractor.log.Printf("failed to recover slab %v: %v\n", respIndex, err)
-						return err
+					s := slabs[respIndex]
+					if s.PartialSlab {
+						// Partial slab.
+						_, err = cw.Write(s.Data)
+						if err != nil {
+							mgr.contractor.log.Printf("failed to send partial slab %v: %v\n", respIndex, err)
+							return err
+						}
+					} else {
+						// Regular slab.
+						slabs[respIndex].Decrypt(next.shards)
+						err := slabs[respIndex].Recover(cw, next.shards)
+						if err != nil {
+							mgr.contractor.log.Printf("failed to recover slab %v: %v\n", respIndex, err)
+							return err
+						}
 					}
 
 					next = nil
@@ -510,7 +557,7 @@ func (mgr *downloadManager) refreshDownloaders(rpk types.PublicKey, contracts []
 	for _, c := range want {
 		downloader := newDownloader(mgr.contractor, rpk, c.HostPublicKey)
 		mgr.downloaders[rpk.String()+c.HostPublicKey.String()] = downloader
-		go downloader.processQueue(mgr.contractor)
+		go downloader.processQueue()
 	}
 }
 
@@ -689,7 +736,7 @@ func (d *downloader) processBatch(batch []*sectorDownloadReq) chan struct{} {
 }
 
 // processQueue processes the queue of download requests.
-func (d *downloader) processQueue(c *Contractor) {
+func (d *downloader) processQueue() {
 outer:
 	for {
 		// Wait for work.
@@ -809,6 +856,7 @@ func (d *downloader) execute(req *sectorDownloadReq) (err error) {
 func (req *sectorDownloadReq) succeed(sector []byte) {
 	req.resps.add(&sectorDownloadResp{
 		hk:          req.hostKey,
+		root:        req.root,
 		overdrive:   req.overdrive,
 		sectorIndex: req.sectorIndex,
 		sector:      sector,
@@ -820,6 +868,7 @@ func (req *sectorDownloadReq) fail(err error) {
 	req.resps.add(&sectorDownloadResp{
 		err:       err,
 		hk:        req.hostKey,
+		root:      req.root,
 		overdrive: req.overdrive,
 	})
 }
@@ -966,10 +1015,12 @@ func (s *slabDownload) downloadShards(ctx context.Context, nextSlabChan chan str
 	resetOverdrive := s.overdrive(ctx, resps)
 
 	// Launch 'MinShard' requests.
-	for i := 0; i < int(s.minShards); i++ {
+	for i := 0; i < int(s.minShards); {
 		req := s.nextRequest(ctx, resps, false)
-		if err := s.launch(req); err != nil {
-			return nil, errors.New("no hosts available")
+		if req == nil {
+			return nil, fmt.Errorf("no hosts available")
+		} else if err := s.launch(req); err == nil {
+			i++
 		}
 	}
 
@@ -1154,8 +1205,15 @@ func (mgr *downloadManager) launch(req *sectorDownloadReq) error {
 	return nil
 }
 
+// slabSlice is a helper type for downloading slabs.
+type slabSlice struct {
+	object.SlabSlice
+	PartialSlab bool
+	Data        []byte
+}
+
 // slabsForDownload picks a slice of slabs from the provided set.
-func slabsForDownload(slabs []object.SlabSlice, offset, length uint64) []object.SlabSlice {
+func slabsForDownload(slabs []slabSlice, offset, length uint64) []slabSlice {
 	// Declare a helper to cast a uint64 to uint32 with overflow detection. This
 	// could should never produce an overflow.
 	cast32 := func(in uint64) uint32 {
@@ -1166,7 +1224,7 @@ func slabsForDownload(slabs []object.SlabSlice, offset, length uint64) []object.
 	}
 
 	// Mutate a copy.
-	slabs = append([]object.SlabSlice(nil), slabs...)
+	slabs = append([]slabSlice(nil), slabs...)
 
 	firstOffset := offset
 	for i, ss := range slabs {

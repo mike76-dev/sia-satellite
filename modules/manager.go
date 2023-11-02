@@ -443,7 +443,7 @@ type Manager interface {
 	UpdateRenterSettings(types.PublicKey, RenterSettings, types.PrivateKey, types.PrivateKey) error
 
 	// UpdateSlab updates a file slab after a successful migration.
-	UpdateSlab(types.PublicKey, Slab) error
+	UpdateSlab(types.PublicKey, Slab, bool) error
 
 	// UpdateSpendings updates the user's spendings.
 	UpdateSpendings(string, UserSpendings) error

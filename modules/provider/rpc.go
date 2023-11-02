@@ -773,7 +773,7 @@ func (p *Provider) managedUpdateSlab(s *modules.RPCSession) error {
 	}
 
 	// Update the slab.
-	err = p.m.UpdateSlab(usr.PubKey, usr.Slab)
+	err = p.m.UpdateSlab(usr.PubKey, usr.Slab, usr.Packed)
 	if err != nil {
 		err = fmt.Errorf("couldn't update slab: %v", err)
 		s.WriteError(err)

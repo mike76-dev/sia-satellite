@@ -581,6 +581,7 @@ func (rmr requestMetadataResponse) DecodeFrom(d *types.Decoder) {
 type updateSlabRequest struct {
 	PubKey    types.PublicKey
 	Slab      modules.Slab
+	Packed    bool
 	Signature types.Signature
 }
 
@@ -588,6 +589,7 @@ type updateSlabRequest struct {
 func (usr *updateSlabRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(usr.PubKey[:])
 	usr.Slab.DecodeFrom(d)
+	usr.Packed = d.ReadBool()
 	usr.Signature.DecodeFrom(d)
 }
 
@@ -595,6 +597,7 @@ func (usr *updateSlabRequest) DecodeFrom(d *types.Decoder) {
 func (usr *updateSlabRequest) EncodeTo(e *types.Encoder) {
 	e.Write(usr.PubKey[:])
 	usr.Slab.EncodeTo(e)
+	e.WriteBool(usr.Packed)
 }
 
 // shareRequest is used when the renter submits a set of contracts.
