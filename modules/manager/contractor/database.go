@@ -570,7 +570,7 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		_, err = tx.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", fm.Key[:])
 		if err != nil {
 			tx.Rollback()
-			return modules.AddContext(err, "unable to save partial data")
+			return modules.AddContext(err, "unable to delete partial data")
 		}
 	}
 
