@@ -349,6 +349,11 @@ func (c *Contractor) managedCheckFileHealth() (toRepair []slabInfo, err error) {
 
 	// Iterate through the slabs and check if any needs a repair.
 	for _, slab := range slabs {
+		// Skip any partial slabs.
+		if slab.Partial {
+			continue
+		}
+
 		// Sanity check.
 		if slab.MinShards > uint8(len(slab.Shards)) {
 			c.log.Printf("ERROR: retrieved less shards than MinShards (%v/%v)\n", len(slab.Shards), slab.MinShards)

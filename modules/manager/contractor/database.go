@@ -903,11 +903,13 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, offset, length
 // getSlabs loads the slabs from the database.
 func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 	// Load slabs.
+	emptyID := make([]byte, 32)
 	rows, err := c.db.Query(`
-		SELECT enc_key, renter_pk, min_shards, offset, len, num
+		SELECT enc_key, renter_pk, min_shards, offset, len, num, partial
 		FROM ctr_slabs
+		WHERE object_id <> ?
 		ORDER BY num ASC
-	`)
+	`, emptyID[:])
 	if err != nil {
 		return nil, modules.AddContext(err, "unable to query slabs")
 	}
@@ -918,7 +920,8 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 		var minShards uint8
 		var offset, length uint64
 		var i int
-		if err := rows.Scan(&key, &rpk, &minShards, &offset, &length, &i); err != nil {
+		var partial bool
+		if err := rows.Scan(&key, &rpk, &minShards, &offset, &length, &i, &partial); err != nil {
 			rows.Close()
 			return nil, modules.AddContext(err, "unable to retrieve slab")
 		}
@@ -926,6 +929,7 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 			MinShards: minShards,
 			Offset:    offset,
 			Length:    length,
+			Partial:   partial,
 		}
 		copy(slab.Key[:], key)
 		si := slabInfo{
@@ -1183,7 +1187,7 @@ func (c *Contractor) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, erro
 			SET retrieved = ?
 			WHERE enc_key = ?
 			AND object_id <> ?
-		`, slab.Key[:], emptyID[:])
+		`, time.Now().Unix(), slab.Key[:], emptyID[:])
 		if err != nil {
 			return nil, modules.AddContext(err, "couldn't update timestamp")
 		}
