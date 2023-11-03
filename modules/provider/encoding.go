@@ -600,6 +600,41 @@ func (usr *updateSlabRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBool(usr.Packed)
 }
 
+// requestSlabsRequest is used to retrieve modified slabs.
+type requestSlabsRequest struct {
+	PubKey    types.PublicKey
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (rsr *requestSlabsRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(rsr.PubKey[:])
+	rsr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (rsr *requestSlabsRequest) EncodeTo(e *types.Encoder) {
+	e.Write(rsr.PubKey[:])
+}
+
+// requestSlabsResponse is a response type for requestSlabsRequest.
+type requestSlabsResponse struct {
+	slabs []modules.Slab
+}
+
+// EncodeTo implements requestBody.
+func (rsr requestSlabsResponse) EncodeTo(e *types.Encoder) {
+	e.WritePrefix(len(rsr.slabs))
+	for _, s := range rsr.slabs {
+		s.EncodeTo(e)
+	}
+}
+
+// DecodeFrom implements requestBody.
+func (rsr requestSlabsResponse) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
 // shareRequest is used when the renter submits a set of contracts.
 type shareRequest struct {
 	PubKey    types.PublicKey

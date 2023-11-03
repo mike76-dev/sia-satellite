@@ -99,6 +99,9 @@ type hostContractor interface {
 	// in the contract set, and returns them.
 	FormContracts(types.PublicKey, types.PrivateKey) ([]modules.RenterContract, error)
 
+	// GetModifiedSlabs returns the slabs modified since the last retrieval.
+	GetModifiedSlabs(types.PublicKey) ([]modules.Slab, error)
+
 	// PeriodSpending returns the amount spent on contracts during the current
 	// billing period of the renter.
 	PeriodSpending(types.PublicKey) (modules.RenterSpending, error)
@@ -1142,9 +1145,9 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab, packed bool)
 	}
 	var fee float64
 	if ub.Subscribed {
-		fee = modules.StaticPricing.MigrateSlab.Invoicing
+		fee = modules.StaticPricing.SaveMetadata.Invoicing
 	} else {
-		fee = modules.StaticPricing.MigrateSlab.PrePayment
+		fee = modules.StaticPricing.SaveMetadata.PrePayment
 	}
 	if !ub.Subscribed && ub.Balance < fee {
 		return errors.New("insufficient account balance")
@@ -1173,7 +1176,7 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab, packed bool)
 	}
 	us.CurrentUsed += fee
 	us.CurrentOverhead += fee
-	us.CurrentSlabsMigrated += 1
+	us.CurrentSlabsSaved += 1
 
 	return m.UpdateSpendings(renter.Email, us)
 }
@@ -1208,4 +1211,58 @@ func (m *Manager) Maintenance() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.maintenance
+}
+
+// GetModifiedSlabs returns the slabs modified since the last retrieval.
+func (m *Manager) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, error) {
+	// Retrieve the slabs.
+	slabs, err := m.hostContractor.GetModifiedSlabs(rpk)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the user's balance and check if it is sufficient.
+	renter, err := m.GetRenter(rpk)
+	if err != nil {
+		return nil, err
+	}
+	ub, err := m.GetBalance(renter.Email)
+	if err != nil {
+		return nil, err
+	}
+	var fee float64
+	if ub.Subscribed {
+		fee = modules.StaticPricing.RetrieveMetadata.Invoicing * float64(len(slabs))
+	} else {
+		fee = modules.StaticPricing.RetrieveMetadata.Invoicing * float64(len(slabs))
+	}
+	if !ub.Subscribed && ub.Balance < fee {
+		return nil, errors.New("insufficient account balance")
+	}
+	if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+		return nil, errors.New("account on hold")
+	}
+
+	// Deduct from the account balance.
+	ub.Balance -= fee
+	err = m.UpdateBalance(renter.Email, ub)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the spendings.
+	us, err := m.GetSpendings(renter.Email)
+	if err != nil {
+		return nil, err
+	}
+	us.CurrentUsed += fee
+	us.CurrentOverhead += fee
+	us.CurrentSlabsRetrieved += uint64(len(slabs))
+
+	err = m.UpdateSpendings(renter.Email, us)
+	if err != nil {
+		return nil, err
+	}
+
+	return slabs, nil
 }

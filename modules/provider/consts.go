@@ -39,13 +39,17 @@ const (
 	// to accept the file metadata and save it.
 	saveMetadataTime = 1 * time.Minute
 
-	// retrieveMetadataTime defines the amount of time that the provider has
+	// requestMetadataTime defines the amount of time that the provider has
 	// to retrieve the file metadata and send it.
 	requestMetadataTime = 1 * time.Minute
 
 	// updateSlabTime defines the amount of time that the provider has to
 	// update a single slab.
 	updateSlabTime = 15 * time.Second
+
+	// requestSlabsTime defines the amount of time that the provider has to
+	// retrieve modified slabs and send them.
+	requestSlabsTime = 1 * time.Minute
 
 	// shareContractsTime defines the amount of time that the provider has to
 	// accept a set of contracts from the renter.
@@ -102,6 +106,9 @@ var (
 
 	// updateSlabSpecifier is used to update a single slab.
 	updateSlabSpecifier = types.NewSpecifier("UpdateSlab")
+
+	// requestSlabsSpecifier is used to retrieve modified slabs.
+	requestSlabsSpecifier = types.NewSpecifier("RequestSlabs")
 
 	// shareContractsSpecifier is used when a renter shares their contract set.
 	shareContractsSpecifier = types.NewSpecifier("ShareContracts")

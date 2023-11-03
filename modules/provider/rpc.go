@@ -783,6 +783,43 @@ func (p *Provider) managedUpdateSlab(s *modules.RPCSession) error {
 	return s.WriteResponse(nil)
 }
 
+// managedRequestSlabs returns a slice of slabs modified
+// since the last retrieval.
+func (p *Provider) managedRequestSlabs(s *modules.RPCSession) error {
+	// Extend the deadline.
+	s.Conn.SetDeadline(time.Now().Add(requestSlabsTime))
+
+	// Read the request.
+	var rsr requestSlabsRequest
+	hash, err := s.ReadRequest(&rsr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	if !rsr.PubKey.VerifyHash(hash, rsr.Signature) {
+		err = errors.New("could not verify renter signature")
+		s.WriteError(err)
+		return err
+	}
+
+	// Retrieve the slabs.
+	slabs, err := p.m.GetModifiedSlabs(rsr.PubKey)
+	if err != nil {
+		err = fmt.Errorf("couldn't retrieve slabs: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	resp := requestSlabsResponse{
+		slabs: slabs,
+	}
+
+	return s.WriteResponse(&resp)
+}
+
 // managedAcceptContracts accepts a set of contracts from the renter.
 func (p *Provider) managedAcceptContracts(s *modules.RPCSession) error {
 	// Extend the deadline.

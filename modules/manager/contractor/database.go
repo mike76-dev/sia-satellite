@@ -794,6 +794,16 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't save packed slab")
 		}
+	} else {
+		_, err = tx.Exec(`
+			UPDATE ctr_slabs
+			SET modified = ?
+			WHERE enc_key = ?
+		`, time.Now().Unix(), slab.Key[:])
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't update slab")
+		}
 	}
 
 	for _, id := range ids {
@@ -1090,4 +1100,98 @@ func (c *Contractor) getPartialSlab(ec object.EncryptionKey) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// GetModifiedSlabs returns all slabs modified since the last retrieval.
+func (c *Contractor) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, error) {
+	tx, err := c.db.Begin()
+	if err != nil {
+		return nil, modules.AddContext(err, "couldn't start transaction")
+	}
+
+	// Make a list of slabs.
+	emptyID := make([]byte, 32)
+	rows, err := tx.Query(`
+		SELECT enc_key, min_shards
+		FROM ctr_slabs
+		WHERE renter_pk = ?
+		AND modified > retrieved
+		AND partial = FALSE
+		AND object_id <> ?
+	`, rpk[:], emptyID[:])
+	if err != nil {
+		tx.Rollback()
+		return nil, modules.AddContext(err, "couldn't query slabs")
+	}
+
+	// Make a map first in order to exclude duplicate slabs.
+	slabsMap := make(map[types.Hash256]modules.Slab)
+	for rows.Next() {
+		key := make([]byte, 32)
+		var minShards uint8
+		if err := rows.Scan(&key, &minShards); err != nil {
+			rows.Close()
+			tx.Rollback()
+			return nil, modules.AddContext(err, "couldn't retrieve slab")
+		}
+		slab := modules.Slab{
+			MinShards: minShards,
+		}
+		copy(slab.Key[:], key)
+		slabsMap[slab.Key] = slab
+	}
+	rows.Close()
+
+	// Convert map to a slice.
+	var slabs []modules.Slab
+	for _, slab := range slabsMap {
+		slabs = append(slabs, slab)
+	}
+
+	// Retrieve shards.
+	for i, slab := range slabs {
+		rows, err := tx.Query(`
+			SELECT host, merkle_root
+			FROM ctr_shards
+			WHERE slab_id = ?
+		`, slab.Key[:])
+		if err != nil {
+			tx.Rollback()
+			return nil, modules.AddContext(err, "couldn't query shards")
+		}
+
+		for rows.Next() {
+			host := make([]byte, 32)
+			root := make([]byte, 32)
+			if err := rows.Scan(&host, &root); err != nil {
+				rows.Close()
+				tx.Rollback()
+				return nil, modules.AddContext(err, "couldn't retrieve shard")
+			}
+			var shard modules.Shard
+			copy(shard.Host[:], host)
+			copy(shard.Root[:], root)
+			slabs[i].Shards = append(slabs[i].Shards, shard)
+		}
+		rows.Close()
+	}
+
+	// Update retrieved timestamp.
+	for _, slab := range slabs {
+		_, err = tx.Exec(`
+			UPDATE ctr_slabs
+			SET retrieved = ?
+			WHERE enc_key = ?
+			AND object_id <> ?
+		`, slab.Key[:], emptyID[:])
+		if err != nil {
+			return nil, modules.AddContext(err, "couldn't update timestamp")
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, modules.AddContext(err, "couldn't commit transaction")
+	}
+
+	return slabs, nil
 }
