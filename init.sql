@@ -559,12 +559,14 @@ CREATE TABLE ctr_metadata (
 CREATE TABLE ctr_slabs (
 	enc_key    BINARY(32) NOT NULL,
 	object_id  BINARY(32) NOT NULL,
-	renter_pk BINARY(32) NOT NULL,
+	renter_pk  BINARY(32) NOT NULL,
 	min_shards INT UNSIGNED NOT NULL,
 	offset     BIGINT UNSIGNED NOT NULL,
 	len        BIGINT UNSIGNED NOT NULL,
 	num        INT NOT NULL,
 	partial    BOOL NOT NULL,
+	modified   BIGINT UNSIGNED NOT NULL,
+	retrieved  BIGINT UNSIGNED NOT NULL,
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );
 

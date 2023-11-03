@@ -536,10 +536,20 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 			}
 		} else {
 			_, err = tx.Exec(`
-				INSERT INTO ctr_slabs
-					(enc_key, object_id, renter_pk, min_shards, offset, len, num, partial)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			`, s.Key[:], fm.Key[:], pk[:], s.MinShards, s.Offset, s.Length, i, s.Partial)
+				INSERT INTO ctr_slabs (
+					enc_key,
+					object_id,
+					renter_pk,
+					min_shards,
+					offset,
+					len,
+					num,
+					partial,
+					modified,
+					retrieved
+				)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, s.Key[:], fm.Key[:], pk[:], s.MinShards, s.Offset, s.Length, i, s.Partial, time.Now().Unix(), time.Now().Unix())
 			if err != nil {
 				tx.Rollback()
 				return modules.AddContext(err, "unable to insert slab")
@@ -766,10 +776,20 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 
 	if packed {
 		_, err = tx.Exec(`
-			INSERT INTO ctr_slabs
-				(enc_key, object_id, renter_pk, min_shards, offset, len, num, partial)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, slab.Key[:], []byte{}, rpk[:], slab.MinShards, slab.Offset, slab.Length, 0, false)
+			INSERT INTO ctr_slabs (
+				enc_key,
+				object_id,
+				renter_pk,
+				min_shards,
+				offset,
+				len,
+				num,
+				partial,
+				modified,
+				retrieved
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, slab.Key[:], []byte{}, rpk[:], slab.MinShards, slab.Offset, slab.Length, 0, false, time.Now().Unix(), time.Now().Unix())
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't save packed slab")
