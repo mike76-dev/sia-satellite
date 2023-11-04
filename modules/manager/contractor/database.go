@@ -483,11 +483,9 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 			etag,
 			mime,
 			renter_pk,
-			uploaded,
-			modified,
-			retrieved
+			uploaded
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`,
 		fm.Key[:],
 		fm.Bucket,
@@ -495,8 +493,6 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		fm.ETag,
 		fm.MimeType,
 		pk[:],
-		uint64(time.Now().Unix()),
-		uint64(time.Now().Unix()),
 		uint64(time.Now().Unix()),
 	)
 	if err != nil {
@@ -621,9 +617,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 			bucket,
 			filepath,
 			etag,
-			mime,
-			modified,
-			retrieved
+			mime
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 	`, pk[:])
@@ -636,18 +630,14 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		var slabs []modules.Slab
 		objectID := make([]byte, 32)
 		var bucket, path, eTag, mime string
-		var modified, retrieved uint64
-		if err := rows.Scan(&objectID, &bucket, &path, &eTag, &mime, &modified, &retrieved); err != nil {
+		if err := rows.Scan(&objectID, &bucket, &path, &eTag, &mime); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
-		// If the object is present in the map and hasn't been updated
-		// since the last retrieval, skip it.
+		// If the object is present in the map, skip it.
 		if files, exists := po[bucket]; exists {
 			if _, exists := files[path]; exists {
-				if modified <= retrieved {
-					continue
-				}
+				continue
 			}
 		}
 
@@ -672,26 +662,28 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 				slabRows.Close()
 				return nil, modules.AddContext(err, "unable to retrieve slab")
 			}
-			shardRows, err := c.db.Query("SELECT host, merkle_root FROM ctr_shards WHERE slab_id = ?", slabID[:])
-			if err != nil {
-				slabRows.Close()
-				return nil, modules.AddContext(err, "unable to query slabs")
-			}
-			for shardRows.Next() {
-				host := make([]byte, 32)
-				root := make([]byte, 32)
-				if err := shardRows.Scan(&host, &root); err != nil {
-					shardRows.Close()
+			if !partial {
+				shardRows, err := c.db.Query("SELECT host, merkle_root FROM ctr_shards WHERE slab_id = ?", slabID[:])
+				if err != nil {
 					slabRows.Close()
-					return nil, modules.AddContext(err, "unable to retrieve shard")
+					return nil, modules.AddContext(err, "unable to query slabs")
 				}
-				var shard modules.Shard
-				copy(shard.Host[:], host)
-				copy(shard.Root[:], root)
-				shards = append(shards, shard)
-			}
+				for shardRows.Next() {
+					host := make([]byte, 32)
+					root := make([]byte, 32)
+					if err := shardRows.Scan(&host, &root); err != nil {
+						shardRows.Close()
+						slabRows.Close()
+						return nil, modules.AddContext(err, "unable to retrieve shard")
+					}
+					var shard modules.Shard
+					copy(shard.Host[:], host)
+					copy(shard.Root[:], root)
+					shards = append(shards, shard)
+				}
 
-			shardRows.Close()
+				shardRows.Close()
+			}
 			var slab modules.Slab
 			copy(slab.Key[:], slabID)
 			slab.MinShards = minShards
@@ -710,17 +702,19 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		md.ETag = eTag
 		md.MimeType = mime
 		md.Slabs = slabs
-		fm = append(fm, md)
 
-		// Update timestamp.
-		_, err = c.db.Exec(`
-			UPDATE ctr_metadata
-			SET retrieved = ?
-			WHERE enc_key = ?
-		`, uint64(time.Now().Unix()), objectID[:])
+		// Load partial slab data.
+		var data []byte
+		err = c.db.QueryRow(`
+			SELECT data
+			FROM ctr_buffers
+			WHERE object_id = ?
+		`, objectID).Scan(&data)
 		if err != nil {
-			return nil, modules.AddContext(err, "unable to update timestamp")
+			return nil, modules.AddContext(err, "unable to load partial slab data")
 		}
+		md.Data = data
+		fm = append(fm, md)
 	}
 
 	return
@@ -732,30 +726,6 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 	if err != nil {
 		return err
 	}
-
-	rows, err := tx.Query(`
-		SELECT object_id
-		FROM ctr_slabs
-		WHERE enc_key = ?
-	`, slab.Key[:])
-	if err != nil {
-		tx.Rollback()
-		return modules.AddContext(err, "couldn't query slabs")
-	}
-
-	var ids []types.Hash256
-	for rows.Next() {
-		b := make([]byte, 32)
-		if err := rows.Scan(&b); err != nil {
-			rows.Close()
-			tx.Rollback()
-			return modules.AddContext(err, "couldn't get object ID")
-		}
-		var id types.Hash256
-		copy(id[:], b)
-		ids = append(ids, id)
-	}
-	rows.Close()
 
 	_, err = tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab.Key[:])
 	if err != nil {
@@ -803,18 +773,6 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't update slab")
-		}
-	}
-
-	for _, id := range ids {
-		_, err = tx.Exec(`
-			UPDATE ctr_metadata
-			SET modified = ?
-			WHERE enc_key = ?
-		`, uint64(time.Now().Unix()), id[:])
-		if err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "couldn't update object")
 		}
 	}
 
