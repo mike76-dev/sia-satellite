@@ -84,6 +84,7 @@ var paymentAmount = 0.0;
 var paymentCurrency = 'USD';
 var processing = false;
 var paying = false;
+var refreshing = false;
 
 loadFromStorage();
 getVersion();
@@ -91,9 +92,10 @@ getCurrencies();
 retrieveBlockHeight();
 retrieveBalance();
 retrieveAverages();
-window.setInterval(retrieveBlockHeight, 60000);
-window.setInterval(retrieveBalance, 60000);
+window.setInterval(retrieveBlockHeight, 30000);
+window.setInterval(retrieveBalance, 30000);
 window.setInterval(retrieveAverages, 600000);
+window.setInterval(refresh, 30000);
 retrieveKey();
 
 function loadFromStorage() {
@@ -117,6 +119,12 @@ function loadFromStorage() {
 		document.getElementById('history-timestamp-asc').classList.remove('active');
 	}
 	setActiveMenuIndex(userData.activeMenuIndex);
+}
+
+function refresh() {
+	refreshing = true;
+	setActiveMenuIndex(userData.activeMenuIndex);
+	refreshing = false;
 }
 
 function setActiveMenuIndex(ind) {
@@ -704,9 +712,12 @@ function renderPayments() {
 }
 
 function getPayments() {
-	document.getElementById('history-empty').classList.add('disabled');
 	let loading = document.getElementById('history-loading');
-	loading.classList.remove('disabled');
+	if (!refreshing) {
+		document.getElementById('history-empty').classList.add('disabled');
+		document.getElementById('history-non-empty').classList.add('disabled');
+		loading.classList.remove('disabled');
+	}
 	let options = {
 		method: 'GET',
 		headers: {
@@ -907,9 +918,12 @@ function expandContract(e) {
 function getContracts() {
 	let current = userData.currentContracts;
 	let old = userData.oldContracts;
-	document.getElementById('contracts-empty').classList.add('disabled');
 	let loading = document.getElementById('contracts-loading');
-	loading.classList.remove('disabled');
+	if (!refreshing) {
+		document.getElementById('contracts-empty').classList.add('disabled');
+		document.getElementById('contracts-non-empty').classList.add('disabled');
+		loading.classList.remove('disabled');
+	}
 	let options = {
 		method: 'GET',
 		headers: {
@@ -1171,7 +1185,7 @@ function renderFiles() {
 		tr.innerHTML += `<td id=${'bucket-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${row.bucket}<div class="hint">select</div></td>`;
 		if (index >= 0) {
 			tr.innerHTML += `<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
-			let loaded = (downloads[index].loaded == 0 || downloads[index].loaded == row.size) ? '...' :
+			let loaded = (downloads[index].loaded == 0 || downloads[index].loaded == row.size) ? '<span class="loading"></span>' :
 				(downloads[index].loaded / row.size * 100).toFixed(0) + '%';
 			tr.innerHTML += `<td id=${'size-' + encodeURI(row.bucket) + encodeURI(row.path)}>${loaded}</td>`;
 			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.bucket) + encodeURI(row.path)}><span id=${'cancel-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cancel">&#9421;<div class="hint">cancel</div></span></td>`;
@@ -1214,7 +1228,7 @@ function downloadFile(index) {
 		signal: signal,
 	}
 	document.getElementById('path-' + encodeURI(file.bucket) + encodeURI(file.path)).classList.remove('hint-spot');
-	document.getElementById('size-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = '...';
+	document.getElementById('size-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = '<span class="loading"></span>';
 	document.getElementById('slabs-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = `<span id=${'cancel-' + encodeURI(file.bucket) + encodeURI(file.path)} class="cancel">&#9421;<div class="hint">cancel</div></span>`;
 	document.getElementById('cancel-' + encodeURI(file.bucket) + encodeURI(file.path)).addEventListener('click', () => {
 		controller.abort();
@@ -1249,7 +1263,7 @@ function downloadFile(index) {
 				console.log(blob.message);
 				return;
 			}
-			document.getElementById('size-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = '...';
+			document.getElementById('size-' + encodeURI(file.bucket) + encodeURI(file.path)).innerHTML = '<span class="loading"></span>';
 			let url = window.URL.createObjectURL(blob);
 			let a = document.createElement("a");
 			a.href = url;
@@ -1325,9 +1339,12 @@ function selectBucket(bucket) {
 }
 
 function getFiles() {
-	document.getElementById('files-empty').classList.add('disabled');
 	let loading = document.getElementById('files-loading');
-	loading.classList.remove('disabled');
+	if (!refreshing) {
+		document.getElementById('files-empty').classList.add('disabled');
+		document.getElementById('files-non-empty').classList.add('disabled');
+		loading.classList.remove('disabled');
+	}
 	let options = {
 		method: 'GET',
 		headers: {
