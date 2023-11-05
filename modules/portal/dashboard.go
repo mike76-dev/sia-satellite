@@ -92,11 +92,12 @@ type (
 
 	// savedFile contains the information about saved file metadata.
 	savedFile struct {
-		Bucket   string `json:"bucket"`
-		Path     string `json:"path"`
-		Size     uint64 `json:"size"`
-		Slabs    int    `json:"slabs"`
-		Uploaded uint64 `json:"uploaded"`
+		Bucket      string `json:"bucket"`
+		Path        string `json:"path"`
+		Size        uint64 `json:"size"`
+		Slabs       int    `json:"slabs"`
+		Uploaded    uint64 `json:"uploaded"`
+		PartialData uint64 `json:"partialdata"`
 	}
 
 	// fileIndices contains the indices of files to delete.

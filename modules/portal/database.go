@@ -689,12 +689,22 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 			size += length
 		}
 		slabRows.Close()
+		var dataLen uint64
+		err = p.db.QueryRow(`
+			SELECT len
+			FROM ctr_buffers
+			WHERE object_id = ?
+		`, id).Scan(&dataLen)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, modules.AddContext(err, "couldn't query buffers")
+		}
 		sf = append(sf, savedFile{
-			Bucket:   bucket,
-			Path:     path,
-			Size:     size,
-			Slabs:    count,
-			Uploaded: timestamp,
+			Bucket:      bucket,
+			Path:        path,
+			Size:        size,
+			Slabs:       count,
+			Uploaded:    timestamp,
+			PartialData: dataLen,
 		})
 	}
 

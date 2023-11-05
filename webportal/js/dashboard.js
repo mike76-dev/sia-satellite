@@ -1361,6 +1361,14 @@ function getFiles() {
 				files = data;
 				renderFiles();
 				loading.classList.add('disabled');
+				let slabs = 0;
+				let partial = 0;
+				data.forEach(file => {
+					slabs += file.slabs;
+					partial += file.partialdata;
+				});
+				document.getElementById('files-slabs').innerHTML = slabs;
+				document.getElementById('files-partial').innerHTML = convertSize(partial);
 			}
 		})
 		.catch(error => console.log(error));
