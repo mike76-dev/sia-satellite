@@ -410,6 +410,8 @@ CREATE TABLE mg_prices (
 	save_metadata_invoicing      DOUBLE NOT NULL,
 	store_metadata_prepayment    DOUBLE NOT NULL,
 	store_metadata_invoicing     DOUBLE NOT NULL,
+	store_partial_prepayment     DOUBLE NOT NULL,
+	store_partial_invoicing      DOUBLE NOT NULL,
 	retrieve_metadata_prepayment DOUBLE NOT NULL,
 	retrieve_metadata_invoicing  DOUBLE NOT NULL,
 	migrate_slab_prepayment      DOUBLE NOT NULL,

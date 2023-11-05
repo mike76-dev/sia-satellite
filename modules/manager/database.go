@@ -431,12 +431,14 @@ func (m *Manager) UpdatePrices(prices modules.Pricing) error {
 			save_metadata_invoicing,
 			store_metadata_prepayment,
 			store_metadata_invoicing,
+			store_partial_prepayment,
+			store_partial_invoicing,
 			retrieve_metadata_prepayment,
 			retrieve_metadata_invoicing,
 			migrate_slab_prepayment,
 			migrate_slab_invoicing
 		)
-		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		prices.FormContract.PrePayment,
 		prices.FormContract.Invoicing,
@@ -444,6 +446,8 @@ func (m *Manager) UpdatePrices(prices modules.Pricing) error {
 		prices.SaveMetadata.Invoicing,
 		prices.StoreMetadata.PrePayment,
 		prices.StoreMetadata.Invoicing,
+		prices.StorePartialData.PrePayment,
+		prices.StorePartialData.Invoicing,
 		prices.RetrieveMetadata.PrePayment,
 		prices.RetrieveMetadata.Invoicing,
 		prices.MigrateSlab.PrePayment,
@@ -468,6 +472,8 @@ func (m *Manager) loadPrices() error {
 			save_metadata_invoicing,
 			store_metadata_prepayment,
 			store_metadata_invoicing,
+			store_partial_prepayment,
+			store_partial_invoicing,
 			retrieve_metadata_prepayment,
 			retrieve_metadata_invoicing,
 			migrate_slab_prepayment,
@@ -481,6 +487,8 @@ func (m *Manager) loadPrices() error {
 		&modules.StaticPricing.SaveMetadata.Invoicing,
 		&modules.StaticPricing.StoreMetadata.PrePayment,
 		&modules.StaticPricing.StoreMetadata.Invoicing,
+		&modules.StaticPricing.StorePartialData.PrePayment,
+		&modules.StaticPricing.StorePartialData.Invoicing,
 		&modules.StaticPricing.RetrieveMetadata.PrePayment,
 		&modules.StaticPricing.RetrieveMetadata.Invoicing,
 		&modules.StaticPricing.MigrateSlab.PrePayment,

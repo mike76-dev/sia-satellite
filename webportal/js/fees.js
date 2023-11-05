@@ -63,6 +63,8 @@ function renderFees() {
 				document.getElementById('retrieve-in').innerHTML = (fees.retrievemetadata.invoicing*data.scrate).toPrecision(2) + ' ' + cur;
 				document.getElementById('store-pp').innerHTML = (fees.storemetadata.prepayment*data.scrate).toPrecision(2) + ' ' + cur;
 				document.getElementById('store-in').innerHTML = (fees.storemetadata.invoicing*data.scrate).toPrecision(2) + ' ' + cur;
+				document.getElementById('store-ps-pp').innerHTML = (fees.storepartialdata.prepayment*data.scrate).toPrecision(2) + ' ' + cur;
+				document.getElementById('store-ps-in').innerHTML = (fees.storepartialdata.invoicing*data.scrate).toPrecision(2) + ' ' + cur;
 				document.getElementById('migrate-pp').innerHTML = (fees.migrateslab.prepayment*data.scrate).toPrecision(2) + ' ' + cur;
 				document.getElementById('migrate-in').innerHTML = (fees.migrateslab.invoicing*data.scrate).toPrecision(2) + ' ' + cur;
 			}

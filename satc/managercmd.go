@@ -93,6 +93,7 @@ formcontract:     fee for forming or renewing a single contract (fraction of the
 savemetadata:     fee for backing up a single slab (in SC),
 retrievemetadata: fee for retrieving a single slab (in SC),
 storemetadata:    fee for storing a single slab for one month (in SC),
+storepartialdata: fee for storing one MiB (also incomplete) of partial slab data (in SC/month),
 migrateslab:      fee for repairing a single slab (in SC),
 
 For payment_plan, either 'prepayment' or 'invoicing' are accepted.`,
@@ -513,6 +514,9 @@ Restore a Slab (in SC):
 Store a Slab (in SC per month):
   Pre-Payment:    %v
   Invoicing:      %v
+Store Partial Slab Data (in SC per MiB per month):
+  Pre-Payment:    %v
+  Invoicing:      %v
 Repair a Slab (in SC):
   Pre-Payment:    %v
   Invoicing:      %v
@@ -525,6 +529,8 @@ Repair a Slab (in SC):
 		prices.RetrieveMetadata.Invoicing,
 		prices.StoreMetadata.PrePayment,
 		prices.StoreMetadata.Invoicing,
+		prices.StorePartialData.PrePayment,
+		prices.StorePartialData.Invoicing,
 		prices.MigrateSlab.PrePayment,
 		prices.MigrateSlab.Invoicing,
 	)
@@ -572,6 +578,12 @@ func managersetpricescmd(typ, plan, v string) {
 			prices.StoreMetadata.PrePayment = value
 		} else {
 			prices.StoreMetadata.Invoicing = value
+		}
+	case "storepartialdata":
+		if plan == "prepayment" {
+			prices.StorePartialData.PrePayment = value
+		} else {
+			prices.StorePartialData.Invoicing = value
 		}
 	case "migrateslab":
 		if plan == "prepayment" {
