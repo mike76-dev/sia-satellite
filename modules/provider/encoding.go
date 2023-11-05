@@ -118,6 +118,8 @@ type formRequest struct {
 	MinMaxCollateral     types.Currency
 	BlockHeightLeeway    uint64
 
+	UploadPacking bool
+
 	Signature types.Signature
 }
 
@@ -142,6 +144,7 @@ func (fr *formRequest) DecodeFrom(d *types.Decoder) {
 	fr.MaxSectorAccessPrice.DecodeFrom(d)
 	fr.MinMaxCollateral.DecodeFrom(d)
 	fr.BlockHeightLeeway = d.ReadUint64()
+	fr.UploadPacking = d.ReadBool()
 	fr.Signature.DecodeFrom(d)
 }
 
@@ -165,6 +168,7 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	fr.MaxSectorAccessPrice.EncodeTo(e)
 	fr.MinMaxCollateral.EncodeTo(e)
 	e.WriteUint64(fr.BlockHeightLeeway)
+	e.WriteBool(fr.UploadPacking)
 }
 
 // renewRequest is used when the renter requests contract renewals.
@@ -190,6 +194,8 @@ type renewRequest struct {
 	MaxSectorAccessPrice types.Currency
 	MinMaxCollateral     types.Currency
 	BlockHeightLeeway    uint64
+
+	UploadPacking bool
 
 	Signature types.Signature
 }
@@ -219,6 +225,7 @@ func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
 	rr.MaxSectorAccessPrice.DecodeFrom(d)
 	rr.MinMaxCollateral.DecodeFrom(d)
 	rr.BlockHeightLeeway = d.ReadUint64()
+	rr.UploadPacking = d.ReadBool()
 	rr.Signature.DecodeFrom(d)
 }
 
@@ -245,6 +252,7 @@ func (rr *renewRequest) EncodeTo(e *types.Encoder) {
 	rr.MaxSectorAccessPrice.EncodeTo(e)
 	rr.MinMaxCollateral.EncodeTo(e)
 	e.WriteUint64(rr.BlockHeightLeeway)
+	e.WriteBool(rr.UploadPacking)
 }
 
 // updateRequest is used when the renter submits a new revision.
@@ -435,6 +443,8 @@ type updateSettingsRequest struct {
 	MinMaxCollateral     types.Currency
 	BlockHeightLeeway    uint64
 
+	UploadPacking bool
+
 	Signature types.Signature
 }
 
@@ -469,6 +479,7 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 		usr.MaxSectorAccessPrice.DecodeFrom(d)
 		usr.MinMaxCollateral.DecodeFrom(d)
 		usr.BlockHeightLeeway = d.ReadUint64()
+		usr.UploadPacking = d.ReadBool()
 	}
 	usr.Signature.DecodeFrom(d)
 }
@@ -502,6 +513,7 @@ func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 		usr.MaxSectorAccessPrice.EncodeTo(e)
 		usr.MinMaxCollateral.EncodeTo(e)
 		e.WriteUint64(usr.BlockHeightLeeway)
+		e.WriteBool(usr.UploadPacking)
 	}
 }
 

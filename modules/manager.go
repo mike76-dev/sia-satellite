@@ -602,6 +602,9 @@ type Allowance struct {
 	MaxUploadBandwidthPrice   types.Currency
 	MinMaxCollateral          types.Currency
 	BlockHeightLeeway         uint64
+
+	// UploadPacking indicates whether the upload packing is turned on.
+	UploadPacking bool
 }
 
 // DefaultAllowance is the set of default allowance settings that will be
@@ -645,6 +648,7 @@ func (a *Allowance) EncodeTo(e *types.Encoder) {
 	a.MaxUploadBandwidthPrice.EncodeTo(e)
 	a.MinMaxCollateral.EncodeTo(e)
 	e.WriteUint64(a.BlockHeightLeeway)
+	e.WriteBool(a.UploadPacking)
 }
 
 // DecodeFrom implements types.DecoderFrom.
@@ -666,6 +670,7 @@ func (a *Allowance) DecodeFrom(d *types.Decoder) {
 	a.MaxUploadBandwidthPrice.DecodeFrom(d)
 	a.MinMaxCollateral.DecodeFrom(d)
 	a.BlockHeightLeeway = d.ReadUint64()
+	a.UploadPacking = d.ReadBool()
 }
 
 // ContractWatchStatus provides information about the status of a contract in

@@ -144,6 +144,8 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 		MaxUploadBandwidthPrice:   fr.MaxUploadPrice,
 		MinMaxCollateral:          fr.MinMaxCollateral,
 		BlockHeightLeeway:         fr.BlockHeightLeeway,
+
+		UploadPacking: fr.UploadPacking,
 	}
 
 	// Form the contracts.
@@ -246,6 +248,8 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 		MaxUploadBandwidthPrice:   rr.MaxUploadPrice,
 		MinMaxCollateral:          rr.MinMaxCollateral,
 		BlockHeightLeeway:         rr.BlockHeightLeeway,
+
+		UploadPacking: rr.UploadPacking,
 	}
 
 	// Renew the contracts.
@@ -628,6 +632,8 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		MaxUploadBandwidthPrice:   usr.MaxUploadPrice,
 		MinMaxCollateral:          usr.MinMaxCollateral,
 		BlockHeightLeeway:         usr.BlockHeightLeeway,
+
+		UploadPacking: usr.UploadPacking,
 	}
 	if a.Funds.IsZero() {
 		a.Funds = types.HastingsPerSiacoin.Mul64(1000) // 1 KS
