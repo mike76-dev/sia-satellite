@@ -270,6 +270,9 @@ const reportTemplate = `
 	<td>Slabs migrated</td><td>{{.NumMigrated}}</td><td>{{.FeeMigrated}}</td>
 	</tr>
 	<tr>
+	<td>Partial slab data stored</td><td>{{.Partial}}</td><td>{{.FeePartial}}</td>
+	</tr>
+	<tr>
 	<td><strong>Total revenue</strong></td><td></td><td><strong>{{.Revenue}}</strong></td>
 	</tr>
 	</table>
@@ -280,6 +283,25 @@ const reportTemplate = `
 // ProcessConsensusChange gets called to inform Manager about the
 // changes in the consensus set.
 func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
+	// Define a helper.
+	convertSize := func(size uint64) string {
+		if size < 1024 {
+			return fmt.Sprintf("%d B", size)
+		}
+		sizes := []string{"KiB", "MiB", "GiB", "TiB"}
+		i := 0
+		s := float64(size)
+		for {
+			s = s / 1024
+			if i >= len(sizes)-1 || s < 1024 {
+				break
+			}
+			i++
+		}
+
+		return fmt.Sprintf("%.2f %s", s, sizes[i])
+	}
+
 	// Process the applied blocks till the first found in the following month.
 	for _, block := range cc.AppliedBlocks {
 		m.mu.RLock()
@@ -302,8 +324,8 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 
 			// Move the current spendings of each renter to the previous ones.
 			renters := m.Renters()
-			var formed, renewed, stored, saved, retrieved, migrated uint64
-			var formedFee, renewedFee, storedFee, savedFee, retrievedFee, migratedFee float64
+			var formed, renewed, stored, saved, retrieved, migrated, partial uint64
+			var formedFee, renewedFee, storedFee, savedFee, retrievedFee, migratedFee, partialFee float64
 			for _, renter := range renters {
 				ub, err := m.GetBalance(renter.Email)
 				if err != nil {
@@ -361,28 +383,35 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				us.CurrentSlabsSaved = 0
 				us.CurrentSlabsRetrieved = 0
 				us.CurrentSlabsMigrated = 0
-				count, err := m.numSlabs(renter.PublicKey)
+				count, data, err := m.numSlabs(renter.PublicKey)
 				if err != nil {
 					m.log.Println("ERROR: couldn't retrieve slab count:", err)
 					continue
 				}
-				var fee float64
+				var storageFee, dataFee float64
 				if ub.Subscribed {
-					fee = modules.StaticPricing.StoreMetadata.Invoicing
+					storageFee = modules.StaticPricing.StoreMetadata.Invoicing
+					dataFee = modules.StaticPricing.StorePartialData.Invoicing
 				} else {
-					fee = modules.StaticPricing.StoreMetadata.PrePayment
+					storageFee = modules.StaticPricing.StoreMetadata.PrePayment
+					dataFee = modules.StaticPricing.StorePartialData.PrePayment
 				}
-				cost := fee * float64(count)
+				storageCost := storageFee * float64(count)
 				stored += uint64(count)
-				storedFee += cost
-				us.PrevUsed += cost
-				us.PrevOverhead += cost
+				storedFee += storageCost
+				us.PrevUsed += storageCost
+				us.PrevOverhead += storageCost
+				partialCost := dataFee * float64(data)
+				partial += data
+				partialFee += partialCost
+				us.PrevUsed += partialCost
+				us.PrevOverhead += partialCost
 				err = m.UpdateSpendings(renter.Email, us)
 				if err != nil {
 					m.log.Println("ERROR: couldn't update spendings:", err)
 				}
 				// Deduct from the account balance.
-				if !ub.Subscribed && ub.Balance < cost {
+				if !ub.Subscribed && ub.Balance < storageCost+partialCost {
 					// Insufficient balance, delete the file metadata.
 					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
 					m.DeleteMetadata(renter.PublicKey)
@@ -394,7 +423,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					m.DeleteMetadata(renter.PublicKey)
 					continue
 				}
-				ub.Balance -= cost
+				ub.Balance -= (storageCost + partialCost)
 				if err := m.UpdateBalance(renter.Email, ub); err != nil {
 					m.log.Println("ERROR: couldn't update balance", err)
 				}
@@ -422,9 +451,11 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					FeeRetrieved string
 					NumMigrated  uint64
 					FeeMigrated  string
+					Partial      string
+					FeePartial   string
 					Revenue      string
 				}
-				revenue := formedFee + renewedFee + storedFee + savedFee + retrievedFee + migratedFee
+				revenue := formedFee + renewedFee + storedFee + savedFee + retrievedFee + migratedFee + partialFee
 				t := template.New("report")
 				t, err := t.Parse(reportTemplate)
 				if err != nil {
@@ -449,6 +480,8 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					FeeRetrieved: fmt.Sprintf("%.2f SC", retrievedFee),
 					NumMigrated:  migrated,
 					FeeMigrated:  fmt.Sprintf("%.2f SC", migratedFee),
+					Partial:      convertSize(partial),
+					FeePartial:   fmt.Sprintf("%.2f SC", partialFee),
 					Revenue:      fmt.Sprintf("%.2f SC", revenue),
 				})
 				err = m.ms.SendMail("Sia Satellite", m.email, "Your Monthly Report", &b)

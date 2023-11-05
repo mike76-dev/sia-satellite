@@ -235,28 +235,23 @@ func (m *Manager) IncrementStats(email string, renewed bool) (err error) {
 
 // numSlabs returns the count of file slab metadata objects stored for
 // the specified renter.
-func (m *Manager) numSlabs(pk types.PublicKey) (count int, err error) {
-	var items []types.Hash256
-	rows, err := m.db.Query("SELECT enc_key FROM ctr_metadata WHERE renter_pk = ?", pk[:])
-	if err != nil {
-		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var item types.Hash256
-		id := make([]byte, 32)
-		if err = rows.Scan(&id); err != nil {
-			return
-		}
-		copy(item[:], id)
-		items = append(items, item)
+func (m *Manager) numSlabs(pk types.PublicKey) (count int, partial uint64, err error) {
+	err = m.db.QueryRow(`
+		SELECT COUNT(*)
+		FROM ctr_slabs
+		WHERE renter_pk = ?
+	`, pk[:]).Scan(&count)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, modules.AddContext(err, "couldn't fetch slab count")
 	}
 
-	for _, item := range items {
-		var c int
-		err = m.db.QueryRow("SELECT COUNT(*) FROM ctr_slabs WHERE object_id = ?", item[:]).Scan(&c)
-		count += c
+	err = m.db.QueryRow(`
+		SELECT SUM(len)
+		FROM ctr_buffers
+		WHERE renterpk = ?
+	`, pk[:]).Scan(&partial)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, modules.AddContext(err, "couldn't fetch data length")
 	}
 
 	return
