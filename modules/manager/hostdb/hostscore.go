@@ -137,7 +137,7 @@ func (hdb *HostDB) priceAdjustmentScore(allowance modules.Allowance, entry modul
 
 // storageRemainingScore computes a score for a host based on its remaining
 // storage and the amount of data already stored with that host.
-func (hdb *HostDB) storageRemainingScore(allowance modules.Allowance, entry modules.HostDBEntry) float64 {
+func (hdb *HostDB) storageRemainingScore(allowance modules.Allowance, entry modules.HostDBEntry, allocationPerHost float64) float64 {
 	// Determine how much data the renter is storing on this host.
 	var storedData float64
 	if cis, exists := hdb.knownContracts[entry.PublicKey.String()]; exists {
@@ -156,21 +156,6 @@ func (hdb *HostDB) storageRemainingScore(allowance modules.Allowance, entry modu
 	if allowance.TotalShards == 0 {
 		allowance.TotalShards = 1
 	}
-
-	// idealDataPerHost is the amount of data that we would have to put on each
-	// host assuming that our storage requirements were spread evenly across
-	// every single host.
-	idealDataPerHost := float64(allowance.ExpectedStorage*allowance.TotalShards/allowance.MinShards) / float64(allowance.Hosts)
-
-	// allocationPerHost is the amount of data that we would like to be able to
-	// put on each host, because data is not always spread evenly across the
-	// hosts during upload. Slower hosts may get very little data, more
-	// expensive hosts may get very little data, and other factors can skew the
-	// distribution. allocationPerHost takes into account the skew and tries to
-	// ensure that there's enough allocation per host to accommodate for a skew.
-	// NOTE: assume that data is not spread evenly and the host with the most
-	// data will store twice the expectation.
-	allocationPerHost := idealDataPerHost * 2
 
 	// hostExpectedStorage is the amount of storage that we expect to be able to
 	// store on this host overall, which should include the stored data that is
@@ -226,7 +211,7 @@ func (hdb *HostDB) ageScore(entry modules.HostDBEntry) float64 {
 }
 
 // collateralScore computes a score for a host based on its collateral settings.
-func (hdb *HostDB) collateralScore(allowance modules.Allowance, entry modules.HostDBEntry) float64 {
+func (hdb *HostDB) collateralScore(allowance modules.Allowance, entry modules.HostDBEntry, allocationPerHost float64) float64 {
 	// Divide by zero mitigation.
 	if allowance.Hosts == 0 {
 		allowance.Hosts = 1
@@ -244,14 +229,17 @@ func (hdb *HostDB) collateralScore(allowance modules.Allowance, entry modules.Ho
 	}
 
 	// Convenience variables.
-	duration := allowance.Period
-	storage := allowance.ExpectedStorage * allowance.TotalShards / allowance.MinShards
+	ratioNum := uint64(3)
+	ratioDenom := uint64(2)
+
+	// Compute the cost of storing.
+	numSectors := bytesToSectors(uint64(allocationPerHost))
+	storageCost := entry.PriceTable.AppendSectorCost(allowance.Period).Storage.Mul64(numSectors)
 
 	// Calculate the expected collateral.
-	expectedCollateral := entry.Settings.Collateral.Mul64(storage).Mul64(duration)
-	expectedCollateralMax := entry.Settings.MaxCollateral.Div64(2) // 2x buffer - renter may end up storing extra data.
-	if expectedCollateral.Cmp(expectedCollateralMax) > 0 {
-		expectedCollateral = expectedCollateralMax
+	expectedCollateral := entry.PriceTable.CollateralCost.Mul64(uint64(allocationPerHost)).Mul64(allowance.Period)
+	if expectedCollateral.Cmp(entry.PriceTable.MaxCollateral) > 0 {
+		expectedCollateral = entry.PriceTable.MaxCollateral
 	}
 
 	// Avoid division by zero.
@@ -259,32 +247,33 @@ func (hdb *HostDB) collateralScore(allowance modules.Allowance, entry modules.Ho
 		expectedCollateral = types.NewCurrency64(1)
 	}
 
-	// Determine a cutoff at 20% of the budgeted per-host funds.
-	// Meaning that an 'ok' host puts in 1/5 of what the renter puts into a
-	// contract. Beyond that the score increases linearly and below that
-	// decreases exponentially.
-	cutoff := hostPeriodCostForScore(allowance, entry).Div64(5)
+	// Determine a cutoff at 150% of the storage cost. Meaning that a host
+	// should be willing to put in at least 1.5x the amount of money the renter
+	// expects to spend on storage on that host.
+	cutoff := storageCost.Mul64(ratioNum).Div64(ratioDenom)
 
-	// calculate the weight. We use the same approach here as in
-	// priceAdjustScore but with a different cutoff.
-	ratio := new(big.Rat).SetFrac(cutoff.Big(), expectedCollateral.Big())
-	fRatio, _ := ratio.Float64()
-	switch ratio.Cmp(new(big.Rat).SetUint64(1)) {
-	case 0:
-		return 0.5 // Ratio is exactly 1 -> score is 0.5.
-	case 1:
-		// Collateral is below cutoff -> score is in range (0; 0.5).
-		//
-		return 1.5 / math.Pow(3, fRatio)
-	case -1:
-		// Collateral is beyond cutoff -> score is (0.5; 1].
-		s := 0.5 * (1 / fRatio)
-		if s > 1.0 {
-			s = 1.0
+	// The score is a linear function between 0 and 1 where the upper limit is
+	// 4 times the cutoff. Beyond that, we don't care if a host puts in more
+	// collateral.
+	cutoffMultiplier := uint64(4)
+
+	if expectedCollateral.Cmp(cutoff) < 0 {
+		return 0 // expectedCollateral <= cutoff -> score is 0
+	} else if expectedCollateral.Cmp(cutoff.Mul64(cutoffMultiplier)) >= 0 {
+		return 1 // expectedCollateral is 10x cutoff -> score is 1
+	} else {
+		// Perform linear interpolation for all other values.
+		slope := new(big.Rat).SetFrac(new(big.Int).SetInt64(1), cutoff.Mul64(cutoffMultiplier).Big())
+		intercept := new(big.Rat).Mul(slope, new(big.Rat).SetInt(cutoff.Big())).Neg(slope)
+		score := new(big.Rat).SetInt(expectedCollateral.Big())
+		score = score.Mul(score, slope)
+		score = score.Add(score, intercept)
+		fScore, _ := score.Float64()
+		if fScore > 1 {
+			return 1.0
 		}
-		return s
+		return fScore
 	}
-	panic("unreachable")
 }
 
 // interactionScore computes a score for a host based on its interaction history.
@@ -299,10 +288,10 @@ func (hdb *HostDB) interactionScore(entry modules.HostDBEntry) float64 {
 func (hdb *HostDB) uptimeScore(entry modules.HostDBEntry) float64 {
 	uptime := entry.HistoricUptime
 	downtime := entry.HistoricDowntime
-	var lastScanSuccess, secondLastScanSuccess bool
+	var lastScanSuccess, secondToLastScanSuccess bool
+	totalScans := len(entry.ScanHistory)
 
 	// Special cases.
-	totalScans := len(entry.ScanHistory)
 	switch totalScans {
 	case 0:
 		return 0.25 // No scans yet.
@@ -315,10 +304,10 @@ func (hdb *HostDB) uptimeScore(entry modules.HostDBEntry) float64 {
 		}
 	case 2:
 		lastScanSuccess = entry.ScanHistory[totalScans-1].Success
-		secondLastScanSuccess = entry.ScanHistory[totalScans-2].Success
-		if lastScanSuccess && secondLastScanSuccess {
+		secondToLastScanSuccess = entry.ScanHistory[totalScans-2].Success
+		if lastScanSuccess && secondToLastScanSuccess {
 			return 0.85
-		} else if lastScanSuccess || secondLastScanSuccess {
+		} else if lastScanSuccess || secondToLastScanSuccess {
 			return 0.5
 		} else {
 			return 0.05
@@ -375,13 +364,28 @@ func (hdb *HostDB) versionScore(entry modules.HostDBEntry) float64 {
 // NOTE: the hosttree.ScoreFunc that is returned accesses fields of the hostdb.
 // The hostdb lock must be held while utilizing the ScoreFunc.
 func (hdb *HostDB) managedCalculateHostScoreFn(allowance modules.Allowance) hosttree.ScoreFunc {
+	// idealDataPerHost is the amount of data that we would have to put on each
+	// host assuming that our storage requirements were spread evenly across
+	// every single host.
+	idealDataPerHost := float64(allowance.ExpectedStorage*allowance.TotalShards/allowance.MinShards) / float64(allowance.Hosts)
+
+	// allocationPerHost is the amount of data that we would like to be able to
+	// put on each host, because data is not always spread evenly across the
+	// hosts during upload. Slower hosts may get very little data, more
+	// expensive hosts may get very little data, and other factors can skew the
+	// distribution. allocationPerHost takes into account the skew and tries to
+	// ensure that there's enough allocation per host to accommodate for a skew.
+	// NOTE: assume that data is not spread evenly and the host with the most
+	// data will store twice the expectation.
+	allocationPerHost := idealDataPerHost * 2
+
 	return func(entry modules.HostDBEntry) hosttree.ScoreBreakdown {
 		return hosttree.HostAdjustments{
 			AgeAdjustment:              hdb.ageScore(entry),
-			CollateralAdjustment:       hdb.collateralScore(allowance, entry),
+			CollateralAdjustment:       hdb.collateralScore(allowance, entry, allocationPerHost),
 			InteractionAdjustment:      hdb.interactionScore(entry),
 			PriceAdjustment:            hdb.priceAdjustmentScore(allowance, entry),
-			StorageRemainingAdjustment: hdb.storageRemainingScore(allowance, entry),
+			StorageRemainingAdjustment: hdb.storageRemainingScore(allowance, entry, allocationPerHost),
 			UptimeAdjustment:           hdb.uptimeScore(entry),
 			VersionAdjustment:          hdb.versionScore(entry),
 		}
