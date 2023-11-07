@@ -310,8 +310,11 @@ type Manager interface {
 	// CreateNewRenter inserts a new renter into the map.
 	CreateNewRenter(string, types.PublicKey)
 
+	// DeleteBufferedFiles deletes the files waiting to be uploaded.
+	DeleteBufferedFiles(types.PublicKey, string) error
+
 	// DeleteMetadata deletes the renter's saved file metadata.
-	DeleteMetadata(types.PublicKey)
+	DeleteMetadata(types.PublicKey) error
 
 	// DeleteObject deletes the saved file metadata object.
 	DeleteObject(types.PublicKey, string, string) error

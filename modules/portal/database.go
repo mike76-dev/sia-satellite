@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"text/template"
 	"time"
@@ -132,54 +133,15 @@ func (p *Portal) deleteAccount(email string) error {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
+	var rpk types.PublicKey
+	copy(rpk[:], pk)
+
+	// Delete buffered files.
+	err = p.manager.DeleteBufferedFiles(rpk, filepath.Join(p.dir, "temp"))
+	errs = append(errs, err)
 
 	// Delete file metadata.
-	var objects, slabs []types.Hash256
-	rows, err := p.db.Query("SELECT enc_key FROM ctr_metadata WHERE renter_pk = ?", pk)
-	if err != nil {
-		return err
-	}
-
-	for rows.Next() {
-		id := make([]byte, 32)
-		if err := rows.Scan(&id); err != nil {
-			p.log.Println("ERROR: unable to retrieve metadata key:", err)
-			continue
-		}
-		var key types.Hash256
-		copy(key[:], id)
-		objects = append(objects, key)
-
-		slabRows, err := p.db.Query("SELECT enc_key FROM ctr_slabs WHERE object_id = ?", id)
-		if err != nil {
-			p.log.Println("ERROR: unable to retrieve slabs:", err)
-			continue
-		}
-
-		for slabRows.Next() {
-			slabID := make([]byte, 32)
-			if err := slabRows.Scan(&slabID); err != nil {
-				p.log.Println("ERROR: unable to retrieve slab:", err)
-				continue
-			}
-			var slab types.Hash256
-			copy(slab[:], slabID)
-			slabs = append(slabs, slab)
-		}
-		slabRows.Close()
-	}
-	rows.Close()
-
-	for _, slab := range slabs {
-		_, err = p.db.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab[:])
-		errs = append(errs, err)
-	}
-
-	_, err = p.db.Exec("DELETE FROM ctr_buffers WHERE renter_pk = ?", pk)
-	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM ctr_slabs WHERE renter_pk = ?", pk)
-	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk)
+	err = p.manager.DeleteMetadata(rpk)
 	errs = append(errs, err)
 
 	// Delete contracts.

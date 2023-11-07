@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -368,12 +370,49 @@ func (w *watchdog) load() error {
 	return tx.Commit()
 }
 
+// DeleteBufferedFiles deletes the files waiting to be uploaded.
+func (c *Contractor) DeleteBufferedFiles(pk types.PublicKey, dir string) error {
+	// Make a list of file names.
+	rows, err := c.db.Query("SELECT filename FROM ctr_uploads WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		c.log.Println("ERROR: unable to query files:", err)
+		return modules.AddContext(err, "unable to query files")
+	}
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			c.log.Println("ERROR: unable to retrieve filename:", err)
+			return modules.AddContext(err, "unable to retrieve filename")
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+
+	// Delete the files one by one.
+	for _, name := range names {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
+			c.log.Println("ERROR: unable to delete file:", err)
+			return modules.AddContext(err, "unable to delete file")
+		}
+		_, err = c.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
+		if err != nil {
+			c.log.Println("ERROR: unable to delete file record:", err)
+			return modules.AddContext(err, "unable to delete file record")
+		}
+	}
+
+	return nil
+}
+
 // DeleteMetadata deletes the renter's saved file metadata.
-func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
+func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		c.log.Println("ERROR: unable to start transaction:", err)
-		return
+		return modules.AddContext(err, "unable to start transaction")
 	}
 
 	// Retrieve slab IDs.
@@ -382,7 +421,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 	if err != nil {
 		c.log.Println("ERROR: unable to query slabs:", err)
 		tx.Rollback()
-		return
+		return modules.AddContext(err, "unable to query slabs")
 	}
 
 	for rows.Next() {
@@ -391,7 +430,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 			rows.Close()
 			c.log.Println("ERROR: unable to load slab ID:", err)
 			tx.Rollback()
-			return
+			return modules.AddContext(err, "unable to load slab ID")
 		}
 		var slab types.Hash256
 		copy(slab[:], s)
@@ -413,7 +452,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 	if err != nil {
 		c.log.Println("ERROR: unable to delete slabs:", err)
 		tx.Rollback()
-		return
+		return modules.AddContext(err, "unable to delete slabs")
 	}
 
 	// Delete partial slab buffer.
@@ -421,7 +460,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 	if err != nil {
 		c.log.Println("ERROR: unable to delete buffer:", err)
 		tx.Rollback()
-		return
+		return modules.AddContext(err, "unable to delete buffer")
 	}
 
 	// Delete objects.
@@ -429,13 +468,16 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) {
 	if err != nil {
 		c.log.Println("ERROR: unable to delete metadata:", err)
 		tx.Rollback()
-		return
+		return modules.AddContext(err, "unable to delete metadata")
 	}
 
 	err = tx.Commit()
 	if err != nil {
 		c.log.Println("ERROR: unable to commit transaction:", err)
+		return modules.AddContext(err, "unable to commit transaction")
 	}
+
+	return nil
 }
 
 // dbDeleteObject deletes a single file metadata object from
