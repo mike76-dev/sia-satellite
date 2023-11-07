@@ -744,6 +744,7 @@ type RenterSettings struct {
 	AutoRenewContracts bool `json:"autorenew"`
 	BackupFileMetadata bool `json:"backupmetadata"`
 	AutoRepairFiles    bool `json:"autorepair"`
+	ProxyUploads       bool `json:"proxyuploads"`
 }
 
 // Renter holds the data related to the specific renter.

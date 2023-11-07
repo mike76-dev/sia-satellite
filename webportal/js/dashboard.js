@@ -1486,10 +1486,12 @@ function settingsChange(e) {
 	let rn = document.getElementById('settings-autorenew');
 	let md = document.getElementById('settings-metadata');
 	let rp = document.getElementById('settings-autorepair');
+	let pr = document.getElementById('settings-proxy');
 	let data = {
 		autorenew: rn.checked,
 		backupmetadata: md.checked,
-		autorepair: (rn.checked && md.checked) ? rp.checked : false
+		autorepair: (rn.checked && md.checked) ? rp.checked : false,
+		proxyuploads: md.checked ? pr.checked : false
 	}
 	let options = {
 		method: 'POST',
@@ -1513,10 +1515,17 @@ function settingsChange(e) {
 					if (!e.checked) {
 						rp.checked = false;
 						rp.disabled = true;
+						pr.checked = false;
+						pr.disabled = true;
 						e.disabled = true;
 					}
 					break;
 				case 'settings-autorepair':
+					if (!e.checked) {
+						e.disabled = true;
+					}
+					break;
+				case 'settings-proxy':
 					if (!e.checked) {
 						e.disabled = true;
 					}

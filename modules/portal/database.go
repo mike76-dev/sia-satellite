@@ -515,9 +515,9 @@ func (p *Portal) createNewRenter(email string, pk types.PublicKey) error {
 		(email, public_key, current_period, allowance,
 		private_key, account_key,
 		auto_renew_contracts, backup_file_metadata,
-		auto_repair_files)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, email, pk[:], 0, buf.Bytes(), []byte{}, []byte{}, false, false, false)
+		auto_repair_files, proxy_uploads)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, pk[:], 0, buf.Bytes(), []byte{}, []byte{}, false, false, false, false)
 	if err != nil {
 		return err
 	}

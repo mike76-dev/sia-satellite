@@ -83,9 +83,19 @@ func (c *Contractor) UpdateRenter(renter modules.Renter) error {
 		UPDATE ctr_renters
 		SET current_period = ?, allowance = ?, private_key = ?,
 		account_key = ?, auto_renew_contracts = ?,
-		backup_file_metadata = ?, auto_repair_files = ?
+		backup_file_metadata = ?, auto_repair_files = ?, proxy_uploads = ?
 		WHERE email = ?
-	`, renter.CurrentPeriod, buf.Bytes(), renter.PrivateKey, renter.AccountKey, renter.Settings.AutoRenewContracts, renter.Settings.BackupFileMetadata, renter.Settings.AutoRepairFiles, renter.Email)
+	`,
+		renter.CurrentPeriod,
+		buf.Bytes(),
+		renter.PrivateKey,
+		renter.AccountKey,
+		renter.Settings.AutoRenewContracts,
+		renter.Settings.BackupFileMetadata,
+		renter.Settings.AutoRepairFiles,
+		renter.Settings.ProxyUploads,
+		renter.Email,
+	)
 	return err
 }
 
@@ -203,7 +213,8 @@ func (c *Contractor) loadRenters() error {
 	rows, err := c.db.Query(`
 		SELECT email, public_key, current_period,
 		allowance, private_key, account_key,
-		auto_renew_contracts, backup_file_metadata, auto_repair_files
+		auto_renew_contracts, backup_file_metadata,
+		auto_repair_files, proxy_uploads
 		FROM ctr_renters
 	`)
 	if err != nil {
@@ -219,8 +230,19 @@ func (c *Contractor) loadRenters() error {
 		var period uint64
 		sk := make([]byte, 64)
 		ak := make([]byte, 64)
-		var autoRenew, backupMetadata, autoRepair bool
-		if err := rows.Scan(&email, &pk, &period, &aBytes, &sk, &ak, &autoRenew, &backupMetadata, &autoRepair); err != nil {
+		var autoRenew, backupMetadata, autoRepair, proxyUploads bool
+		if err := rows.Scan(
+			&email,
+			&pk,
+			&period,
+			&aBytes,
+			&sk,
+			&ak,
+			&autoRenew,
+			&backupMetadata,
+			&autoRepair,
+			&proxyUploads,
+		); err != nil {
 			c.log.Println("ERROR: could not load the renter:", err)
 			continue
 		}
@@ -248,6 +270,7 @@ func (c *Contractor) loadRenters() error {
 				AutoRenewContracts: autoRenew,
 				BackupFileMetadata: backupMetadata,
 				AutoRepairFiles:    autoRepair,
+				ProxyUploads:       proxyUploads,
 			},
 		}
 		copy(renter.PublicKey[:], pk)

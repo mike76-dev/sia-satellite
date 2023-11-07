@@ -507,6 +507,7 @@ func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
 		AutoRenewContracts: renter.Settings.AutoRenewContracts,
 		BackupFileMetadata: renter.Settings.BackupFileMetadata,
 		AutoRepairFiles:    renter.Settings.AutoRepairFiles,
+		ProxyUploads:       renter.Settings.ProxyUploads,
 	}
 
 	return s.WriteResponse(&resp)
@@ -589,11 +590,18 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		return err
 	}
 
+	if usr.ProxyUploads && !usr.BackupFileMetadata {
+		err := errors.New("proxying uploads only works with automatic metadata backups enabled")
+		s.WriteError(err)
+		return err
+	}
+
 	// Update the settings.
 	err = p.m.UpdateRenterSettings(usr.PubKey, modules.RenterSettings{
 		AutoRenewContracts: usr.AutoRenewContracts,
 		BackupFileMetadata: usr.BackupFileMetadata,
 		AutoRepairFiles:    usr.AutoRepairFiles,
+		ProxyUploads:       usr.ProxyUploads,
 	}, usr.PrivateKey, usr.AccountKey)
 	if err != nil {
 		err = fmt.Errorf("couldn't update settings: %v", err)
@@ -605,6 +613,8 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 	if !usr.BackupFileMetadata {
 		p.m.DeleteMetadata(usr.PubKey)
 	}
+
+	// TODO Perform action if opted out of proxying uploads.
 
 	// If not opted in, return.
 	if !usr.AutoRenewContracts {

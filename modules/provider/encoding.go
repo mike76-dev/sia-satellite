@@ -399,6 +399,7 @@ type getSettingsResponse struct {
 	AutoRenewContracts bool
 	BackupFileMetadata bool
 	AutoRepairFiles    bool
+	ProxyUploads       bool
 }
 
 // DecodeFrom implements requestBody.
@@ -411,6 +412,7 @@ func (gsr *getSettingsResponse) EncodeTo(e *types.Encoder) {
 	e.WriteBool(gsr.AutoRenewContracts)
 	e.WriteBool(gsr.BackupFileMetadata)
 	e.WriteBool(gsr.AutoRepairFiles)
+	e.WriteBool(gsr.ProxyUploads)
 }
 
 // updateSettingsRequest is used to update the renter's opt-in
@@ -420,6 +422,7 @@ type updateSettingsRequest struct {
 	AutoRenewContracts bool
 	BackupFileMetadata bool
 	AutoRepairFiles    bool
+	ProxyUploads       bool
 	PrivateKey         types.PrivateKey
 	AccountKey         types.PrivateKey
 
@@ -454,6 +457,7 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 	usr.AutoRenewContracts = d.ReadBool()
 	usr.BackupFileMetadata = d.ReadBool()
 	usr.AutoRepairFiles = d.ReadBool()
+	usr.ProxyUploads = d.ReadBool()
 	if usr.AutoRenewContracts || usr.AutoRepairFiles {
 		sk := d.ReadBytes()
 		usr.PrivateKey = types.PrivateKey(sk)
@@ -490,6 +494,7 @@ func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBool(usr.AutoRenewContracts)
 	e.WriteBool(usr.BackupFileMetadata)
 	e.WriteBool(usr.AutoRepairFiles)
+	e.WriteBool(usr.ProxyUploads)
 	if usr.AutoRenewContracts || usr.AutoRepairFiles {
 		e.WriteBytes(usr.PrivateKey[:])
 	}

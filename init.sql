@@ -507,6 +507,7 @@ CREATE TABLE ctr_renters (
 	auto_renew_contracts BOOL NOT NULL,
 	backup_file_metadata BOOL NOT NULL,
 	auto_repair_files    BOOL NOT NULL,
+	proxy_uploads        BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );
