@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"runtime"
 	"text/template"
 	"time"
@@ -137,7 +136,7 @@ func (p *Portal) deleteAccount(email string) error {
 	copy(rpk[:], pk)
 
 	// Delete buffered files.
-	err = p.manager.DeleteBufferedFiles(rpk, filepath.Join(p.dir, "temp"))
+	err = p.manager.DeleteBufferedFiles(rpk)
 	errs = append(errs, err)
 
 	// Delete file metadata.

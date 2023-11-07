@@ -55,7 +55,6 @@ type Portal struct {
 	staticAlerter *modules.GenericAlerter
 	closeChan     chan int
 	ms            mail.MailSender
-	dir           string
 }
 
 // New returns an initialized portal server.
@@ -96,7 +95,6 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wall
 		authStats:    make(map[string]authenticationStats),
 		transactions: make(map[types.TransactionID]types.Address),
 		name:         name,
-		dir:          dir,
 
 		staticAlerter: modules.NewAlerter("portal"),
 		closeChan:     make(chan int, 1),

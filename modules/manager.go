@@ -311,7 +311,7 @@ type Manager interface {
 	CreateNewRenter(string, types.PublicKey)
 
 	// DeleteBufferedFiles deletes the files waiting to be uploaded.
-	DeleteBufferedFiles(types.PublicKey, string) error
+	DeleteBufferedFiles(types.PublicKey) error
 
 	// DeleteMetadata deletes the renter's saved file metadata.
 	DeleteMetadata(types.PublicKey) error

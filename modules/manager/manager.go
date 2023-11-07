@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -26,6 +28,9 @@ var (
 	errNilWallet  = errors.New("manager cannot use a nil wallet")
 	errNilGateway = errors.New("manager cannot use nil gateway")
 )
+
+// A directory for storing temporary files.
+const bufferedFilesDir = "temp"
 
 // A hostContractor negotiates, revises, renews, and provides access to file
 // contracts.
@@ -198,6 +203,7 @@ type Manager struct {
 	mu            sync.RWMutex
 	tg            siasync.ThreadGroup
 	staticAlerter *modules.GenericAlerter
+	dir           string
 }
 
 // New returns an initialized Manager.
@@ -250,6 +256,7 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gate
 		exchRates: make(map[string]float64),
 
 		staticAlerter: modules.NewAlerter("manager"),
+		dir:           dir,
 	}
 
 	// Create the Contractor.
@@ -269,6 +276,13 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gate
 
 	// Initialize the Manager's persistence.
 	err := m.initPersist(dir)
+	if err != nil {
+		errChan <- err
+		return nil, errChan
+	}
+
+	// Create the temporary directory if it doesn't exist.
+	err = os.MkdirAll(filepath.Join(dir, bufferedFilesDir), 0700)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
@@ -1016,8 +1030,8 @@ func (m *Manager) GetWalletSeed() (seed modules.Seed, err error) {
 }
 
 // DeleteBufferedFiles deletes the files waiting to be uploaded.
-func (m *Manager) DeleteBufferedFiles(pk types.PublicKey, dir string) error {
-	return m.hostContractor.DeleteBufferedFiles(pk, dir)
+func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
+	return m.hostContractor.DeleteBufferedFiles(pk, filepath.Join(m.dir, bufferedFilesDir))
 }
 
 // DeleteMetadata deletes the renter's saved file metadata.
