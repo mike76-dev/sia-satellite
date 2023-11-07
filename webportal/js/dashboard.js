@@ -1135,12 +1135,15 @@ function getSettings() {
 				let ar = document.getElementById('settings-autorenew');
 				let md = document.getElementById('settings-metadata');
 				let fr = document.getElementById('settings-autorepair');
+				let pu = document.getElementById('settings-proxy');
 				ar.checked = data.autorenew;
 				ar.disabled = !data.autorenew;
 				md.checked = data.backupmetadata;
 				md.disabled = !data.backupmetadata;
 				fr.checked = data.autorepair;
 				fr.disabled = !data.autorepair;
+				pu.checked = data.proxyuploads;
+				pu.disabled = !data.proxyuploads;
 			}
 		})
 		.catch(error => console.log(error));
