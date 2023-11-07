@@ -55,10 +55,11 @@ type Portal struct {
 	staticAlerter *modules.GenericAlerter
 	closeChan     chan int
 	ms            mail.MailSender
+	dir           string
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wallet, m modules.Manager, p modules.Provider, dir string, name string) (*Portal, error) {
+func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wallet, m modules.Manager, p modules.Provider, portalPort, name, dir string) (*Portal, error) {
 	var err error
 
 	// Check that all the dependencies were provided.
@@ -90,11 +91,12 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 		manager:  m,
 		provider: p,
 
-		apiPort: config.PortalPort,
+		apiPort: portalPort,
 
 		authStats:    make(map[string]authenticationStats),
 		transactions: make(map[types.TransactionID]types.Address),
 		name:         name,
+		dir:          dir,
 
 		staticAlerter: modules.NewAlerter("portal"),
 		closeChan:     make(chan int, 1),
