@@ -104,6 +104,13 @@ type (
 	fileIndices struct {
 		Indices []int `json:"files"`
 	}
+
+	// satelliteSettings contains the public settings of the satellite.
+	satelliteSettings struct {
+		SatPort int    `json:"satport"`
+		MuxPort int    `json:"muxport"`
+		Key     string `json:"key"`
+	}
 )
 
 // balanceHandlerGET handles the GET /dashboard/balance requests.
@@ -411,9 +418,31 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 // keyHandlerGET handles the GET /dashboard/key requests.
 func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	key := api.portal.provider.PublicKey()
-	writeJSON(w, struct {
-		Key string `json:"key"`
-	}{Key: hex.EncodeToString(key[:])})
+	satPort, err := strconv.ParseInt(strings.TrimPrefix(api.portal.satAddr, ":"), 10, 32)
+	if err != nil {
+		api.portal.log.Println("ERROR: couldn't fetch satellite port:", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+	muxPort, err := strconv.ParseInt(strings.TrimPrefix(api.portal.muxAddr, ":"), 10, 32)
+	if err != nil {
+		api.portal.log.Println("ERROR: couldn't fetch mux port:", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, satelliteSettings{
+		SatPort: int(satPort),
+		MuxPort: int(muxPort),
+		Key:     hex.EncodeToString(key[:]),
+	})
 }
 
 // contractsHandlerGET handles the GET /dashboard/contracts requests.

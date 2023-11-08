@@ -297,6 +297,18 @@ button {
 	margin: 0;
 }
 
+.subcontent {
+	display: flex;
+	flex-direction: row;
+	margin-bottom: 0.5rem;
+}
+
+.subcontent-item {
+	display: flex;
+	flex-direction: column;
+	margin-right: 1rem;
+}
+
 .average {
 	font-size: 0.8rem;
 	align-self: flex-start;
@@ -576,5 +588,13 @@ label[for='reveal-text'] {
 
 	#payment-submit, #payment-back {
 		align-self: center;
+	}
+
+	.subcontent {
+		flex-direction: column;
+	}
+	
+	.subcontent-item {
+		margin-right: 0;
 	}
 }

@@ -767,6 +767,18 @@ function copyPK() {
 	}, 1000);
 }
 
+function copyAddress() {
+	let b = document.getElementById('copy-addr');
+	let a = document.getElementById('reveal-addr');
+	a.select();
+	a.setSelectionRange(0, 99);
+	navigator.clipboard.writeText(a.value);
+	b.innerText = 'Copied!';
+	window.setTimeout(function() {
+		b.innerText = 'Copy';
+	}, 1000);
+}
+
 function revealSeed() {
 	let b = document.getElementById('reveal-button');
 	let t = document.getElementById('reveal-text');
@@ -805,7 +817,6 @@ function revealSeed() {
 }
 
 function retrieveKey() {
-	let k = document.getElementById('reveal-key');
 	let options = {
 		method: 'GET',
 		headers: {
@@ -815,8 +826,12 @@ function retrieveKey() {
 	fetch(apiBaseURL + '/dashboard/key', options)
 		.then(response => response.json())
 		.then(data => {
-			if (data.key) {
-				k.value = data.key;
+			if (data.code) {
+				console.log(data.message);
+			} else {
+				document.getElementById('reveal-key').value = data.key;
+				document.getElementById('reveal-addr').value = window.location.hostname + ':' + data.satport;
+				document.getElementById('reveal-mux').value = data.muxport;
 			}
 		})
 		.catch(error => console.log(error));
