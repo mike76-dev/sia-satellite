@@ -923,7 +923,7 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 
 	// Start receiving data in chunks.
 	var ud uploadData
-	maxLen := uint64(65536) + 8 + 1
+	maxLen := uint64(1048576) + 8 + 1
 	err = s.ReadResponse(&ud, maxLen)
 	if err != nil {
 		err = fmt.Errorf("could not read data: %v", err)
@@ -964,7 +964,7 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 
 	// Continue as long as there is more data available.
 	for ud.More {
-		s.SetDeadline(time.Now().Add(10 * time.Second))
+		s.SetDeadline(time.Now().Add(30 * time.Second))
 		err = s.ReadResponse(&ud, maxLen)
 		if err != nil {
 			err = fmt.Errorf("could not read data: %v", err)
