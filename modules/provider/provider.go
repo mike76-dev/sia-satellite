@@ -36,6 +36,7 @@ type Provider struct {
 
 	// Utilities.
 	listener      net.Listener
+	mux           net.Listener
 	log           *persist.Logger
 	mu            sync.RWMutex
 	port          string
@@ -44,7 +45,7 @@ type Provider struct {
 }
 
 // New returns an initialized Provider.
-func New(db *sql.DB, g modules.Gateway, m modules.Manager, satelliteAddr string, dir string) (*Provider, <-chan error) {
+func New(db *sql.DB, g modules.Gateway, m modules.Manager, satelliteAddr string, muxAddr string, dir string) (*Provider, <-chan error) {
 	errChan := make(chan error, 1)
 	var err error
 
@@ -87,7 +88,7 @@ func New(db *sql.DB, g modules.Gateway, m modules.Manager, satelliteAddr string,
 	}
 
 	// Initialize the networking.
-	err = p.initNetworking(satelliteAddr)
+	err = p.initNetworking(satelliteAddr, muxAddr)
 	if err != nil {
 		p.log.Println("ERROR: could not initialize provider networking:", err)
 		errChan <- err

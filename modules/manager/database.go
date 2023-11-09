@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"text/template"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/rs/xid"
 
 	"go.sia.tech/core/types"
 )
@@ -534,4 +537,41 @@ func (m *Manager) loadMaintenance() error {
 	m.maintenance = maintenance
 	m.mu.Unlock()
 	return nil
+}
+
+// BytesUploaded returns the size of the file already uploaded.
+func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path string) (string, uint64, error) {
+	var name string
+	err := m.db.QueryRow(`
+		SELECT filename
+		FROM ctr_uploads
+		WHERE renter_pk = ?
+		AND bucket = ?
+		AND filepath = ?
+	`, pk[:], bucket, path).Scan(&name)
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		name = xid.New().String()
+		return filepath.Join(filepath.Join(m.dir, bufferedFilesDir), name), 0, nil
+	}
+	if err != nil {
+		return "", 0, err
+	}
+
+	p := filepath.Join(filepath.Join(m.dir, bufferedFilesDir), name)
+	fi, err := os.Stat(p)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return p, uint64(fi.Size()), nil
+}
+
+// RegisterUpload associates the uploaded file with the object.
+func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, filename string, complete bool) error {
+	_, err := m.db.Exec(`
+		REPLACE INTO ctr_uploads
+			(filename, bucket, filepath, renter_pk, ready)
+		VALUES (?, ?, ?, ?, ?)
+	`, filepath.Base(filename), bucket, path, pk[:], complete)
+	return err
 }

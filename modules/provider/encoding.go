@@ -678,3 +678,58 @@ func (sr *shareRequest) EncodeTo(e *types.Encoder) {
 		contract.EncodeTo(e)
 	}
 }
+
+// uploadRequest is used when the renter wants to upload a file.
+type uploadRequest struct {
+	PubKey    types.PublicKey
+	Bucket    string
+	Path      string
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (ur *uploadRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(ur.PubKey[:])
+	ur.Bucket = d.ReadString()
+	ur.Path = d.ReadString()
+	ur.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (ur *uploadRequest) EncodeTo(e *types.Encoder) {
+	e.Write(ur.PubKey[:])
+	e.WriteString(ur.Bucket)
+	e.WriteString(ur.Path)
+}
+
+// uploadResponse is used to respond with the filesize already uploaded.
+type uploadResponse struct {
+	Filesize uint64
+}
+
+// DecodeFrom implements requestBody.
+func (ur *uploadResponse) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
+// EncodeTo implements requestBody.
+func (ur *uploadResponse) EncodeTo(e *types.Encoder) {
+	e.WriteUint64(ur.Filesize)
+}
+
+// uploadData contains a chunk of data and an indicator if there is more.
+type uploadData struct {
+	Data []byte
+	More bool
+}
+
+// DecodeFrom implements requestBody.
+func (ud *uploadData) DecodeFrom(d *types.Decoder) {
+	ud.Data = d.ReadBytes()
+	ud.More = d.ReadBool()
+}
+
+// EncodeTo implements requestBody.
+func (ud *uploadData) EncodeTo(e *types.Encoder) {
+	// Nothing to do here.
+}

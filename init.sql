@@ -592,6 +592,7 @@ CREATE TABLE ctr_uploads (
 	bucket    VARCHAR(255) NOT NULL,
 	filepath  VARCHAR(255) NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
+	ready     BOOL NOT NULL,
 	PRIMARY KEY (filename),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );

@@ -59,6 +59,10 @@ const (
 	// on a connection. This ensures it times out if I/O exceeds this deadline.
 	defaultConnectionDeadline = 5 * time.Minute
 
+	// defaultStreamDeadline is the default read and write deadline which is set
+	// on a stream. The RPCs may extend that.
+	defaultStreamDeadline = 30 * time.Second
+
 	// rpcRatelimit prevents someone from spamming the provider connections,
 	// causing it to spin up enough goroutines to crash.
 	rpcRatelimit = time.Millisecond * 50
@@ -112,4 +116,7 @@ var (
 
 	// shareContractsSpecifier is used when a renter shares their contract set.
 	shareContractsSpecifier = types.NewSpecifier("ShareContracts")
+
+	// uploadFileSpecifier is used when a renter wants to upload a file.
+	uploadFileSpecifier = types.NewSpecifier("UploadFile")
 )

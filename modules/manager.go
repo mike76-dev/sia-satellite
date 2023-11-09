@@ -298,6 +298,9 @@ type Manager interface {
 	// BlockHeight returns the current block height.
 	BlockHeight() uint64
 
+	// BytesUploaded returns the size of the file already uploaded.
+	BytesUploaded(types.PublicKey, string, string) (string, uint64, error)
+
 	// Close safely shuts down the manager.
 	Close() error
 
@@ -393,6 +396,9 @@ type Manager interface {
 
 	// RefreshedContract returns a bool indicating if the contract was refreshed.
 	RefreshedContract(types.FileContractID) bool
+
+	// RegisterUpload associates the uploaded file with the object.
+	RegisterUpload(types.PublicKey, string, string, string, bool) error
 
 	// RenewContract renews a contract.
 	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)

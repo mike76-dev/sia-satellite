@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"errors"
 	"io"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -11,6 +13,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 
+	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
 
 	"lukechampine.com/frand"
@@ -71,14 +74,14 @@ func (p *Provider) managedLearnHostname() {
 
 // initNetworking performs actions like port forwarding, and gets the
 // Satellite established on the network.
-func (p *Provider) initNetworking(address string) (err error) {
+func (p *Provider) initNetworking(address, muxAddr string) (err error) {
 	// Create the listener and setup the close procedures.
 	p.listener, err = net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
 
-	// Automatically close the listener when p.threads.Stop() is called.
+	// Automatically close the listener when p.tg.Stop() is called.
 	threadedListenerClosedChan := make(chan struct{})
 	p.tg.OnStop(func() {
 		err := p.listener.Close()
@@ -125,6 +128,33 @@ func (p *Provider) initNetworking(address string) (err error) {
 
 	// Launch the listener.
 	go p.threadedListen(threadedListenerClosedChan)
+	p.log.Println("INFO: listening on port", port)
+
+	// Create the mux and setup the close procedures.
+	p.mux, err = net.Listen("tcp", muxAddr)
+	if err != nil {
+		return err
+	}
+	_, muxPort, err := net.SplitHostPort(p.mux.Addr().String())
+	if err != nil {
+		return err
+	}
+
+	// Automatically close the mux when p.tg.Stop() is called.
+	threadedMuxClosedChan := make(chan struct{})
+	p.tg.OnStop(func() {
+		err := p.mux.Close()
+		if err != nil {
+			p.log.Println("WARN: closing the mux failed:", err)
+		}
+
+		// Wait until the threadedListener has returned to continue shutdown.
+		<-threadedMuxClosedChan
+	})
+
+	// Launch the mux.
+	go p.threadedListenMux(threadedMuxClosedChan)
+	p.log.Println("INFO: mux listening on port", muxPort)
 
 	return nil
 }
@@ -143,6 +173,53 @@ func (p *Provider) threadedListen(closeChan chan struct{}) {
 		}
 
 		go p.threadedHandleConn(conn)
+
+		// Soft-sleep to ratelimit the number of incoming connections.
+		select {
+		case <-p.tg.StopChan():
+		case <-time.After(rpcRatelimit):
+		}
+	}
+}
+
+// threadedListenMux listens for incoming RHP3 requests.
+func (p *Provider) threadedListenMux(closeChan chan struct{}) {
+	defer close(closeChan)
+
+	// Receive connections until an error is returned by the listener. When an
+	// error is returned, there will be no more calls to receive.
+	for {
+		// Block until there is a connection to handle.
+		conn, err := p.mux.Accept()
+		if err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				p.log.Println("WARN: falied to accept connection:", err)
+			}
+			return
+		}
+
+		go func() {
+			defer conn.Close()
+
+			// Upgrade the connection to RHP3.
+			t, err := rhpv3.NewHostTransport(conn, p.secretKey)
+			if err != nil {
+				p.log.Println("ERROR: falied to upgrade connection:", err)
+			}
+			defer t.Close()
+
+			for {
+				stream, err := t.AcceptStream()
+				if err != nil {
+					if !strings.Contains(err.Error(), "peer closed stream gracefully") && !strings.Contains(err.Error(), "peer closed underlying connection") {
+						p.log.Println("ERROR: falied to accept stream:", err)
+					}
+					return
+				}
+
+				go p.threadedHandleStream(stream, conn.RemoteAddr().String())
+			}
+		}()
 
 		// Soft-sleep to ratelimit the number of incoming connections.
 		select {
@@ -337,6 +414,60 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	}
 	if err != nil {
 		p.log.Printf("ERROR: error with %v: %v\n", conn.RemoteAddr(), err)
+	}
+}
+
+// threadedHandleStream handles an incoming RHP3 stream.
+func (p *Provider) threadedHandleStream(s *rhpv3.Stream, addr string) {
+	err := p.tg.Add()
+	if err != nil {
+		return
+	}
+	defer p.tg.Done()
+
+	// Close the stream on provider.Close or when the method terminates, whichever
+	// comes first.
+	streamCloseChan := make(chan struct{})
+	defer close(streamCloseChan)
+	go func() {
+		select {
+		case <-p.tg.StopChan():
+		case <-streamCloseChan:
+		}
+		s.Close()
+	}()
+
+	// Skip if a satellite maintenance is running.
+	if p.m.Maintenance() {
+		p.log.Println("INFO: closing inbound stream because satellite maintenance is running")
+		return
+	}
+
+	// Set an initial duration that is generous, but finite. RPCs can extend
+	// this if desired.
+	err = s.SetDeadline(time.Now().Add(defaultStreamDeadline))
+	if err != nil {
+		p.log.Println("ERROR: could not set deadline on stream:", err)
+		return
+	}
+
+	id, err := s.ReadID()
+	if err != nil {
+		p.log.Println("ERROR: failed to read RPC ID:", err)
+		return
+	}
+
+	switch id {
+	case uploadFileSpecifier:
+		err = p.managedReceiveFile(s)
+		if err != nil {
+			err = modules.AddContext(err, "incoming RPCUploadFile failed")
+		}
+	default:
+		p.log.Println("INFO: unknown inbound stream from", addr) //TODO
+	}
+	if err != nil {
+		p.log.Printf("ERROR: error with %v: %v\n", addr, err)
 	}
 }
 
