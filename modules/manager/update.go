@@ -414,12 +414,14 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				if !ub.Subscribed && ub.Balance < storageCost+partialCost {
 					// Insufficient balance, delete the file metadata.
 					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
+					m.DeleteBufferedFiles(renter.PublicKey)
 					m.DeleteMetadata(renter.PublicKey)
 					continue
 				}
 				if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
 					// Account on hold, delete the file metadata.
 					m.log.Println("WARN: account on hold, deleting stored metadata")
+					m.DeleteBufferedFiles(renter.PublicKey)
 					m.DeleteMetadata(renter.PublicKey)
 					continue
 				}

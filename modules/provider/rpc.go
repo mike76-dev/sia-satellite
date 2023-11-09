@@ -611,12 +611,15 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		return err
 	}
 
+	// Delete buffered files if opted out.
+	if !usr.ProxyUploads {
+		p.m.DeleteBufferedFiles(usr.PubKey)
+	}
+
 	// Delete file metadata if opted out.
 	if !usr.BackupFileMetadata {
 		p.m.DeleteMetadata(usr.PubKey)
 	}
-
-	// TODO Perform action if opted out of proxying uploads.
 
 	// If not opted in, return.
 	if !usr.AutoRenewContracts {
