@@ -81,9 +81,6 @@ type hostContractor interface {
 	// of the renter began.
 	CurrentPeriod(types.PublicKey) uint64
 
-	// DeleteBufferedFiles deletes the files waiting to be uploaded.
-	DeleteBufferedFiles(types.PublicKey, string) error
-
 	// DeleteMetadata deletes the renter's saved file metadata.
 	DeleteMetadata(types.PublicKey) error
 
@@ -1029,11 +1026,6 @@ func (m *Manager) GetWalletSeed() (seed modules.Seed, err error) {
 	return
 }
 
-// DeleteBufferedFiles deletes the files waiting to be uploaded.
-func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
-	return m.hostContractor.DeleteBufferedFiles(pk, filepath.Join(m.dir, bufferedFilesDir))
-}
-
 // DeleteMetadata deletes the renter's saved file metadata.
 func (m *Manager) DeleteMetadata(pk types.PublicKey) error {
 	return m.hostContractor.DeleteMetadata(pk)
@@ -1287,4 +1279,9 @@ func (m *Manager) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, error) 
 	}
 
 	return slabs, nil
+}
+
+// BufferedFilesDir returns the path to the buffered files directory.
+func (m *Manager) BufferedFilesDir() string {
+	return filepath.Join(m.dir, bufferedFilesDir)
 }

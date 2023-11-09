@@ -386,6 +386,10 @@ tbody > tr:nth-child(odd) {
 	cursor: pointer;
 }
 
+.buffered, .buffered td {
+	color: #3f3f3f;
+}
+
 .history-button {
 	width: 2rem;
 	height: 1.8rem;

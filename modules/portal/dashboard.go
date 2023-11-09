@@ -98,6 +98,7 @@ type (
 		Slabs       int    `json:"slabs"`
 		Uploaded    uint64 `json:"uploaded"`
 		PartialData uint64 `json:"partialdata"`
+		Buffered    bool   `json:"buffered"`
 	}
 
 	// fileIndices contains the indices of files to delete.
@@ -718,7 +719,19 @@ func (api *portalAPI) filesHandlerGET(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 
-	writeJSON(w, sf)
+	// Retrieve the file information.
+	bf, err := api.portal.getBufferedFiles(renter.PublicKey)
+	if err != nil {
+		api.portal.log.Printf("ERROR: couldn't retrieve buffered files: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, append(sf, bf...))
 }
 
 // filesHandlerPOST handles the POST /dashboard/files requests.

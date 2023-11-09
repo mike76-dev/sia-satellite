@@ -298,6 +298,9 @@ type Manager interface {
 	// BlockHeight returns the current block height.
 	BlockHeight() uint64
 
+	// BufferedFilesDir returns the path to the buffered files directory.
+	BufferedFilesDir() string
+
 	// BytesUploaded returns the size of the file already uploaded.
 	BytesUploaded(types.PublicKey, string, string) (string, uint64, error)
 
@@ -312,6 +315,10 @@ type Manager interface {
 
 	// CreateNewRenter inserts a new renter into the map.
 	CreateNewRenter(string, types.PublicKey)
+
+	// DeleteBufferedFile deletes the specified file and the associated
+	// database record.
+	DeleteBufferedFile(pk types.PublicKey, bucket, path string) error
 
 	// DeleteBufferedFiles deletes the files waiting to be uploaded.
 	DeleteBufferedFiles(types.PublicKey) error

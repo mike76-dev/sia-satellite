@@ -575,3 +575,67 @@ func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, filename stri
 	`, filepath.Base(filename), bucket, path, pk[:], complete)
 	return err
 }
+
+// DeleteBufferedFiles deletes the files waiting to be uploaded.
+func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
+	// Make a list of file names.
+	rows, err := m.db.Query("SELECT filename FROM ctr_uploads WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		m.log.Println("ERROR: unable to query files:", err)
+		return modules.AddContext(err, "unable to query files")
+	}
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			m.log.Println("ERROR: unable to retrieve filename:", err)
+			return modules.AddContext(err, "unable to retrieve filename")
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+
+	// Delete the files one by one.
+	for _, name := range names {
+		if err := os.Remove(filepath.Join(m.BufferedFilesDir(), name)); err != nil {
+			m.log.Println("ERROR: unable to delete file:", err)
+			return modules.AddContext(err, "unable to delete file")
+		}
+		_, err = m.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
+		if err != nil {
+			m.log.Println("ERROR: unable to delete file record:", err)
+			return modules.AddContext(err, "unable to delete file record")
+		}
+	}
+
+	return nil
+}
+
+// DeleteBufferedFile deletes the specified file and the associated
+// database record.
+func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path string) error {
+	var name string
+	err := m.db.QueryRow(`
+		SELECT filename
+		FROM ctr_uploads
+		WHERE bucket = ?
+		AND filepath = ?
+		AND renter_pk = ?
+	`, bucket, path, pk[:]).Scan(&name)
+	if err != nil {
+		return modules.AddContext(err, "couldn't query buffered files")
+	}
+
+	if err := os.Remove(filepath.Join(m.BufferedFilesDir(), name)); err != nil {
+		return modules.AddContext(err, "unable to delete file")
+	}
+
+	_, err = m.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
+	if err != nil {
+		return modules.AddContext(err, "couldn't delete record")
+	}
+
+	return nil
+}

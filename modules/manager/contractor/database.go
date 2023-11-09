@@ -6,8 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -368,43 +366,6 @@ func (w *watchdog) load() error {
 	}
 
 	return tx.Commit()
-}
-
-// DeleteBufferedFiles deletes the files waiting to be uploaded.
-func (c *Contractor) DeleteBufferedFiles(pk types.PublicKey, dir string) error {
-	// Make a list of file names.
-	rows, err := c.db.Query("SELECT filename FROM ctr_uploads WHERE renter_pk = ?", pk[:])
-	if err != nil {
-		c.log.Println("ERROR: unable to query files:", err)
-		return modules.AddContext(err, "unable to query files")
-	}
-
-	var names []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			rows.Close()
-			c.log.Println("ERROR: unable to retrieve filename:", err)
-			return modules.AddContext(err, "unable to retrieve filename")
-		}
-		names = append(names, name)
-	}
-	rows.Close()
-
-	// Delete the files one by one.
-	for _, name := range names {
-		if err := os.Remove(filepath.Join(dir, name)); err != nil {
-			c.log.Println("ERROR: unable to delete file:", err)
-			return modules.AddContext(err, "unable to delete file")
-		}
-		_, err = c.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
-		if err != nil {
-			c.log.Println("ERROR: unable to delete file record:", err)
-			return modules.AddContext(err, "unable to delete file record")
-		}
-	}
-
-	return nil
 }
 
 // DeleteMetadata deletes the renter's saved file metadata.
