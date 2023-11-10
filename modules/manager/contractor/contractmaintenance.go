@@ -879,4 +879,7 @@ func (c *Contractor) threadedContractMaintenance() {
 	// Perform slab migrations.
 	c.migrator.signalMaintenanceFinished()
 	c.migrator.tryPerformMigrations()
+
+	// Upload any complete slabs.
+	go c.threadedUploadPackedSlabs()
 }

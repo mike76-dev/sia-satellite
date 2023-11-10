@@ -31,6 +31,9 @@ const (
 	statsDecayHalfTime        = 10 * time.Minute
 	statsDecayThreshold       = 5 * time.Minute
 	statsRecomputeMinInterval = 3 * time.Second
+
+	// A timeout for uploading a packed slab.
+	packedSlabUploadTimeout = 10 * time.Minute
 )
 
 var (
@@ -239,9 +242,9 @@ func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucke
 	defer cancel()
 
 	// Fetch necessary params.
-	c.mu.Lock()
+	c.mu.RLock()
 	bh := c.blockHeight
-	c.mu.Unlock()
+	c.mu.RUnlock()
 	contracts := c.staticContracts.ByRenter(rpk)
 
 	// Upload the object.
@@ -288,6 +291,64 @@ func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucke
 	}
 
 	return
+}
+
+// managedUploadPackedSlab uploads a packed slab to the network.
+func (c *Contractor) managedUploadPackedSlab(rpk types.PublicKey, data []byte, key object.EncryptionKey, offset uint64) (modules.Slab, error) {
+	// Create a context and set up its cancelling.
+	ctx, cancel := context.WithTimeout(context.Background(), packedSlabUploadTimeout)
+	defer cancel()
+
+	// Fetch the renter.
+	c.mu.RLock()
+	bh := c.blockHeight
+	renter, exists := c.renters[rpk]
+	c.mu.RUnlock()
+	if !exists {
+		return modules.Slab{}, ErrRenterNotFound
+	}
+
+	// Upload packed slab.
+	contracts := c.staticContracts.ByRenter(rpk)
+	shards := encryptPartialSlab(data, key, uint8(renter.Allowance.MinShards), uint8(renter.Allowance.TotalShards))
+	sectors, err := c.um.uploadShards(ctx, rpk, shards, contracts, bh)
+	if err != nil {
+		return modules.Slab{}, err
+	}
+
+	id, err := convertEncryptionKey(key)
+	if err != nil {
+		return modules.Slab{}, err
+	}
+
+	slab := modules.Slab{
+		Key:       id,
+		MinShards: uint8(renter.Allowance.MinShards),
+		Offset:    offset,
+		Length:    uint64(len(data)),
+		Partial:   false,
+	}
+	for _, s := range sectors {
+		slab.Shards = append(slab.Shards, modules.Shard{
+			Host: s.Host,
+			Root: s.Root,
+		})
+	}
+
+	return slab, nil
+}
+
+// encryptPartialSlab encrypts data and splits them into shards.
+func encryptPartialSlab(data []byte, key object.EncryptionKey, minShards, totalShards uint8) [][]byte {
+	slab := object.Slab{
+		Key:       key,
+		MinShards: minShards,
+		Shards:    make([]object.Sector, totalShards),
+	}
+	encodedShards := make([][]byte, totalShards)
+	slab.Encode(data, encodedShards)
+	slab.Encrypt(encodedShards)
+	return encodedShards
 }
 
 // stats returns the upload manager's stats.
@@ -451,6 +512,23 @@ loop:
 	}
 
 	return o, partialSlab, hr.Hash(), nil
+}
+
+// uploadShards uploads the shards of a packed slab.
+func (mgr *uploadManager) uploadShards(ctx context.Context, rpk types.PublicKey, shards [][]byte, contracts []modules.RenterContract, bh uint64) ([]object.Sector, error) {
+	// Initiate the upload.
+	upload, err := mgr.newUpload(rpk, len(shards), contracts, bh)
+	if err != nil {
+		return nil, err
+	}
+
+	// Upload the shards.
+	sectors, err := upload.uploadShards(ctx, shards, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return sectors, nil
 }
 
 // launch starts an upload.
