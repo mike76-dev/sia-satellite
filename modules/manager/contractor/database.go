@@ -6,9 +6,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"mime"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"lukechampine.com/frand"
 
@@ -16,6 +20,10 @@ import (
 	"go.sia.tech/core/types"
 	"go.sia.tech/renterd/object"
 )
+
+// bufferedFilesUploadInterval determines how often buffered files
+// are uploaded to the network.
+const bufferedFilesUploadInterval = 10 * time.Minute
 
 // initDB initializes the sync state.
 func (c *Contractor) initDB() error {
@@ -500,7 +508,7 @@ func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path string) error {
 }
 
 // updateMetadata updates the file metadata in the database.
-func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
+func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata, imported bool) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return err
@@ -511,6 +519,11 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		return modules.AddContext(err, "unable to delete object")
 	}
 
+	var retrieved int64
+	modified := time.Now().Unix()
+	if imported {
+		retrieved = time.Now().Unix()
+	}
 	_, err = tx.Exec(`
 		INSERT INTO ctr_metadata (
 			enc_key,
@@ -531,9 +544,9 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 		fm.ETag,
 		fm.MimeType,
 		pk[:],
-		time.Now().Unix(),
-		time.Now().Unix(),
-		time.Now().Unix(),
+		modified,
+		modified,
+		retrieved,
 	)
 	if err != nil {
 		tx.Rollback()
@@ -594,8 +607,8 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata)
 				s.Length,
 				i,
 				s.Partial,
-				time.Now().Unix(),
-				time.Now().Unix(),
+				modified,
+				modified,
 			)
 			if err != nil {
 				tx.Rollback()
@@ -766,7 +779,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 			FROM ctr_buffers
 			WHERE object_id = ?
 		`, objectID).Scan(&data)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, modules.AddContext(err, "unable to load partial slab data")
 		}
 		md.Data = data
@@ -1224,277 +1237,390 @@ func (c *Contractor) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, erro
 	return slabs, nil
 }
 
-// threadedUploadPackedSlabs checks if there is any partial slab data
+// uploadPackedSlabs checks if there is any partial slab data
 // that is large enough to form a slab and uploads it.
-func (c *Contractor) threadedUploadPackedSlabs() {
-	err := c.tg.Add()
+func (c *Contractor) uploadPackedSlabs(rpk types.PublicKey) error {
+	// Fetch the renter.
+	c.mu.Lock()
+	renter, exists := c.renters[rpk]
+	c.mu.Unlock()
+	if !exists {
+		return ErrRenterNotFound
+	}
+
+	// Skip if the renter hasn't opted in.
+	if !renter.Settings.ProxyUploads {
+		return nil
+	}
+
+	// Start a transaction.
+	tx, err := c.db.Begin()
 	if err != nil {
+		return modules.AddContext(err, "couldn't start transaction")
+	}
+
+	// Create a map of object IDs to the partial slab data lengths.
+	rows, err := tx.Query(`
+		SELECT object_id, len
+		FROM ctr_buffers
+		WHERE renter_pk = ?
+	`, renter.PublicKey[:])
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "couldn't query buffers")
+	}
+
+	buffers := make(map[types.Hash256]uint64)
+	for rows.Next() {
+		key := make([]byte, 32)
+		var length uint64
+		if err := rows.Scan(&key, &length); err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't scan buffers")
+		}
+		var id types.Hash256
+		copy(id[:], key)
+		buffers[id] = length
+	}
+	rows.Close()
+
+	// Go through the map and check if the partial slab data
+	// is large enough to be uploaded.
+	slabSize := rhpv2.SectorSize * renter.Allowance.MinShards
+	type chunk struct {
+		objectID types.Hash256
+		offset   uint64
+		length   uint64
+	}
+	var completeChunks []chunk
+	var incompleteChunk chunk
+	var dataLen uint64
+	for id, length := range buffers {
+		var firstLen, lastLen uint64
+		if dataLen+length >= slabSize {
+			firstLen = slabSize - dataLen
+			lastLen = length - firstLen
+		} else {
+			firstLen = length
+			lastLen = 0
+		}
+		completeChunks = append(completeChunks, chunk{
+			objectID: id,
+			offset:   dataLen,
+			length:   firstLen,
+		})
+		dataLen += firstLen
+		if lastLen > 0 {
+			incompleteChunk = chunk{
+				objectID: id,
+				offset:   firstLen,
+				length:   lastLen,
+			}
+			break
+		}
+	}
+
+	if dataLen < slabSize {
+		// Not enough for a complete slab, return.
+		tx.Commit()
+		return nil
+	}
+
+	// Fetch the data.
+	var slabData []byte
+	for _, chunk := range completeChunks {
+		var data []byte
+		err := tx.QueryRow(`
+			SELECT data
+			FROM ctr_buffers
+			WHERE object_id = ?
+		`, chunk.objectID[:]).Scan(&data)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't retrieve data")
+		}
+		slabData = append(slabData, data[:chunk.length]...)
+	}
+
+	// Upload the slab.
+	slabKey := object.GenerateEncryptionKey()
+	slab, err := c.managedUploadPackedSlab(renter.PublicKey, slabData, slabKey, 0)
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "unable to upload slab")
+	}
+
+	// Save the shards in the database.
+	slabID, err := convertEncryptionKey(slabKey)
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "couldn't marshal encryption key")
+	}
+	for _, shard := range slab.Shards {
+		_, err := tx.Exec(`
+			INSERT INTO ctr_shards (slab_id, host, merkle_root)
+			VALUES (?, ?, ?)
+		`, slabID[:], shard.Host[:], shard.Root[:])
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't insert shard")
+		}
+	}
+
+	// Replace the last (a partial) slab in each object with the
+	// new (a complete) one.
+	for _, chunk := range completeChunks {
+		_, err := tx.Exec(`
+			UPDATE ctr_slabs
+			SET enc_key = ?,
+				min_shards = ?,
+				offset = ?,
+				len = ?,
+				partial = FALSE,
+				modified = ?,
+				retrieved = ?
+			WHERE object_id = ?
+			AND partial = TRUE
+		`,
+			slabID[:],
+			renter.Allowance.MinShards,
+			chunk.offset,
+			chunk.length,
+			time.Now().Unix(),
+			time.Now().Unix(),
+			chunk.objectID[:],
+		)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't save slab")
+		}
+	}
+
+	// If there was partial slab data left, add a partial slab.
+	if incompleteChunk.length > 0 {
+		key := make([]byte, 32)
+		frand.Read(key)
+		var count int
+		err := tx.QueryRow(`
+			SELECT COUNT(num)
+			FROM ctr_slabs
+			WHERE object_id = ?
+		`, incompleteChunk.objectID[:]).Scan(&count)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't read number of slabs")
+		}
+		_, err = tx.Exec(`
+			INSERT INTO ctr_slabs (
+				enc_key,
+				object_id,
+				renter_pk,
+				min_shards,
+				offset,
+				len,
+				num,
+				partial,
+				modified,
+				retrieved
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`,
+			key,
+			incompleteChunk.objectID[:],
+			renter.PublicKey[:],
+			0,
+			0,
+			incompleteChunk.length,
+			count,
+			true,
+			time.Now().Unix(),
+			time.Now().Unix(),
+		)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't save partial slab")
+		}
+	}
+
+	// Truncate or delete the buffers.
+	for i, chunk := range completeChunks {
+		if incompleteChunk.length > 0 && i == len(completeChunks)-1 {
+			_, err := tx.Exec(`
+				UPDATE ctr_buffers
+				SET len = ?,
+					data = SUBSTR(data, ?, ?)
+				WHERE object_id = ?
+			`,
+				incompleteChunk.length,
+				incompleteChunk.offset+1,
+				incompleteChunk.length,
+				incompleteChunk.objectID[:],
+			)
+			if err != nil {
+				tx.Rollback()
+				return modules.AddContext(err, "couldn't truncate buffer")
+			}
+		} else {
+			_, err := tx.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", chunk.objectID[:])
+			if err != nil {
+				tx.Rollback()
+				return modules.AddContext(err, "couldn't delete buffer")
+			}
+		}
+	}
+
+	// Update the timestamps.
+	for _, chunk := range completeChunks {
+		_, err := tx.Exec(`
+			UPDATE ctr_metadata
+			SET modified = ?
+			WHERE enc_key = ?
+		`, time.Now().Unix(), chunk.objectID[:])
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't update timestamp")
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return modules.AddContext(err, "couldn't commit transaction")
+	}
+
+	return nil
+}
+
+// managedUploadBufferedFiles uploads temporary files to the network.
+func (c *Contractor) managedUploadBufferedFiles() {
+	// Skip if a satellite maintenance is running.
+	if c.m.Maintenance() {
+		c.log.Println("INFO: skipping file uploads because satellite maintenance is running")
+		return
+	}
+
+	// No file uploads unless contractor is synced.
+	if !c.managedSynced() {
+		c.log.Println("INFO: skipping file uploads since consensus isn't synced yet")
+		return
+	}
+
+	c.log.Println("INFO: uploading buffered files")
+
+	// Sort the files by the upload timestamp, the older come first.
+	rows, err := c.db.Query(`
+		SELECT filename, bucket, filepath, renter_pk
+		FROM ctr_uploads
+		WHERE ready = TRUE
+		ORDER BY filename ASC
+	`)
+	if err != nil {
+		c.log.Println("ERROR: couldn't query buffered files:", err)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var n, bucket, path string
+		pk := make([]byte, 32)
+		if err := rows.Scan(&n, &bucket, &path, &pk); err != nil {
+			rows.Close()
+			c.log.Println("ERROR: couldn't scan file record:", err)
+			return
+		}
+		var rpk types.PublicKey
+		copy(rpk[:], pk)
+
+		// Read the file.
+		var err error
+		err = func() error {
+			name := filepath.Join(c.m.BufferedFilesDir(), n)
+			file, err := os.Open(name)
+			if err != nil {
+				c.log.Println("ERROR: couldn't open file:", err)
+				return err
+			}
+			defer func() {
+				file.Close()
+				if err == nil {
+					err = os.Remove(name)
+					if err != nil {
+						c.log.Println("ERROR: couldn't delete file:", err)
+						return
+					}
+					_, err = c.db.Exec(`
+						DELETE FROM ctr_uploads
+						WHERE renter_pk = ?
+						AND filename = ?
+						AND bucket = ?
+						AND filepath = ?
+					`, pk, n, bucket, path)
+					if err != nil {
+						c.log.Println("ERROR: couldn't delete file record:", err)
+						return
+					}
+				}
+			}()
+
+			mimeType := mime.TypeByExtension(filepath.Ext(n))
+			var reader io.Reader
+			if mimeType == "" {
+				mimeType, reader, err = newMimeReader(file)
+				if err != nil {
+					c.log.Println("ERROR: couldn't detect MIME type:", err)
+					return err
+				}
+			}
+
+			// Upload the data.
+			fm, err := c.managedUploadObject(reader, rpk, bucket, path, mimeType)
+			if err != nil {
+				c.log.Println("ERROR: couldn't upload object:", err)
+				return err
+			}
+
+			// Store the object in the database.
+			if err := c.updateMetadata(rpk, fm, false); err != nil {
+				c.log.Println("ERROR: couldn't save object:", err)
+				return err
+			}
+
+			// Upload any complete slabs.
+			if err := c.uploadPackedSlabs(rpk); err != nil {
+				c.log.Println("ERROR: couldn't upload packed slabs:", err)
+				return err
+			}
+
+			return nil
+		}()
+		if err != nil {
+			return
+		}
+	}
+}
+
+// threadedUploadBufferedFiles performs the periodic upload of the
+// buffered files.
+func (c *Contractor) threadedUploadBufferedFiles() {
+	if err := c.tg.Add(); err != nil {
 		return
 	}
 	defer c.tg.Done()
 
-	// Only one instance of this thread should be running at a time.
-	if !c.slabUploadLock.TryLock() {
-		c.log.Println("ERROR: slab upload lock could not be obtained")
-		return
-	}
-	defer c.slabUploadLock.Unlock()
-	c.log.Println("INFO: uploading packed slabs")
-
-	c.mu.Lock()
-	renters := c.renters
-	c.mu.Unlock()
-
-	for _, renter := range renters {
-		// Skip if the renter hasn't opted in.
-		if !renter.Settings.ProxyUploads {
-			continue
-		}
-
-		// Return here if an interrupt or kill signal has been sent.
+	for {
 		select {
 		case <-c.tg.StopChan():
-			c.log.Println("INFO: returning because the contractor was stopped")
-		default:
-		}
-
-		// Start a transaction.
-		tx, err := c.db.Begin()
-		if err != nil {
-			c.log.Println("ERROR: couldn't start transaction:", err)
 			return
+		case <-time.After(bufferedFilesUploadInterval):
 		}
-
-		// Create a map of object IDs to the partial slab data lengths.
-		rows, err := tx.Query(`
-			SELECT object_id, len
-			FROM ctr_buffers
-			WHERE renter_pk = ?
-		`, renter.PublicKey[:])
-		if err != nil {
-			c.log.Println("ERROR: couldn't query buffers:", err)
-			tx.Rollback()
-			return
-		}
-
-		buffers := make(map[types.Hash256]uint64)
-		for rows.Next() {
-			key := make([]byte, 32)
-			var length uint64
-			if err := rows.Scan(&key, &length); err != nil {
-				c.log.Println("ERROR: couldn't scan buffers:", err)
-				tx.Rollback()
-				return
-			}
-			var id types.Hash256
-			copy(id[:], key)
-			buffers[id] = length
-		}
-		rows.Close()
-
-		// Go through the map and check if the partial slab data
-		// is large enough to be uploaded.
-		slabSize := rhpv2.SectorSize * renter.Allowance.MinShards
-		type chunk struct {
-			objectID types.Hash256
-			offset   uint64
-			length   uint64
-		}
-		var completeChunks []chunk
-		var incompleteChunk chunk
-		var dataLen uint64
-		for id, length := range buffers {
-			var firstLen, lastLen uint64
-			if dataLen+length >= slabSize {
-				firstLen = slabSize - dataLen
-				lastLen = length - firstLen
-			} else {
-				firstLen = length
-				lastLen = 0
-			}
-			completeChunks = append(completeChunks, chunk{
-				objectID: id,
-				offset:   dataLen,
-				length:   firstLen,
-			})
-			dataLen += firstLen
-			if lastLen > 0 {
-				incompleteChunk = chunk{
-					objectID: id,
-					offset:   firstLen,
-					length:   lastLen,
-				}
-				break
-			}
-		}
-
-		if dataLen < slabSize {
-			// Not enough for a complete slab, skip it.
-			tx.Commit()
-			continue
-		}
-
-		// Fetch the data.
-		var slabData []byte
-		for _, chunk := range completeChunks {
-			var data []byte
-			err := tx.QueryRow(`
-				SELECT data
-				FROM ctr_buffers
-				WHERE object_id = ?
-			`, chunk.objectID[:]).Scan(&data)
-			if err != nil {
-				c.log.Println("ERROR: couldn't retrieve data:", err)
-				tx.Rollback()
-				return
-			}
-			slabData = append(slabData, data[:chunk.length]...)
-		}
-
-		// Upload the slab.
-		slabKey := object.GenerateEncryptionKey()
-		slab, err := c.managedUploadPackedSlab(renter.PublicKey, slabData, slabKey, 0)
-		if err != nil {
-			c.log.Println("ERROR: unable to upload slab:", err)
-			tx.Rollback()
-			continue
-		}
-
-		// Save the shards in the database.
-		slabID, err := convertEncryptionKey(slabKey)
-		if err != nil {
-			c.log.Println("ERROR: couldn't marshal encryption key:", err)
-			tx.Rollback()
-			return
-		}
-		for _, shard := range slab.Shards {
-			_, err := tx.Exec(`
-				INSERT INTO ctr_shards (slab_id, host, merkle_root)
-				VALUES (?, ?, ?)
-			`, slabID[:], shard.Host[:], shard.Root[:])
-			if err != nil {
-				c.log.Println("ERROR: couldn't insert shard:", err)
-				tx.Rollback()
-				return
-			}
-		}
-
-		// Replace the last (a partial) slab in each object with the
-		// new (a complete) one.
-		for _, chunk := range completeChunks {
-			_, err := tx.Exec(`
-				UPDATE ctr_slabs
-				SET enc_key = ?,
-					min_shards = ?,
-					offset = ?,
-					len = ?,
-					partial = FALSE,
-					modified = ?,
-					retrieved = ?
-				WHERE object_id = ?
-				AND partial = TRUE
-			`,
-				slabID[:],
-				renter.Allowance.MinShards,
-				chunk.offset,
-				chunk.length,
-				time.Now().Unix(),
-				time.Now().Unix(),
-				chunk.objectID[:],
-			)
-			if err != nil {
-				c.log.Println("ERROR: couldn't save slab:", err)
-				tx.Rollback()
-				return
-			}
-		}
-
-		// If there was partial slab data left, add a partial slab.
-		if incompleteChunk.length > 0 {
-			key := make([]byte, 32)
-			frand.Read(key)
-			_, err := tx.Exec(`
-				INSERT INTO ctr_slabs (
-					enc_key,
-					object_id,
-					renter_pk,
-					min_shards,
-					offset,
-					len,
-					num,
-					partial,
-					modified,
-					retrieved
-				)
-				VALUES (?, ?, ?, ?, ?, ?, (
-					SELECT MAX(num)+1 FROM ctr_slabs WHERE object_id = ?
-				), ?, ?, ?)
-			`,
-				key,
-				incompleteChunk.objectID[:],
-				renter.PublicKey[:],
-				0,
-				incompleteChunk.offset,
-				incompleteChunk.length,
-				incompleteChunk.objectID[:],
-				true,
-				time.Now().Unix(),
-				time.Now().Unix(),
-			)
-			if err != nil {
-				c.log.Println("ERROR: couldn't save partial slab:", err)
-				tx.Rollback()
-				return
-			}
-		}
-
-		// Truncate or delete the buffers.
-		for i, chunk := range completeChunks {
-			if incompleteChunk.length > 0 && i == len(completeChunks)-1 {
-				_, err := tx.Exec(`
-					UPDATE ctr_buffers
-					SET len = ?,
-						data = SUBSTR(data, ?, ?)
-					WHERE object_id = ?
-				`,
-					incompleteChunk.length,
-					incompleteChunk.offset,
-					incompleteChunk.length,
-					incompleteChunk.objectID[:],
-				)
-				if err != nil {
-					c.log.Println("ERROR: couldn't truncate buffer:", err)
-					tx.Rollback()
-					return
-				}
-			} else {
-				_, err := tx.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", chunk.objectID[:])
-				if err != nil {
-					c.log.Println("ERROR: couldn't delete buffer:", err)
-					tx.Rollback()
-					return
-				}
-			}
-		}
-
-		// Update the timestamps.
-		for _, chunk := range completeChunks {
-			_, err := tx.Exec(`
-				UPDATE ctr_metadata
-				SET modified = ?
-				WHERE enc_key = ?
-			`, time.Now().Unix(), chunk.objectID[:])
-			if err != nil {
-				c.log.Println("ERROR: couldn't update timestamp:", err)
-				tx.Rollback()
-				return
-			}
-		}
-
-		err = tx.Commit()
-		if err != nil {
-			c.log.Println("ERROR: couldn't commit transaction:", err)
-			return
-		}
+		c.managedUploadBufferedFiles()
 	}
+}
+
+// newMimeReader is a helper function that detects the MIME type
+// of the underlying data.
+func newMimeReader(r io.Reader) (mimeType string, recycled io.Reader, err error) {
+	buf := bytes.NewBuffer(nil)
+	mtype, err := mimetype.DetectReader(io.TeeReader(r, buf))
+	recycled = io.MultiReader(buf, r)
+	return mtype.String(), recycled, err
 }

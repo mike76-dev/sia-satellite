@@ -1388,12 +1388,15 @@ function getFiles() {
 				loading.classList.add('disabled');
 				let slabs = 0;
 				let partial = 0;
+				let pending = 0;
 				data.forEach(file => {
 					slabs += file.slabs;
 					partial += file.partialdata;
+					pending += file.buffered ? 1 : 0;
 				});
 				document.getElementById('files-slabs').innerHTML = slabs;
 				document.getElementById('files-partial').innerHTML = convertSize(partial);
+				document.getElementById('files-pending').innerHTML = pending;
 			}
 		})
 		.catch(error => console.log(error));
