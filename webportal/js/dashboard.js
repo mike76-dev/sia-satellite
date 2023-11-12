@@ -767,6 +767,18 @@ function copyPK() {
 	}, 1000);
 }
 
+function copyAddress() {
+	let b = document.getElementById('copy-addr');
+	let a = document.getElementById('reveal-addr');
+	a.select();
+	a.setSelectionRange(0, 99);
+	navigator.clipboard.writeText(a.value);
+	b.innerText = 'Copied!';
+	window.setTimeout(function() {
+		b.innerText = 'Copy';
+	}, 1000);
+}
+
 function revealSeed() {
 	let b = document.getElementById('reveal-button');
 	let t = document.getElementById('reveal-text');
@@ -805,7 +817,6 @@ function revealSeed() {
 }
 
 function retrieveKey() {
-	let k = document.getElementById('reveal-key');
 	let options = {
 		method: 'GET',
 		headers: {
@@ -815,8 +826,12 @@ function retrieveKey() {
 	fetch(apiBaseURL + '/dashboard/key', options)
 		.then(response => response.json())
 		.then(data => {
-			if (data.key) {
-				k.value = data.key;
+			if (data.code) {
+				console.log(data.message);
+			} else {
+				document.getElementById('reveal-key').value = data.key;
+				document.getElementById('reveal-addr').value = window.location.hostname + ':' + data.satport;
+				document.getElementById('reveal-mux').value = data.muxport;
 			}
 		})
 		.catch(error => console.log(error));
@@ -1135,12 +1150,15 @@ function getSettings() {
 				let ar = document.getElementById('settings-autorenew');
 				let md = document.getElementById('settings-metadata');
 				let fr = document.getElementById('settings-autorepair');
+				let pu = document.getElementById('settings-proxy');
 				ar.checked = data.autorenew;
 				ar.disabled = !data.autorenew;
 				md.checked = data.backupmetadata;
 				md.disabled = !data.backupmetadata;
 				fr.checked = data.autorepair;
 				fr.disabled = !data.autorepair;
+				pu.checked = data.proxyuploads;
+				pu.disabled = !data.proxyuploads;
 			}
 		})
 		.catch(error => console.log(error));
@@ -1182,7 +1200,8 @@ function renderFiles() {
 		let tr = document.createElement('tr');
 		tr.innerHTML = '<td><label class="checkbox" style="margin-left: 0.5rem"><input type="checkbox" onchange="selectFile(this)"><span class="checkmark"></span></label></td>';
 		tr.innerHTML += `<td>${i + 1}</td>`;
-		tr.innerHTML += `<td id=${'bucket-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${row.bucket}<div class="hint">select</div></td>`;
+		tr.innerHTML += row.buffered ? `<td class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${row.bucket}<div class="hint">select</div></td>` :
+			`<td id=${'bucket-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${row.bucket}<div class="hint">select</div></td>`;
 		if (index >= 0) {
 			tr.innerHTML += `<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
 			let loaded = (downloads[index].loaded == 0 || downloads[index].loaded == row.size) ? '<span class="loading"></span>' :
@@ -1190,13 +1209,19 @@ function renderFiles() {
 			tr.innerHTML += `<td id=${'size-' + encodeURI(row.bucket) + encodeURI(row.path)}>${loaded}</td>`;
 			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.bucket) + encodeURI(row.path)}><span id=${'cancel-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cancel">&#9421;<div class="hint">cancel</div></span></td>`;
 		} else {
-			tr.innerHTML += `<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
-			tr.innerHTML += `<td id=${'size-' + encodeURI(row.bucket) + encodeURI(row.path)}>${convertSize(row.size)}</td>`;
-			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.bucket) + encodeURI(row.path)}>${row.slabs}</td>`;
+			tr.innerHTML += row.buffered ? `<td>${row.path.slice(1)}</td>` :
+				`<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
+			tr.innerHTML += row.buffered ? `<td>${convertSize(row.size)}</td>` :
+				`<td id=${'size-' + encodeURI(row.bucket) + encodeURI(row.path)}>${convertSize(row.size)}</td>`;
+			tr.innerHTML += row.buffered ? '<td>&minus;</td>' :
+				`<td id=${'slabs-' + encodeURI(row.bucket) + encodeURI(row.path)}>${row.slabs}</td>`;
 		}
 		tr.innerHTML += `<td>${timestamp.toLocaleString()}</td>`;
 		tr.children[0].children[0].children[0].setAttribute('index', i);
 		tr.children[0].children[0].children[0].checked = selectedFiles.includes(i);
+		if (row.buffered) {
+			tr.classList.add('buffered');
+		}
 		tbody.appendChild(tr);
 		if (index >= 0) {
 			document.getElementById('cancel-' + encodeURI(row.bucket) + encodeURI(row.path)).addEventListener('click', () => {
@@ -1363,12 +1388,15 @@ function getFiles() {
 				loading.classList.add('disabled');
 				let slabs = 0;
 				let partial = 0;
+				let pending = 0;
 				data.forEach(file => {
 					slabs += file.slabs;
 					partial += file.partialdata;
+					pending += file.buffered ? 1 : 0;
 				});
 				document.getElementById('files-slabs').innerHTML = slabs;
 				document.getElementById('files-partial').innerHTML = convertSize(partial);
+				document.getElementById('files-pending').innerHTML = pending;
 			}
 		})
 		.catch(error => console.log(error));
@@ -1486,10 +1514,12 @@ function settingsChange(e) {
 	let rn = document.getElementById('settings-autorenew');
 	let md = document.getElementById('settings-metadata');
 	let rp = document.getElementById('settings-autorepair');
+	let pr = document.getElementById('settings-proxy');
 	let data = {
 		autorenew: rn.checked,
 		backupmetadata: md.checked,
-		autorepair: (rn.checked && md.checked) ? rp.checked : false
+		autorepair: (rn.checked && md.checked) ? rp.checked : false,
+		proxyuploads: md.checked ? pr.checked : false
 	}
 	let options = {
 		method: 'POST',
@@ -1513,10 +1543,17 @@ function settingsChange(e) {
 					if (!e.checked) {
 						rp.checked = false;
 						rp.disabled = true;
+						pr.checked = false;
+						pr.disabled = true;
 						e.disabled = true;
 					}
 					break;
 				case 'settings-autorepair':
+					if (!e.checked) {
+						e.disabled = true;
+					}
+					break;
+				case 'settings-proxy':
 					if (!e.checked) {
 						e.disabled = true;
 					}

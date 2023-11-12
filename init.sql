@@ -488,6 +488,7 @@ CREATE TABLE hdb_info (
 
 DROP TABLE IF EXISTS ctr_contracts;
 DROP TABLE IF EXISTS ctr_buffers;
+DROP TABLE IF EXISTS ctr_uploads;
 DROP TABLE IF EXISTS ctr_renters;
 DROP TABLE IF EXISTS ctr_info;
 DROP TABLE IF EXISTS ctr_dspent;
@@ -507,6 +508,7 @@ CREATE TABLE ctr_renters (
 	auto_renew_contracts BOOL NOT NULL,
 	backup_file_metadata BOOL NOT NULL,
 	auto_repair_files    BOOL NOT NULL,
+	proxy_uploads        BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );
@@ -552,6 +554,8 @@ CREATE TABLE ctr_metadata (
 	len       BIGINT UNSIGNED NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
 	uploaded  BIGINT UNSIGNED NOT NULL,
+	modified  BIGINT UNSIGNED NOT NULL,
+	retrieved BIGINT UNSIGNED NOT NULL,
 	PRIMARY KEY (enc_key),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );
@@ -582,5 +586,15 @@ CREATE TABLE ctr_buffers (
 	len       BIGINT UNSIGNED NOT NULL,
 	data      LONGBLOB NOT NULL,
 	PRIMARY KEY (object_id),
+	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
+);
+
+CREATE TABLE ctr_uploads (
+	filename  CHAR(20) NOT NULL,
+	bucket    VARCHAR(255) NOT NULL,
+	filepath  VARCHAR(255) NOT NULL,
+	renter_pk BINARY(32) NOT NULL,
+	ready     BOOL NOT NULL,
+	PRIMARY KEY (filename),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );

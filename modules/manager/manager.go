@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -26,6 +28,9 @@ var (
 	errNilWallet  = errors.New("manager cannot use a nil wallet")
 	errNilGateway = errors.New("manager cannot use nil gateway")
 )
+
+// A directory for storing temporary files.
+const bufferedFilesDir = "temp"
 
 // A hostContractor negotiates, revises, renews, and provides access to file
 // contracts.
@@ -77,7 +82,7 @@ type hostContractor interface {
 	CurrentPeriod(types.PublicKey) uint64
 
 	// DeleteMetadata deletes the renter's saved file metadata.
-	DeleteMetadata(types.PublicKey)
+	DeleteMetadata(types.PublicKey) error
 
 	// DeleteObject deletes the saved file metadata object.
 	DeleteObject(types.PublicKey, string, string) error
@@ -195,6 +200,7 @@ type Manager struct {
 	mu            sync.RWMutex
 	tg            siasync.ThreadGroup
 	staticAlerter *modules.GenericAlerter
+	dir           string
 }
 
 // New returns an initialized Manager.
@@ -247,6 +253,7 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gate
 		exchRates: make(map[string]float64),
 
 		staticAlerter: modules.NewAlerter("manager"),
+		dir:           dir,
 	}
 
 	// Create the Contractor.
@@ -266,6 +273,13 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gate
 
 	// Initialize the Manager's persistence.
 	err := m.initPersist(dir)
+	if err != nil {
+		errChan <- err
+		return nil, errChan
+	}
+
+	// Create the temporary directory if it doesn't exist.
+	err = os.MkdirAll(filepath.Join(dir, bufferedFilesDir), 0700)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
@@ -1013,8 +1027,8 @@ func (m *Manager) GetWalletSeed() (seed modules.Seed, err error) {
 }
 
 // DeleteMetadata deletes the renter's saved file metadata.
-func (m *Manager) DeleteMetadata(pk types.PublicKey) {
-	m.hostContractor.DeleteMetadata(pk)
+func (m *Manager) DeleteMetadata(pk types.PublicKey) error {
+	return m.hostContractor.DeleteMetadata(pk)
 }
 
 // UpdateMetadata updates the file metadata in the database.
@@ -1265,4 +1279,9 @@ func (m *Manager) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, error) 
 	}
 
 	return slabs, nil
+}
+
+// BufferedFilesDir returns the path to the buffered files directory.
+func (m *Manager) BufferedFilesDir() string {
+	return filepath.Join(m.dir, bufferedFilesDir)
 }

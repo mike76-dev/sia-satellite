@@ -2,6 +2,7 @@ package contractor
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -30,6 +31,9 @@ const (
 	statsDecayHalfTime        = 10 * time.Minute
 	statsDecayThreshold       = 5 * time.Minute
 	statsRecomputeMinInterval = 3 * time.Second
+
+	// A timeout for uploading a packed slab.
+	packedSlabUploadTimeout = 10 * time.Minute
 )
 
 var (
@@ -111,6 +115,7 @@ type (
 		overdriving   map[int]int
 		remaining     map[int]sectorCtx
 		sectors       []object.Sector
+		errs          hostErrorSet
 	}
 
 	// slabUploadResponse contains the result of a slab upload.
@@ -230,6 +235,122 @@ func (mgr *uploadManager) migrate(ctx context.Context, rpk types.PublicKey, shar
 	return upload.uploadShards(ctx, shards, nil)
 }
 
+// managedUploadObject uploads an object and returns its metadata.
+func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucket, path, mimeType string) (fm modules.FileMetadata, err error) {
+	// Create the context and setup its cancelling.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Fetch necessary params.
+	c.mu.RLock()
+	bh := c.blockHeight
+	c.mu.RUnlock()
+	contracts := c.staticContracts.ByRenter(rpk)
+
+	// Upload the object.
+	obj, ps, eTag, err := c.um.upload(ctx, r, rpk, contracts, bh)
+	if err != nil {
+		return
+	}
+
+	// Construct the metadata object.
+	key, _ := convertEncryptionKey(obj.Key)
+	fm = modules.FileMetadata{
+		Key:      key,
+		Bucket:   bucket,
+		Path:     path,
+		ETag:     eTag,
+		MimeType: mimeType,
+		Data:     ps,
+	}
+	for _, slab := range obj.Slabs {
+		key, _ := convertEncryptionKey(slab.Key)
+		s := modules.Slab{
+			Key:       key,
+			MinShards: slab.MinShards,
+			Offset:    uint64(slab.Offset),
+			Length:    uint64(slab.Length),
+			Partial:   false,
+		}
+		for _, shard := range slab.Shards {
+			s.Shards = append(s.Shards, modules.Shard{
+				Host: shard.Host,
+				Root: shard.Root,
+			})
+		}
+		fm.Slabs = append(fm.Slabs, s)
+	}
+	if len(ps) > 0 {
+		key, _ := convertEncryptionKey(object.GenerateEncryptionKey())
+		fm.Slabs = append(fm.Slabs, modules.Slab{
+			Key:     key,
+			Offset:  0,
+			Length:  uint64(len(ps)),
+			Partial: true,
+		})
+	}
+
+	return
+}
+
+// managedUploadPackedSlab uploads a packed slab to the network.
+func (c *Contractor) managedUploadPackedSlab(rpk types.PublicKey, data []byte, key object.EncryptionKey, offset uint64) (modules.Slab, error) {
+	// Create a context and set up its cancelling.
+	ctx, cancel := context.WithTimeout(context.Background(), packedSlabUploadTimeout)
+	defer cancel()
+
+	// Fetch the renter.
+	c.mu.RLock()
+	bh := c.blockHeight
+	renter, exists := c.renters[rpk]
+	c.mu.RUnlock()
+	if !exists {
+		return modules.Slab{}, ErrRenterNotFound
+	}
+
+	// Upload packed slab.
+	contracts := c.staticContracts.ByRenter(rpk)
+	shards := encryptPartialSlab(data, key, uint8(renter.Allowance.MinShards), uint8(renter.Allowance.TotalShards))
+	sectors, err := c.um.uploadShards(ctx, rpk, shards, contracts, bh)
+	if err != nil {
+		return modules.Slab{}, err
+	}
+
+	id, err := convertEncryptionKey(key)
+	if err != nil {
+		return modules.Slab{}, err
+	}
+
+	slab := modules.Slab{
+		Key:       id,
+		MinShards: uint8(renter.Allowance.MinShards),
+		Offset:    offset,
+		Length:    uint64(len(data)),
+		Partial:   false,
+	}
+	for _, s := range sectors {
+		slab.Shards = append(slab.Shards, modules.Shard{
+			Host: s.Host,
+			Root: s.Root,
+		})
+	}
+
+	return slab, nil
+}
+
+// encryptPartialSlab encrypts data and splits them into shards.
+func encryptPartialSlab(data []byte, key object.EncryptionKey, minShards, totalShards uint8) [][]byte {
+	slab := object.Slab{
+		Key:       key,
+		MinShards: minShards,
+		Shards:    make([]object.Sector, totalShards),
+	}
+	encodedShards := make([][]byte, totalShards)
+	slab.Encode(data, encodedShards)
+	slab.Encrypt(encodedShards)
+	return encodedShards
+}
+
 // stats returns the upload manager's stats.
 func (mgr *uploadManager) stats() uploadManagerStats {
 	// Recompute stats.
@@ -269,13 +390,13 @@ func (mgr *uploadManager) stop() {
 }
 
 // upload uploads data to the hosts.
-func (mgr *uploadManager) upload(ctx context.Context, r io.Reader, rpk types.PublicKey, contracts []modules.RenterContract, bh uint64) (_ object.Object, err error) {
+func (mgr *uploadManager) upload(ctx context.Context, r io.Reader, rpk types.PublicKey, contracts []modules.RenterContract, bh uint64) (_ object.Object, partialSlab []byte, eTag string, err error) {
 	// Get the renter.
 	mgr.contractor.mu.RLock()
 	renter, exists := mgr.contractor.renters[rpk]
 	mgr.contractor.mu.RUnlock()
 	if !exists {
-		return object.Object{}, ErrRenterNotFound
+		return object.Object{}, nil, "", ErrRenterNotFound
 	}
 
 	// Cancel all in-flight requests when the upload is done.
@@ -285,16 +406,19 @@ func (mgr *uploadManager) upload(ctx context.Context, r io.Reader, rpk types.Pub
 	// Create the object.
 	o := object.NewObject(object.GenerateEncryptionKey())
 
+	// Create the hash reader.
+	hr := newHashReader(r)
+
 	// Create the cipher reader.
-	cr, err := o.Encrypt(r, 0)
+	cr, err := o.Encrypt(hr, 0)
 	if err != nil {
-		return object.Object{}, err
+		return object.Object{}, nil, "", err
 	}
 
 	// Create the upload.
 	u, err := mgr.newUpload(rpk, int(renter.Allowance.TotalShards), contracts, bh)
 	if err != nil {
-		return object.Object{}, err
+		return object.Object{}, nil, "", err
 	}
 
 	// Create the next slab channel.
@@ -328,9 +452,9 @@ loop:
 	for {
 		select {
 		case <-mgr.stopChan:
-			return object.Object{}, errors.New("manager was stopped")
+			return object.Object{}, nil, "", errors.New("manager was stopped")
 		case <-ctx.Done():
-			return object.Object{}, errors.New("upload timed out")
+			return object.Object{}, nil, "", errors.New("upload timed out")
 		case nextSlabChan <- struct{}{}:
 			// Read next slab's data.
 			data := make([]byte, size)
@@ -340,20 +464,36 @@ loop:
 					break loop
 				}
 				numSlabs = slabIndex
+				if partialSlab != nil {
+					numSlabs-- // Don't wait on partial slab.
+				}
+				if len(responses) == numSlabs {
+					break loop
+				}
 				continue
 			} else if err != nil && err != io.ErrUnexpectedEOF {
-				return object.Object{}, err
+				return object.Object{}, nil, "", err
 			}
-			atomic.AddUint64(&ongoingUploads, 1)
-			go func(min, total uint64, data []byte, length, slabIndex int) {
-				u.uploadSlab(ctx, min, total, data, length, slabIndex, respChan, nextSlabChan)
-				atomic.AddUint64(&ongoingUploads, ^uint64(0))
-			}(renter.Allowance.MinShards, renter.Allowance.TotalShards, data, length, slabIndex)
+			if renter.Allowance.UploadPacking && errors.Is(err, io.ErrUnexpectedEOF) {
+				// If upload packing is enabled, we return the partial slab without
+				// uploading.
+				partialSlab = data[:length]
+				<-nextSlabChan // Trigger next iteration.
+			} else {
+				// Otherwise we upload it.
+				atomic.AddUint64(&ongoingUploads, 1)
+				go func(min, total uint64, data []byte, length, slabIndex int) {
+					u.uploadSlab(ctx, min, total, data, length, slabIndex, respChan, nextSlabChan)
+					atomic.AddUint64(&ongoingUploads, ^uint64(0))
+				}(renter.Allowance.MinShards, renter.Allowance.TotalShards, data, length, slabIndex)
+			}
 			slabIndex++
 		case res := <-respChan:
 			if res.err != nil {
-				return object.Object{}, res.err
+				return object.Object{}, nil, "", res.err
 			}
+
+			// Collect the responses and potentially break out of the loop.
 			responses = append(responses, res)
 			if len(responses) == numSlabs {
 				break loop
@@ -370,7 +510,25 @@ loop:
 	for _, resp := range responses {
 		o.Slabs = append(o.Slabs, resp.slab)
 	}
-	return o, nil
+
+	return o, partialSlab, hr.Hash(), nil
+}
+
+// uploadShards uploads the shards of a packed slab.
+func (mgr *uploadManager) uploadShards(ctx context.Context, rpk types.PublicKey, shards [][]byte, contracts []modules.RenterContract, bh uint64) ([]object.Sector, error) {
+	// Initiate the upload.
+	upload, err := mgr.newUpload(rpk, len(shards), contracts, bh)
+	if err != nil {
+		return nil, err
+	}
+
+	// Upload the shards.
+	sectors, err := upload.uploadShards(ctx, shards, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return sectors, nil
 }
 
 // launch starts an upload.
@@ -397,7 +555,7 @@ func (mgr *uploadManager) newUpload(rpk types.PublicKey, totalShards int, contra
 
 	// Check if we have enough contracts.
 	if len(contracts) < totalShards {
-		return nil, errNotEnoughContracts
+		return nil, fmt.Errorf("%v < %v: %w", len(contracts), totalShards, errNotEnoughContracts)
 	}
 
 	// Create allowed map.
@@ -757,7 +915,7 @@ func (u *upload) uploadShards(ctx context.Context, shards [][]byte, nextSlabChan
 		// Receive the response.
 		done, next = slab.receive(resp)
 
-		// try and trigger next slab
+		// Try and trigger next slab.
 		if next && !triggered {
 			select {
 			case <-nextSlabChan:
@@ -836,36 +994,36 @@ outer:
 			}
 
 			// Pop the next upload.
-			upload := u.pop()
-			if upload == nil {
+			req := u.pop()
+			if req == nil {
 				continue outer
 			}
 
 			// Skip if upload is done.
-			if upload.done() {
+			if req.done() {
 				continue
 			}
 
 			// Execute it.
 			start := time.Now()
-			root, err := u.execute(upload)
+			root, err := u.execute(req)
 
 			// The uploader's contract got renewed, requeue the request, try and refresh the contract.
 			if errors.Is(err, errMaxRevisionReached) {
-				u.requeue(upload)
+				u.requeue(req)
 				u.mgr.renewUploader(u)
 				continue outer
 			}
 
 			// Send the response.
 			if err != nil {
-				upload.fail(err)
+				req.fail(err)
 			} else {
-				upload.succeed(root)
+				req.succeed(root)
 			}
 
 			// Track the error, ignore gracefully closed streams and canceled overdrives.
-			canceledOverdrive := upload.done() && upload.overdrive && err != nil
+			canceledOverdrive := req.done() && req.overdrive && err != nil
 			if !canceledOverdrive && !errors.Is(err, mux.ErrClosedStream) && !errors.Is(err, net.ErrClosed) {
 				u.trackSectorUpload(err, time.Since(start))
 			}
@@ -997,31 +1155,31 @@ func (u *uploader) pop() *sectorUploadReq {
 }
 
 // succeed reports a successful upload.
-func (upload *sectorUploadReq) succeed(root types.Hash256) {
+func (req *sectorUploadReq) succeed(root types.Hash256) {
 	select {
-	case <-upload.ctx.Done():
-	case upload.responseChan <- sectorUploadResp{
-		req:  upload,
+	case <-req.ctx.Done():
+	case req.responseChan <- sectorUploadResp{
+		req:  req,
 		root: root,
 	}:
 	}
 }
 
 // fail reports a failed upload.
-func (upload *sectorUploadReq) fail(err error) {
+func (req *sectorUploadReq) fail(err error) {
 	select {
-	case <-upload.ctx.Done():
-	case upload.responseChan <- sectorUploadResp{
-		req: upload,
+	case <-req.ctx.Done():
+	case req.responseChan <- sectorUploadResp{
+		req: req,
 		err: err,
 	}:
 	}
 }
 
 // done returns whether the upload request is completed.
-func (upload *sectorUploadReq) done() bool {
+func (req *sectorUploadReq) done() bool {
 	select {
-	case <-upload.ctx.Done():
+	case <-req.ctx.Done():
 		return true
 	default:
 		return false
@@ -1046,7 +1204,7 @@ func (s *slabUpload) finish() ([]object.Sector, error) {
 
 	remaining := len(s.remaining)
 	if remaining > 0 {
-		return nil, fmt.Errorf("failed to upload slab: remaining=%d, inflight=%d, launched=%d uploaders=%d", remaining, s.numInflight, s.numLaunched, s.mgr.numUploaders())
+		return nil, fmt.Errorf("failed to upload slab: remaining=%d, inflight=%d, launched=%d uploaders=%d errors=%d %w", remaining, s.numInflight, s.numLaunched, s.mgr.numUploaders(), len(s.errs), s.errs)
 	}
 	return s.sectors, nil
 }
@@ -1209,6 +1367,7 @@ func (s *slabUpload) receive(resp sectorUploadResp) (finished bool, next bool) {
 	// Failed reqs can't complete the upload.
 	s.numInflight--
 	if resp.err != nil {
+		s.errs = append(s.errs, &hostError{resp.req.hostKey, resp.err})
 		return false, false
 	}
 
@@ -1308,6 +1467,31 @@ func (a *dataPoints) tryDecay() {
 
 	// Update the last decay time.
 	a.lastDecay = time.Now()
+}
+
+type hashReader struct {
+	r io.Reader
+	h *types.Hasher
+}
+
+func newHashReader(r io.Reader) *hashReader {
+	return &hashReader{
+		r: r,
+		h: types.NewHasher(),
+	}
+}
+
+func (e *hashReader) Read(p []byte) (int, error) {
+	n, err := e.r.Read(p)
+	if _, wErr := e.h.E.Write(p[:n]); wErr != nil {
+		return 0, wErr
+	}
+	return n, err
+}
+
+func (e *hashReader) Hash() string {
+	sum := e.h.Sum()
+	return hex.EncodeToString(sum[:])
 }
 
 // managedUploadSector uploads a single sector to the host.

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"text/template"
 	"time"
@@ -132,54 +134,15 @@ func (p *Portal) deleteAccount(email string) error {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
+	var rpk types.PublicKey
+	copy(rpk[:], pk)
+
+	// Delete buffered files.
+	err = p.manager.DeleteBufferedFiles(rpk)
+	errs = append(errs, err)
 
 	// Delete file metadata.
-	var objects, slabs []types.Hash256
-	rows, err := p.db.Query("SELECT enc_key FROM ctr_metadata WHERE renter_pk = ?", pk)
-	if err != nil {
-		return err
-	}
-
-	for rows.Next() {
-		id := make([]byte, 32)
-		if err := rows.Scan(&id); err != nil {
-			p.log.Println("ERROR: unable to retrieve metadata key:", err)
-			continue
-		}
-		var key types.Hash256
-		copy(key[:], id)
-		objects = append(objects, key)
-
-		slabRows, err := p.db.Query("SELECT enc_key FROM ctr_slabs WHERE object_id = ?", id)
-		if err != nil {
-			p.log.Println("ERROR: unable to retrieve slabs:", err)
-			continue
-		}
-
-		for slabRows.Next() {
-			slabID := make([]byte, 32)
-			if err := slabRows.Scan(&slabID); err != nil {
-				p.log.Println("ERROR: unable to retrieve slab:", err)
-				continue
-			}
-			var slab types.Hash256
-			copy(slab[:], slabID)
-			slabs = append(slabs, slab)
-		}
-		slabRows.Close()
-	}
-	rows.Close()
-
-	for _, slab := range slabs {
-		_, err = p.db.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab[:])
-		errs = append(errs, err)
-	}
-
-	_, err = p.db.Exec("DELETE FROM ctr_buffers WHERE renter_pk = ?", pk)
-	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM ctr_slabs WHERE renter_pk = ?", pk)
-	errs = append(errs, err)
-	_, err = p.db.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk)
+	err = p.manager.DeleteMetadata(rpk)
 	errs = append(errs, err)
 
 	// Delete contracts.
@@ -515,9 +478,9 @@ func (p *Portal) createNewRenter(email string, pk types.PublicKey) error {
 		(email, public_key, current_period, allowance,
 		private_key, account_key,
 		auto_renew_contracts, backup_file_metadata,
-		auto_repair_files)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, email, pk[:], 0, buf.Bytes(), []byte{}, []byte{}, false, false, false)
+		auto_repair_files, proxy_uploads)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, email, pk[:], 0, buf.Bytes(), []byte{}, []byte{}, false, false, false, false)
 	if err != nil {
 		return err
 	}
@@ -705,6 +668,42 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 			Slabs:       count,
 			Uploaded:    timestamp,
 			PartialData: dataLen,
+			Buffered:    false,
+		})
+	}
+
+	return sf, nil
+}
+
+// getBufferedFiles retrieves the information about the temporary files.
+func (p *Portal) getBufferedFiles(pk types.PublicKey) ([]savedFile, error) {
+	rows, err := p.db.Query(`
+		SELECT filename, bucket, filepath
+		FROM ctr_uploads
+		WHERE renter_pk = ?
+		ORDER BY bucket ASC, filename DESC
+	`, pk[:])
+	if err != nil {
+		return nil, modules.AddContext(err, "couldn't query buffered files")
+	}
+	defer rows.Close()
+
+	var sf []savedFile
+	for rows.Next() {
+		var name, bucket, path string
+		if err = rows.Scan(&name, &bucket, &path); err != nil {
+			return nil, modules.AddContext(err, "couldn't retrieve record")
+		}
+		fs, err := os.Stat(filepath.Join(p.manager.BufferedFilesDir(), name))
+		if err != nil {
+			return nil, modules.AddContext(err, "couldn't get file size")
+		}
+		sf = append(sf, savedFile{
+			Bucket:   bucket,
+			Path:     path,
+			Size:     uint64(fs.Size()),
+			Uploaded: uint64(fs.ModTime().Unix()),
+			Buffered: true,
 		})
 	}
 
@@ -717,14 +716,24 @@ func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
 	if err != nil {
 		return modules.AddContext(err, "couldn't retrieve files")
 	}
+	bf, err := p.getBufferedFiles(pk)
+	if err != nil {
+		return modules.AddContext(err, "couldn't retrieve buffered files")
+	}
 
 	for _, index := range indices {
-		if index >= len(sf) {
-			p.log.Printf("ERROR: index %v out of range (%v)\n", index, len(sf))
+		if index >= len(sf)+len(bf) {
+			p.log.Printf("ERROR: index %v out of range (%v)\n", index, len(sf)+len(bf))
 			continue
 		}
-		if err := p.manager.DeleteObject(pk, sf[index].Bucket, sf[index].Path); err != nil {
-			return modules.AddContext(err, "couldn't delete file")
+		if index < len(sf) {
+			if err := p.manager.DeleteObject(pk, sf[index].Bucket, sf[index].Path); err != nil {
+				return modules.AddContext(err, "couldn't delete file")
+			}
+		} else {
+			if err := p.manager.DeleteBufferedFile(pk, bf[index-len(sf)].Bucket, bf[index-len(sf)].Path); err != nil {
+				return modules.AddContext(err, "couldn't delete buffered file")
+			}
 		}
 	}
 

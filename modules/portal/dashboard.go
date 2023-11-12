@@ -98,11 +98,19 @@ type (
 		Slabs       int    `json:"slabs"`
 		Uploaded    uint64 `json:"uploaded"`
 		PartialData uint64 `json:"partialdata"`
+		Buffered    bool   `json:"buffered"`
 	}
 
 	// fileIndices contains the indices of files to delete.
 	fileIndices struct {
 		Indices []int `json:"files"`
+	}
+
+	// satelliteSettings contains the public settings of the satellite.
+	satelliteSettings struct {
+		SatPort int    `json:"satport"`
+		MuxPort int    `json:"muxport"`
+		Key     string `json:"key"`
 	}
 )
 
@@ -411,9 +419,31 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 // keyHandlerGET handles the GET /dashboard/key requests.
 func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	key := api.portal.provider.PublicKey()
-	writeJSON(w, struct {
-		Key string `json:"key"`
-	}{Key: hex.EncodeToString(key[:])})
+	satPort, err := strconv.ParseInt(strings.TrimPrefix(api.portal.satAddr, ":"), 10, 32)
+	if err != nil {
+		api.portal.log.Println("ERROR: couldn't fetch satellite port:", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+	muxPort, err := strconv.ParseInt(strings.TrimPrefix(api.portal.muxAddr, ":"), 10, 32)
+	if err != nil {
+		api.portal.log.Println("ERROR: couldn't fetch mux port:", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, satelliteSettings{
+		SatPort: int(satPort),
+		MuxPort: int(muxPort),
+		Key:     hex.EncodeToString(key[:]),
+	})
 }
 
 // contractsHandlerGET handles the GET /dashboard/contracts requests.
@@ -689,7 +719,19 @@ func (api *portalAPI) filesHandlerGET(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 
-	writeJSON(w, sf)
+	// Retrieve the file information.
+	bf, err := api.portal.getBufferedFiles(renter.PublicKey)
+	if err != nil {
+		api.portal.log.Printf("ERROR: couldn't retrieve buffered files: %v\n", err)
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, append(sf, bf...))
 }
 
 // filesHandlerPOST handles the POST /dashboard/files requests.

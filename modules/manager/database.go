@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"text/template"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/rs/xid"
 
 	"go.sia.tech/core/types"
 )
@@ -533,5 +536,106 @@ func (m *Manager) loadMaintenance() error {
 	m.mu.Lock()
 	m.maintenance = maintenance
 	m.mu.Unlock()
+	return nil
+}
+
+// BytesUploaded returns the size of the file already uploaded.
+func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path string) (string, uint64, error) {
+	var name string
+	err := m.db.QueryRow(`
+		SELECT filename
+		FROM ctr_uploads
+		WHERE renter_pk = ?
+		AND bucket = ?
+		AND filepath = ?
+	`, pk[:], bucket, path).Scan(&name)
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		name = xid.New().String()
+		return filepath.Join(filepath.Join(m.dir, bufferedFilesDir), name), 0, nil
+	}
+	if err != nil {
+		return "", 0, err
+	}
+
+	p := filepath.Join(filepath.Join(m.dir, bufferedFilesDir), name)
+	fi, err := os.Stat(p)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return p, uint64(fi.Size()), nil
+}
+
+// RegisterUpload associates the uploaded file with the object.
+func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, filename string, complete bool) error {
+	_, err := m.db.Exec(`
+		REPLACE INTO ctr_uploads
+			(filename, bucket, filepath, renter_pk, ready)
+		VALUES (?, ?, ?, ?, ?)
+	`, filepath.Base(filename), bucket, path, pk[:], complete)
+	return err
+}
+
+// DeleteBufferedFiles deletes the files waiting to be uploaded.
+func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
+	// Make a list of file names.
+	rows, err := m.db.Query("SELECT filename FROM ctr_uploads WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		m.log.Println("ERROR: unable to query files:", err)
+		return modules.AddContext(err, "unable to query files")
+	}
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			m.log.Println("ERROR: unable to retrieve filename:", err)
+			return modules.AddContext(err, "unable to retrieve filename")
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+
+	// Delete the files one by one.
+	for _, name := range names {
+		if err := os.Remove(filepath.Join(m.BufferedFilesDir(), name)); err != nil {
+			m.log.Println("ERROR: unable to delete file:", err)
+			return modules.AddContext(err, "unable to delete file")
+		}
+		_, err = m.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
+		if err != nil {
+			m.log.Println("ERROR: unable to delete file record:", err)
+			return modules.AddContext(err, "unable to delete file record")
+		}
+	}
+
+	return nil
+}
+
+// DeleteBufferedFile deletes the specified file and the associated
+// database record.
+func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path string) error {
+	var name string
+	err := m.db.QueryRow(`
+		SELECT filename
+		FROM ctr_uploads
+		WHERE bucket = ?
+		AND filepath = ?
+		AND renter_pk = ?
+	`, bucket, path, pk[:]).Scan(&name)
+	if err != nil {
+		return modules.AddContext(err, "couldn't query buffered files")
+	}
+
+	if err := os.Remove(filepath.Join(m.BufferedFilesDir(), name)); err != nil {
+		return modules.AddContext(err, "unable to delete file")
+	}
+
+	_, err = m.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
+	if err != nil {
+		return modules.AddContext(err, "couldn't delete record")
+	}
+
 	return nil
 }

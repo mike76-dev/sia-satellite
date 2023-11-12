@@ -161,7 +161,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 
 	// Load provider.
 	fmt.Println("Loading provider...")
-	p, errChanP := provider.New(db, g, m, config.SatelliteAddr, d)
+	p, errChanP := provider.New(db, g, m, config.SatelliteAddr, config.MuxAddr, d)
 	if err := modules.PeekErr(errChanP); err != nil {
 		errChan <- modules.AddContext(err, "unable to create provider")
 		return nil, errChan
@@ -169,7 +169,7 @@ func New(config *persist.SatdConfig, dbPassword string, loadStartTime time.Time)
 
 	// Load portal.
 	fmt.Println("Loading portal...")
-	pt, err := portal.New(config, db, ms, cs, w, m, p, d, config.Name)
+	pt, err := portal.New(config, db, ms, cs, w, m, p, d)
 	if err != nil {
 		errChan <- modules.AddContext(err, "unable to create portal")
 		return nil, errChan

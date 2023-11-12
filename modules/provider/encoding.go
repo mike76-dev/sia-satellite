@@ -118,6 +118,8 @@ type formRequest struct {
 	MinMaxCollateral     types.Currency
 	BlockHeightLeeway    uint64
 
+	UploadPacking bool
+
 	Signature types.Signature
 }
 
@@ -142,6 +144,7 @@ func (fr *formRequest) DecodeFrom(d *types.Decoder) {
 	fr.MaxSectorAccessPrice.DecodeFrom(d)
 	fr.MinMaxCollateral.DecodeFrom(d)
 	fr.BlockHeightLeeway = d.ReadUint64()
+	fr.UploadPacking = d.ReadBool()
 	fr.Signature.DecodeFrom(d)
 }
 
@@ -165,6 +168,7 @@ func (fr *formRequest) EncodeTo(e *types.Encoder) {
 	fr.MaxSectorAccessPrice.EncodeTo(e)
 	fr.MinMaxCollateral.EncodeTo(e)
 	e.WriteUint64(fr.BlockHeightLeeway)
+	e.WriteBool(fr.UploadPacking)
 }
 
 // renewRequest is used when the renter requests contract renewals.
@@ -190,6 +194,8 @@ type renewRequest struct {
 	MaxSectorAccessPrice types.Currency
 	MinMaxCollateral     types.Currency
 	BlockHeightLeeway    uint64
+
+	UploadPacking bool
 
 	Signature types.Signature
 }
@@ -219,6 +225,7 @@ func (rr *renewRequest) DecodeFrom(d *types.Decoder) {
 	rr.MaxSectorAccessPrice.DecodeFrom(d)
 	rr.MinMaxCollateral.DecodeFrom(d)
 	rr.BlockHeightLeeway = d.ReadUint64()
+	rr.UploadPacking = d.ReadBool()
 	rr.Signature.DecodeFrom(d)
 }
 
@@ -245,6 +252,7 @@ func (rr *renewRequest) EncodeTo(e *types.Encoder) {
 	rr.MaxSectorAccessPrice.EncodeTo(e)
 	rr.MinMaxCollateral.EncodeTo(e)
 	e.WriteUint64(rr.BlockHeightLeeway)
+	e.WriteBool(rr.UploadPacking)
 }
 
 // updateRequest is used when the renter submits a new revision.
@@ -391,6 +399,7 @@ type getSettingsResponse struct {
 	AutoRenewContracts bool
 	BackupFileMetadata bool
 	AutoRepairFiles    bool
+	ProxyUploads       bool
 }
 
 // DecodeFrom implements requestBody.
@@ -403,6 +412,7 @@ func (gsr *getSettingsResponse) EncodeTo(e *types.Encoder) {
 	e.WriteBool(gsr.AutoRenewContracts)
 	e.WriteBool(gsr.BackupFileMetadata)
 	e.WriteBool(gsr.AutoRepairFiles)
+	e.WriteBool(gsr.ProxyUploads)
 }
 
 // updateSettingsRequest is used to update the renter's opt-in
@@ -412,6 +422,7 @@ type updateSettingsRequest struct {
 	AutoRenewContracts bool
 	BackupFileMetadata bool
 	AutoRepairFiles    bool
+	ProxyUploads       bool
 	PrivateKey         types.PrivateKey
 	AccountKey         types.PrivateKey
 
@@ -435,6 +446,8 @@ type updateSettingsRequest struct {
 	MinMaxCollateral     types.Currency
 	BlockHeightLeeway    uint64
 
+	UploadPacking bool
+
 	Signature types.Signature
 }
 
@@ -444,6 +457,7 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 	usr.AutoRenewContracts = d.ReadBool()
 	usr.BackupFileMetadata = d.ReadBool()
 	usr.AutoRepairFiles = d.ReadBool()
+	usr.ProxyUploads = d.ReadBool()
 	if usr.AutoRenewContracts || usr.AutoRepairFiles {
 		sk := d.ReadBytes()
 		usr.PrivateKey = types.PrivateKey(sk)
@@ -469,6 +483,7 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 		usr.MaxSectorAccessPrice.DecodeFrom(d)
 		usr.MinMaxCollateral.DecodeFrom(d)
 		usr.BlockHeightLeeway = d.ReadUint64()
+		usr.UploadPacking = d.ReadBool()
 	}
 	usr.Signature.DecodeFrom(d)
 }
@@ -479,6 +494,7 @@ func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBool(usr.AutoRenewContracts)
 	e.WriteBool(usr.BackupFileMetadata)
 	e.WriteBool(usr.AutoRepairFiles)
+	e.WriteBool(usr.ProxyUploads)
 	if usr.AutoRenewContracts || usr.AutoRepairFiles {
 		e.WriteBytes(usr.PrivateKey[:])
 	}
@@ -502,6 +518,7 @@ func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 		usr.MaxSectorAccessPrice.EncodeTo(e)
 		usr.MinMaxCollateral.EncodeTo(e)
 		e.WriteUint64(usr.BlockHeightLeeway)
+		e.WriteBool(usr.UploadPacking)
 	}
 }
 
@@ -660,4 +677,59 @@ func (sr *shareRequest) EncodeTo(e *types.Encoder) {
 	for _, contract := range sr.Contracts {
 		contract.EncodeTo(e)
 	}
+}
+
+// uploadRequest is used when the renter wants to upload a file.
+type uploadRequest struct {
+	PubKey    types.PublicKey
+	Bucket    string
+	Path      string
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (ur *uploadRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(ur.PubKey[:])
+	ur.Bucket = d.ReadString()
+	ur.Path = d.ReadString()
+	ur.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (ur *uploadRequest) EncodeTo(e *types.Encoder) {
+	e.Write(ur.PubKey[:])
+	e.WriteString(ur.Bucket)
+	e.WriteString(ur.Path)
+}
+
+// uploadResponse is used to respond with the filesize already uploaded.
+type uploadResponse struct {
+	Filesize uint64
+}
+
+// DecodeFrom implements requestBody.
+func (ur *uploadResponse) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
+// EncodeTo implements requestBody.
+func (ur *uploadResponse) EncodeTo(e *types.Encoder) {
+	e.WriteUint64(ur.Filesize)
+}
+
+// uploadData contains a chunk of data and an indicator if there is more.
+type uploadData struct {
+	Data []byte
+	More bool
+}
+
+// DecodeFrom implements requestBody.
+func (ud *uploadData) DecodeFrom(d *types.Decoder) {
+	ud.Data = d.ReadBytes()
+	ud.More = d.ReadBool()
+}
+
+// EncodeTo implements requestBody.
+func (ud *uploadData) EncodeTo(e *types.Encoder) {
+	// Nothing to do here.
 }

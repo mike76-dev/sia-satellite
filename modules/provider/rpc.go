@@ -3,11 +3,13 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
+	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
 )
 
@@ -144,6 +146,8 @@ func (p *Provider) managedFormContracts(s *modules.RPCSession) error {
 		MaxUploadBandwidthPrice:   fr.MaxUploadPrice,
 		MinMaxCollateral:          fr.MinMaxCollateral,
 		BlockHeightLeeway:         fr.BlockHeightLeeway,
+
+		UploadPacking: fr.UploadPacking,
 	}
 
 	// Form the contracts.
@@ -246,6 +250,8 @@ func (p *Provider) managedRenewContracts(s *modules.RPCSession) error {
 		MaxUploadBandwidthPrice:   rr.MaxUploadPrice,
 		MinMaxCollateral:          rr.MinMaxCollateral,
 		BlockHeightLeeway:         rr.BlockHeightLeeway,
+
+		UploadPacking: rr.UploadPacking,
 	}
 
 	// Renew the contracts.
@@ -503,6 +509,7 @@ func (p *Provider) managedGetSettings(s *modules.RPCSession) error {
 		AutoRenewContracts: renter.Settings.AutoRenewContracts,
 		BackupFileMetadata: renter.Settings.BackupFileMetadata,
 		AutoRepairFiles:    renter.Settings.AutoRepairFiles,
+		ProxyUploads:       renter.Settings.ProxyUploads,
 	}
 
 	return s.WriteResponse(&resp)
@@ -585,16 +592,28 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		return err
 	}
 
+	if usr.ProxyUploads && !usr.BackupFileMetadata {
+		err := errors.New("proxying uploads only works with automatic metadata backups enabled")
+		s.WriteError(err)
+		return err
+	}
+
 	// Update the settings.
 	err = p.m.UpdateRenterSettings(usr.PubKey, modules.RenterSettings{
 		AutoRenewContracts: usr.AutoRenewContracts,
 		BackupFileMetadata: usr.BackupFileMetadata,
 		AutoRepairFiles:    usr.AutoRepairFiles,
+		ProxyUploads:       usr.ProxyUploads,
 	}, usr.PrivateKey, usr.AccountKey)
 	if err != nil {
 		err = fmt.Errorf("couldn't update settings: %v", err)
 		s.WriteError(err)
 		return err
+	}
+
+	// Delete buffered files if opted out.
+	if !usr.ProxyUploads {
+		p.m.DeleteBufferedFiles(usr.PubKey)
 	}
 
 	// Delete file metadata if opted out.
@@ -628,6 +647,8 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		MaxUploadBandwidthPrice:   usr.MaxUploadPrice,
 		MinMaxCollateral:          usr.MinMaxCollateral,
 		BlockHeightLeeway:         usr.BlockHeightLeeway,
+
+		UploadPacking: usr.UploadPacking,
 	}
 	if a.Funds.IsZero() {
 		a.Funds = types.HastingsPerSiacoin.Mul64(1000) // 1 KS
@@ -853,4 +874,118 @@ func (p *Provider) managedAcceptContracts(s *modules.RPCSession) error {
 	p.m.AcceptContracts(sr.PubKey, sr.Contracts)
 
 	return s.WriteResponse(nil)
+}
+
+// managedReceiveFile accepts a file from the renter.
+func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
+	// Read the request.
+	var ur uploadRequest
+	err := s.ReadResponse(&ur, 1024)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Verify the signature.
+	h := types.NewHasher()
+	ur.EncodeTo(h.E)
+	if ok := ur.PubKey.VerifyHash(h.Sum(), ur.Signature); !ok {
+		err = errors.New("could not verify renter signature")
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Check if we know this renter.
+	_, err = p.m.GetRenter(ur.PubKey)
+	if err != nil {
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Send the length of the file already uploaded.
+	path, length, err := p.m.BytesUploaded(ur.PubKey, ur.Bucket, ur.Path)
+	if err != nil {
+		err = fmt.Errorf("could not get uploaded length: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+	resp := uploadResponse{
+		Filesize: length,
+	}
+	err = s.WriteResponse(&resp)
+	if err != nil {
+		err = fmt.Errorf("could not write response: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Start receiving data in chunks.
+	var ud uploadData
+	maxLen := uint64(1048576) + 8 + 1
+	err = s.ReadResponse(&ud, maxLen)
+	if err != nil {
+		err = fmt.Errorf("could not read data: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Open the file and write data to it.
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0660)
+	if err != nil {
+		err = fmt.Errorf("could not open file: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+	defer func() {
+		if err := file.Sync(); err != nil {
+			p.log.Println("ERROR: couldn't sync file:", err)
+		} else if err := file.Close(); err != nil {
+			p.log.Println("ERROR: couldn't close file:", err)
+		} else if err := p.m.RegisterUpload(ur.PubKey, ur.Bucket, ur.Path, path, !ud.More); err != nil {
+			p.log.Println("ERROR: couldn't register file:", err)
+		}
+	}()
+	numBytes, err := file.Write(ud.Data)
+	if err != nil {
+		err = fmt.Errorf("could not write data: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Return the number of bytes written.
+	resp.Filesize = uint64(numBytes)
+	if err := s.WriteResponse(&resp); err != nil {
+		err = fmt.Errorf("could not write response: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Continue as long as there is more data available.
+	for ud.More {
+		s.SetDeadline(time.Now().Add(30 * time.Second))
+		err = s.ReadResponse(&ud, maxLen)
+		if err != nil {
+			err = fmt.Errorf("could not read data: %v", err)
+			s.WriteResponseErr(err)
+			return err
+		}
+
+		numBytes, err = file.Write(ud.Data)
+		if err != nil {
+			err = fmt.Errorf("could not write data: %v", err)
+			s.WriteResponseErr(err)
+			return err
+		}
+
+		resp.Filesize = uint64(numBytes)
+		if err := s.WriteResponse(&resp); err != nil {
+			err = fmt.Errorf("could not write response: %v", err)
+			s.WriteResponseErr(err)
+			return err
+		}
+	}
+
+	return nil
 }

@@ -298,6 +298,12 @@ type Manager interface {
 	// BlockHeight returns the current block height.
 	BlockHeight() uint64
 
+	// BufferedFilesDir returns the path to the buffered files directory.
+	BufferedFilesDir() string
+
+	// BytesUploaded returns the size of the file already uploaded.
+	BytesUploaded(types.PublicKey, string, string) (string, uint64, error)
+
 	// Close safely shuts down the manager.
 	Close() error
 
@@ -310,8 +316,15 @@ type Manager interface {
 	// CreateNewRenter inserts a new renter into the map.
 	CreateNewRenter(string, types.PublicKey)
 
+	// DeleteBufferedFile deletes the specified file and the associated
+	// database record.
+	DeleteBufferedFile(pk types.PublicKey, bucket, path string) error
+
+	// DeleteBufferedFiles deletes the files waiting to be uploaded.
+	DeleteBufferedFiles(types.PublicKey) error
+
 	// DeleteMetadata deletes the renter's saved file metadata.
-	DeleteMetadata(types.PublicKey)
+	DeleteMetadata(types.PublicKey) error
 
 	// DeleteObject deletes the saved file metadata object.
 	DeleteObject(types.PublicKey, string, string) error
@@ -390,6 +403,9 @@ type Manager interface {
 
 	// RefreshedContract returns a bool indicating if the contract was refreshed.
 	RefreshedContract(types.FileContractID) bool
+
+	// RegisterUpload associates the uploaded file with the object.
+	RegisterUpload(types.PublicKey, string, string, string, bool) error
 
 	// RenewContract renews a contract.
 	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
@@ -602,6 +618,9 @@ type Allowance struct {
 	MaxUploadBandwidthPrice   types.Currency
 	MinMaxCollateral          types.Currency
 	BlockHeightLeeway         uint64
+
+	// UploadPacking indicates whether the upload packing is turned on.
+	UploadPacking bool
 }
 
 // DefaultAllowance is the set of default allowance settings that will be
@@ -645,6 +664,7 @@ func (a *Allowance) EncodeTo(e *types.Encoder) {
 	a.MaxUploadBandwidthPrice.EncodeTo(e)
 	a.MinMaxCollateral.EncodeTo(e)
 	e.WriteUint64(a.BlockHeightLeeway)
+	e.WriteBool(a.UploadPacking)
 }
 
 // DecodeFrom implements types.DecoderFrom.
@@ -666,6 +686,7 @@ func (a *Allowance) DecodeFrom(d *types.Decoder) {
 	a.MaxUploadBandwidthPrice.DecodeFrom(d)
 	a.MinMaxCollateral.DecodeFrom(d)
 	a.BlockHeightLeeway = d.ReadUint64()
+	a.UploadPacking = d.ReadBool()
 }
 
 // ContractWatchStatus provides information about the status of a contract in
@@ -739,6 +760,7 @@ type RenterSettings struct {
 	AutoRenewContracts bool `json:"autorenew"`
 	BackupFileMetadata bool `json:"backupmetadata"`
 	AutoRepairFiles    bool `json:"autorepair"`
+	ProxyUploads       bool `json:"proxyuploads"`
 }
 
 // Renter holds the data related to the specific renter.

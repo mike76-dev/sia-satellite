@@ -366,6 +366,9 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Ma
 	// Spin up a goroutine to periodically save the Contractor.
 	go c.threadedSaveLoop()
 
+	// Spin up a goroutine to periodically upload buffered files.
+	go c.threadedUploadBufferedFiles()
+
 	// Update the pubkeysToContractID map.
 	c.managedUpdatePubKeysToContractIDMap()
 
@@ -535,7 +538,7 @@ func (c *Contractor) UpdateRenterSettings(rpk types.PublicKey, settings modules.
 
 // UpdateMetadata updates the file metadata in the database.
 func (c *Contractor) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) error {
-	err := c.updateMetadata(pk, fm)
+	err := c.updateMetadata(pk, fm, true)
 	if err != nil {
 		c.log.Println("ERROR: couldn't update metadata:", err)
 	}

@@ -36,6 +36,8 @@ type Portal struct {
 
 	// Server-related fields.
 	apiPort string
+	satAddr string
+	muxAddr string
 
 	// Atomic stats.
 	authStats map[string]authenticationStats
@@ -58,7 +60,7 @@ type Portal struct {
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wallet, m modules.Manager, p modules.Provider, dir string, name string) (*Portal, error) {
+func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wallet, m modules.Manager, p modules.Provider, dir string) (*Portal, error) {
 	var err error
 
 	// Check that all the dependencies were provided.
@@ -91,10 +93,12 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 		provider: p,
 
 		apiPort: config.PortalPort,
+		satAddr: config.SatelliteAddr,
+		muxAddr: config.MuxAddr,
 
 		authStats:    make(map[string]authenticationStats),
 		transactions: make(map[types.TransactionID]types.Address),
-		name:         name,
+		name:         config.Name,
 
 		staticAlerter: modules.NewAlerter("portal"),
 		closeChan:     make(chan int, 1),

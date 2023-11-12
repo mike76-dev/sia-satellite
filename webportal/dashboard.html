@@ -210,6 +210,12 @@
 											<p id="files-partial" class="content-primary"></p>
 										</div>
 									</div>
+									<div class="content-item">
+										<p class="content-label">Files pending upload:</p>
+										<div class="content-subitem">
+											<p id="files-pending" class="content-primary"></p>
+										</div>
+									</div>
 								</div>
 							</section>
 							<div>
@@ -697,6 +703,17 @@
 					<section id="reveal" class="disabled">
 						<h2>Show Renter Seed:</h2>
 						<div class="content">
+							<div class="subcontent">
+								<div class="subcontent-item">
+									<label for="reveal-addr">Satellite Address</label>
+									<input id="reveal-addr" type="text" class="input" readonly>
+									<button id="copy-addr" onclick="copyAddress()">Copy</button>
+								</div>
+								<div class="subcontent-item">
+									<label for="reveal-mux">Mux Port</label>
+									<input id="reveal-mux" type="text" class="input" readonly>
+								</div>
+							</div>
 							<label for="reveal-key">Satellite Public Key</label>
 							<input id="reveal-key" type="text" class="input" readonly>
 							<button id="copy-button" onclick="copyPK()">Copy</button>
@@ -765,6 +782,13 @@
 									<p class="content-label">Auto Repair Files</p>
 									<label class="checkbox">
 										<input id="settings-autorepair" type="checkbox" disabled onchange="settingsChange(this)">
+										<span class="checkmark"></span>
+									</label>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Proxy Uploads</p>
+									<label class="checkbox">
+										<input id="settings-proxy" type="checkbox" disabled onchange="settingsChange(this)">
 										<span class="checkmark"></span>
 									</label>
 								</div>

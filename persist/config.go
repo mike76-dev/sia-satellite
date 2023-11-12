@@ -22,6 +22,7 @@ type SatdConfig struct {
 	GatewayAddr   string `json:"gateway"`
 	APIAddr       string `json:"api"`
 	SatelliteAddr string `json:"satellite"`
+	MuxAddr       string `json:"mux"`
 	Dir           string `json:"dir"`
 	Bootstrap     bool   `json:"bootstrap"`
 	DBUser        string `json:"dbUser"`
@@ -39,7 +40,7 @@ type satdMetadata = struct {
 // metadata contains the actual values.
 var metadata = satdMetadata{
 	Header:  "Satd Configuration",
-	Version: "0.2.0",
+	Version: "0.3.0",
 }
 
 // Load loads the configuration from disk.
