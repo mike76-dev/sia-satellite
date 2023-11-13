@@ -821,7 +821,16 @@ func (api *portalAPI) settingsHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	// Update the settings.
-	err = api.portal.manager.UpdateRenterSettings(renter.PublicKey, settings, types.PrivateKey{}, types.PrivateKey{})
+	oldSettings := renter.Settings
+	var sk, ak types.PrivateKey
+	if settings.AutoRenewContracts || settings.AutoRepairFiles || settings.ProxyUploads {
+		sk = renter.PrivateKey
+	}
+	if settings.AutoRepairFiles || settings.ProxyUploads {
+		ak = renter.AccountKey
+	}
+
+	err = api.portal.manager.UpdateRenterSettings(renter.PublicKey, settings, sk, ak)
 	if err != nil {
 		api.portal.log.Printf("ERROR: couldn't update settings: %v\n", err)
 		writeError(w,
@@ -830,6 +839,16 @@ func (api *portalAPI) settingsHandlerPOST(w http.ResponseWriter, req *http.Reque
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
+	}
+
+	// Delete buffered files if opted out.
+	if oldSettings.ProxyUploads && !settings.ProxyUploads {
+		api.portal.manager.DeleteBufferedFiles(renter.PublicKey)
+	}
+
+	// Delete file metadata if opted out.
+	if oldSettings.BackupFileMetadata && !settings.BackupFileMetadata {
+		api.portal.manager.DeleteMetadata(renter.PublicKey)
 	}
 
 	writeSuccess(w)
