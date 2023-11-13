@@ -35,9 +35,17 @@ func (c *Contractor) managedArchiveContracts() {
 	for _, id := range expired {
 		if fc, ok := c.staticContracts.Acquire(id); ok {
 			c.staticContracts.Delete(fc)
-			if !fc.Metadata().Imported {
-				c.UnlockBalance(fc.Metadata().ID)
-			}
+		}
+	}
+
+	// Go through all historic contracts and unlock the balance if required.
+	totalContracts := append(c.staticContracts.ViewAll(), c.staticContracts.OldContracts()...)
+	for _, contract := range totalContracts {
+		c.mu.RLock()
+		_, renewed := c.renewedTo[contract.ID]
+		c.mu.RUnlock()
+		if !contract.Unlocked && !contract.Imported && (currentHeight > contract.EndHeight-modules.BlocksPerDay || renewed) {
+			c.UnlockBalance(contract.ID)
 		}
 	}
 }

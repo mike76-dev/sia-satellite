@@ -47,6 +47,7 @@ type contractHeader struct {
 	TxnFee              types.Currency
 	SiafundFee          types.Currency
 	Utility             modules.ContractUtility
+	Unlocked            bool
 	Imported            bool
 }
 
@@ -194,6 +195,7 @@ func (c *FileContract) Metadata() modules.RenterContract {
 		TxnFee:              h.TxnFee,
 		SiafundFee:          h.SiafundFee,
 		Utility:             h.Utility,
+		Unlocked:            h.Unlocked,
 		Imported:            h.Imported,
 	}
 }
@@ -217,6 +219,12 @@ func (c *FileContract) Utility() modules.ContractUtility {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.header.Utility
+}
+
+// unlockPayout sets the 'Unlocked' flag to true.
+func (c *FileContract) unlockPayout() error {
+	c.header.Unlocked = true
+	return c.saveContract(types.PublicKey{})
 }
 
 // applySetHeader directly makes changes to the contract header.

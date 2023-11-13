@@ -479,7 +479,10 @@ func (c *Contractor) UnlockBalance(fcid types.FileContractID) {
 	err = c.m.UnlockSiacoins(renter.Email, amount, total, contract.StartHeight)
 	if err != nil {
 		c.log.Println("ERROR: unable to unlock funds:", err)
+		return
 	}
+
+	c.staticContracts.UnlockPayout(fcid)
 }
 
 // UpdateContract updates the contract with the new revision.

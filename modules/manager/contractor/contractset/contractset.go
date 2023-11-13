@@ -219,6 +219,23 @@ func (cs *ContractSet) RetireContract(id types.FileContractID) {
 	cs.oldContracts[id] = c
 }
 
+// UnlockPayout sets the 'Unlocked' status of a contract to true.
+func (cs *ContractSet) UnlockPayout(id types.FileContractID) {
+	var c *FileContract
+	c, exists := cs.contracts[id]
+	if !exists {
+		c, exists = cs.oldContracts[id]
+		if !exists {
+			cs.log.Println("ERROR: contract not found:", id)
+			return
+		}
+	}
+	err := c.unlockPayout()
+	if err != nil {
+		cs.log.Println("ERROR: couldn't unlock contract payout:", err)
+	}
+}
+
 // NewContractSet returns a ContractSet storing its contracts in the specified
 // database.
 func NewContractSet(db *sql.DB, log *persist.Logger, height uint64) (*ContractSet, error) {

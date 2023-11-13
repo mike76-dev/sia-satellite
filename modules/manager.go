@@ -575,6 +575,9 @@ type RenterContract struct {
 
 	// Imported indicates if the contract was imported via RPCShareContracts.
 	Imported bool
+
+	// Unlocked indicates if the contract payout has been unlocked.
+	Unlocked bool
 }
 
 // Size returns the contract size.
