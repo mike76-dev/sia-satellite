@@ -95,6 +95,13 @@ func (m *Manager) initPersist(dir string) error {
 		return modules.AddContext(err, "couldn't load maintenance flag")
 	}
 
+	// Calculate the size of the temporary files.
+	total, err := m.GetBufferSize()
+	if err != nil {
+		return modules.AddContext(err, "couldn't calculate buffer size")
+	}
+	m.bufferSize = total
+
 	// Create the global tx that will be used for most persist actions.
 	m.dbTx, err = m.db.Begin()
 	if err != nil {

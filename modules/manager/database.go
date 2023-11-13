@@ -568,12 +568,50 @@ func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path string) (string
 
 // RegisterUpload associates the uploaded file with the object.
 func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, filename string, complete bool) error {
-	_, err := m.db.Exec(`
+	fi, err := os.Stat(filename)
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	m.bufferSize += uint64(fi.Size())
+	m.mu.Unlock()
+
+	_, err = m.db.Exec(`
 		REPLACE INTO ctr_uploads
 			(filename, bucket, filepath, renter_pk, ready)
 		VALUES (?, ?, ?, ?, ?)
 	`, filepath.Base(filename), bucket, path, pk[:], complete)
 	return err
+}
+
+// GetBufferSize returns the total size of the temporary files.
+func (m *Manager) GetBufferSize() (total uint64, err error) {
+	rows, err := m.db.Query("SELECT filename FROM ctr_uploads")
+	if err != nil {
+		return 0, modules.AddContext(err, "unable to query files")
+	}
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			return 0, modules.AddContext(err, "unable to retrieve filename")
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+
+	for _, name := range names {
+		fi, err := os.Stat(filepath.Join(m.BufferedFilesDir(), name))
+		if err != nil {
+			return 0, modules.AddContext(err, "unable to get file size")
+		}
+		total += uint64(fi.Size())
+	}
+
+	return
 }
 
 // DeleteBufferedFiles deletes the files waiting to be uploaded.
@@ -599,10 +637,19 @@ func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 
 	// Delete the files one by one.
 	for _, name := range names {
-		if err := os.Remove(filepath.Join(m.BufferedFilesDir(), name)); err != nil {
+		p := filepath.Join(m.BufferedFilesDir(), name)
+		fi, err := os.Stat(p)
+		if err != nil {
+			m.log.Println("ERROR: unable to get file size:", err)
+			return modules.AddContext(err, "unable to get file size")
+		}
+		if err := os.Remove(p); err != nil {
 			m.log.Println("ERROR: unable to delete file:", err)
 			return modules.AddContext(err, "unable to delete file")
 		}
+		m.mu.Lock()
+		m.bufferSize -= uint64(fi.Size())
+		m.mu.Unlock()
 		_, err = m.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
 		if err != nil {
 			m.log.Println("ERROR: unable to delete file record:", err)
@@ -628,9 +675,17 @@ func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path string) er
 		return modules.AddContext(err, "couldn't query buffered files")
 	}
 
+	p := filepath.Join(m.BufferedFilesDir(), name)
+	fi, err := os.Stat(p)
+	if err != nil {
+		return modules.AddContext(err, "unable to get file size")
+	}
 	if err := os.Remove(filepath.Join(m.BufferedFilesDir(), name)); err != nil {
 		return modules.AddContext(err, "unable to delete file")
 	}
+	m.mu.Lock()
+	m.bufferSize -= uint64(fi.Size())
+	m.mu.Unlock()
 
 	_, err = m.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
 	if err != nil {

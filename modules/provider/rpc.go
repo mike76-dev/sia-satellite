@@ -13,6 +13,9 @@ import (
 	"go.sia.tech/core/types"
 )
 
+// The maximum allowed total size of temporary files.
+const maxBufferSize = uint64(40 * 1024 * 1024 * 1024) // 40 GiB
+
 // managedRequestContracts returns a slice containing the list of the
 // renter's active contracts.
 func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
@@ -904,6 +907,14 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 		return err
 	}
 
+	// Get the current size of the buffer.
+	currentSize, err := p.m.GetBufferSize()
+	if err != nil {
+		err = fmt.Errorf("could not calculate the buffer size: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
 	// Send the length of the file already uploaded.
 	path, length, err := p.m.BytesUploaded(ur.PubKey, ur.Bucket, ur.Path)
 	if err != nil {
@@ -947,12 +958,20 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 			p.log.Println("ERROR: couldn't register file:", err)
 		}
 	}()
+
+	if currentSize+uint64(len(ud.Data)) > maxBufferSize {
+		err = errors.New("maximum buffer size exceeded")
+		s.WriteResponseErr(err)
+		return err
+	}
+
 	numBytes, err := file.Write(ud.Data)
 	if err != nil {
 		err = fmt.Errorf("could not write data: %v", err)
 		s.WriteResponseErr(err)
 		return err
 	}
+	currentSize += uint64(len(ud.Data))
 
 	// Return the number of bytes written.
 	resp.Filesize = uint64(numBytes)
@@ -971,6 +990,13 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 			s.WriteResponseErr(err)
 			return err
 		}
+
+		if currentSize+uint64(len(ud.Data)) > maxBufferSize {
+			err = errors.New("maximum buffer size exceeded")
+			s.WriteResponseErr(err)
+			return err
+		}
+		currentSize += uint64(len(ud.Data))
 
 		numBytes, err = file.Write(ud.Data)
 		if err != nil {

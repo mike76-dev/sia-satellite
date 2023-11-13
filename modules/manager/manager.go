@@ -181,6 +181,7 @@ type Manager struct {
 	exchRates           map[string]float64
 	scusdRate           float64
 	maintenance         bool
+	bufferSize          uint64
 
 	// Block heights at the start of the current and the previous months.
 	currentMonth blockTimestamp
@@ -271,15 +272,15 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gate
 		}
 	}()
 
-	// Initialize the Manager's persistence.
-	err := m.initPersist(dir)
+	// Create the temporary directory if it doesn't exist.
+	err := os.MkdirAll(filepath.Join(dir, bufferedFilesDir), 0700)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
 	}
 
-	// Create the temporary directory if it doesn't exist.
-	err = os.MkdirAll(filepath.Join(dir, bufferedFilesDir), 0700)
+	// Initialize the Manager's persistence.
+	err = m.initPersist(dir)
 	if err != nil {
 		errChan <- err
 		return nil, errChan

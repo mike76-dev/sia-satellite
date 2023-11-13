@@ -354,6 +354,9 @@ type Manager interface {
 	// GetBalance retrieves the balance information on the account.
 	GetBalance(string) (UserBalance, error)
 
+	// GetBufferSize returns the total size of the temporary files.
+	GetBufferSize() (uint64, error)
+
 	// GetEmailPreferences returns the email preferences.
 	GetEmailPreferences() (string, types.Currency)
 
