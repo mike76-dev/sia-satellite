@@ -205,6 +205,7 @@ func (p *Provider) threadedListenMux(closeChan chan struct{}) {
 			t, err := rhpv3.NewHostTransport(conn, p.secretKey)
 			if err != nil {
 				p.log.Println("ERROR: falied to upgrade connection:", err)
+				return
 			}
 			defer t.Close()
 
