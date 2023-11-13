@@ -823,10 +823,10 @@ func (api *portalAPI) settingsHandlerPOST(w http.ResponseWriter, req *http.Reque
 	// Update the settings.
 	oldSettings := renter.Settings
 	var sk, ak types.PrivateKey
-	if settings.AutoRenewContracts || settings.AutoRepairFiles || settings.ProxyUploads {
+	if settings.AutoRenewContracts || settings.BackupFileMetadata || settings.AutoRepairFiles || settings.ProxyUploads {
 		sk = renter.PrivateKey
 	}
-	if settings.AutoRepairFiles || settings.ProxyUploads {
+	if settings.BackupFileMetadata || settings.AutoRepairFiles || settings.ProxyUploads {
 		ak = renter.AccountKey
 	}
 
