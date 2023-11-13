@@ -843,6 +843,34 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't save packed slab")
 		}
+
+		// Delete the buffers if necessary.
+		_, err = tx.Exec(`
+			DELETE FROM ctr_buffers
+			WHERE object_id IN (
+				SELECT object_id
+				FROM ctr_slabs
+				WHERE enc_key = ?
+				AND partial = TRUE
+			)
+		`, slab.Key[:])
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't delete buffers")
+		}
+
+		// Convert any partial slabs into complete.
+		_, err = tx.Exec(`
+			UPDATE ctr_slabs
+			SET min_shards = ?,
+				partial = FALSE
+			WHERE enc_key = ?
+			AND partial = TRUE
+		`, slab.MinShards, slab.Key[:])
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't update partial slabs")
+		}
 	} else {
 		_, err = tx.Exec(`
 			UPDATE ctr_slabs
