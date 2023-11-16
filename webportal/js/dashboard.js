@@ -88,12 +88,6 @@ var paying = false;
 var refreshing = false;
 
 var keyValue = '';
-var chaCha20State = [
-	0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
-	0, 0, 0, 0,
-	0, 0, 0, 0,
-	0, 0, 0, 0
-];
 
 loadFromStorage();
 getVersion();
@@ -1281,11 +1275,13 @@ function downloadFile(index) {
 				let loaded = 0;
 				let percent = 0;
 				let chunks = [];
+				let cc = new ChaCha20(Uint8Array.from(userData.encryptionKey));
 				while(true) {
 					const {done, value} = await reader.read();
 					if (done) {
 						break;
 					}
+					cc.decrypt(value);
 					chunks.push(value);
 					loaded += value.length;
 					downloads[downloads.findIndex(item => item.bucket == file.bucket && item.path == file.path)].loaded = loaded;
@@ -1680,99 +1676,91 @@ function changeEncryptionKey() {
 	window.localStorage.setItem('userData', JSON.stringify(userData));
 	document.getElementById('files-nokey').classList.add('disabled');
 	document.getElementById('files-results').classList.remove('disabled');
-	initChaCha20();
-}
-
-function quarterRound(data, a, b, c, d) {
-	let rotl = (dt, i) => (dt << i) | (dt >>> (32 - i));
-	data[d] = rotl(data[d] ^ (data[a] += data[b]), 16);
-	data[b] = rotl(data[b] ^ (data[c] += data[d]), 12);
-	data[d] = rotl(data[d] ^ (data[a] += data[b]), 8);
-	data[b] = rotl(data[b] ^ (data[c] += data[d]), 7);
-	data[a] >>>= 0;
-	data[b] >>>= 0;
-	data[c] >>>= 0;
-	data[d] >>>= 0;
-	return data;
-};
-
-function initChaCha20() {
-	let key = Uint8Array.from(userData.encryptionKey);
-	let get32 = (data, i) => data[i++] ^ (data[i++] << 8) ^ (data[i++] << 16) ^ (data[i] << 24);
-	let mix = [
-		0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
-		get32(key, 0), get32(key, 4), get32(key, 8), get32(key, 12),
-		get32(key, 16), get32(key, 20), get32(key, 24), get32(key, 28),
-		0, 0, 0, 0
-	];
-	for (let i = 0; i < 10; i++) {
-		mix = quarterRound(mix, 0, 4, 8, 12);
-		mix = quarterRound(mix, 1, 5, 9, 13);
-		mix = quarterRound(mix, 2, 6, 10, 14);
-		mix = quarterRound(mix, 3, 7, 11, 15);
-		mix = quarterRound(mix, 0, 5, 10, 15);
-		mix = quarterRound(mix, 1, 6, 11, 12);
-		mix = quarterRound(mix, 2, 7, 8, 13);
-		mix = quarterRound(mix, 3, 4, 9, 14);
-	}
-	chaCha20State[4] = mix[0];
-	chaCha20State[5] = mix[1];
-	chaCha20State[6] = mix[2];
-	chaCha20State[7] = mix[3];
-	chaCha20State[8] = mix[12];
-	chaCha20State[9] = mix[13];
-	chaCha20State[10] = mix[14];
-	chaCha20State[11] = mix[15];
-}
-
-function decryptChaCha20(ciphertext) {
-	if (ciphertext.length == 0) return null;
-	let plaintext = new Uint8Array(ciphertext.length);
-	let state = Array.from(chaCha20State);
-	let mix = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-	let buf = [
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-	];
-	let counter = 0;
-	for (let i = 0; i < ciphertext.length; i++) {
-		if (counter == 0 || counter == 64) {
-			let b = 0;
-			for (let j = 0; j < 16; j++) {
-				mix[j] = state[j];
-			}
-			for (let j = 0; j < 10; j++) {
-				mix = quarterRound(mix, 0, 4, 8, 12);
-				mix = quarterRound(mix, 1, 5, 9, 13);
-				mix = quarterRound(mix, 2, 6, 10, 14);
-				mix = quarterRound(mix, 3, 7, 11, 15);
-				mix = quarterRound(mix, 0, 5, 10, 15);
-				mix = quarterRound(mix, 1, 6, 11, 12);
-				mix = quarterRound(mix, 2, 7, 8, 13);
-				mix = quarterRound(mix, 3, 4, 9, 14);
-			}
-			for (let j = 0; j < 16; j++) {
-				mix[j] += state[j];
-				buf[b++] = mix[j] & 0xff;
-				buf[b++] = (mix[j] >>> 8) & 0xff;
-				buf[b++] = (mix[j] >>> 16) & 0xff;
-				buf[b++] = (mix[j] >>> 24) & 0xff;
-			}
-			state[12]++
-			counter = 0;
-		}
-		plaintext[i] = ciphertext[i] ^ buf[counter++];
-	}
-	return plaintext;
 }
 
 function decryptString(base64) {
+	let cc = new ChaCha20(Uint8Array.from(userData.encryptionKey));
 	base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 	let ciphertext = Uint8Array.from(atob(base64), (m) => m.codePointAt(0));
-	let plaintext = decryptChaCha20(ciphertext);
-	let i = plaintext.indexOf(0);
+	cc.decrypt(ciphertext);
+	let i = ciphertext.indexOf(0);
 	if (i < 0) i = 255;
-	return new TextDecoder('utf-8').decode(plaintext).slice(0, i);
+	return new TextDecoder('utf-8').decode(ciphertext).slice(0, i);
+}
+
+class ChaCha20 {
+	constructor(key) {
+		let get32 = (data, i) => data[i++] ^ (data[i++] << 8) ^ (data[i++] << 16) ^ (data[i] << 24);
+		this.state = [
+			0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
+			get32(key, 0), get32(key, 4), get32(key, 8), get32(key, 12),
+			get32(key, 16), get32(key, 20), get32(key, 24), get32(key, 28),
+			0, 0, 0, 0
+		];
+		let temp = Array.from(this.state);
+		for (let i = 0; i < 10; i++) {
+			this.quarterRound(temp, 0, 4, 8, 12);
+			this.quarterRound(temp, 1, 5, 9, 13);
+			this.quarterRound(temp, 2, 6, 10, 14);
+			this.quarterRound(temp, 3, 7, 11, 15);
+			this.quarterRound(temp, 0, 5, 10, 15);
+			this.quarterRound(temp, 1, 6, 11, 12);
+			this.quarterRound(temp, 2, 7, 8, 13);
+			this.quarterRound(temp, 3, 4, 9, 14);
+		}
+		this.state[4] = temp[0];
+		this.state[5] = temp[1];
+		this.state[6] = temp[2];
+		this.state[7] = temp[3];
+		this.state[8] = temp[12];
+		this.state[9] = temp[13];
+		this.state[10] = temp[14];
+		this.state[11] = temp[15];
+		this.buf = [
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+		];
+		this.counter = 0;
+	}
+	quarterRound(data, a, b, c, d) {
+		let rotl = (data, i) => (data << i) | (data >>> (32 - i));
+		data[d] = rotl(data[d] ^ (data[a] += data[b]), 16);
+		data[b] = rotl(data[b] ^ (data[c] += data[d]), 12);
+		data[d] = rotl(data[d] ^ (data[a] += data[b]), 8);
+		data[b] = rotl(data[b] ^ (data[c] += data[d]), 7);
+		data[a] >>>= 0;
+		data[b] >>>= 0;
+		data[c] >>>= 0;
+		data[d] >>>= 0;
+	}
+	decrypt(ciphertext) {
+		for (let i = 0; i < ciphertext.length; i++) {
+			if (this.counter == 0 || this.counter == 64) {
+				let b = 0;
+				let temp = Array.from(this.state);
+				for (let j = 0; j < 10; j++) {
+					this.quarterRound(temp, 0, 4, 8, 12);
+					this.quarterRound(temp, 1, 5, 9, 13);
+					this.quarterRound(temp, 2, 6, 10, 14);
+					this.quarterRound(temp, 3, 7, 11, 15);
+					this.quarterRound(temp, 0, 5, 10, 15);
+					this.quarterRound(temp, 1, 6, 11, 12);
+					this.quarterRound(temp, 2, 7, 8, 13);
+					this.quarterRound(temp, 3, 4, 9, 14);
+				}
+				for (let j = 0; j < 16; j++) {
+					temp[j] += this.state[j];
+					this.buf[b++] = temp[j] & 0xff;
+					this.buf[b++] = (temp[j] >>> 8) & 0xff;
+					this.buf[b++] = (temp[j] >>> 16) & 0xff;
+					this.buf[b++] = (temp[j] >>> 24) & 0xff;
+				}
+				this.state[12]++;
+				this.counter = 0;
+			}
+			ciphertext[i] ^= this.buf[this.counter++];
+		}
+	}
 }
