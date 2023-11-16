@@ -749,8 +749,14 @@ func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
 		}
 		copy(bucket[:], bb)
 		copy(path[:], pb)
-		if err := p.manager.DeleteObject(pk, bucket, path); err != nil {
-			return modules.AddContext(err, "couldn't delete file")
+		if index < len(sf) {
+			if err := p.manager.DeleteObject(pk, bucket, path); err != nil {
+				return modules.AddContext(err, "couldn't delete file")
+			}
+		} else {
+			if err := p.manager.DeleteBufferedFile(pk, bucket, path); err != nil {
+				return modules.AddContext(err, "couldn't delete buffered file")
+			}
 		}
 	}
 
