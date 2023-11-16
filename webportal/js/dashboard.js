@@ -1665,6 +1665,10 @@ function changeEncryptionKey() {
 	if (key == keyValue) return;
 	keyValue = key;
 	if (key.length != 64 || /[^a-f0-9]/.test(key)) {
+		userData.encryptionKey = null;
+		window.localStorage.setItem('userData', JSON.stringify(userData));
+		document.getElementById('files-results').classList.add('disabled');
+		document.getElementById('files-nokey').classList.remove('disabled');
 		return;
 	}
 	let bytes = [];
