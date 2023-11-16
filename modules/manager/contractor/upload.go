@@ -236,7 +236,7 @@ func (mgr *uploadManager) migrate(ctx context.Context, rpk types.PublicKey, shar
 }
 
 // managedUploadObject uploads an object and returns its metadata.
-func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucket, path [255]byte, mimeType string) (fm modules.FileMetadata, err error) {
+func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucket, path, mimeType [255]byte) (fm modules.FileMetadata, err error) {
 	// Create the context and setup its cancelling.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

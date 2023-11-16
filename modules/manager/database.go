@@ -567,7 +567,7 @@ func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path [255]byte) (str
 }
 
 // RegisterUpload associates the uploaded file with the object.
-func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path [255]byte, filename string, complete bool) error {
+func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path [255]byte, mimeType [255]byte, filename string, complete bool) error {
 	fi, err := os.Stat(filename)
 	if err != nil {
 		return err
@@ -579,9 +579,9 @@ func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path [255]byte, fil
 
 	_, err = m.db.Exec(`
 		REPLACE INTO ctr_uploads
-			(filename, bucket, filepath, renter_pk, ready)
-		VALUES (?, ?, ?, ?, ?)
-	`, filepath.Base(filename), bucket[:], path[:], pk[:], complete)
+			(filename, bucket, filepath, mime, renter_pk, ready)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, filepath.Base(filename), bucket[:], path[:], mimeType[:], pk[:], complete)
 	return err
 }
 

@@ -408,7 +408,7 @@ type Manager interface {
 	RefreshedContract(types.FileContractID) bool
 
 	// RegisterUpload associates the uploaded file with the object.
-	RegisterUpload(types.PublicKey, [255]byte, [255]byte, string, bool) error
+	RegisterUpload(types.PublicKey, [255]byte, [255]byte, [255]byte, string, bool) error
 
 	// RenewContract renews a contract.
 	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
@@ -792,7 +792,7 @@ type FileMetadata struct {
 	Bucket   [255]byte     `json:"bucket"`
 	Path     [255]byte     `json:"path"`
 	ETag     string        `json:"etag"`
-	MimeType string        `json:"mime"`
+	MimeType [255]byte     `json:"mime"`
 	Slabs    []Slab        `json:"slabs"`
 	Data     []byte        `json:"data"`
 }
@@ -857,7 +857,7 @@ func (fm *FileMetadata) EncodeTo(e *types.Encoder) {
 	e.Write(fm.Bucket[:])
 	e.Write(fm.Path[:])
 	e.WriteString(fm.ETag)
-	e.WriteString(fm.MimeType)
+	e.Write(fm.MimeType[:])
 	e.WritePrefix(len(fm.Slabs))
 	for _, s := range fm.Slabs {
 		s.EncodeTo(e)
@@ -871,7 +871,7 @@ func (fm *FileMetadata) DecodeFrom(d *types.Decoder) {
 	d.Read(fm.Bucket[:])
 	d.Read(fm.Path[:])
 	fm.ETag = d.ReadString()
-	fm.MimeType = d.ReadString()
+	d.Read(fm.MimeType[:])
 	fm.Slabs = make([]Slab, d.ReadPrefix())
 	for i := 0; i < len(fm.Slabs); i++ {
 		fm.Slabs[i].DecodeFrom(d)

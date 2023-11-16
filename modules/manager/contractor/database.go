@@ -6,13 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"mime"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/gabriel-vasile/mimetype"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"lukechampine.com/frand"
 
@@ -542,7 +540,7 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 		fm.Bucket[:],
 		fm.Path[:],
 		fm.ETag,
-		fm.MimeType,
+		fm.MimeType[:],
 		pk[:],
 		modified,
 		modified,
@@ -697,16 +695,18 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		objectID := make([]byte, 32)
 		b := make([]byte, 255)
 		p := make([]byte, 255)
-		var eTag, mime string
+		m := make([]byte, 255)
+		var eTag string
 		var modified, retrieved uint64
-		if err := rows.Scan(&objectID, &b, &p, &eTag, &mime, &modified, &retrieved); err != nil {
+		if err := rows.Scan(&objectID, &b, &p, &eTag, &m, &modified, &retrieved); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
 		// If the object is present in the map and hasn't beed modified, skip it.
-		var bucket, path [255]byte
+		var bucket, path, mimeType [255]byte
 		copy(bucket[:], b)
 		copy(path[:], p)
+		copy(mimeType[:], m)
 		if files, exists := po[bucket]; exists {
 			if _, exists := files[path]; exists {
 				if retrieved >= modified {
@@ -774,7 +774,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		md.Bucket = bucket
 		md.Path = path
 		md.ETag = eTag
-		md.MimeType = mime
+		md.MimeType = mimeType
 		md.Slabs = slabs
 
 		// Load partial slab data.
@@ -1541,7 +1541,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 
 	// Sort the files by the upload timestamp, the older come first.
 	rows, err := c.db.Query(`
-		SELECT filename, bucket, filepath, renter_pk
+		SELECT filename, bucket, filepath, mime, renter_pk
 		FROM ctr_uploads
 		WHERE ready = TRUE
 		ORDER BY filename ASC
@@ -1557,16 +1557,18 @@ func (c *Contractor) managedUploadBufferedFiles() {
 		pk := make([]byte, 32)
 		b := make([]byte, 255)
 		p := make([]byte, 255)
-		if err := rows.Scan(&n, &b, &p, &pk); err != nil {
+		m := make([]byte, 255)
+		if err := rows.Scan(&n, &b, &p, &m, &pk); err != nil {
 			rows.Close()
 			c.log.Println("ERROR: couldn't scan file record:", err)
 			return
 		}
 		var rpk types.PublicKey
-		var bucket, path [255]byte
+		var bucket, path, mimeType [255]byte
 		copy(rpk[:], pk)
 		copy(bucket[:], b)
 		copy(path[:], p)
+		copy(mimeType[:], m)
 
 		// Read the file.
 		var err error
@@ -1599,18 +1601,8 @@ func (c *Contractor) managedUploadBufferedFiles() {
 				}
 			}()
 
-			mimeType := mime.TypeByExtension(filepath.Ext(n))
-			var reader io.Reader
-			if mimeType == "" {
-				mimeType, reader, err = newMimeReader(file)
-				if err != nil {
-					c.log.Println("ERROR: couldn't detect MIME type:", err)
-					return err
-				}
-			}
-
 			// Upload the data.
-			fm, err := c.managedUploadObject(reader, rpk, bucket, path, mimeType)
+			fm, err := c.managedUploadObject(file, rpk, bucket, path, mimeType)
 			if err != nil {
 				c.log.Println("ERROR: couldn't upload object:", err)
 				return err
@@ -1652,13 +1644,4 @@ func (c *Contractor) threadedUploadBufferedFiles() {
 		}
 		c.managedUploadBufferedFiles()
 	}
-}
-
-// newMimeReader is a helper function that detects the MIME type
-// of the underlying data.
-func newMimeReader(r io.Reader) (mimeType string, recycled io.Reader, err error) {
-	buf := bytes.NewBuffer(nil)
-	mtype, err := mimetype.DetectReader(io.TeeReader(r, buf))
-	recycled = io.MultiReader(buf, r)
-	return mtype.String(), recycled, err
 }

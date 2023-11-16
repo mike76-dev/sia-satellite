@@ -684,6 +684,7 @@ type uploadRequest struct {
 	PubKey    types.PublicKey
 	Bucket    [255]byte
 	Path      [255]byte
+	MimeType  [255]byte
 	Signature types.Signature
 }
 
@@ -692,6 +693,7 @@ func (ur *uploadRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(ur.PubKey[:])
 	d.Read(ur.Bucket[:])
 	d.Read(ur.Path[:])
+	d.Read(ur.MimeType[:])
 	ur.Signature.DecodeFrom(d)
 }
 
@@ -700,6 +702,7 @@ func (ur *uploadRequest) EncodeTo(e *types.Encoder) {
 	e.Write(ur.PubKey[:])
 	e.Write(ur.Bucket[:])
 	e.Write(ur.Path[:])
+	e.Write(ur.MimeType[:])
 }
 
 // uploadResponse is used to respond with the filesize already uploaded.

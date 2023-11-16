@@ -954,7 +954,7 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 			p.log.Println("ERROR: couldn't sync file:", err)
 		} else if err := file.Close(); err != nil {
 			p.log.Println("ERROR: couldn't close file:", err)
-		} else if err := p.m.RegisterUpload(ur.PubKey, ur.Bucket, ur.Path, path, !ud.More); err != nil {
+		} else if err := p.m.RegisterUpload(ur.PubKey, ur.Bucket, ur.Path, ur.MimeType, path, !ud.More); err != nil {
 			p.log.Println("ERROR: couldn't register file:", err)
 		}
 	}()
