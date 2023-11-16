@@ -43,6 +43,7 @@ var userData = {
 	sortByEnd:        'inactive',
 	sortByTimestamp:  'ascending',
 	activeMenuIndex:  0,
+	encryptionKey:    null,
 }
 
 var menu = document.getElementById('menu');
@@ -86,6 +87,14 @@ var processing = false;
 var paying = false;
 var refreshing = false;
 
+var keyValue = '';
+var chaCha20State = [
+	0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
+	0, 0, 0, 0,
+	0, 0, 0, 0,
+	0, 0, 0, 0
+];
+
 loadFromStorage();
 getVersion();
 getCurrencies();
@@ -117,6 +126,11 @@ function loadFromStorage() {
 	if (userData.sortByTimestamp == 'descending') {
 		document.getElementById('history-timestamp-desc').classList.add('active');
 		document.getElementById('history-timestamp-asc').classList.remove('active');
+	}
+	if (userData.encryptionKey) {
+		let key = Array.from(userData.encryptionKey, ((byte) => ('0' + (byte & 0xFF).toString(16)).slice(-2))).join('');
+		document.getElementById('files-key').value = key;
+		changeEncryptionKey();
 	}
 	setActiveMenuIndex(userData.activeMenuIndex);
 }
@@ -1197,20 +1211,22 @@ function renderFiles() {
 		if (i >= filesFrom + userData.filesStep - 1) return;
 		timestamp = new Date(row.uploaded * 1000);
 		let index = downloads.findIndex(item => item.bucket == row.bucket && item.path == row.path);
+		let bucket = decryptString(row.bucket);
+		let path = decryptString(row.path);
 		let tr = document.createElement('tr');
 		tr.innerHTML = '<td><label class="checkbox" style="margin-left: 0.5rem"><input type="checkbox" onchange="selectFile(this)"><span class="checkmark"></span></label></td>';
 		tr.innerHTML += `<td>${i + 1}</td>`;
-		tr.innerHTML += row.buffered ? `<td class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${row.bucket}<div class="hint">select</div></td>` :
-			`<td id=${'bucket-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${row.bucket}<div class="hint">select</div></td>`;
+		tr.innerHTML += row.buffered ? `<td class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${bucket}<div class="hint">select</div></td>` :
+			`<td id=${'bucket-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="selectBucket('${row.bucket}')">${bucket}<div class="hint">select</div></td>`;
 		if (index >= 0) {
-			tr.innerHTML += `<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
+			tr.innerHTML += `<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link" onclick="downloadFile(${i})">${path.slice(1)}<div class="hint">download</div></td>`;
 			let loaded = (downloads[index].loaded == 0 || downloads[index].loaded == row.size) ? '<span class="loading"></span>' :
 				(downloads[index].loaded / row.size * 100).toFixed(0) + '%';
 			tr.innerHTML += `<td id=${'size-' + encodeURI(row.bucket) + encodeURI(row.path)}>${loaded}</td>`;
 			tr.innerHTML += `<td id=${'slabs-' + encodeURI(row.bucket) + encodeURI(row.path)}><span id=${'cancel-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cancel">&#9421;<div class="hint">cancel</div></span></td>`;
 		} else {
-			tr.innerHTML += row.buffered ? `<td>${row.path.slice(1)}</td>` :
-				`<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="downloadFile(${i})">${row.path.slice(1)}<div class="hint">download</div></td>`;
+			tr.innerHTML += row.buffered ? `<td>${path.slice(1)}</td>` :
+				`<td id=${'path-' + encodeURI(row.bucket) + encodeURI(row.path)} class="cell-link hint-spot" onclick="downloadFile(${i})">${path.slice(1)}<div class="hint">download</div></td>`;
 			tr.innerHTML += row.buffered ? `<td>${convertSize(row.size)}</td>` :
 				`<td id=${'size-' + encodeURI(row.bucket) + encodeURI(row.path)}>${convertSize(row.size)}</td>`;
 			tr.innerHTML += row.buffered ? '<td>&minus;</td>' :
@@ -1292,7 +1308,7 @@ function downloadFile(index) {
 			let url = window.URL.createObjectURL(blob);
 			let a = document.createElement("a");
 			a.href = url;
-			a.setAttribute("download", file.path.slice(1));
+			a.setAttribute("download", decryptString(file.path).slice(1));
 			a.click();
 			window.URL.revokeObjectURL(url);
 		})
@@ -1646,4 +1662,117 @@ function changePaymentPlan() {
 			}
 		})
 		.catch(error => console.log(error));
+}
+
+function changeEncryptionKey() {
+	let key = document.getElementById('files-key').value.toLowerCase();
+	if (key == keyValue) return;
+	keyValue = key;
+	if (key.length != 64 || /[^a-f0-9]/.test(key)) {
+		return;
+	}
+	let bytes = [];
+	while (key.length > 0) {
+		bytes.push(parseInt(key.slice(0, 2), 16));
+		key = key.slice(2);
+	}
+	userData.encryptionKey = bytes;
+	window.localStorage.setItem('userData', JSON.stringify(userData));
+	document.getElementById('files-nokey').classList.add('disabled');
+	document.getElementById('files-results').classList.remove('disabled');
+	initChaCha20();
+}
+
+function quarterRound(data, a, b, c, d) {
+	let rotl = (dt, i) => (dt << i) | (dt >>> (32 - i));
+	data[d] = rotl(data[d] ^ (data[a] += data[b]), 16);
+	data[b] = rotl(data[b] ^ (data[c] += data[d]), 12);
+	data[d] = rotl(data[d] ^ (data[a] += data[b]), 8);
+	data[b] = rotl(data[b] ^ (data[c] += data[d]), 7);
+	data[a] >>>= 0;
+	data[b] >>>= 0;
+	data[c] >>>= 0;
+	data[d] >>>= 0;
+	return data;
+};
+
+function initChaCha20() {
+	let key = Uint8Array.from(userData.encryptionKey);
+	let get32 = (data, i) => data[i++] ^ (data[i++] << 8) ^ (data[i++] << 16) ^ (data[i] << 24);
+	let mix = [
+		0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
+		get32(key, 0), get32(key, 4), get32(key, 8), get32(key, 12),
+		get32(key, 16), get32(key, 20), get32(key, 24), get32(key, 28),
+		0, 0, 0, 0
+	];
+	for (let i = 0; i < 10; i++) {
+		mix = quarterRound(mix, 0, 4, 8, 12);
+		mix = quarterRound(mix, 1, 5, 9, 13);
+		mix = quarterRound(mix, 2, 6, 10, 14);
+		mix = quarterRound(mix, 3, 7, 11, 15);
+		mix = quarterRound(mix, 0, 5, 10, 15);
+		mix = quarterRound(mix, 1, 6, 11, 12);
+		mix = quarterRound(mix, 2, 7, 8, 13);
+		mix = quarterRound(mix, 3, 4, 9, 14);
+	}
+	chaCha20State[4] = mix[0];
+	chaCha20State[5] = mix[1];
+	chaCha20State[6] = mix[2];
+	chaCha20State[7] = mix[3];
+	chaCha20State[8] = mix[12];
+	chaCha20State[9] = mix[13];
+	chaCha20State[10] = mix[14];
+	chaCha20State[11] = mix[15];
+}
+
+function decryptChaCha20(ciphertext) {
+	if (ciphertext.length == 0) return null;
+	let plaintext = new Uint8Array(ciphertext.length);
+	let state = Array.from(chaCha20State);
+	let mix = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+	let buf = [
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	];
+	let counter = 0;
+	for (let i = 0; i < ciphertext.length; i++) {
+		if (counter == 0 || counter == 64) {
+			let b = 0;
+			for (let j = 0; j < 16; j++) {
+				mix[j] = state[j];
+			}
+			for (let j = 0; j < 10; j++) {
+				mix = quarterRound(mix, 0, 4, 8, 12);
+				mix = quarterRound(mix, 1, 5, 9, 13);
+				mix = quarterRound(mix, 2, 6, 10, 14);
+				mix = quarterRound(mix, 3, 7, 11, 15);
+				mix = quarterRound(mix, 0, 5, 10, 15);
+				mix = quarterRound(mix, 1, 6, 11, 12);
+				mix = quarterRound(mix, 2, 7, 8, 13);
+				mix = quarterRound(mix, 3, 4, 9, 14);
+			}
+			for (let j = 0; j < 16; j++) {
+				mix[j] += state[j];
+				buf[b++] = mix[j] & 0xff;
+				buf[b++] = (mix[j] >>> 8) & 0xff;
+				buf[b++] = (mix[j] >>> 16) & 0xff;
+				buf[b++] = (mix[j] >>> 24) & 0xff;
+			}
+			state[12]++
+			counter = 0;
+		}
+		plaintext[i] = ciphertext[i] ^ buf[counter++];
+	}
+	return plaintext;
+}
+
+function decryptString(base64) {
+	base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
+	let ciphertext = Uint8Array.from(atob(base64), (m) => m.codePointAt(0));
+	let plaintext = decryptChaCha20(ciphertext);
+	let i = plaintext.indexOf(0);
+	if (i < 0) i = 255;
+	return new TextDecoder('utf-8').decode(plaintext).slice(0, i);
 }

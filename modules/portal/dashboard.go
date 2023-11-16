@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"math"
 	"net/http"
@@ -874,19 +875,32 @@ func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _
 	}
 
 	// Download the file.
-	bucket := req.FormValue("bucket")
-	if bucket == "" {
-		bucket = "default"
-	}
-	path := req.FormValue("path")
-	if path == "" {
+	b := req.FormValue("bucket")
+	bb, err := base64.URLEncoding.DecodeString(b)
+	if b == "" || err != nil {
 		writeError(w,
 			Error{
 				Code:    httpErrorBadRequest,
-				Message: "path not specified",
+				Message: "error decoding bucket",
 			}, http.StatusBadRequest)
 		return
 	}
+	var bucket [255]byte
+	copy(bucket[:], bb)
+
+	p := req.FormValue("path")
+	pb, err := base64.URLEncoding.DecodeString(p)
+	if p == "" || err != nil {
+		writeError(w,
+			Error{
+				Code:    httpErrorBadRequest,
+				Message: "error decoding path",
+			}, http.StatusBadRequest)
+		return
+	}
+	var path [255]byte
+	copy(path[:], pb)
+
 	err = api.portal.manager.DownloadObject(w, renter.PublicKey, bucket, path)
 	if err != nil {
 		api.portal.log.Printf("ERROR: couldn't download file: %v\n", err)
