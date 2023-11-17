@@ -114,16 +114,3 @@ func (cs *ConsensusSet) forkBlockchain(tx *sql.Tx, newBlock *processedBlock) (re
 	}
 	return revertedBlocks, appliedBlocks, nil
 }
-
-// revertLastBlock will try to remove the last block from the path if it was
-// found invalid.
-func revertLastBlock(tx *sql.Tx) error {
-	block := currentProcessedBlock(tx)
-	id := block.Block.ID()
-	err := commitDiffSet(tx, block, modules.DiffRevert)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM cs_map WHERE bid = ?", id[:])
-	return err
-}
