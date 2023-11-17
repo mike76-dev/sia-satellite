@@ -554,10 +554,10 @@ func (rmr *requestMetadataRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(rmr.PubKey[:])
 	rmr.PresentObjects = make([]modules.BucketFiles, d.ReadPrefix())
 	for i := 0; i < len(rmr.PresentObjects); i++ {
-		rmr.PresentObjects[i].Name = d.ReadString()
-		rmr.PresentObjects[i].Paths = make([]string, d.ReadPrefix())
+		d.Read(rmr.PresentObjects[i].Name[:])
+		rmr.PresentObjects[i].Paths = make([][255]byte, d.ReadPrefix())
 		for j := 0; j < len(rmr.PresentObjects[i].Paths); j++ {
-			rmr.PresentObjects[i].Paths[j] = d.ReadString()
+			d.Read(rmr.PresentObjects[i].Paths[j][:])
 		}
 	}
 	rmr.Signature.DecodeFrom(d)
@@ -568,10 +568,10 @@ func (rmr *requestMetadataRequest) EncodeTo(e *types.Encoder) {
 	e.Write(rmr.PubKey[:])
 	e.WritePrefix(len(rmr.PresentObjects))
 	for _, po := range rmr.PresentObjects {
-		e.WriteString(po.Name)
+		e.Write(po.Name[:])
 		e.WritePrefix(len(po.Paths))
 		for _, p := range po.Paths {
-			e.WriteString(p)
+			e.Write(p[:])
 		}
 	}
 }
@@ -682,24 +682,27 @@ func (sr *shareRequest) EncodeTo(e *types.Encoder) {
 // uploadRequest is used when the renter wants to upload a file.
 type uploadRequest struct {
 	PubKey    types.PublicKey
-	Bucket    string
-	Path      string
+	Bucket    [255]byte
+	Path      [255]byte
+	MimeType  [255]byte
 	Signature types.Signature
 }
 
 // DecodeFrom implements requestBody.
 func (ur *uploadRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(ur.PubKey[:])
-	ur.Bucket = d.ReadString()
-	ur.Path = d.ReadString()
+	d.Read(ur.Bucket[:])
+	d.Read(ur.Path[:])
+	d.Read(ur.MimeType[:])
 	ur.Signature.DecodeFrom(d)
 }
 
 // EncodeTo implements requestBody.
 func (ur *uploadRequest) EncodeTo(e *types.Encoder) {
 	e.Write(ur.PubKey[:])
-	e.WriteString(ur.Bucket)
-	e.WriteString(ur.Path)
+	e.Write(ur.Bucket[:])
+	e.Write(ur.Path[:])
+	e.Write(ur.MimeType[:])
 }
 
 // uploadResponse is used to respond with the filesize already uploaded.

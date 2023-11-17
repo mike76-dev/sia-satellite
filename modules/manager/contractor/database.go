@@ -6,13 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"mime"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/gabriel-vasile/mimetype"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"lukechampine.com/frand"
 
@@ -453,13 +451,13 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 
 // dbDeleteObject deletes a single file metadata object from
 // the database.
-func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path string) error {
+func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path [255]byte) error {
 	objectID := make([]byte, 32)
 	err := tx.QueryRow(`
 		SELECT enc_key
 		FROM ctr_metadata
 		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
-	`, bucket, path, pk[:]).Scan(&objectID)
+	`, bucket[:], path[:], pk[:]).Scan(&objectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -539,10 +537,10 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		fm.Key[:],
-		fm.Bucket,
-		fm.Path,
+		fm.Bucket[:],
+		fm.Path[:],
 		fm.ETag,
-		fm.MimeType,
+		fm.MimeType[:],
 		pk[:],
 		modified,
 		modified,
@@ -648,7 +646,7 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 }
 
 // DeleteObject deletes the saved file metadata object.
-func (c *Contractor) DeleteObject(pk types.PublicKey, bucket, path string) error {
+func (c *Contractor) DeleteObject(pk types.PublicKey, bucket, path [255]byte) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return err
@@ -665,11 +663,11 @@ func (c *Contractor) DeleteObject(pk types.PublicKey, bucket, path string) error
 // retrieveMetadata retrieves the file metadata from the database.
 func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.BucketFiles) (fm []modules.FileMetadata, err error) {
 	// Create a map of the present objects for convenience.
-	po := make(map[string]map[string]struct{})
+	po := make(map[[255]byte]map[[255]byte]struct{})
 	for _, bucket := range present {
 		for _, path := range bucket.Paths {
 			if po[bucket.Name] == nil {
-				po[bucket.Name] = make(map[string]struct{})
+				po[bucket.Name] = make(map[[255]byte]struct{})
 			}
 			po[bucket.Name][path] = struct{}{}
 		}
@@ -695,13 +693,20 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 	for rows.Next() {
 		var slabs []modules.Slab
 		objectID := make([]byte, 32)
-		var bucket, path, eTag, mime string
+		b := make([]byte, 255)
+		p := make([]byte, 255)
+		m := make([]byte, 255)
+		var eTag string
 		var modified, retrieved uint64
-		if err := rows.Scan(&objectID, &bucket, &path, &eTag, &mime, &modified, &retrieved); err != nil {
+		if err := rows.Scan(&objectID, &b, &p, &eTag, &m, &modified, &retrieved); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
 		// If the object is present in the map and hasn't beed modified, skip it.
+		var bucket, path, mimeType [255]byte
+		copy(bucket[:], b)
+		copy(path[:], p)
+		copy(mimeType[:], m)
 		if files, exists := po[bucket]; exists {
 			if _, exists := files[path]; exists {
 				if retrieved >= modified {
@@ -769,7 +774,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		md.Bucket = bucket
 		md.Path = path
 		md.ETag = eTag
-		md.MimeType = mime
+		md.MimeType = mimeType
 		md.Slabs = slabs
 
 		// Load partial slab data.
@@ -1031,7 +1036,7 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 }
 
 // getObject tries to find an object by its path.
-func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.Object, error) {
+func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (object.Object, error) {
 	// Start a transaction.
 	tx, err := c.db.Begin()
 	if err != nil {
@@ -1044,7 +1049,7 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path string) (object.
 		SELECT enc_key
 		FROM ctr_metadata
 		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
-	`, bucket, path, pk[:]).Scan(&objectID)
+	`, bucket[:], path[:], pk[:]).Scan(&objectID)
 	if err != nil {
 		tx.Rollback()
 		return object.Object{}, modules.AddContext(err, "couldn't find object")
@@ -1536,7 +1541,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 
 	// Sort the files by the upload timestamp, the older come first.
 	rows, err := c.db.Query(`
-		SELECT filename, bucket, filepath, renter_pk
+		SELECT filename, bucket, filepath, mime, renter_pk
 		FROM ctr_uploads
 		WHERE ready = TRUE
 		ORDER BY filename ASC
@@ -1548,15 +1553,22 @@ func (c *Contractor) managedUploadBufferedFiles() {
 	defer rows.Close()
 
 	for rows.Next() {
-		var n, bucket, path string
+		var n string
 		pk := make([]byte, 32)
-		if err := rows.Scan(&n, &bucket, &path, &pk); err != nil {
+		b := make([]byte, 255)
+		p := make([]byte, 255)
+		m := make([]byte, 255)
+		if err := rows.Scan(&n, &b, &p, &m, &pk); err != nil {
 			rows.Close()
 			c.log.Println("ERROR: couldn't scan file record:", err)
 			return
 		}
 		var rpk types.PublicKey
+		var bucket, path, mimeType [255]byte
 		copy(rpk[:], pk)
+		copy(bucket[:], b)
+		copy(path[:], p)
+		copy(mimeType[:], m)
 
 		// Read the file.
 		var err error
@@ -1581,7 +1593,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 						AND filename = ?
 						AND bucket = ?
 						AND filepath = ?
-					`, pk, n, bucket, path)
+					`, pk, n, bucket[:], path[:])
 					if err != nil {
 						c.log.Println("ERROR: couldn't delete file record:", err)
 						return
@@ -1589,18 +1601,8 @@ func (c *Contractor) managedUploadBufferedFiles() {
 				}
 			}()
 
-			mimeType := mime.TypeByExtension(filepath.Ext(n))
-			var reader io.Reader
-			if mimeType == "" {
-				mimeType, reader, err = newMimeReader(file)
-				if err != nil {
-					c.log.Println("ERROR: couldn't detect MIME type:", err)
-					return err
-				}
-			}
-
 			// Upload the data.
-			fm, err := c.managedUploadObject(reader, rpk, bucket, path, mimeType)
+			fm, err := c.managedUploadObject(file, rpk, bucket, path, mimeType)
 			if err != nil {
 				c.log.Println("ERROR: couldn't upload object:", err)
 				return err
@@ -1642,13 +1644,4 @@ func (c *Contractor) threadedUploadBufferedFiles() {
 		}
 		c.managedUploadBufferedFiles()
 	}
-}
-
-// newMimeReader is a helper function that detects the MIME type
-// of the underlying data.
-func newMimeReader(r io.Reader) (mimeType string, recycled io.Reader, err error) {
-	buf := bytes.NewBuffer(nil)
-	mtype, err := mimetype.DetectReader(io.TeeReader(r, buf))
-	recycled = io.MultiReader(buf, r)
-	return mtype.String(), recycled, err
 }

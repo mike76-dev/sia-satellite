@@ -547,12 +547,10 @@ CREATE TABLE ctr_watchdog (
 
 CREATE TABLE ctr_metadata (
 	enc_key   BINARY(32) NOT NULL,
-	bucket    VARCHAR(255) NOT NULL,
-	filepath  VARCHAR(255) NOT NULL,
+	bucket    BINARY(255) NOT NULL,
+	filepath  BINARY(255) NOT NULL,
 	etag      VARCHAR(64) NOT NULL,
-	mime      VARCHAR(32) NOT NULL,
-	offset    BIGINT UNSIGNED NOT NULL,
-	len       BIGINT UNSIGNED NOT NULL,
+	mime      BINARY(255) NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
 	uploaded  BIGINT UNSIGNED NOT NULL,
 	modified  BIGINT UNSIGNED NOT NULL,
@@ -592,8 +590,9 @@ CREATE TABLE ctr_buffers (
 
 CREATE TABLE ctr_uploads (
 	filename  CHAR(20) NOT NULL,
-	bucket    VARCHAR(255) NOT NULL,
-	filepath  VARCHAR(255) NOT NULL,
+	bucket    BINARY(255) NOT NULL,
+	filepath  BINARY(255) NOT NULL,
+	mime      BINARY(255) NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
 	ready     BOOL NOT NULL,
 	PRIMARY KEY (filename),

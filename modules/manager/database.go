@@ -540,7 +540,7 @@ func (m *Manager) loadMaintenance() error {
 }
 
 // BytesUploaded returns the size of the file already uploaded.
-func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path string) (string, uint64, error) {
+func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path [255]byte) (string, uint64, error) {
 	var name string
 	err := m.db.QueryRow(`
 		SELECT filename
@@ -548,7 +548,7 @@ func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path string) (string
 		WHERE renter_pk = ?
 		AND bucket = ?
 		AND filepath = ?
-	`, pk[:], bucket, path).Scan(&name)
+	`, pk[:], bucket[:], path[:]).Scan(&name)
 	if err != nil && errors.Is(err, sql.ErrNoRows) {
 		name = xid.New().String()
 		return filepath.Join(filepath.Join(m.dir, bufferedFilesDir), name), 0, nil
@@ -567,7 +567,7 @@ func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path string) (string
 }
 
 // RegisterUpload associates the uploaded file with the object.
-func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, filename string, complete bool) error {
+func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path [255]byte, mimeType [255]byte, filename string, complete bool) error {
 	fi, err := os.Stat(filename)
 	if err != nil {
 		return err
@@ -579,9 +579,9 @@ func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, filename stri
 
 	_, err = m.db.Exec(`
 		REPLACE INTO ctr_uploads
-			(filename, bucket, filepath, renter_pk, ready)
-		VALUES (?, ?, ?, ?, ?)
-	`, filepath.Base(filename), bucket, path, pk[:], complete)
+			(filename, bucket, filepath, mime, renter_pk, ready)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, filepath.Base(filename), bucket[:], path[:], mimeType[:], pk[:], complete)
 	return err
 }
 
@@ -662,7 +662,7 @@ func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 
 // DeleteBufferedFile deletes the specified file and the associated
 // database record.
-func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path string) error {
+func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path [255]byte) error {
 	var name string
 	err := m.db.QueryRow(`
 		SELECT filename
@@ -670,7 +670,7 @@ func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path string) er
 		WHERE bucket = ?
 		AND filepath = ?
 		AND renter_pk = ?
-	`, bucket, path, pk[:]).Scan(&name)
+	`, bucket[:], path[:], pk[:]).Scan(&name)
 	if err != nil {
 		return modules.AddContext(err, "couldn't query buffered files")
 	}

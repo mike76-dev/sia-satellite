@@ -206,7 +206,7 @@ button {
 
 .hint {
 	position: absolute;
-	bottom: 1.5rem;
+	bottom: 0.75rem;
 	left: calc(50% - 5rem);
 	color: var(--hint);
 	background-color: var(--textSecondary);
@@ -255,6 +255,11 @@ button {
 	border-radius: 0.5rem;
 	min-width: 16rem;
 	padding: 0.5rem;
+	margin-bottom: 0.5rem;
+}
+
+.content-long {
+	flex-grow: 1;
 }
 
 .content-item {
@@ -370,7 +375,7 @@ tbody > tr:nth-child(odd) {
 	background-color: var(--tableRow);
 }
 
-.cell-overflow {
+.cell-overflow, .cell-link {
 	overflow: hidden;
 	text-overflow: ellipsis;
 }

@@ -85,10 +85,10 @@ type hostContractor interface {
 	DeleteMetadata(types.PublicKey) error
 
 	// DeleteObject deletes the saved file metadata object.
-	DeleteObject(types.PublicKey, string, string) error
+	DeleteObject(types.PublicKey, [255]byte, [255]byte) error
 
 	// DownloadObject downloads an object and returns it.
-	DownloadObject(io.Writer, types.PublicKey, string, string) error
+	DownloadObject(io.Writer, types.PublicKey, [255]byte, [255]byte) error
 
 	// UpdateMetadata updates the file metadata in the database.
 	UpdateMetadata(types.PublicKey, modules.FileMetadata) error
@@ -1083,7 +1083,7 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 }
 
 // DeleteObject deletes the saved file metadata object.
-func (m *Manager) DeleteObject(pk types.PublicKey, bucket, path string) error {
+func (m *Manager) DeleteObject(pk types.PublicKey, bucket, path [255]byte) error {
 	return m.hostContractor.DeleteObject(pk, bucket, path)
 }
 
@@ -1203,7 +1203,7 @@ func (m *Manager) AcceptContracts(rpk types.PublicKey, contracts []modules.Contr
 }
 
 // DownloadObject downloads an object and returns it.
-func (m *Manager) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, path string) error {
+func (m *Manager) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, path [255]byte) error {
 	return m.hostContractor.DownloadObject(w, rpk, bucket, path)
 }
 
