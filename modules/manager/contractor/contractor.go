@@ -369,6 +369,9 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Ma
 	// Spin up a goroutine to periodically upload buffered files.
 	go c.threadedUploadBufferedFiles()
 
+	// Spin up a goroutine to periodically prune orphaned slabs.
+	go c.threadedPruneOrphanedSlabs()
+
 	// Update the pubkeysToContractID map.
 	c.managedUpdatePubKeysToContractIDMap()
 

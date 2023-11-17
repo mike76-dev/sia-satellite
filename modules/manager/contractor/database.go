@@ -23,6 +23,14 @@ import (
 // are uploaded to the network.
 const bufferedFilesUploadInterval = 10 * time.Minute
 
+// orphanedSlabPruneInterval determines how often orphaned slabs
+// are pruned.
+const orphanedSlabPruneInterval = 30 * time.Minute
+
+// orphanedSlabPruneThreshold determines how old an orphaned slab
+// has to be to get pruned.
+const orphanedSlabPruneThreshold = 2 * time.Hour
+
 // initDB initializes the sync state.
 func (c *Contractor) initDB() error {
 	var count int
@@ -567,6 +575,7 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 		}
 		if count > 0 {
 			packedLength = s.Length
+			c.log.Println("DEBUG: assigning orphaned slab to object:", s.Key) //TODO
 			_, err = tx.Exec(`
 				UPDATE ctr_slabs
 				SET
@@ -829,6 +838,7 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 	}
 
 	if packed {
+		c.log.Println("DEBUG: inserting orphaned slab", slab.Key) //TODO
 		_, err = tx.Exec(`
 			INSERT INTO ctr_slabs (
 				enc_key,
@@ -877,6 +887,7 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 			return modules.AddContext(err, "couldn't update partial slabs")
 		}
 	} else {
+		c.log.Println("DEBUG: modifying slab", slab.Key) //TODO
 		_, err = tx.Exec(`
 			UPDATE ctr_slabs
 			SET modified = ?
@@ -1443,6 +1454,7 @@ func (c *Contractor) uploadPackedSlabs(rpk types.PublicKey) error {
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't read number of slabs")
 		}
+		c.log.Println("DEBUG: inserting partial slab", slab.Key) //TODO
 		_, err = tx.Exec(`
 			INSERT INTO ctr_slabs (
 				enc_key,
@@ -1643,5 +1655,91 @@ func (c *Contractor) threadedUploadBufferedFiles() {
 		case <-time.After(bufferedFilesUploadInterval):
 		}
 		c.managedUploadBufferedFiles()
+	}
+}
+
+// managedPruneOrphanedSlabs deletes any orphaned slabs that are older
+// than the threshold together with their shards.
+func (c *Contractor) managedPruneOrphanedSlabs() {
+	tx, err := c.db.Begin()
+	if err != nil {
+		c.log.Println("ERROR: unable to start transaction:", err)
+		return
+	}
+
+	// Make a list of orphaned slabs that don't have non-orphaned twins.
+	// The shards of these is safe to delete.
+	emptyID := make([]byte, 32)
+	rows, err := tx.Query(`
+		SELECT enc_key
+		FROM ctr_slabs
+		WHERE object_id = ?
+		AND modified < ?
+		AND enc_key IN (
+			SELECT enc_key
+			FROM ctr_slabs
+			GROUP BY enc_key
+			HAVING COUNT(*) = 1
+		)
+	`, emptyID, uint64(time.Now().Add(-orphanedSlabPruneThreshold).Unix()))
+	if err != nil {
+		c.log.Println("ERROR: unable to query slabs:", err)
+		tx.Rollback()
+		return
+	}
+
+	var ids []types.Hash256
+	for rows.Next() {
+		key := make([]byte, 32)
+		if err := rows.Scan(&key); err != nil {
+			c.log.Println("ERROR: unable to get slab ID:", err)
+			rows.Close()
+			tx.Rollback()
+			return
+		}
+		var id types.Hash256
+		copy(id[:], key)
+		ids = append(ids, id)
+	}
+	rows.Close()
+
+	// Delete the shards.
+	for _, id := range ids {
+		_, err := tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", id[:])
+		if err != nil {
+			c.log.Println("ERROR: unable to delete shards:", err)
+			tx.Rollback()
+			return
+		}
+	}
+
+	// Delete the slabs.
+	_, err = tx.Exec("DELETE FROM ctr_slabs WHERE object_id = ?", emptyID)
+	if err != nil {
+		c.log.Println("ERROR: unable to delete orphaned slabs:", err)
+		tx.Rollback()
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.log.Println("ERROR: unable to commit transaction:", err)
+	}
+}
+
+// threadedPruneOrphanedSlabs prunes the orphaned slabs with the
+// certain interval.
+func (c *Contractor) threadedPruneOrphanedSlabs() {
+	if err := c.tg.Add(); err != nil {
+		return
+	}
+	defer c.tg.Done()
+
+	for {
+		select {
+		case <-c.tg.StopChan():
+			return
+		case <-time.After(orphanedSlabPruneInterval):
+		}
+		c.managedPruneOrphanedSlabs()
 	}
 }
