@@ -129,7 +129,7 @@ func dbPutSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, output types.Siaco
 	e := types.NewEncoder(&buf)
 	output.EncodeTo(e)
 	e.Flush()
-	_, err := tx.Exec("INSERT INTO wt_sco (scoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec("REPLACE INTO wt_sco (scoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 	return err
 }
 
@@ -181,7 +181,7 @@ func dbPutSiafundOutput(tx *sql.Tx, id types.SiafundOutputID, output types.Siafu
 	e := types.NewEncoder(&buf)
 	output.EncodeTo(e)
 	e.Flush()
-	_, err := tx.Exec("INSERT INTO wt_sfo (sfoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec("REPLACE INTO wt_sfo (sfoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 	return err
 }
 
