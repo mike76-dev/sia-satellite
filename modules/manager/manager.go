@@ -1172,6 +1172,11 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []modules.BucketF
 
 // UpdateSlab updates a file slab after a successful migration.
 func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab, packed bool) error {
+	// No fee on saving a packed slab's metadata.
+	if packed {
+		return m.hostContractor.UpdateSlab(pk, slab, packed)
+	}
+
 	// Get the balance and check if it is sufficient.
 	renter, err := m.GetRenter(pk)
 	if err != nil {
