@@ -35,6 +35,7 @@ Once a payment has been made to your account, you will be able to see the Satell
 Once your `renterd` is fully synced, navigate to the Satellite page and enter the following configuration:
 ```
 Address:     the network address of the Satellite including the port number
+Mux Port:    the port of the Satellite listening to RHP3 calls (defaults to 9993)
 Public Key:  the public key displayed on the Account page of the Satellite portal,
              without the 'ed25519:' prefix
 Renter Seed: the renter seed displayed on the Account page of the Satellite portal
@@ -56,4 +57,13 @@ By enabling this option, `renterd` will save any file metadata on the Satellite 
 ### File Auto Repair
 This option needs both _Auto Renew Contracts_ and _Backup File Metadata_ to be enabled to work. When you enable it, the Satellite takes over almost all contract maintenance: contract formations, renewals, and refreshes, as well as monitoring the file health and migrating unhealthy slabs to new hosts. Enabling this option allows you to turn on `renterd` only if you need to upload or download files, which you can do as often as you like, even once in a few years. The only thing you need to care of is maintaining a positive balance with the Satellite.
 
-IMPORTANT: Please note that S3 interface and upload packing are not supported yet.
+### Proxy Uploads through Satellite
+When you enable this option, you upload your files directly to the Satellite, which saves your bandwidth and is usually much faster. The Satellite then uploads these files to the network in the background. The downside of this is that you don't see the uploaded files in `renterd` immediately, but only on the next autopilot loop iteration, when the file metadata is imported from the Satellite.
+
+IMPORTANT: Please note that S3 interface is not fully supported yet.
+
+## Data Encryption
+
+The `-satellite` versions of `renterd` now encrypt the files before uploading. If you choose to backup the file metadata on the Satellite, the Satellite operator will not be able to read the contents of the files or even their names. This way, you can enjoy the full privacy when sharing your file metadata with the Satellite.
+
+The Satellite page of the `renterd` UI shows the encryption key used to encrypt your data. You can copy this key end paste it on your dashboard of the Satellite web portal, this will allow you to view your saved files and download them from the dashboard. The key is not transferred to the Satellite, which means that only you can access your data.

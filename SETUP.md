@@ -16,11 +16,11 @@ You will also need an email account, from which the users will be receiving emai
 
 ## To Start With
 
-Log into your server and download the Satellite files. This guide assumes that you will use the version `0.6.0` for an x86 CPU:
+Log into your server and download the Satellite files. This guide assumes that you will use the version `0.8.0` for an x86 CPU:
 ```
 mkdir ~/satellite
 cd ~/satellite
-wget -q https://github.com/mike76-dev/satellite/releases/download/v0.6.0/satellite_linux_amd64.zip
+wget -q https://github.com/mike76-dev/satellite/releases/download/v0.8.0/satellite_linux_amd64.zip
 unzip satellite_linux_amd64.zip
 rm satellite_linux_amd64.zip
 ```
@@ -415,13 +415,14 @@ $ nano satdconfig.json
 First, choose a `name` of your satellite node (Hint: it makes sense to use your domain name for it). This is required to receive email reports later on. Fill in the `dbUser` and `dbName` fields with the MySQL user name (`satuser`) and the database name (`satellite`). Set the directory to store the `satd` metadata and log files (here it is `/usr/local/etc/satd`). You can also change the default portal API port number (`:8080`) as well as the other ports:
 ```
 "Satd Configuration"
-"0.2.0"
+"0.3.0"
 {
   "name": "your_chosen_name",
 	"agent": "Sat-Agent",
 	"gateway": ":0",
 	"api": "localhost:9990",
 	"satellite": ":9992",
+  "mux": ":9993",
 	"dir": "/usr/local/etc/satd",
 	"bootstrap": true,
 	"dbUser": "satuser",
@@ -523,26 +524,26 @@ $ journalctl -u satd -f
 If everything went well, you should see the following output:
 ```
 Output:
-Jul 31 15:16:17 <host> systemd[1]: Started satd.
-Jul 31 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
-Jul 31 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
-Jul 31 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
-Jul 31 15:16:17 <host> satd[226480]: satd v0.6.0
-Jul 31 15:16:17 <host> satd[226480]: Git Revision 2f5a918
-Jul 31 15:16:17 <host> satd[226480]: Loading...
-Jul 31 15:16:17 <host> satd[226480]: Creating mail client...
-Jul 31 15:16:17 <host> satd[226480]: Connecting to the SQL database...
-Jul 31 15:16:17 <host> satd[226480]: Loading gateway...
-Jul 31 15:16:17 <host> satd[226480]: Loading consensus...
-Jul 31 15:16:17 <host> satd[226480]: Loading transaction pool...
-Jul 31 15:16:17 <host> satd[226480]: Loading wallet...
-Jul 31 15:16:17 <host> satd[226480]: Loading manager...
-Jul 31 15:16:18 <host> satd[226480]: Loading provider...
-Jul 31 15:16:18 <host> satd[226480]: Loading portal...
-Jul 31 15:16:18 <host> satd[226480]: API is now available, synchronous startup completed in 0.019 seconds
-Jul 31 15:16:18 <host> satd[226480]: Wallet Password found, attempting to auto-unlock wallet...
-Jul 31 15:16:18 <host> satd[226480]: Auto-unlock failed: provided encryption key is incorrect
-Jul 31 15:16:18 <host> satd[226480]: Finished full setup in 0s
+Nov 18 15:16:17 <host> systemd[1]: Started satd.
+Nov 18 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
+Nov 18 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
+Nov 18 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
+Nov 18 15:16:17 <host> satd[226480]: satd v0.8.0
+Nov 18 15:16:17 <host> satd[226480]: Git Revision 2f5a918
+Nov 18 15:16:17 <host> satd[226480]: Loading...
+Nov 18 15:16:17 <host> satd[226480]: Creating mail client...
+Nov 18 15:16:17 <host> satd[226480]: Connecting to the SQL database...
+Nov 18 15:16:17 <host> satd[226480]: Loading gateway...
+Nov 18 15:16:17 <host> satd[226480]: Loading consensus...
+Nov 18 15:16:17 <host> satd[226480]: Loading transaction pool...
+Nov 18 15:16:17 <host> satd[226480]: Loading wallet...
+Nov 18 15:16:17 <host> satd[226480]: Loading manager...
+Nov 18 15:16:18 <host> satd[226480]: Loading provider...
+Nov 18 15:16:18 <host> satd[226480]: Loading portal...
+Nov 18 15:16:18 <host> satd[226480]: API is now available, synchronous startup completed in 0.019 seconds
+Nov 18 15:16:18 <host> satd[226480]: Wallet Password found, attempting to auto-unlock wallet...
+Nov 18 15:16:18 <host> satd[226480]: Auto-unlock failed: provided encryption key is incorrect
+Nov 18 15:16:18 <host> satd[226480]: Finished full setup in 0s
 ```
 The daemon will now be syncing to the blockchain. You can monitor the progress with the following command:
 ```
@@ -557,10 +558,10 @@ Once the node is synced, the output will change:
 ```
 Output:
 Synced: Yes
-Block:      bid:00000000000000013c202585e95d03c2614e99c0fc74c45abfbbef6c3327bec4
-Height:     428683
-Target:     [0 0 0 0 0 0 0 1 75 152 56 175 21 91 242 148 66 247 215 220 161 236 232 219 132 237 129 170 88 165 124 154]
-Difficulty: ~14.24 uS
+Block:      bid:00000000000000000b9b687a2794ff4dd450bfed6f7fc452e27bcf2a433d8d93
+Height:     444562
+Target:     [0 0 0 0 0 0 0 1 35 47 52 114 83 128 110 166 227 1 23 115 197 236 127 4 15 91 59 30 228 136 86 160]
+Difficulty: ~16.22 uS
 ```
 You should now create a wallet. You will need the password you set in your `systemd` unit earlier. When prompted type in the wallet password you chose.
 ```
