@@ -504,9 +504,10 @@ Alias=satd.service
 ```
 Save and exit.
 
-One last thing before you start the server, open the Provider port:
+One last thing before you start the server, open the Provider and the Mux ports:
 ```
 $ sudo ufw allow 9992
+$ sudo ufw allow 9993
 ```
 ```
 Output:
