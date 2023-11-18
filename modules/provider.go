@@ -24,6 +24,7 @@ type Provider interface {
 type ExtendedContract struct {
 	Contract            rhpv2.ContractRevision
 	StartHeight         uint64
+	ContractPrice       types.Currency
 	TotalCost           types.Currency
 	UploadSpending      types.Currency
 	DownloadSpending    types.Currency
@@ -37,6 +38,7 @@ func (ec ExtendedContract) EncodeTo(e *types.Encoder) {
 	ec.Contract.Signatures[0].EncodeTo(e)
 	ec.Contract.Signatures[1].EncodeTo(e)
 	e.WriteUint64(ec.StartHeight)
+	ec.ContractPrice.EncodeTo(e)
 	ec.TotalCost.EncodeTo(e)
 	ec.UploadSpending.EncodeTo(e)
 	ec.DownloadSpending.EncodeTo(e)
@@ -79,6 +81,7 @@ type ContractMetadata struct {
 	UploadSpending      types.Currency
 	DownloadSpending    types.Currency
 	FundAccountSpending types.Currency
+	ContractPrice       types.Currency
 	TotalCost           types.Currency
 
 	Revision types.FileContractRevision
@@ -93,6 +96,7 @@ func (cm *ContractMetadata) EncodeTo(e *types.Encoder) {
 	cm.UploadSpending.EncodeTo(e)
 	cm.DownloadSpending.EncodeTo(e)
 	cm.FundAccountSpending.EncodeTo(e)
+	cm.ContractPrice.EncodeTo(e)
 	cm.TotalCost.EncodeTo(e)
 	cm.Revision.EncodeTo(e)
 }
@@ -106,6 +110,7 @@ func (cm *ContractMetadata) DecodeFrom(d *types.Decoder) {
 	cm.UploadSpending.DecodeFrom(d)
 	cm.DownloadSpending.DecodeFrom(d)
 	cm.FundAccountSpending.DecodeFrom(d)
+	cm.ContractPrice.DecodeFrom(d)
 	cm.TotalCost.DecodeFrom(d)
 	cm.Revision.DecodeFrom(d)
 }

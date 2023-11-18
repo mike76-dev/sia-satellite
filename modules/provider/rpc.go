@@ -57,6 +57,7 @@ func (p *Provider) managedRequestContracts(s *modules.RPCSession) error {
 		ecs.Contracts = append(ecs.Contracts, modules.ExtendedContract{
 			Contract:            cr,
 			StartHeight:         contract.StartHeight,
+			ContractPrice:       contract.ContractFee,
 			TotalCost:           contract.TotalCost,
 			UploadSpending:      contract.UploadSpending,
 			DownloadSpending:    contract.DownloadSpending,

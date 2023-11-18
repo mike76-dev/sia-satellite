@@ -617,31 +617,15 @@ func (c *Contractor) AcceptContracts(rpk types.PublicKey, contracts []modules.Co
 			continue
 		}
 
-		// We have no way to get some information from the data
-		// provided, so we have to speculate a bit.
+		// Insert the contract.
 		rev := contract.Revision
 		payout := rev.ValidRenterPayout().Add(rev.ValidHostPayout())
 		tax := modules.Tax(contract.StartHeight, payout)
-		host, ok, err := c.hdb.Host(contract.HostKey)
-		if err != nil || !ok {
-			c.log.Println("ERROR: couldn't find host for the contract", contract.ID)
-			continue
-		}
-		contractFee := host.Settings.ContractPrice
-		maxContractFee := contract.TotalCost.Sub(txnFee).Sub(tax).Sub(contract.UploadSpending).Sub(contract.DownloadSpending).Sub(contract.FundAccountSpending)
-		if contractFee.Cmp(maxContractFee) > 0 {
-			contractFee = maxContractFee
-		}
-
-		// Insert the contract.
 		txn := types.Transaction{
 			FileContractRevisions: []types.FileContractRevision{rev},
-			Signatures: []types.TransactionSignature{
-				types.TransactionSignature{},
-				types.TransactionSignature{},
-			},
+			Signatures:            []types.TransactionSignature{{}, {}},
 		}
-		rc, err := c.staticContracts.InsertContract(txn, contract.StartHeight, contract.TotalCost, contractFee, txnFee, tax, rpk, true)
+		rc, err := c.staticContracts.InsertContract(txn, contract.StartHeight, contract.TotalCost, contract.ContractPrice, txnFee, tax, rpk, true)
 		if err != nil {
 			c.log.Printf("ERROR: couldn't accept contract %s: %v\n", contract.ID, err)
 			continue
