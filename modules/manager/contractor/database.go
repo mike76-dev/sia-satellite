@@ -1714,12 +1714,14 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 	}
 
 	// Delete the slabs.
-	_, err = tx.Exec("DELETE FROM ctr_slabs WHERE object_id = ?", emptyID)
+	res, err := tx.Exec("DELETE FROM ctr_slabs WHERE object_id = ?", emptyID)
 	if err != nil {
 		c.log.Println("ERROR: unable to delete orphaned slabs:", err)
 		tx.Rollback()
 		return
 	}
+	num, _ := res.RowsAffected()
+	c.log.Printf("INFO: deleted %d orphaned slabs\n", num)
 
 	if err := tx.Commit(); err != nil {
 		c.log.Println("ERROR: unable to commit transaction:", err)
