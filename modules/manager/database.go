@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -159,81 +160,105 @@ func (m *Manager) UpdateBalance(email string, ub modules.UserBalance) error {
 }
 
 // GetSpendings retrieves the user's spendings.
-func (m *Manager) GetSpendings(email string) (modules.UserSpendings, error) {
-	var currLocked, currUsed, currOverhead float64
-	var prevLocked, prevUsed, prevOverhead float64
-	var currFormed, currRenewed, prevFormed, prevRenewed uint64
-	var currSlabsSaved, currSlabsRetrieved, currSlabsMigrated uint64
-	var prevSlabsSaved, prevSlabsRetrieved, prevSlabsMigrated uint64
-
-	err := m.db.QueryRow(`
-		SELECT current_locked, current_used, current_overhead,
-			prev_locked, prev_used, prev_overhead,
-			current_formed, current_renewed,
-			current_slabs_saved, current_slabs_retrieved, current_slabs_migrated,
-			prev_formed, prev_renewed,
-			prev_slabs_saved, prev_slabs_retrieved, prev_slabs_migrated
+func (m *Manager) GetSpendings(email string, month, year int) (us modules.UserSpendings, err error) {
+	period := fmt.Sprintf("%02d%04d", month, year)
+	err = m.db.QueryRow(`
+		SELECT locked, used, overhead,
+			formed, renewed, slabs_saved,
+			slabs_retrieved, slabs_migrated
 		FROM mg_spendings
-		WHERE email = ?`, email).Scan(&currLocked, &currUsed, &currOverhead, &prevLocked, &prevUsed, &prevOverhead, &currFormed, &currRenewed, &currSlabsSaved, &currSlabsRetrieved, &currSlabsMigrated, &prevFormed, &prevRenewed, &prevSlabsSaved, &prevSlabsRetrieved, &prevSlabsMigrated)
+		WHERE email = ?
+		AND period = ?`, email, period,
+	).Scan(
+		&us.Locked,
+		&us.Used,
+		&us.Overhead,
+		&us.Formed,
+		&us.Renewed,
+		&us.SlabsSaved,
+		&us.SlabsRetrieved,
+		&us.SlabsMigrated,
+	)
 
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return modules.UserSpendings{}, err
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
 	}
 
-	us := modules.UserSpendings{
-		CurrentLocked:         currLocked,
-		CurrentUsed:           currUsed,
-		CurrentOverhead:       currOverhead,
-		PrevLocked:            prevLocked,
-		PrevUsed:              prevUsed,
-		PrevOverhead:          prevOverhead,
-		CurrentFormed:         currFormed,
-		CurrentRenewed:        currRenewed,
-		CurrentSlabsSaved:     currSlabsSaved,
-		CurrentSlabsRetrieved: currSlabsRetrieved,
-		CurrentSlabsMigrated:  currSlabsMigrated,
-		PrevFormed:            prevFormed,
-		PrevRenewed:           prevRenewed,
-		PrevSlabsSaved:        prevSlabsSaved,
-		PrevSlabsRetrieved:    prevSlabsRetrieved,
-		PrevSlabsMigrated:     prevSlabsMigrated,
-	}
-
-	return us, nil
+	return
 }
 
 // UpdateSpendings updates the user's spendings.
-func (m *Manager) UpdateSpendings(email string, us modules.UserSpendings) error {
+func (m *Manager) UpdateSpendings(email string, us modules.UserSpendings, month, year int) error {
+	period := fmt.Sprintf("%02d%04d", month, year)
 	_, err := m.db.Exec(`
-		REPLACE INTO mg_spendings
-		(email, current_locked, current_used, current_overhead,
-		prev_locked, prev_used, prev_overhead,
-		current_formed, current_renewed,
-		current_slabs_saved, current_slabs_retrieved, current_slabs_migrated,
-		prev_formed, prev_renewed,
-		prev_slabs_saved, prev_slabs_retrieved, prev_slabs_migrated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, email, us.CurrentLocked, us.CurrentUsed, us.CurrentOverhead, us.PrevLocked, us.PrevUsed, us.PrevOverhead, us.CurrentFormed, us.CurrentRenewed, us.CurrentSlabsSaved, us.CurrentSlabsRetrieved, us.CurrentSlabsMigrated, us.PrevFormed, us.PrevRenewed, us.PrevSlabsSaved, us.PrevSlabsRetrieved, us.PrevSlabsMigrated)
+		INSERT INTO mg_spendings
+		(email, period, locked, used, overhead,
+		formed, renewed, slabs_saved,
+		slabs_retrieved, slabs_migrated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AS new
+		ON DUPLICATE KEY UPDATE
+			locked = new.locked,
+			used = new.used,
+			overhead = new.overhead,
+			formed = new.formed,
+			renewed = new.renewed,
+			slabs_saved = new.slabs_saved,
+			slabs_retrieved = new.slabs_retrieved,
+			slabs_migrated = new.slabs_migrated
+	`,
+		email,
+		period,
+		us.Locked,
+		us.Used,
+		us.Overhead,
+		us.Formed,
+		us.Renewed,
+		us.SlabsSaved,
+		us.SlabsRetrieved,
+		us.SlabsMigrated,
+	)
 
 	return err
 }
 
 // IncrementStats increments the number of formed or renewed contracts.
 func (m *Manager) IncrementStats(email string, renewed bool) (err error) {
+	year, month, _ := time.Now().Date()
+	period := fmt.Sprintf("%02d%04d", int(month), year)
 	if renewed {
 		_, err = m.db.Exec(`
 			UPDATE mg_spendings
-			SET current_renewed = current_renewed + 1
+			SET renewed = renewed + 1
 			WHERE email = ?
-		`, email)
+			AND period = ?
+		`, email, period)
 	} else {
 		_, err = m.db.Exec(`
 			UPDATE mg_spendings
-			SET current_formed = current_formed + 1
+			SET formed = formed + 1
 			WHERE email = ?
-		`, email)
+			AND period = ?
+		`, email, period)
 	}
 	return
+}
+
+// deleteOldSpendings deletes all spendings records older than two months.
+func (m *Manager) deleteOldSpendings() error {
+	var curr, prev string
+	year, month, _ := time.Now().Date()
+	curr = fmt.Sprintf("%02d%04d", int(month), year)
+	if int(month) > 1 {
+		prev = fmt.Sprintf("%02d%04d", int(month)-1, year)
+	} else {
+		prev = fmt.Sprintf("%02d%04d", 12, year-1)
+	}
+	_, err := m.db.Exec(`
+		DELETE FROM mg_spendings
+		WHERE period <> ?
+		AND period <> ?
+	`, curr, prev)
+	return err
 }
 
 // numSlabs returns the count of file slab metadata objects stored for

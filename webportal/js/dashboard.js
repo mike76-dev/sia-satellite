@@ -1109,34 +1109,34 @@ function getSpendings() {
 				let pmm = document.getElementById('spendings-prev-migrated');
 				c.innerHTML = month[cm] + ' ' + cy;
 				p.innerHTML = month[pm] + ' ' + py;
-				clp.innerHTML = (data.currentlocked * data.scrate).toFixed(2) +
+				clp.innerHTML = (data[0].locked * data[0].scrate).toFixed(2) +
 					' ' + averages.currency;
-				cls.innerHTML = data.currentlocked.toFixed(2) + ' SC';
-				cup.innerHTML = (data.currentused * data.scrate).toFixed(2) +
+				cls.innerHTML = data[0].locked.toFixed(2) + ' SC';
+				cup.innerHTML = (data[0].used * data[0].scrate).toFixed(2) +
 					' ' + averages.currency;
-				cus.innerHTML = data.currentused.toFixed(2) + ' SC';
-				cop.innerHTML = (data.currentoverhead * data.scrate).toFixed(2) +
+				cus.innerHTML = data[0].used.toFixed(2) + ' SC';
+				cop.innerHTML = (data[0].overhead * data[0].scrate).toFixed(2) +
 					' ' + averages.currency;
-				cos.innerHTML = data.currentoverhead.toFixed(2) + ' SC';
-				cf.innerHTML = data.currentformed;
-				cr.innerHTML = data.currentrenewed;
-				cs.innerHTML = data.currentslabssaved;
-				crr.innerHTML = data.currentslabsretrieved;
-				cmm.innerHTML = data.currentslabsmigrated;
-				plp.innerHTML = (data.prevlocked * data.scrate).toFixed(2) +
+				cos.innerHTML = data[0].overhead.toFixed(2) + ' SC';
+				cf.innerHTML = data[0].formed;
+				cr.innerHTML = data[0].renewed;
+				cs.innerHTML = data[0].slabssaved;
+				crr.innerHTML = data[0].slabsretrieved;
+				cmm.innerHTML = data[0].slabsmigrated;
+				plp.innerHTML = (data[1].locked * data[1].scrate).toFixed(2) +
 					' ' + averages.currency;
-				pls.innerHTML = data.prevlocked.toFixed(2) + ' SC';
-				pup.innerHTML = (data.prevused * data.scrate).toFixed(2) +
+				pls.innerHTML = data[1].locked.toFixed(2) + ' SC';
+				pup.innerHTML = (data[1].used * data[1].scrate).toFixed(2) +
 					' ' + averages.currency;
-				pus.innerHTML = data.prevused.toFixed(2) + ' SC';
-				pop.innerHTML = (data.prevoverhead * data.scrate).toFixed(2) +
+				pus.innerHTML = data[1].used.toFixed(2) + ' SC';
+				pop.innerHTML = (data[1].overhead * data[1].scrate).toFixed(2) +
 					' ' + averages.currency;
-				pos.innerHTML = data.prevoverhead.toFixed(2) + ' SC';
-				pf.innerHTML = data.prevformed;
-				pr.innerHTML = data.prevrenewed;
-				ps.innerHTML = data.prevslabssaved;
-				prr.innerHTML = data.prevslabsretrieved;
-				pmm.innerHTML = data.prevslabsmigrated;
+				pos.innerHTML = data[1].overhead.toFixed(2) + ' SC';
+				pf.innerHTML = data[1].formed;
+				pr.innerHTML = data[1].renewed;
+				ps.innerHTML = data[1].slabssaved;
+				prr.innerHTML = data[1].slabsretrieved;
+				pmm.innerHTML = data[1].slabsmigrated;
 			}
 		})
 		.catch(error => console.log(error));

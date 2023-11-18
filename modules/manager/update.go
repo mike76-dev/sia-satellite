@@ -322,7 +322,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				m.log.Println("ERROR: couldn't save block timestamps", err)
 			}
 
-			// Move the current spendings of each renter to the previous ones.
+			// Calculate the monthly spendings of each renter.
 			renters := m.Renters()
 			var formed, renewed, stored, saved, retrieved, migrated, partial uint64
 			var formedFee, renewedFee, storedFee, savedFee, retrievedFee, migratedFee, partialFee float64
@@ -332,57 +332,41 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					m.log.Println("ERROR: couldn't retrieve balance:", err)
 					continue
 				}
-				us, err := m.GetSpendings(renter.Email)
+				us, err := m.GetSpendings(renter.Email, int(currentMonth), currentYear)
 				if err != nil {
 					m.log.Println("ERROR: couldn't retrieve renter spendings:", err)
 					continue
 				}
-				formed += us.CurrentFormed
+				formed += us.Formed
 				if ub.Subscribed {
-					formedFee += float64(us.CurrentFormed) * modules.StaticPricing.FormContract.Invoicing
+					formedFee += float64(us.Formed) * modules.StaticPricing.FormContract.Invoicing
 				} else {
-					formedFee += float64(us.CurrentFormed) * modules.StaticPricing.FormContract.PrePayment
+					formedFee += float64(us.Formed) * modules.StaticPricing.FormContract.PrePayment
 				}
-				renewed += us.CurrentRenewed
+				renewed += us.Renewed
 				if ub.Subscribed {
-					renewedFee += float64(us.CurrentRenewed) * modules.StaticPricing.FormContract.Invoicing
+					renewedFee += float64(us.Renewed) * modules.StaticPricing.FormContract.Invoicing
 				} else {
-					renewedFee += float64(us.CurrentRenewed) * modules.StaticPricing.FormContract.PrePayment
+					renewedFee += float64(us.Renewed) * modules.StaticPricing.FormContract.PrePayment
 				}
-				saved += us.CurrentSlabsSaved
+				saved += us.SlabsSaved
 				if ub.Subscribed {
-					savedFee += float64(us.CurrentSlabsSaved) * modules.StaticPricing.SaveMetadata.Invoicing
+					savedFee += float64(us.SlabsSaved) * modules.StaticPricing.SaveMetadata.Invoicing
 				} else {
-					savedFee += float64(us.CurrentSlabsSaved) * modules.StaticPricing.SaveMetadata.PrePayment
+					savedFee += float64(us.SlabsSaved) * modules.StaticPricing.SaveMetadata.PrePayment
 				}
-				retrieved += us.CurrentSlabsRetrieved
+				retrieved += us.SlabsRetrieved
 				if ub.Subscribed {
-					retrievedFee += float64(us.CurrentSlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.Invoicing
+					retrievedFee += float64(us.SlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.Invoicing
 				} else {
-					retrievedFee += float64(us.CurrentSlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.PrePayment
+					retrievedFee += float64(us.SlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.PrePayment
 				}
-				migrated += us.CurrentSlabsMigrated
+				migrated += us.SlabsMigrated
 				if ub.Subscribed {
-					migratedFee += float64(us.CurrentSlabsMigrated) * modules.StaticPricing.MigrateSlab.Invoicing
+					migratedFee += float64(us.SlabsMigrated) * modules.StaticPricing.MigrateSlab.Invoicing
 				} else {
-					migratedFee += float64(us.CurrentSlabsMigrated) * modules.StaticPricing.MigrateSlab.PrePayment
+					migratedFee += float64(us.SlabsMigrated) * modules.StaticPricing.MigrateSlab.PrePayment
 				}
-				us.PrevLocked = us.CurrentLocked
-				us.PrevUsed = us.CurrentUsed
-				us.PrevOverhead = us.CurrentOverhead
-				us.CurrentLocked = 0
-				us.CurrentUsed = 0
-				us.CurrentOverhead = 0
-				us.PrevFormed = us.CurrentFormed
-				us.PrevRenewed = us.CurrentRenewed
-				us.CurrentFormed = 0
-				us.CurrentRenewed = 0
-				us.PrevSlabsSaved = us.CurrentSlabsSaved
-				us.PrevSlabsRetrieved = us.CurrentSlabsRetrieved
-				us.PrevSlabsMigrated = us.CurrentSlabsMigrated
-				us.CurrentSlabsSaved = 0
-				us.CurrentSlabsRetrieved = 0
-				us.CurrentSlabsMigrated = 0
 				count, data, err := m.numSlabs(renter.PublicKey)
 				if err != nil {
 					m.log.Println("ERROR: couldn't retrieve slab count:", err)
@@ -399,14 +383,14 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				storageCost := storageFee * float64(count)
 				stored += uint64(count)
 				storedFee += storageCost
-				us.PrevUsed += storageCost
-				us.PrevOverhead += storageCost
+				us.Used += storageCost
+				us.Overhead += storageCost
 				partialCost := dataFee * float64(data)
 				partial += data
 				partialFee += partialCost
-				us.PrevUsed += partialCost
-				us.PrevOverhead += partialCost
-				err = m.UpdateSpendings(renter.Email, us)
+				us.Used += partialCost
+				us.Overhead += partialCost
+				err = m.UpdateSpendings(renter.Email, us, int(currentMonth), currentYear)
 				if err != nil {
 					m.log.Println("ERROR: couldn't update spendings:", err)
 				}
@@ -491,6 +475,12 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					m.log.Println("ERROR: unable to send a monthly report:", err)
 				}
 			}()
+
+			// Delete old spendings records from the database.
+			err = m.deleteOldSpendings()
+			if err != nil {
+				m.log.Println("ERROR: couldn't delete old spendings:", err)
+			}
 
 			// Spin a thread to invoice the subscribed accounts.
 			go m.threadedSettleAccounts()

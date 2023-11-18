@@ -166,15 +166,16 @@ func (m *migrator) performMigrations(ctx context.Context) {
 			}
 
 			// Update the spendings.
-			us, err := m.contractor.m.GetSpendings(renter.Email)
+			year, month, _ := time.Now().Date()
+			us, err := m.contractor.m.GetSpendings(renter.Email, int(month), year)
 			if err != nil {
 				m.contractor.log.Println("ERROR: couldn't retrieve renter spendings:", err)
 				continue
 			}
-			us.CurrentOverhead += cost
-			us.CurrentSlabsMigrated += num
+			us.Overhead += cost
+			us.SlabsMigrated += num
 
-			err = m.contractor.m.UpdateSpendings(renter.Email, us)
+			err = m.contractor.m.UpdateSpendings(renter.Email, us, int(month), year)
 			if err != nil {
 				m.contractor.log.Println("ERROR: couldn't update renter spendings:", err)
 			}

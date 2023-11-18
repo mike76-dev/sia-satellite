@@ -67,23 +67,15 @@ type UserBalance struct {
 // UserSpendings contains the spendings in the current and the
 // previous months.
 type UserSpendings struct {
-	CurrentLocked         float64 `json:"currentlocked"`
-	CurrentUsed           float64 `json:"currentused"`
-	CurrentOverhead       float64 `json:"currentoverhead"`
-	PrevLocked            float64 `json:"prevlocked"`
-	PrevUsed              float64 `json:"prevused"`
-	PrevOverhead          float64 `json:"prevoverhead"`
-	SCRate                float64 `json:"scrate"`
-	CurrentFormed         uint64  `json:"currentformed"`
-	CurrentRenewed        uint64  `json:"currentrenewed"`
-	CurrentSlabsSaved     uint64  `json:"currentslabssaved"`
-	CurrentSlabsRetrieved uint64  `json:"currentslabsretrieved"`
-	CurrentSlabsMigrated  uint64  `json:"currentslabsmigrated"`
-	PrevFormed            uint64  `json:"prevformed"`
-	PrevRenewed           uint64  `json:"prevrenewed"`
-	PrevSlabsSaved        uint64  `json:"prevslabssaved"`
-	PrevSlabsRetrieved    uint64  `json:"prevslabsretrieved"`
-	PrevSlabsMigrated     uint64  `json:"prevslabsmigrated"`
+	Locked         float64 `json:"locked"`
+	Used           float64 `json:"used"`
+	Overhead       float64 `json:"overhead"`
+	SCRate         float64 `json:"scrate"`
+	Formed         uint64  `json:"formed"`
+	Renewed        uint64  `json:"renewed"`
+	SlabsSaved     uint64  `json:"slabssaved"`
+	SlabsRetrieved uint64  `json:"slabsretrieved"`
+	SlabsMigrated  uint64  `json:"slabsmigrated"`
 }
 
 // HostScoreBreakdown breaks down the host scores.
@@ -373,7 +365,7 @@ type Manager interface {
 	GetSiacoinRate(string) (float64, error)
 
 	// GetSpendings retrieves the user's spendings.
-	GetSpendings(string) (UserSpendings, error)
+	GetSpendings(string, int, int) (UserSpendings, error)
 
 	// GetWalletSeed returns the wallet seed.
 	GetWalletSeed() (Seed, error)
@@ -426,8 +418,9 @@ type Manager interface {
 	// RetrieveMetadata retrieves the file metadata from the database.
 	RetrieveMetadata(types.PublicKey, []BucketFiles) ([]FileMetadata, error)
 
-	// RetrieveSpendings retrieves the user's spendings.
-	RetrieveSpendings(string, string) (UserSpendings, error)
+	// RetrieveSpendings retrieves the user's spendings for the current and
+	// the previous months in the specified currency.
+	RetrieveSpendings(string, string) ([]UserSpendings, error)
 
 	// ScoreBreakdown returns the score breakdown of the specific host.
 	ScoreBreakdown(HostDBEntry) (HostScoreBreakdown, error)
@@ -468,7 +461,7 @@ type Manager interface {
 	UpdateSlab(types.PublicKey, Slab, bool) error
 
 	// UpdateSpendings updates the user's spendings.
-	UpdateSpendings(string, UserSpendings) error
+	UpdateSpendings(string, UserSpendings, int, int) error
 }
 
 // MaintenanceSpending is a helper struct that contains a breakdown of costs

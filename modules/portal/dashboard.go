@@ -653,7 +653,7 @@ func (api *portalAPI) spendingsHandlerGET(w http.ResponseWriter, req *http.Reque
 	if currency == "" {
 		currency = "USD"
 	}
-	var us modules.UserSpendings
+	var us []modules.UserSpendings
 	if us, err = api.portal.manager.RetrieveSpendings(email, currency); err != nil {
 		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
 		writeError(w,

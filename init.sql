@@ -368,24 +368,17 @@ CREATE TABLE mg_averages (
 );
 
 CREATE TABLE mg_spendings (
-	email                   VARCHAR(64) NOT NULL,
-	current_locked          DOUBLE NOT NULL,
-	current_used            DOUBLE NOT NULL,
-	current_overhead        DOUBLE NOT NULL,
-	prev_locked             DOUBLE NOT NULL,
-	prev_used               DOUBLE NOT NULL,
-	prev_overhead           DOUBLE NOT NULL,
-	current_formed          BIGINT UNSIGNED NOT NULL,
-	current_renewed         BIGINT UNSIGNED NOT NULL,
-	current_slabs_saved     BIGINT UNSIGNED NOT NULL,
-	current_slabs_retrieved BIGINT UNSIGNED NOT NULL,
-	current_slabs_migrated  BIGINT UNSIGNED NOT NULL,
-	prev_formed             BIGINT UNSIGNED NOT NULL,
-	prev_renewed            BIGINT UNSIGNED NOT NULL,
-	prev_slabs_saved        BIGINT UNSIGNED NOT NULL,
-	prev_slabs_retrieved    BIGINT UNSIGNED NOT NULL,
-	prev_slabs_migrated     BIGINT UNSIGNED NOT NULL,
-	PRIMARY KEY (email),
+	email           VARCHAR(64) NOT NULL,
+	period          CHAR(6) NOT NULL,
+	locked          DOUBLE NOT NULL,
+	used            DOUBLE NOT NULL,
+	overhead        DOUBLE NOT NULL,
+	formed          BIGINT UNSIGNED NOT NULL,
+	renewed         BIGINT UNSIGNED NOT NULL,
+	slabs_saved     BIGINT UNSIGNED NOT NULL,
+	slabs_retrieved BIGINT UNSIGNED NOT NULL,
+	slabs_migrated  BIGINT UNSIGNED NOT NULL,
+	CONSTRAINT email_period UNIQUE (email, period),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );
 

@@ -909,14 +909,15 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 	}
 
 	// Update the spendings.
-	us, err := m.GetSpendings(email)
+	year, month, _ := time.Now().Date()
+	us, err := m.GetSpendings(email, int(month), year)
 	if err != nil {
 		return err
 	}
-	us.CurrentLocked += amount
-	us.CurrentOverhead += amountWithFee - amount
+	us.Locked += amount
+	us.Overhead += amountWithFee - amount
 
-	return m.UpdateSpendings(email, us)
+	return m.UpdateSpendings(email, us, int(month), year)
 }
 
 // UnlockSiacoins unlocks the specified amount of Siacoins in the user balance.
@@ -976,40 +977,60 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 		// Spending outside the reporting period.
 		return nil
 	}
-	us, err := m.GetSpendings(email)
+	var month int
+	year, mon, _ := time.Now().Date()
+	month = int(mon)
+	if height < currentMonth {
+		month--
+		if month == 0 {
+			month = 12
+			year--
+		}
+	}
+	us, err := m.GetSpendings(email, month, year)
 	if err != nil {
 		return err
 	}
-	if height < currentMonth {
-		us.PrevLocked -= (unlocked + burned)
-		us.PrevUsed += burned
-	} else {
-		us.CurrentLocked -= (unlocked + burned)
-		us.CurrentUsed += burned
-	}
+	us.Locked -= (unlocked + burned)
+	us.Used += burned
 
-	return m.UpdateSpendings(email, us)
+	return m.UpdateSpendings(email, us, month, year)
 }
 
 // RetrieveSpendings retrieves the user's spendings in the given currency.
-func (m *Manager) RetrieveSpendings(email string, currency string) (modules.UserSpendings, error) {
+func (m *Manager) RetrieveSpendings(email string, currency string) ([]modules.UserSpendings, error) {
 	// Get exchange rate.
 	scRate, err := m.GetSiacoinRate(currency)
 	if err != nil {
-		return modules.UserSpendings{}, err
+		return nil, err
 	}
 	if scRate == 0 {
-		return modules.UserSpendings{}, errors.New("couldn't get exchange rate")
+		return nil, errors.New("couldn't get exchange rate")
 	}
 
 	// Get user spendings.
-	us, err := m.GetSpendings(email)
-	if err != nil {
-		return modules.UserSpendings{}, err
+	var cm, pm, cy, py int
+	year, month, _ := time.Now().Date()
+	cm = int(month)
+	cy = year
+	pm = cm - 1
+	py = year
+	if pm == 0 {
+		pm = 12
+		py--
 	}
-	us.SCRate = scRate
+	cus, err := m.GetSpendings(email, cm, cy)
+	if err != nil {
+		return nil, err
+	}
+	cus.SCRate = scRate
+	pus, err := m.GetSpendings(email, pm, py)
+	if err != nil {
+		return nil, err
+	}
+	pus.SCRate = scRate
 
-	return us, nil
+	return append([]modules.UserSpendings{cus}, pus), nil
 }
 
 // BlockHeight returns the current block height.
@@ -1071,15 +1092,16 @@ func (m *Manager) UpdateMetadata(pk types.PublicKey, fm modules.FileMetadata) er
 	}
 
 	// Update the spendings.
-	us, err := m.GetSpendings(renter.Email)
+	year, month, _ := time.Now().Date()
+	us, err := m.GetSpendings(renter.Email, int(month), year)
 	if err != nil {
 		return err
 	}
-	us.CurrentUsed += cost
-	us.CurrentOverhead += cost
-	us.CurrentSlabsSaved += uint64(len(fm.Slabs))
+	us.Used += cost
+	us.Overhead += cost
+	us.SlabsSaved += uint64(len(fm.Slabs))
 
-	return m.UpdateSpendings(renter.Email, us)
+	return m.UpdateSpendings(renter.Email, us, int(month), year)
 }
 
 // DeleteObject deletes the saved file metadata object.
@@ -1131,15 +1153,16 @@ func (m *Manager) RetrieveMetadata(pk types.PublicKey, present []modules.BucketF
 	}
 
 	// Update the spendings.
-	us, err := m.GetSpendings(renter.Email)
+	year, month, _ := time.Now().Date()
+	us, err := m.GetSpendings(renter.Email, int(month), year)
 	if err != nil {
 		return nil, err
 	}
-	us.CurrentUsed += cost
-	us.CurrentOverhead += cost
-	us.CurrentSlabsRetrieved += numRetrieved
+	us.Used += cost
+	us.Overhead += cost
+	us.SlabsRetrieved += numRetrieved
 
-	err = m.UpdateSpendings(renter.Email, us)
+	err = m.UpdateSpendings(renter.Email, us, int(month), year)
 	if err != nil {
 		return nil, err
 	}
@@ -1185,15 +1208,16 @@ func (m *Manager) UpdateSlab(pk types.PublicKey, slab modules.Slab, packed bool)
 	}
 
 	// Update the spendings.
-	us, err := m.GetSpendings(renter.Email)
+	year, month, _ := time.Now().Date()
+	us, err := m.GetSpendings(renter.Email, int(month), year)
 	if err != nil {
 		return err
 	}
-	us.CurrentUsed += fee
-	us.CurrentOverhead += fee
-	us.CurrentSlabsSaved += 1
+	us.Used += fee
+	us.Overhead += fee
+	us.SlabsSaved += 1
 
-	return m.UpdateSpendings(renter.Email, us)
+	return m.UpdateSpendings(renter.Email, us, int(month), year)
 }
 
 // AcceptContracts accepts a set of contracts from the renter
@@ -1266,15 +1290,16 @@ func (m *Manager) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, error) 
 	}
 
 	// Update the spendings.
-	us, err := m.GetSpendings(renter.Email)
+	year, month, _ := time.Now().Date()
+	us, err := m.GetSpendings(renter.Email, int(month), year)
 	if err != nil {
 		return nil, err
 	}
-	us.CurrentUsed += fee
-	us.CurrentOverhead += fee
-	us.CurrentSlabsRetrieved += uint64(len(slabs))
+	us.Used += fee
+	us.Overhead += fee
+	us.SlabsRetrieved += uint64(len(slabs))
 
-	err = m.UpdateSpendings(renter.Email, us)
+	err = m.UpdateSpendings(renter.Email, us, int(month), year)
 	if err != nil {
 		return nil, err
 	}
