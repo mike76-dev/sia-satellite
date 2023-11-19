@@ -268,12 +268,7 @@ func (c *Contractor) loadRenters() error {
 		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(aBytes))})
 		a.DecodeFrom(d)
 		if err := d.Err(); err != nil {
-			// COMPAT: TODO remove.
-			if strings.Contains(err.Error(), "EOF") {
-				d.SetErr(nil)
-			} else {
-				return err
-			}
+			return err
 		}
 
 		renter := modules.Renter{
@@ -291,9 +286,6 @@ func (c *Contractor) loadRenters() error {
 		}
 		copy(renter.PublicKey[:], pk)
 		c.renters[renter.PublicKey] = renter
-
-		// COMPAT: TODO remove.
-		c.UpdateRenter(renter)
 	}
 
 	return nil
