@@ -62,8 +62,8 @@
         </tr>
         <tr>
             <td class="bold">Store Partial Slab Data</td>
-            <td><span id="store-ps-pp"></span> for one MiB per month</td>
-            <td><span id="store-ps-in"></span> for one MiB per month</td>
+            <td><span id="store-ps-pp"></span> for one MiB** per month</td>
+            <td><span id="store-ps-in"></span> for one MiB** per month</td>
         </tr>
         <tr>
             <td class="bold">Repair a File</td>
@@ -79,6 +79,15 @@
     <p>
         Example: if you upload a 120MiB file to Sia with the default redundancy settings
         (10-of-30 shards), this file is split into 120/(4*10) = 3 slabs.
+    </p>
+    <p>
+        **Partial slabs are pieces of data that have not yet formed a complete slab. When
+        upload packing is enabled, only complete slabs are uploaded to the network, leaving
+        any incomplete slabs reside in the buffer until more data comes up.
+    </p>
+    <p>
+        The partial slab data size of any file, even as large as 1 TB, depends on the chosen
+        redundancy settings and usually doesn't exceed 40 MiB.
     </p>
 </body>
 </html>
