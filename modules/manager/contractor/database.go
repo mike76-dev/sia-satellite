@@ -1713,7 +1713,9 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 		return
 	}
 	num, _ := res.RowsAffected()
-	c.log.Printf("INFO: deleted %d orphaned slabs\n", num)
+	if num > 0 {
+		c.log.Printf("INFO: deleted %d orphaned slabs\n", num)
+	}
 
 	if err := tx.Commit(); err != nil {
 		c.log.Println("ERROR: unable to commit transaction:", err)
