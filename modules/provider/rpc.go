@@ -670,23 +670,25 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 }
 
 // managedSaveMetadata reads the file metadata and saves it.
-func (p *Provider) managedSaveMetadata(s *modules.RPCSession) error {
+func (p *Provider) managedSaveMetadata(s *rhpv3.Stream) error {
 	// Extend the deadline.
-	s.Conn.SetDeadline(time.Now().Add(saveMetadataTime))
+	s.SetDeadline(time.Now().Add(saveMetadataTime))
 
 	// Read the request.
 	var smr saveMetadataRequest
-	hash, err := s.ReadRequest(&smr, metadataRequestMaxSize)
+	err := s.ReadResponse(&smr, 65536)
 	if err != nil {
 		err = fmt.Errorf("could not read renter request: %v", err)
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
 	}
 
 	// Verify the signature.
-	if !smr.PubKey.VerifyHash(hash, smr.Signature) {
+	h := types.NewHasher()
+	smr.EncodeTo(h.E)
+	if ok := smr.PubKey.VerifyHash(h.Sum(), smr.Signature); !ok {
 		err = errors.New("could not verify renter signature")
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
 	}
 
@@ -694,47 +696,76 @@ func (p *Provider) managedSaveMetadata(s *modules.RPCSession) error {
 	renter, err := p.m.GetRenter(smr.PubKey)
 	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
 	}
 
 	// Check if the renter has opted in.
 	if !renter.Settings.BackupFileMetadata {
 		err := errors.New("metadata backups disabled")
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
+	}
+
+	// Receive partial slab data if there is any.
+	if smr.DataSize > 0 {
+		var ud uploadData
+		maxLen := uint64(1048576) + 8 + 1
+		ud.More = true
+		offset := 0
+		for ud.More {
+			s.SetDeadline(time.Now().Add(30 * time.Second))
+			err = s.ReadResponse(&ud, maxLen)
+			if err != nil {
+				err = fmt.Errorf("could not read data: %v", err)
+				s.WriteResponseErr(err)
+				return err
+			}
+			copy(smr.Metadata.Data[offset:], ud.Data)
+			offset += len(ud.Data)
+			resp := uploadResponse{
+				Filesize: uint64(len(ud.Data)),
+			}
+			if err := s.WriteResponse(&resp); err != nil {
+				err = fmt.Errorf("could not write response: %v", err)
+				s.WriteResponseErr(err)
+				return err
+			}
+		}
 	}
 
 	// Save the metadata.
 	err = p.m.UpdateMetadata(smr.PubKey, smr.Metadata)
 	if err != nil {
 		err = fmt.Errorf("couldn't save metadata: %v", err)
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
 	}
 
-	return s.WriteResponse(nil)
+	return nil
 }
 
 // managedRequestMetadata returns a slice containing the saved file
 // metadata belonging top the renter.
-func (p *Provider) managedRequestMetadata(s *modules.RPCSession) error {
+func (p *Provider) managedRequestMetadata(s *rhpv3.Stream) error {
 	// Extend the deadline.
-	s.Conn.SetDeadline(time.Now().Add(requestMetadataTime))
+	s.SetDeadline(time.Now().Add(requestMetadataTime))
 
 	// Read the request.
 	var rmr requestMetadataRequest
-	hash, err := s.ReadRequest(&rmr, 65536)
+	err := s.ReadResponse(&rmr, 65536)
 	if err != nil {
 		err = fmt.Errorf("could not read renter request: %v", err)
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
 	}
 
 	// Verify the signature.
-	if ok := rmr.PubKey.VerifyHash(hash, rmr.Signature); !ok {
+	h := types.NewHasher()
+	rmr.EncodeTo(h.E)
+	if ok := rmr.PubKey.VerifyHash(h.Sum(), rmr.Signature); !ok {
 		err = errors.New("could not verify renter signature")
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
 	}
 
@@ -742,7 +773,7 @@ func (p *Provider) managedRequestMetadata(s *modules.RPCSession) error {
 	_, err = p.m.GetRenter(rmr.PubKey)
 	if err != nil {
 		err = fmt.Errorf("could not find renter in the database: %v", err)
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
 	}
 
@@ -750,7 +781,7 @@ func (p *Provider) managedRequestMetadata(s *modules.RPCSession) error {
 	fm, err := p.m.RetrieveMetadata(rmr.PubKey, rmr.PresentObjects)
 	if err != nil {
 		err = fmt.Errorf("could not retrieve metadata: %v", err)
-		s.WriteError(err)
+		s.WriteResponseErr(err)
 		return err
 	}
 
@@ -758,7 +789,59 @@ func (p *Provider) managedRequestMetadata(s *modules.RPCSession) error {
 		metadata: fm,
 	}
 
-	return s.WriteResponse(&resp)
+	if err := s.WriteResponse(&resp); err != nil {
+		err = fmt.Errorf("could not write response: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Send the partial slab data one by one.
+	for _, md := range fm {
+		ur := uploadResponse{
+			Filesize: uint64(len(md.Data)),
+		}
+		if err := s.WriteResponse(&ur); err != nil {
+			err = fmt.Errorf("could not write response: %v", err)
+			s.WriteResponseErr(err)
+			return err
+		}
+
+		if len(md.Data) == 0 {
+			continue // No partial slab data with this object.
+		}
+
+		var ud uploadData
+		dataLen := 1048576
+		for len(md.Data) > 0 {
+			s.SetDeadline(time.Now().Add(30 * time.Second))
+			if len(md.Data) > dataLen {
+				ud.Data = md.Data[:dataLen]
+			} else {
+				ud.Data = md.Data
+			}
+			md.Data = md.Data[len(ud.Data):]
+			ud.More = len(md.Data) > 0
+			err = s.WriteResponse(&ud)
+			if err != nil {
+				err = fmt.Errorf("could not write data: %v", err)
+				s.WriteResponseErr(err)
+				return err
+			}
+			var ur uploadResponse
+			if err := s.ReadResponse(&ur, 1024); err != nil {
+				err = fmt.Errorf("could not read response: %v", err)
+				s.WriteResponseErr(err)
+				return err
+			}
+			if ur.Filesize != uint64(len(ud.Data)) {
+				err = errors.New("wrong data size received")
+				s.WriteResponseErr(err)
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // managedUpdateSlab updates a single slab.

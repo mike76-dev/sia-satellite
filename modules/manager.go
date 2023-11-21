@@ -855,7 +855,6 @@ func (fm *FileMetadata) EncodeTo(e *types.Encoder) {
 	for _, s := range fm.Slabs {
 		s.EncodeTo(e)
 	}
-	e.WriteBytes(fm.Data)
 }
 
 // DecodeFrom implements types.ProtocolObject.
@@ -869,7 +868,6 @@ func (fm *FileMetadata) DecodeFrom(d *types.Decoder) {
 	for i := 0; i < len(fm.Slabs); i++ {
 		fm.Slabs[i].DecodeFrom(d)
 	}
-	fm.Data = d.ReadBytes()
 }
 
 // BucketFiles contains a list of filepaths within a single bucket.

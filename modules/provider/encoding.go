@@ -526,6 +526,7 @@ func (usr *updateSettingsRequest) EncodeTo(e *types.Encoder) {
 type saveMetadataRequest struct {
 	PubKey    types.PublicKey
 	Metadata  modules.FileMetadata
+	DataSize  uint64
 	Signature types.Signature
 }
 
@@ -533,6 +534,8 @@ type saveMetadataRequest struct {
 func (smr *saveMetadataRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(smr.PubKey[:])
 	smr.Metadata.DecodeFrom(d)
+	smr.DataSize = d.ReadUint64()
+	smr.Metadata.Data = make([]byte, smr.DataSize)
 	smr.Signature.DecodeFrom(d)
 }
 
@@ -540,6 +543,7 @@ func (smr *saveMetadataRequest) DecodeFrom(d *types.Decoder) {
 func (smr *saveMetadataRequest) EncodeTo(e *types.Encoder) {
 	e.Write(smr.PubKey[:])
 	smr.Metadata.EncodeTo(e)
+	e.WriteUint64(smr.DataSize)
 }
 
 // requestMetadataRequest is used to retrieve file metadata.
@@ -586,6 +590,7 @@ func (rmr requestMetadataResponse) EncodeTo(e *types.Encoder) {
 	e.WritePrefix(len(rmr.metadata))
 	for _, fm := range rmr.metadata {
 		fm.EncodeTo(e)
+		e.WriteUint64(uint64(len(fm.Data)))
 	}
 }
 
@@ -712,7 +717,7 @@ type uploadResponse struct {
 
 // DecodeFrom implements requestBody.
 func (ur *uploadResponse) DecodeFrom(d *types.Decoder) {
-	// Nothing to do here.
+	ur.Filesize = d.ReadUint64()
 }
 
 // EncodeTo implements requestBody.
@@ -734,5 +739,6 @@ func (ud *uploadData) DecodeFrom(d *types.Decoder) {
 
 // EncodeTo implements requestBody.
 func (ud *uploadData) EncodeTo(e *types.Encoder) {
-	// Nothing to do here.
+	e.WriteBytes(ud.Data)
+	e.WriteBool(ud.More)
 }

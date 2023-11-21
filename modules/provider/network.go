@@ -385,16 +385,6 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		if err != nil {
 			err = modules.AddContext(err, "incoming RPCUpdateSettings failed")
 		}
-	case saveMetadataSpecifier:
-		err = p.managedSaveMetadata(s)
-		if err != nil {
-			err = modules.AddContext(err, "incoming RPCSaveMetadata failed")
-		}
-	case requestMetadataSpecifier:
-		err = p.managedRequestMetadata(s)
-		if err != nil {
-			err = modules.AddContext(err, "incoming RPCRequestMetadata failed")
-		}
 	case updateSlabSpecifier:
 		err = p.managedUpdateSlab(s)
 		if err != nil {
@@ -459,6 +449,16 @@ func (p *Provider) threadedHandleStream(s *rhpv3.Stream, addr string) {
 	}
 
 	switch id {
+	case saveMetadataSpecifier:
+		err = p.managedSaveMetadata(s)
+		if err != nil {
+			err = modules.AddContext(err, "incoming RPCSaveMetadata failed")
+		}
+	case requestMetadataSpecifier:
+		err = p.managedRequestMetadata(s)
+		if err != nil {
+			err = modules.AddContext(err, "incoming RPCRequestMetadata failed")
+		}
 	case uploadFileSpecifier:
 		err = p.managedReceiveFile(s)
 		if err != nil {
