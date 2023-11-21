@@ -389,23 +389,6 @@ Once you have an account with Stripe, go to the "Developers" section of the Dash
 2. Go to the "API keys" tab and request the Publishable key and the Secret key. Take a note of both.
 3. Go to the "Webhooks" tab and add a new endpoint with the URL `https://your_domain/api/stripe/webhook` listening for `payment_intent.succeeded` and `payment_intent.payment_failed` events. Reveal the signing secret and take a note of it.
 
-## Checking the Siacoin Exchange Rate API
-
-Sia Satellite uses the Bittrex API to fetch the SC/USD exchange rate. To check if it works from your server's location, enter this:
-```
-$ curl https://api.bittrex.com/v3/markets/SC-USD/ticker
-```
-This should produce an output similar to the following:
-```
-Output:
-{"symbol":"SC-USD","lastTradeRate":"0.004290000000","bidRate":"0.004180000000","askRate":"0.004260000000","updatedAt":"2023-04-17T11:09:23.3590326Z"}
-```
-If this API is unavailable at your server's location, let me know and I will add another option for you.
-
-## Configuring the Currency Exchange API
-
-Sia Satellite uses Freecurrency API to fetch the exchange rates of different fiat currencies to US dollar. Freecurrency has a free tier but requires an authentication to prevent an abuse. You need to sign up at `https://freecurrencyapi.com` and receive an API key.
-
 ## Configuring SATD
 
 Open the `satdconfig.json` file:
@@ -472,7 +455,6 @@ Enter the following lines. Replace:
 `<db_password>` with the MySQL user password created earlier,
 `<wallet_password>` with the wallet encryption password that you will create at a later step,
 `<mail_password>` with your SMTP server authentication password,
-`<freecurrency_key>` with your Freecurrency API key,
 `<stripe_key>` with your Stripe secret key,
 `<webhook_key>` with your Stripe webhook signing secret.
 ```
@@ -493,7 +475,6 @@ Environment="SATD_DB_PASSWORD=<db_password>"
 Environment="SATD_WALLET_PASSWORD=<wallet_password>"
 Environment="SATD_CONFIG_DIR=/usr/local/etc/satd"
 Environment="SATD_MAIL_PASSWORD=<mail_password>"
-Environment="SATD_FREECURRENCY_API_KEY=<freecurrency_key>"
 Environment="SATD_STRIPE_KEY=<stripe_key>"
 Environment="SATD_STRIPE_WEBHOOK_KEY=<webhook_key>"
 LimitNOFILE=900000

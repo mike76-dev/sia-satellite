@@ -179,7 +179,6 @@ type Manager struct {
 	hostAverages        modules.HostAverages
 	lastEstimationHosts []modules.HostDBEntry
 	exchRates           map[string]float64
-	scusdRate           float64
 	maintenance         bool
 	bufferSize          uint64
 

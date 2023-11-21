@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	github.com/dchest/threefish v0.0.0-20120919164726-3ecf4c494abf
-	github.com/gabriel-vasile/mimetype v1.4.3
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/montanaflynn/stats v0.7.1

@@ -49,13 +49,6 @@ var (
 		Run:   wrap(managercmd),
 	}
 
-	managerRateCmd = &cobra.Command{
-		Use:   "rate [currency]",
-		Short: "Display exchange rate",
-		Long:  "Display the exchange rate of the given currency. Both fiat currencies (as a 3-letter code) and SC are supported.",
-		Run:   wrap(managerratecmd),
-	}
-
 	managerAveragesCmd = &cobra.Command{
 		Use:   "averages [currency]",
 		Short: "Display host network averages",
@@ -121,21 +114,6 @@ For payment_plan, either 'prepayment' or 'invoicing' are accepted.`,
 		Run:   wrap(managermaintenancestopcmd),
 	}
 )
-
-// managerratecmd is the handler for the command `satc manager rate [currency]`.
-// Displays the exchange rate of the given currency.
-func managerratecmd(currency string) {
-	er, err := httpClient.ManagerRateGet(currency)
-	if err != nil {
-		die(err)
-	}
-
-	if er.Currency == "SC" {
-		fmt.Printf("1 %v = %v USD\n", er.Currency, er.Rate)
-	} else {
-		fmt.Printf("1 USD = %v %v\n", er.Rate, er.Currency)
-	}
-}
 
 // manageraveragescmd is the handler for the command `satc manager averages [currency]`.
 // Displays the host network averages in the given currency.

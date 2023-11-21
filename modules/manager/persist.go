@@ -136,7 +136,6 @@ func (m *Manager) initPersist(dir string) error {
 
 	// Spawn the threads to fetch the exchange rates.
 	go m.threadedFetchExchangeRates()
-	go m.threadedFetchSCUSDRate()
 
 	// Subscribe to the consensus set using the most recent consensus change.
 	go func() {

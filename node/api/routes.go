@@ -63,7 +63,6 @@ func (api *API) buildHTTPRoutes() {
 
 	// Manager API Calls.
 	if api.manager != nil {
-		router.GET("/manager/rate/:currency", api.managerRateHandlerGET)
 		router.GET("/manager/averages/:currency", api.managerAveragesHandlerGET)
 		router.GET("/manager/renters", RequirePassword(api.managerRentersHandlerGET, requiredPassword))
 		router.GET("/manager/renter/:publickey", RequirePassword(api.managerRenterHandlerGET, requiredPassword))

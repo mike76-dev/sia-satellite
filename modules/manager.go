@@ -352,9 +352,6 @@ type Manager interface {
 	// GetEmailPreferences returns the email preferences.
 	GetEmailPreferences() (string, types.Currency)
 
-	// GetExchangeRate returns the exchange rate of a given currency.
-	GetExchangeRate(string) (float64, error)
-
 	// GetModifiedSlabs returns the slabs modified since the last retrieval.
 	GetModifiedSlabs(types.PublicKey) ([]Slab, error)
 

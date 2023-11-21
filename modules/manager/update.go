@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 	"text/template"
 	"time"
 
@@ -16,8 +17,7 @@ import (
 const (
 	// Intervals for the threads.
 	calculateAveragesInterval = 10 * time.Minute
-	exchangeRateFetchInterval = 24 * time.Hour
-	scusdRateFetchInterval    = 10 * time.Minute
+	exchangeRateFetchInterval = 10 * time.Minute
 )
 
 var (
@@ -140,9 +140,9 @@ func (m *Manager) threadedCalculateAverages() {
 	}
 }
 
-// fetchExchangeRates retrieves the fiat currency exchange rates.
+// fetchExchangeRates retrieves the SC exchange rates.
 func (m *Manager) fetchExchangeRates() {
-	data, err := external.FetchExchangeRates()
+	data, err := external.FetchSCRates()
 	if err != nil {
 		m.log.Println("ERROR:", err)
 		return
@@ -177,58 +177,11 @@ func (m *Manager) threadedFetchExchangeRates() {
 	}
 }
 
-// fetchSCUSDRate retrieves the SC-USD rate.
-func (m *Manager) fetchSCUSDRate() {
-	data, err := external.FetchSCUSDRate()
-	if err != nil {
-		m.log.Println("ERROR:", err)
-		return
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.scusdRate = data
-}
-
-// threadedFetchSCUSDRate performs the fetch with set intervals.
-func (m *Manager) threadedFetchSCUSDRate() {
-	err := m.tg.Add()
-	if err != nil {
-		return
-	}
-	defer m.tg.Done()
-
-	m.fetchSCUSDRate()
-
-	for {
-		select {
-		case <-m.tg.StopChan():
-			return
-		case <-time.After(scusdRateFetchInterval):
-		}
-
-		m.fetchSCUSDRate()
-	}
-}
-
 // GetSiacoinRate calculates the SC price in a given currency.
 func (m *Manager) GetSiacoinRate(currency string) (float64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	fiatRate, ok := m.exchRates[currency]
-	if !ok {
-		return 0, errors.New("unsupported currency")
-	}
-
-	return fiatRate * m.scusdRate, nil
-}
-
-// GetExchangeRate returns the exchange rate of a given currency.
-func (m *Manager) GetExchangeRate(currency string) (float64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	rate, ok := m.exchRates[currency]
+	rate, ok := m.exchRates[strings.ToLower(currency)]
 	if !ok {
 		return 0, errors.New("unsupported currency")
 	}

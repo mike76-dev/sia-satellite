@@ -186,7 +186,6 @@ func initCmds() *cobra.Command {
 	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
 
 	root.AddCommand(managerCmd)
-	managerCmd.AddCommand(managerRateCmd)
 	managerCmd.AddCommand(managerAveragesCmd)
 	managerCmd.AddCommand(managerRentersCmd, managerRenterCmd, managerBalanceCmd, managerContractsCmd)
 	managerCmd.AddCommand(managerPreferencesCmd)

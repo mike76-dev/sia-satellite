@@ -101,39 +101,6 @@ type (
 	}
 )
 
-// managerRateHandlerGET handles the API call to /manager/rate.
-func (api *API) managerRateHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
-	currency := strings.ToUpper(ps.ByName("currency"))
-	if currency == "" {
-		WriteError(w, Error{"currency not specified"}, http.StatusBadRequest)
-		return
-	}
-
-	var rate float64
-	var err error
-	if currency == "SC" {
-		// Special case.
-		rate, err = api.manager.GetSiacoinRate("USD")
-		if err != nil {
-			WriteError(w, Error{fmt.Sprintf("couldn't get SC rate: %v", err)}, http.StatusInternalServerError)
-			return
-		}
-	} else {
-		rate, err = api.manager.GetExchangeRate(currency)
-		if err != nil {
-			WriteError(w, Error{fmt.Sprintf("couldn't get exchange rate: %v", err)}, http.StatusInternalServerError)
-			return
-		}
-	}
-
-	er := ExchangeRate{
-		Currency: currency,
-		Rate:     rate,
-	}
-
-	WriteJSON(w, er)
-}
-
 // managerAveragesHandlerGET handles the API call to /manager/averages.
 func (api *API) managerAveragesHandlerGET(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
 	currency := strings.ToUpper(ps.ByName("currency"))
@@ -144,7 +111,7 @@ func (api *API) managerAveragesHandlerGET(w http.ResponseWriter, _ *http.Request
 	rate := float64(1.0)
 	var err error
 	if currency != "SC" {
-		rate, err = api.manager.GetExchangeRate(currency)
+		rate, err = api.manager.GetSiacoinRate(currency)
 		if err != nil {
 			WriteError(w, Error{fmt.Sprintf("couldn't get exchange rate: %v", err)}, http.StatusInternalServerError)
 			return

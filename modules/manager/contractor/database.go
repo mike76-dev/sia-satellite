@@ -1717,6 +1717,19 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 		c.log.Printf("INFO: deleted %d orphaned slabs\n", num)
 	}
 
+	// Delete orphaned shards.
+	res, err = tx.Exec(`
+		DELETE FROM ctr_shards
+		WHERE NOT slab_id IN (
+			SELECT enc_key
+			FROM ctr_slabs
+		)
+	`)
+	num, _ = res.RowsAffected()
+	if num > 0 {
+		c.log.Printf("INFO: deleted %d orphaned shards\n", num)
+	}
+
 	if err := tx.Commit(); err != nil {
 		c.log.Println("ERROR: unable to commit transaction:", err)
 	}
