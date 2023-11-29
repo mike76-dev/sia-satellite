@@ -1180,13 +1180,13 @@ function changeFilesStep(s) {
 }
 
 function convertSize(size) {
-	if (size == 0) {
-		return '0 B';
+	if (size < 1024) {
+		return '' + size + ' B';
 	}
-	const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+	const sizes = ['KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
 	let i = Math.floor(Math.log10(size) / 3);
 	let s = '' + size / Math.pow(10, 3 * i);
-	return s.slice(0, s.indexOf('.') + i + 1) + ' ' + sizes[i];
+	return s.slice(0, s.indexOf('.') + i + 1) + ' ' + sizes[i - 1];
 }
 
 function renderFiles() {
