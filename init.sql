@@ -539,6 +539,7 @@ CREATE TABLE ctr_watchdog (
 );
 
 CREATE TABLE ctr_metadata (
+	id        BINARY(32) NOT NULL,
 	enc_key   BINARY(32) NOT NULL,
 	bucket    BINARY(255) NOT NULL,
 	filepath  BINARY(255) NOT NULL,
@@ -548,7 +549,7 @@ CREATE TABLE ctr_metadata (
 	uploaded  BIGINT UNSIGNED NOT NULL,
 	modified  BIGINT UNSIGNED NOT NULL,
 	retrieved BIGINT UNSIGNED NOT NULL,
-	PRIMARY KEY (enc_key),
+	PRIMARY KEY (id),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );
 
@@ -561,8 +562,10 @@ CREATE TABLE ctr_slabs (
 	len        BIGINT UNSIGNED NOT NULL,
 	num        INT NOT NULL,
 	partial    BOOL NOT NULL,
+	orphan     BOOL NOT NULL,
 	modified   BIGINT UNSIGNED NOT NULL,
 	retrieved  BIGINT UNSIGNED NOT NULL,
+	data       LONGBLOB,
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );
 
@@ -570,15 +573,6 @@ CREATE TABLE ctr_shards (
 	slab_id     BINARY(32) NOT NULL,
 	host        BINARY(32) NOT NULL,
 	merkle_root BINARY(32) NOT NULL
-);
-
-CREATE TABLE ctr_buffers (
-	object_id BINARY(32) NOT NULL,
-	renter_pk BINARY(32) NOT NULL,
-	len       BIGINT UNSIGNED NOT NULL,
-	data      LONGBLOB NOT NULL,
-	PRIMARY KEY (object_id),
-	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );
 
 CREATE TABLE ctr_uploads (

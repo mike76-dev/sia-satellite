@@ -268,6 +268,7 @@ func (m *Manager) numSlabs(pk types.PublicKey) (count int, partial uint64, err e
 		SELECT COUNT(*)
 		FROM ctr_slabs
 		WHERE renter_pk = ?
+		AND orphan = FALSE
 	`, pk[:]).Scan(&count)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, 0, modules.AddContext(err, "couldn't fetch slab count")
@@ -275,8 +276,10 @@ func (m *Manager) numSlabs(pk types.PublicKey) (count int, partial uint64, err e
 
 	err = m.db.QueryRow(`
 		SELECT SUM(len)
-		FROM ctr_buffers
-		WHERE renterpk = ?
+		FROM ctr_slabs
+		WHERE renter_pk = ?
+		AND partial = TRUE
+		AND orphan = FALSE
 	`, pk[:]).Scan(&partial)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, 0, modules.AddContext(err, "couldn't fetch data length")

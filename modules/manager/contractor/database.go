@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/internal/object"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"lukechampine.com/frand"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/core/types"
-	"go.sia.tech/renterd/object"
 )
 
 // bufferedFilesUploadInterval determines how often buffered files
@@ -424,14 +424,6 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 		return modules.AddContext(err, "unable to delete slabs")
 	}
 
-	// Delete partial slab buffer.
-	_, err = tx.Exec("DELETE FROM ctr_buffers WHERE renter_pk = ?", pk[:])
-	if err != nil {
-		c.log.Println("ERROR: unable to delete buffer:", err)
-		tx.Rollback()
-		return modules.AddContext(err, "unable to delete buffer")
-	}
-
 	// Delete objects.
 	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk[:])
 	if err != nil {
@@ -454,7 +446,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path [255]byte) error {
 	objectID := make([]byte, 32)
 	err := tx.QueryRow(`
-		SELECT enc_key
+		SELECT id
 		FROM ctr_metadata
 		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
 	`, bucket[:], path[:], pk[:]).Scan(&objectID)
@@ -465,11 +457,22 @@ func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path [255]byte) erro
 		return err
 	}
 
-	rows, err := tx.Query("SELECT enc_key FROM ctr_slabs WHERE object_id = ?", objectID)
+	rows, err := tx.Query(`
+		SELECT enc_key
+		FROM ctr_slabs
+		WHERE object_id = ?
+		AND orphan = FALSE
+		AND enc_key IN (
+			SELECT enc_key
+			FROM ctr_slabs
+			GROUP BY enc_key
+			HAVING COUNT(DISTINCT(object_id)) = 1
+		)
+	`, objectID)
 	if err != nil {
 		return err
 	}
-	slabs := make(map[types.Hash256]int)
+	var slabs []types.Hash256
 	for rows.Next() {
 		var slab types.Hash256
 		id := make([]byte, 32)
@@ -478,16 +481,14 @@ func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path [255]byte) erro
 			return err
 		}
 		copy(slab[:], id)
-		slabs[slab]++
+		slabs = append(slabs, slab)
 	}
 	rows.Close()
 
-	for slab, num := range slabs {
-		if num == 1 {
-			_, err = tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab[:])
-			if err != nil {
-				return err
-			}
+	for _, slab := range slabs {
+		_, err = tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab[:])
+		if err != nil {
+			return err
 		}
 	}
 
@@ -496,12 +497,7 @@ func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path [255]byte) erro
 		return err
 	}
 
-	_, err = tx.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", objectID)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE enc_key = ?", objectID)
+	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE id = ?", objectID)
 	return err
 }
 
@@ -522,8 +518,11 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 	if imported {
 		retrieved = time.Now().Unix()
 	}
+	objectID := make([]byte, 32)
+	frand.Read(objectID)
 	_, err = tx.Exec(`
 		INSERT INTO ctr_metadata (
+			id,
 			enc_key,
 			bucket,
 			filepath,
@@ -534,8 +533,9 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 			modified,
 			retrieved
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
+		objectID,
 		fm.Key[:],
 		fm.Bucket[:],
 		fm.Path[:],
@@ -551,38 +551,64 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 		return modules.AddContext(err, "unable to store object")
 	}
 
-	var packedLength uint64
-	emptyID := make([]byte, 32)
-	for i, s := range fm.Slabs {
+	// Delete orphaned slabs and shards in case of a multipart uplod.
+	// An empty object key is likely the sign of a multipart upload.
+	// TODO: verify that.
+	if fm.Key == (types.Hash256{}) {
+		for _, slab := range fm.Slabs {
+			_, err = tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab.Key[:])
+			if err != nil {
+				tx.Rollback()
+				return modules.AddContext(err, "unable to delete orphaned shards")
+			}
+			_, err = tx.Exec("DELETE FROM ctr_slabs WHERE enc_key = ? AND orphan = TRUE", slab.Key[:])
+			if err != nil {
+				tx.Rollback()
+				return modules.AddContext(err, "unable to delete orphaned slab")
+			}
+		}
+	}
+
+	// Create a map of inserted slabs. This way, the shards will only be
+	// inserted once for each slab.
+	insertedSlabs := make(map[types.Hash256]struct{})
+	for i, slab := range fm.Slabs {
 		var count int
 		err = tx.QueryRow(`
 			SELECT COUNT(*)
 			FROM ctr_slabs
 			WHERE enc_key = ?
-			AND object_id = ?
-		`, s.Key[:], emptyID[:]).Scan(&count)
+			AND orphan = TRUE
+		`, slab.Key[:]).Scan(&count)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "unable to get packed slab length")
 		}
-		if count > 0 {
-			packedLength = s.Length
-			c.log.Println("DEBUG: assigning orphaned slab to object:", s.Key) //TODO
+		if fm.Key != (types.Hash256{}) && count > 0 {
 			_, err = tx.Exec(`
 				UPDATE ctr_slabs
 				SET
 					object_id = ?,
 					offset = ?,
 					len = ?,
-					num = ?
+					num = ?,
+					orphan = FALSE
 				WHERE enc_key = ?
-				AND object_id = ?
-			`, fm.Key[:], s.Offset, s.Length, i, s.Key[:], emptyID[:])
+				AND orphan = TRUE
+			`, objectID, slab.Offset, slab.Length, i, slab.Key[:])
 			if err != nil {
 				tx.Rollback()
 				return modules.AddContext(err, "unable to update orphaned slab")
 			}
+			if fm.Key != (types.Hash256{}) {
+				fm.Data = fm.Data[slab.Length:]
+			}
 		} else {
+			var data []byte
+			if slab.Partial {
+				data = fm.Data[:slab.Length]
+				fm.Data = fm.Data[slab.Length:]
+			}
 			_, err = tx.Exec(`
 				INSERT INTO ctr_slabs (
 					enc_key,
@@ -593,53 +619,46 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 					len,
 					num,
 					partial,
+					orphan,
 					modified,
-					retrieved
+					retrieved,
+					data
 				)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			`,
-				s.Key[:],
-				fm.Key[:],
+				slab.Key[:],
+				objectID,
 				pk[:],
-				s.MinShards,
-				s.Offset,
-				s.Length,
+				slab.MinShards,
+				slab.Offset,
+				slab.Length,
 				i,
-				s.Partial,
+				slab.Partial,
+				false,
 				modified,
 				modified,
+				data,
 			)
 			if err != nil {
 				tx.Rollback()
 				return modules.AddContext(err, "unable to insert slab")
 			}
-			for _, ss := range s.Shards {
-				_, err = tx.Exec(`
-					INSERT INTO ctr_shards (slab_id, host, merkle_root)
-					VALUES (?, ?, ?)
-				`, s.Key[:], ss.Host[:], ss.Root[:])
-				if err != nil {
-					tx.Rollback()
-					return modules.AddContext(err, "unable to insert shard")
+			if slab.Partial {
+				continue
+			}
+			if _, exists := insertedSlabs[slab.Key]; !exists {
+				for _, ss := range slab.Shards {
+					_, err = tx.Exec(`
+						INSERT INTO ctr_shards (slab_id, host, merkle_root)
+						VALUES (?, ?, ?)
+					`, slab.Key[:], ss.Host[:], ss.Root[:])
+					if err != nil {
+						tx.Rollback()
+						return modules.AddContext(err, "unable to insert shard")
+					}
 				}
 			}
-		}
-	}
-
-	if len(fm.Data) > int(packedLength) {
-		_, err = tx.Exec(`
-			INSERT INTO ctr_buffers (object_id, renter_pk, len, data)
-			VALUES (?, ?, ?, ?)
-		`, fm.Key[:], pk[:], len(fm.Data)-int(packedLength), fm.Data[packedLength:])
-		if err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "unable to save partial data")
-		}
-	} else {
-		_, err = tx.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", fm.Key[:])
-		if err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "unable to delete partial data")
+			insertedSlabs[slab.Key] = struct{}{}
 		}
 	}
 
@@ -676,6 +695,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 
 	rows, err := c.db.Query(`
 		SELECT
+			id,
 			enc_key,
 			bucket,
 			filepath,
@@ -694,12 +714,13 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 	for rows.Next() {
 		var slabs []modules.Slab
 		objectID := make([]byte, 32)
+		ec := make([]byte, 32)
 		b := make([]byte, 255)
 		p := make([]byte, 255)
 		m := make([]byte, 255)
 		var eTag string
 		var modified, retrieved uint64
-		if err := rows.Scan(&objectID, &b, &p, &eTag, &m, &modified, &retrieved); err != nil {
+		if err := rows.Scan(&objectID, &ec, &b, &p, &eTag, &m, &modified, &retrieved); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
@@ -717,15 +738,17 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		}
 
 		slabRows, err := c.db.Query(`
-			SELECT enc_key, min_shards, offset, len, num, partial
+			SELECT enc_key, min_shards, offset, len, num, partial, data
 			FROM ctr_slabs
 			WHERE object_id = ?
+			AND orphan = FALSE
 			ORDER BY num ASC
 		`, objectID)
 		if err != nil {
 			return nil, modules.AddContext(err, "unable to query slabs")
 		}
 
+		var md modules.FileMetadata
 		for slabRows.Next() {
 			var shards []modules.Shard
 			slabID := make([]byte, 32)
@@ -733,7 +756,8 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 			var offset, length uint64
 			var i int
 			var partial bool
-			if err := slabRows.Scan(&slabID, &minShards, &offset, &length, &i, &partial); err != nil {
+			var data []byte
+			if err := slabRows.Scan(&slabID, &minShards, &offset, &length, &i, &partial, &data); err != nil {
 				slabRows.Close()
 				return nil, modules.AddContext(err, "unable to retrieve slab")
 			}
@@ -758,6 +782,8 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 				}
 
 				shardRows.Close()
+			} else {
+				md.Data = append(md.Data, data...)
 			}
 			var slab modules.Slab
 			copy(slab.Key[:], slabID)
@@ -770,25 +796,12 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		}
 
 		slabRows.Close()
-		var md modules.FileMetadata
-		copy(md.Key[:], objectID)
+		copy(md.Key[:], ec)
 		md.Bucket = bucket
 		md.Path = path
 		md.ETag = eTag
 		md.MimeType = mimeType
 		md.Slabs = slabs
-
-		// Load partial slab data.
-		var data []byte
-		err = c.db.QueryRow(`
-			SELECT data
-			FROM ctr_buffers
-			WHERE object_id = ?
-		`, objectID).Scan(&data)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, modules.AddContext(err, "unable to load partial slab data")
-		}
-		md.Data = data
 		fm = append(fm, md)
 
 		// Update timestamp.
@@ -830,7 +843,6 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 	}
 
 	if packed {
-		c.log.Println("DEBUG: inserting orphaned slab", slab.Key) //TODO
 		_, err = tx.Exec(`
 			INSERT INTO ctr_slabs (
 				enc_key,
@@ -841,45 +853,43 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 				len,
 				num,
 				partial,
+				orphan,
 				modified,
 				retrieved
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, slab.Key[:], []byte{}, rpk[:], slab.MinShards, slab.Offset, slab.Length, 0, false, time.Now().Unix(), time.Now().Unix())
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`,
+			slab.Key[:],
+			[]byte{},
+			rpk[:],
+			slab.MinShards,
+			slab.Offset,
+			slab.Length,
+			0,
+			false,
+			true,
+			time.Now().Unix(),
+			time.Now().Unix(),
+		)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't save packed slab")
-		}
-
-		// Delete the buffers if necessary.
-		_, err = tx.Exec(`
-			DELETE FROM ctr_buffers
-			WHERE object_id IN (
-				SELECT object_id
-				FROM ctr_slabs
-				WHERE enc_key = ?
-				AND partial = TRUE
-			)
-		`, slab.Key[:])
-		if err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "couldn't delete buffers")
 		}
 
 		// Convert any partial slabs into complete.
 		_, err = tx.Exec(`
 			UPDATE ctr_slabs
 			SET min_shards = ?,
-				partial = FALSE
+				partial = FALSE,
+				data = ?
 			WHERE enc_key = ?
 			AND partial = TRUE
-		`, slab.MinShards, slab.Key[:])
+		`, slab.MinShards, []byte{}, slab.Key[:])
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't update partial slabs")
 		}
 	} else {
-		c.log.Println("DEBUG: modifying slab", slab.Key) //TODO
 		_, err = tx.Exec(`
 			UPDATE ctr_slabs
 			SET modified = ?
@@ -945,7 +955,7 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, offset, length
 			return object.Slab{}, 0, 0, modules.AddContext(err, "couldn't retrieve shard")
 		}
 		var shard object.Sector
-		copy(shard.Host[:], h)
+		copy(shard.LatestHost[:], h)
 		copy(shard.Root[:], r)
 		shards = append(shards, shard)
 	}
@@ -976,13 +986,12 @@ func (c *Contractor) getSlab(id types.Hash256) (slab object.Slab, offset, length
 // getSlabs loads the slabs from the database.
 func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 	// Load slabs.
-	emptyID := make([]byte, 32)
 	rows, err := c.db.Query(`
 		SELECT enc_key, renter_pk, min_shards, offset, len, num, partial
 		FROM ctr_slabs
-		WHERE object_id <> ?
+		WHERE orphan = FALSE
 		ORDER BY num ASC
-	`, emptyID[:])
+	`)
 	if err != nil {
 		return nil, modules.AddContext(err, "unable to query slabs")
 	}
@@ -1039,30 +1048,32 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 }
 
 // getObject tries to find an object by its path.
-func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (object.Object, error) {
+func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (object.Object, types.Hash256, error) {
 	// Start a transaction.
 	tx, err := c.db.Begin()
 	if err != nil {
-		return object.Object{}, err
+		return object.Object{}, types.Hash256{}, err
 	}
 
 	// Find the object ID.
-	objectID := make([]byte, 32)
+	id := make([]byte, 32)
+	ec := make([]byte, 32)
 	err = tx.QueryRow(`
-		SELECT enc_key
+		SELECT id, enc_key
 		FROM ctr_metadata
 		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
-	`, bucket[:], path[:], pk[:]).Scan(&objectID)
+	`, bucket[:], path[:], pk[:]).Scan(&id, &ec)
 	if err != nil {
 		tx.Rollback()
-		return object.Object{}, modules.AddContext(err, "couldn't find object")
+		return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't find object")
 	}
-	var key types.Hash256
-	copy(key[:], objectID)
+	var objectID, key types.Hash256
+	copy(objectID[:], id)
+	copy(key[:], ec)
 	objectKey, err := encryptionKey(key)
 	if err != nil {
 		tx.Rollback()
-		return object.Object{}, modules.AddContext(err, "couldn't unmarshal object key")
+		return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't unmarshal object key")
 	}
 
 	// Load slabs.
@@ -1071,14 +1082,13 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (obje
 		FROM ctr_slabs
 		WHERE object_id = ?
 		ORDER BY num ASC
-	`, objectID)
+	`, objectID[:])
 	if err != nil {
 		tx.Rollback()
-		return object.Object{}, modules.AddContext(err, "couldn't load slabs")
+		return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't load slabs")
 	}
 
 	var slabs []object.SlabSlice
-	var partialSlabs []object.PartialSlab
 	for rows.Next() {
 		slabID := make([]byte, 32)
 		var minShards uint8
@@ -1088,7 +1098,7 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (obje
 		if err = rows.Scan(&slabID, &minShards, &offset, &length, &n, &p); err != nil {
 			rows.Close()
 			tx.Rollback()
-			return object.Object{}, modules.AddContext(err, "couldn't load slab")
+			return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't load slab")
 		}
 		copy(key[:], slabID)
 		var slabKey object.EncryptionKey
@@ -1096,24 +1106,16 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (obje
 		if err != nil {
 			rows.Close()
 			tx.Rollback()
-			return object.Object{}, modules.AddContext(err, "couldn't unmarshal slab key")
+			return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't unmarshal slab key")
 		}
-		if p {
-			partialSlabs = append(partialSlabs, object.PartialSlab{
-				Key:    slabKey,
-				Offset: uint32(offset),
-				Length: uint32(length),
-			})
-		} else {
-			slabs = append(slabs, object.SlabSlice{
-				Slab: object.Slab{
-					Key:       slabKey,
-					MinShards: minShards,
-				},
-				Offset: uint32(offset),
-				Length: uint32(length),
-			})
-		}
+		slabs = append(slabs, object.SlabSlice{
+			Slab: object.Slab{
+				Key:       slabKey,
+				MinShards: minShards,
+			},
+			Offset: uint32(offset),
+			Length: uint32(length),
+		})
 	}
 	rows.Close()
 
@@ -1123,7 +1125,7 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (obje
 		id, err = convertEncryptionKey(slabs[index].Key)
 		if err != nil {
 			tx.Rollback()
-			return object.Object{}, modules.AddContext(err, "couldn't marshal encryption key")
+			return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't marshal encryption key")
 		}
 		rows, err = tx.Query(`
 			SELECT host, merkle_root
@@ -1132,7 +1134,7 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (obje
 		`, id[:])
 		if err != nil {
 			tx.Rollback()
-			return object.Object{}, modules.AddContext(err, "couldn't load shards")
+			return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't load shards")
 		}
 
 		for rows.Next() {
@@ -1141,10 +1143,10 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (obje
 			if err = rows.Scan(&host, &root); err != nil {
 				rows.Close()
 				tx.Rollback()
-				return object.Object{}, modules.AddContext(err, "couldn't load shard")
+				return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't load shard")
 			}
 			var shard object.Sector
-			copy(shard.Host[:], host)
+			copy(shard.LatestHost[:], host)
 			copy(shard.Root[:], root)
 			slabs[index].Shards = append(slabs[index].Shards, shard)
 		}
@@ -1153,25 +1155,36 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (obje
 
 	// Construct the object.
 	obj := object.Object{
-		Key:          objectKey,
-		Slabs:        slabs,
-		PartialSlabs: partialSlabs,
+		Key:   objectKey,
+		Slabs: slabs,
 	}
 
 	tx.Commit()
-	return obj, nil
+	return obj, objectID, nil
 }
 
 // getPartialSlab returns the chunk of data corresponding to the
 // params supplied.
-func (c *Contractor) getPartialSlab(ec object.EncryptionKey) ([]byte, error) {
-	key, err := convertEncryptionKey(ec)
+func (c *Contractor) getPartialSlab(objectID types.Hash256, key object.EncryptionKey, offset, length uint64) ([]byte, error) {
+	id, err := convertEncryptionKey(key)
 	if err != nil {
-		return nil, modules.AddContext(err, "couldn't unmarshal key")
+		return nil, modules.AddContext(err, "couldn't marshal encryption key")
 	}
-
 	var data []byte
-	err = c.db.QueryRow("SELECT data FROM ctr_buffers WHERE object_id = ?", key[:]).Scan(&data)
+	err = c.db.QueryRow(`
+		SELECT data
+		FROM ctr_slabs
+		WHERE enc_key = ?
+		AND object_id = ?
+		AND offset = ?
+		AND len = ?
+		AND partial = TRUE
+	`,
+		id[:],
+		objectID[:],
+		offset,
+		length,
+	).Scan(&data)
 	if err != nil {
 		return nil, modules.AddContext(err, "couldn't retrieve partial slab data")
 	}
@@ -1187,15 +1200,14 @@ func (c *Contractor) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, erro
 	}
 
 	// Make a list of slabs.
-	emptyID := make([]byte, 32)
 	rows, err := tx.Query(`
 		SELECT enc_key, min_shards
 		FROM ctr_slabs
 		WHERE renter_pk = ?
 		AND modified > retrieved
 		AND partial = FALSE
-		AND object_id <> ?
-	`, rpk[:], emptyID[:])
+		AND orphan = FALSE
+	`, rpk[:])
 	if err != nil {
 		tx.Rollback()
 		return nil, modules.AddContext(err, "couldn't query slabs")
@@ -1259,8 +1271,8 @@ func (c *Contractor) GetModifiedSlabs(rpk types.PublicKey) ([]modules.Slab, erro
 			UPDATE ctr_slabs
 			SET retrieved = ?
 			WHERE enc_key = ?
-			AND object_id <> ?
-		`, time.Now().Unix(), slab.Key[:], emptyID[:])
+			AND orphan = FALSE
+		`, time.Now().Unix(), slab.Key[:])
 		if err != nil {
 			return nil, modules.AddContext(err, "couldn't update timestamp")
 		}
@@ -1295,92 +1307,67 @@ func (c *Contractor) uploadPackedSlabs(rpk types.PublicKey) error {
 		return modules.AddContext(err, "couldn't start transaction")
 	}
 
-	// Create a map of object IDs to the partial slab data lengths.
+	// Create a list of the partial slabs.
 	rows, err := tx.Query(`
-		SELECT object_id, len
-		FROM ctr_buffers
+		SELECT enc_key, object_id, len, data
+		FROM ctr_slabs
 		WHERE renter_pk = ?
+		AND partial = TRUE
 	`, renter.PublicKey[:])
 	if err != nil {
 		tx.Rollback()
-		return modules.AddContext(err, "couldn't query buffers")
+		return modules.AddContext(err, "couldn't query partial slab data")
 	}
 
-	buffers := make(map[types.Hash256]uint64)
-	for rows.Next() {
-		key := make([]byte, 32)
-		var length uint64
-		if err := rows.Scan(&key, &length); err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "couldn't scan buffers")
-		}
-		var id types.Hash256
-		copy(id[:], key)
-		buffers[id] = length
-	}
-	rows.Close()
-
-	// Go through the map and check if the partial slab data
-	// is large enough to be uploaded.
-	slabSize := rhpv2.SectorSize * renter.Allowance.MinShards
-	type chunk struct {
-		objectID types.Hash256
+	type partialSlab struct {
+		key      []byte
+		objectID []byte
 		offset   uint64
 		length   uint64
 	}
-	var completeChunks []chunk
-	var incompleteChunk chunk
-	var dataLen uint64
-	for id, length := range buffers {
-		var firstLen, lastLen uint64
-		if dataLen+length >= slabSize {
-			firstLen = slabSize - dataLen
-			lastLen = length - firstLen
-		} else {
-			firstLen = length
-			lastLen = 0
+	var slabs []partialSlab
+	slabSize := rhpv2.SectorSize * renter.Allowance.MinShards
+	var slabData []byte
+	var incomplete int
+	var offset uint64
+	for rows.Next() {
+		key := make([]byte, 32)
+		id := make([]byte, 32)
+		var length uint64
+		var data []byte
+		if err := rows.Scan(&key, &id, &length, &data); err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't scan partial slab data")
 		}
-		completeChunks = append(completeChunks, chunk{
-			objectID: id,
-			offset:   dataLen,
-			length:   firstLen,
-		})
-		dataLen += firstLen
-		if lastLen > 0 {
-			incompleteChunk = chunk{
-				objectID: id,
-				offset:   firstLen,
-				length:   lastLen,
+		slabs = append(slabs, partialSlab{key, id, offset, length})
+		offset += length
+		slabData = append(slabData, data...)
+		if uint64(len(slabData)) >= slabSize {
+			if uint64(len(slabData)) > slabSize {
+				diff := uint64(len(slabData)) - slabSize
+				slabs[len(slabs)-1].length -= diff
+				slabs = append(slabs, partialSlab{
+					key:      slabs[len(slabs)-1].key,
+					objectID: slabs[len(slabs)-1].objectID,
+					offset:   0,
+					length:   diff,
+				})
+				incomplete = 1
 			}
 			break
 		}
 	}
+	rows.Close()
 
-	if dataLen < slabSize {
-		// Not enough for a complete slab, return.
+	// Return early if there are no slabs to upload.
+	if uint64(len(slabData)) < slabSize {
 		tx.Commit()
 		return nil
 	}
 
-	// Fetch the data.
-	var slabData []byte
-	for _, chunk := range completeChunks {
-		var data []byte
-		err := tx.QueryRow(`
-			SELECT data
-			FROM ctr_buffers
-			WHERE object_id = ?
-		`, chunk.objectID[:]).Scan(&data)
-		if err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "couldn't retrieve data")
-		}
-		slabData = append(slabData, data[:chunk.length]...)
-	}
-
 	// Upload the slab.
 	slabKey := object.GenerateEncryptionKey()
-	slab, err := c.managedUploadPackedSlab(renter.PublicKey, slabData, slabKey, 0)
+	slab, err := c.managedUploadPackedSlab(renter.PublicKey, slabData[:slabSize], slabKey, 0)
 	if err != nil {
 		tx.Rollback()
 		return modules.AddContext(err, "unable to upload slab")
@@ -1403,50 +1390,22 @@ func (c *Contractor) uploadPackedSlabs(rpk types.PublicKey) error {
 		}
 	}
 
-	// Replace the last (a partial) slab in each object with the
-	// new (a complete) one.
-	for _, chunk := range completeChunks {
+	// Delete partial slabs.
+	for i := 0; i < len(slabs)-incomplete; i++ {
 		_, err := tx.Exec(`
-			UPDATE ctr_slabs
-			SET enc_key = ?,
-				min_shards = ?,
-				offset = ?,
-				len = ?,
-				partial = FALSE,
-				modified = ?,
-				retrieved = ?
-			WHERE object_id = ?
+			DELETE FROM ctr_slabs
+			WHERE enc_key = ?
+			AND object_id = ?
 			AND partial = TRUE
-		`,
-			slabID[:],
-			renter.Allowance.MinShards,
-			chunk.offset,
-			chunk.length,
-			time.Now().Unix(),
-			time.Now().Unix(),
-			chunk.objectID[:],
-		)
+		`, slabs[i].key, slabs[i].objectID)
 		if err != nil {
 			tx.Rollback()
-			return modules.AddContext(err, "couldn't save slab")
+			return modules.AddContext(err, "couldn't delete partial slabs")
 		}
 	}
 
-	// If there was partial slab data left, add a partial slab.
-	if incompleteChunk.length > 0 {
-		key := make([]byte, 32)
-		frand.Read(key)
-		var count int
-		err := tx.QueryRow(`
-			SELECT COUNT(num)
-			FROM ctr_slabs
-			WHERE object_id = ?
-		`, incompleteChunk.objectID[:]).Scan(&count)
-		if err != nil {
-			tx.Rollback()
-			return modules.AddContext(err, "couldn't read number of slabs")
-		}
-		c.log.Println("DEBUG: inserting partial slab", slab.Key) //TODO
+	// Add new (complete) slabs.
+	for i := 0; i < len(slabs)-incomplete; i++ {
 		_, err = tx.Exec(`
 			INSERT INTO ctr_slabs (
 				enc_key,
@@ -1457,21 +1416,75 @@ func (c *Contractor) uploadPackedSlabs(rpk types.PublicKey) error {
 				len,
 				num,
 				partial,
+				orphan,
 				modified,
 				retrieved
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, (
+				SELECT MAX(num) FROM (
+					SELECT object_id, num
+					FROM ctr_slabs
+				) AS num_slabs
+				WHERE num_slabs.object_id = ?
+			) + 1, ?, ?, ?, ?)
+		`,
+			slabID[:],
+			slabs[i].objectID,
+			rpk[:],
+			renter.Allowance.MinShards,
+			slabs[i].offset,
+			slabs[i].length,
+			slabs[i].objectID,
+			false,
+			false,
+			time.Now().Unix(),
+			time.Now().Unix(),
+		)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "couldn't insert slab")
+		}
+	}
+
+	// If there was an incomplete slab left, add it.
+	if incomplete > 0 {
+		key := make([]byte, 32)
+		frand.Read(key)
+		_, err = tx.Exec(`
+			INSERT INTO ctr_slabs (
+				enc_key,
+				object_id,
+				renter_pk,
+				min_shards,
+				offset,
+				len,
+				num,
+				partial,
+				orphan,
+				modified,
+				retrieved,
+				data
+			)
+			VALUES (?, ?, ?, ?, ?, ?, (
+				SELECT MAX(num) FROM (
+					SELECT object_id, num
+					FROM ctr_slabs
+				) AS num_slabs
+				WHERE num_slabs.object_id = ?
+			) + 1, ?, ?, ?, ?, ?)
 		`,
 			key,
-			incompleteChunk.objectID[:],
-			renter.PublicKey[:],
+			slabs[len(slabs)-1].objectID[:],
+			rpk[:],
 			0,
 			0,
-			incompleteChunk.length,
-			count,
+			uint64(len(slabData))-slabSize,
+			slabs[len(slabs)-1].objectID[:],
 			true,
+			false,
 			time.Now().Unix(),
 			time.Now().Unix(),
+			slabData[slabSize:],
 		)
 		if err != nil {
 			tx.Rollback()
@@ -1479,40 +1492,13 @@ func (c *Contractor) uploadPackedSlabs(rpk types.PublicKey) error {
 		}
 	}
 
-	// Truncate or delete the buffers.
-	for i, chunk := range completeChunks {
-		if incompleteChunk.length > 0 && i == len(completeChunks)-1 {
-			_, err := tx.Exec(`
-				UPDATE ctr_buffers
-				SET len = ?,
-					data = SUBSTR(data, ?, ?)
-				WHERE object_id = ?
-			`,
-				incompleteChunk.length,
-				incompleteChunk.offset+1,
-				incompleteChunk.length,
-				incompleteChunk.objectID[:],
-			)
-			if err != nil {
-				tx.Rollback()
-				return modules.AddContext(err, "couldn't truncate buffer")
-			}
-		} else {
-			_, err := tx.Exec("DELETE FROM ctr_buffers WHERE object_id = ?", chunk.objectID[:])
-			if err != nil {
-				tx.Rollback()
-				return modules.AddContext(err, "couldn't delete buffer")
-			}
-		}
-	}
-
 	// Update the timestamps.
-	for _, chunk := range completeChunks {
+	for _, slab := range slabs {
 		_, err := tx.Exec(`
 			UPDATE ctr_metadata
 			SET modified = ?
 			WHERE enc_key = ?
-		`, time.Now().Unix(), chunk.objectID[:])
+		`, time.Now().Unix(), slab.objectID)
 		if err != nil {
 			tx.Rollback()
 			return modules.AddContext(err, "couldn't update timestamp")
@@ -1575,7 +1561,6 @@ func (c *Contractor) managedUploadBufferedFiles() {
 		copy(mimeType[:], m)
 
 		// Read the file.
-		var err error
 		err = func() error {
 			name := filepath.Join(c.m.BufferedFilesDir(), n)
 			file, err := os.Open(name)
@@ -1661,11 +1646,10 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 
 	// Make a list of orphaned slabs that don't have non-orphaned twins.
 	// The shards of these is safe to delete.
-	emptyID := make([]byte, 32)
 	rows, err := tx.Query(`
 		SELECT enc_key
 		FROM ctr_slabs
-		WHERE object_id = ?
+		WHERE orphan = TRUE
 		AND modified < ?
 		AND enc_key IN (
 			SELECT enc_key
@@ -1673,7 +1657,7 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 			GROUP BY enc_key
 			HAVING COUNT(*) = 1
 		)
-	`, emptyID, uint64(time.Now().Add(-orphanedSlabPruneThreshold).Unix()))
+	`, uint64(time.Now().Add(-orphanedSlabPruneThreshold).Unix()))
 	if err != nil {
 		c.log.Println("ERROR: unable to query slabs:", err)
 		tx.Rollback()
@@ -1706,7 +1690,7 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 	}
 
 	// Delete the slabs.
-	res, err := tx.Exec("DELETE FROM ctr_slabs WHERE object_id = ?", emptyID)
+	res, err := tx.Exec("DELETE FROM ctr_slabs WHERE orphan = TRUE")
 	if err != nil {
 		c.log.Println("ERROR: unable to delete orphaned slabs:", err)
 		tx.Rollback()
@@ -1725,6 +1709,11 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 			FROM ctr_slabs
 		)
 	`)
+	if err != nil {
+		c.log.Println("ERROR: unable to delete orphaned shards:", err)
+		tx.Rollback()
+		return
+	}
 	num, _ = res.RowsAffected()
 	if num > 0 {
 		c.log.Printf("INFO: deleted %d orphaned shards\n", num)

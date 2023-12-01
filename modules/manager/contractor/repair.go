@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/internal/object"
 	"github.com/mike76-dev/sia-satellite/modules"
 
 	"go.sia.tech/core/types"
-	"go.sia.tech/renterd/object"
 )
 
 // healthCutoff represents the health of a slab, beyond which
@@ -212,7 +212,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 					}
 					for _, shard := range slab.Shards {
 						var ss modules.Shard
-						copy(ss.Host[:], shard.Host[:])
+						copy(ss.Host[:], shard.LatestHost[:])
 						copy(ss.Root[:], shard.Root[:])
 						s.Shards = append(s.Shards, ss)
 					}
@@ -223,9 +223,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 				}
 
 				// Send a response.
-				select {
-				case responses <- jobResponse{j.renterKey, err == nil}:
-				}
+				responses <- jobResponse{j.renterKey, err == nil}
 			}
 		}()
 	}
@@ -453,18 +451,18 @@ func (c *Contractor) migrateSlab(ctx context.Context, rpk types.PublicKey, s *ob
 	var shardIndices []int
 	for i, shard := range s.Shards {
 		// Bad host.
-		if _, exists := goodHosts[shard.Host]; !exists {
+		if _, exists := goodHosts[shard.LatestHost]; !exists {
 			shardIndices = append(shardIndices, i)
 			continue
 		}
 
 		// Reused host.
-		_, exists := usedMap[h2c[shard.Host]]
+		_, exists := usedMap[h2c[shard.LatestHost]]
 		if exists {
 			shardIndices = append(shardIndices, i)
 			continue
 		}
-		usedMap[h2c[shard.Host]] = struct{}{}
+		usedMap[h2c[shard.LatestHost]] = struct{}{}
 	}
 
 	// If all shards are on good hosts, we're done.
@@ -476,7 +474,7 @@ func (c *Contractor) migrateSlab(ctx context.Context, rpk types.PublicKey, s *ob
 	// therefore be used for downloading from.
 	missingShards := len(shardIndices)
 	for _, si := range shardIndices {
-		_, hasContract := h2c[s.Shards[si].Host]
+		_, hasContract := h2c[s.Shards[si].LatestHost]
 		if hasContract {
 			missingShards--
 		}

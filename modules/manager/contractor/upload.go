@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/internal/object"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
 	"github.com/montanaflynn/stats"
@@ -21,7 +22,6 @@ import (
 	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
 	"go.sia.tech/mux/v1"
-	"go.sia.tech/renterd/object"
 
 	"lukechampine.com/frand"
 )
@@ -154,15 +154,6 @@ type (
 		err  error
 	}
 
-	// uploadManagerStats keeps track of the upload stats.
-	uploadManagerStats struct {
-		avgSlabUploadSpeedMBPS float64
-		avgOverdrivePct        float64
-		healthyUploaders       uint64
-		numUploaders           uint64
-		uploadSpeedsMBPS       map[types.PublicKey]float64
-	}
-
 	// dataPoints contains the datapoints for the stats.
 	dataPoints struct {
 		stats.Float64Data
@@ -274,7 +265,7 @@ func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucke
 		}
 		for _, shard := range slab.Shards {
 			s.Shards = append(s.Shards, modules.Shard{
-				Host: shard.Host,
+				Host: shard.LatestHost,
 				Root: shard.Root,
 			})
 		}
@@ -330,7 +321,7 @@ func (c *Contractor) managedUploadPackedSlab(rpk types.PublicKey, data []byte, k
 	}
 	for _, s := range sectors {
 		slab.Shards = append(slab.Shards, modules.Shard{
-			Host: s.Host,
+			Host: s.LatestHost,
 			Root: s.Root,
 		})
 	}
@@ -349,34 +340,6 @@ func encryptPartialSlab(data []byte, key object.EncryptionKey, minShards, totalS
 	slab.Encode(data, encodedShards)
 	slab.Encrypt(encodedShards)
 	return encodedShards
-}
-
-// stats returns the upload manager's stats.
-func (mgr *uploadManager) stats() uploadManagerStats {
-	// Recompute stats.
-	mgr.tryRecomputeStats()
-
-	// Collect stats.
-	mgr.mu.Lock()
-	var numHealthy uint64
-	speeds := make(map[types.PublicKey]float64)
-	for _, u := range mgr.uploaders {
-		healthy, mbps := u.stats()
-		speeds[u.hostKey] = mbps
-		if healthy {
-			numHealthy++
-		}
-	}
-	mgr.mu.Unlock()
-
-	// Prepare stats.
-	return uploadManagerStats{
-		avgSlabUploadSpeedMBPS: mgr.statsSlabUploadSpeedBytesPerMS.average() * 0.008, // Convert bytes per ms to mbps.
-		avgOverdrivePct:        mgr.statsOverdrivePct.average(),
-		healthyUploaders:       numHealthy,
-		numUploaders:           uint64(len(speeds)),
-		uploadSpeedsMBPS:       speeds,
-	}
 }
 
 // stop stops the upload manager and all running uploads.
@@ -1047,15 +1010,6 @@ func (u *uploader) stop() {
 	}
 }
 
-// stats returns the uploader stats.
-func (u *uploader) stats() (healthy bool, mbps float64) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	healthy = u.consecutiveFailures == 0
-	mbps = u.statsSectorUploadSpeedBytesPerMS.average() * 0.008
-	return
-}
-
 // execute executes an upload request.
 func (u *uploader) execute(req *sectorUploadReq) (types.Hash256, error) {
 	u.mu.Lock()
@@ -1070,13 +1024,6 @@ func (u *uploader) execute(req *sectorUploadReq) (types.Hash256, error) {
 	}
 
 	return root, nil
-}
-
-// blockHeight returns the uploader's block height.
-func (u *uploader) blockHeight() uint64 {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return u.bh
 }
 
 // estimate returns the estimated upload duration.
@@ -1334,13 +1281,6 @@ func (s *slabUpload) nextRequest(responseChan chan sectorUploadResp) *sectorUplo
 	}
 }
 
-// overdriveCnt returns the overdrive count.
-func (s *slabUpload) overdriveCnt() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return int(s.numLaunched) - len(s.sectors)
-}
-
 // overdrivePct returns the percentage of the overdrive workers.
 func (s *slabUpload) overdrivePct() float64 {
 	s.mu.Lock()
@@ -1378,8 +1318,8 @@ func (s *slabUpload) receive(resp sectorUploadResp) (finished bool, next bool) {
 
 	// Store the sector and call cancel on the sector ctx.
 	s.sectors[resp.req.sectorIndex] = object.Sector{
-		Host: resp.req.hostKey,
-		Root: resp.root,
+		LatestHost: resp.req.hostKey,
+		Root:       resp.root,
 	}
 	s.remaining[resp.req.sectorIndex].cancel()
 
@@ -1624,6 +1564,9 @@ func (c *Contractor) managedUploadSector(ctx context.Context, rpk, hpk types.Pub
 				return err
 			}
 			curr, err = proto.RPCAccountBalance(ctx, t, &payment, accountID, pt.UID)
+			if err != nil {
+				return err
+			}
 		}
 		if err != nil {
 			hostFault = true

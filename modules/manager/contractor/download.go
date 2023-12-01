@@ -13,13 +13,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/internal/object"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
-	"go.sia.tech/renterd/object"
 
 	"lukechampine.com/frand"
 )
@@ -78,13 +78,6 @@ type (
 		consecutiveFailures uint64
 		queue               []*sectorDownloadReq
 		numDownloads        uint64
-	}
-
-	// downloaderStats keeps the stats of a downloader.
-	downloaderStats struct {
-		avgSpeedMBPS float64
-		healthy      bool
-		numDownloads uint64
 	}
 
 	// sectorDownloadReq contains a sector download request.
@@ -161,13 +154,6 @@ type (
 		object.Sector
 		index int
 	}
-
-	// downloadManagerStats keeps the stats of the download manager.
-	downloadManagerStats struct {
-		avgDownloadSpeedMBPS float64
-		avgOverdrivePct      float64
-		downloaders          map[string]downloaderStats
-	}
 )
 
 // hostError associates an error with a given host.
@@ -236,26 +222,13 @@ func newDownloader(c *Contractor, rpk, hpk types.PublicKey) *downloader {
 }
 
 // managedDownloadObject downloads the whole object.
-func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writer, rpk types.PublicKey, o object.Object, offset, length uint64, contracts []modules.RenterContract) (err error) {
+func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writer, rpk types.PublicKey, o object.Object, id types.Hash256, offset, length uint64, contracts []modules.RenterContract) (err error) {
 	// Calculate what slabs we need.
 	var ss []slabSlice
 	for _, s := range o.Slabs {
 		ss = append(ss, slabSlice{
 			SlabSlice:   s,
-			PartialSlab: false,
-		})
-	}
-	for _, ps := range o.PartialSlabs {
-		// Add a fake slab.
-		ss = append(ss, slabSlice{
-			SlabSlice: object.SlabSlice{
-				Slab: object.Slab{
-					Key: ps.Key,
-				},
-				Offset: ps.Offset,
-				Length: ps.Length,
-			},
-			PartialSlab: true,
+			PartialSlab: s.IsPartial(),
 		})
 	}
 	slabs := slabsForDownload(ss, offset, length)
@@ -268,7 +241,7 @@ func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writ
 		if !slabs[i].PartialSlab {
 			continue
 		}
-		data, err := mgr.contractor.getPartialSlab(o.Key)
+		data, err := mgr.contractor.getPartialSlab(id, slabs[i].Key, uint64(slabs[i].Offset), uint64(slabs[i].Length))
 		if err != nil {
 			return modules.AddContext(err, "failed to fetch partial slab data")
 		}
@@ -324,7 +297,7 @@ func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writ
 				// Check if we have enough downloaders.
 				var available uint8
 				for _, s := range next.Shards {
-					if _, exists := hosts[s.Host]; exists {
+					if _, exists := hosts[s.LatestHost]; exists {
 						available++
 					}
 				}
@@ -431,7 +404,7 @@ func (mgr *downloadManager) managedDownloadSlab(ctx context.Context, rpk types.P
 	// Count how many shards we can download (best-case).
 	var availableShards uint8
 	for _, shard := range slab.Shards {
-		if _, exists := available[shard.Host]; exists {
+		if _, exists := available[shard.LatestHost]; exists {
 			availableShards++
 		}
 	}
@@ -475,27 +448,6 @@ func (mgr *downloadManager) managedDownloadSlab(ctx context.Context, rpk types.P
 	}
 
 	return resp.shards, err
-}
-
-// stats returns the downloadManager's stats.
-func (mgr *downloadManager) stats(rpk types.PublicKey) downloadManagerStats {
-	// Recompute stats.
-	mgr.tryRecomputeStats()
-
-	mgr.mu.Lock()
-	defer mgr.mu.Unlock()
-
-	// Collect stats.
-	stats := make(map[string]downloaderStats)
-	for key, d := range mgr.downloaders {
-		stats[key] = d.stats()
-	}
-
-	return downloadManagerStats{
-		avgDownloadSpeedMBPS: mgr.statsSlabDownloadSpeedBytesPerMS.average() * 0.008, // Convert bytes per ms to mbps.
-		avgOverdrivePct:      mgr.statsOverdrivePct.average(),
-		downloaders:          stats,
-	}
 }
 
 // stop stops the download manager and all running downloads.
@@ -573,7 +525,7 @@ func (mgr *downloadManager) newSlabDownload(ctx context.Context, rpk types.Publi
 	// Build sector info.
 	hostToSectors := make(map[types.PublicKey][]sectorInfo)
 	for sI, s := range slice.Shards {
-		hostToSectors[s.Host] = append(hostToSectors[s.Host], sectorInfo{s, sI})
+		hostToSectors[s.LatestHost] = append(hostToSectors[s.LatestHost], sectorInfo{s, sI})
 	}
 
 	// Create slab download.
@@ -609,17 +561,6 @@ func (mgr *downloadManager) downloadSlab(ctx context.Context, rpk types.PublicKe
 	select {
 	case <-ctx.Done():
 	case responseChan <- resp:
-	}
-}
-
-// stats returns the downloader's stats.
-func (d *downloader) stats() downloaderStats {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return downloaderStats{
-		avgSpeedMBPS: d.statsDownloadSpeedBytesPerMS.average() * 0.008,
-		healthy:      d.consecutiveFailures == 0,
-		numDownloads: d.numDownloads,
 	}
 }
 
@@ -991,7 +932,7 @@ func (s *slabDownload) nextRequest(ctx context.Context, resps *sectorResponses, 
 		root:   sector.Root,
 
 		renterKey: s.renterKey,
-		hostKey:   sector.Host,
+		hostKey:   sector.LatestHost,
 
 		overdrive:   overdrive,
 		sectorIndex: sector.index,
@@ -1215,7 +1156,7 @@ type slabSlice struct {
 // slabsForDownload picks a slice of slabs from the provided set.
 func slabsForDownload(slabs []slabSlice, offset, length uint64) []slabSlice {
 	// Declare a helper to cast a uint64 to uint32 with overflow detection. This
-	// could should never produce an overflow.
+	// should never produce an overflow.
 	cast32 := func(in uint64) uint32 {
 		if in > math.MaxUint32 {
 			panic("slabsForDownload: overflow detected")

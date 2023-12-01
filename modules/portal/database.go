@@ -619,7 +619,7 @@ func (p *Portal) loadCredits() error {
 // getFiles retrieves the information about the stored file metadata.
 func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 	rows, err := p.db.Query(`
-		SELECT enc_key, bucket, filepath, uploaded
+		SELECT id, bucket, filepath, uploaded
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 		ORDER BY bucket ASC, uploaded DESC
@@ -638,31 +638,26 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 		if err = rows.Scan(&id, &bucket, &path, &timestamp); err != nil {
 			return nil, modules.AddContext(err, "couldn't retrieve object")
 		}
-		slabRows, err := p.db.Query("SELECT len FROM ctr_slabs WHERE object_id = ?", id)
+		slabRows, err := p.db.Query("SELECT len, partial FROM ctr_slabs WHERE object_id = ?", id)
 		if err != nil {
 			return nil, modules.AddContext(err, "couldn't retrieve slabs")
 		}
 		var count int
-		var size uint64
+		var size, dataLen uint64
 		for slabRows.Next() {
 			var length uint64
-			if err := slabRows.Scan(&length); err != nil {
+			var partial bool
+			if err := slabRows.Scan(&length, &partial); err != nil {
 				slabRows.Close()
 				return nil, modules.AddContext(err, "couldn't retrieve slab")
 			}
 			count++
 			size += length
+			if partial {
+				dataLen += length
+			}
 		}
 		slabRows.Close()
-		var dataLen uint64
-		err = p.db.QueryRow(`
-			SELECT len
-			FROM ctr_buffers
-			WHERE object_id = ?
-		`, id).Scan(&dataLen)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, modules.AddContext(err, "couldn't query buffers")
-		}
 		sf = append(sf, savedFile{
 			Bucket:      base64.URLEncoding.EncodeToString(bucket),
 			Path:        base64.URLEncoding.EncodeToString(path),
