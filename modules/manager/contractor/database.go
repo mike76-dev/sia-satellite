@@ -1527,6 +1527,19 @@ func (c *Contractor) managedUploadBufferedFiles() {
 		return
 	}
 
+	c.mu.Lock()
+	if c.uploadingBufferedFiles {
+		c.mu.Unlock()
+		return
+	}
+	c.uploadingBufferedFiles = true
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.uploadingBufferedFiles = false
+		c.mu.Unlock()
+	}()
+
 	c.log.Println("INFO: uploading buffered files")
 
 	// Sort the files by the upload timestamp, the older come first.
