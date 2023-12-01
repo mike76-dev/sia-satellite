@@ -18,6 +18,6 @@ var (
 )
 
 var (
-	errAlreadyWatchingContract = errors.New("Watchdog already watching contract with this ID")
-	errTxnNotInSet             = errors.New("Transaction not in set; cannot remove from set.")
+	errAlreadyWatchingContract = errors.New("watchdog already watching contract with this ID")
+	errTxnNotInSet             = errors.New("transaction not in set; cannot remove from set")
 )
