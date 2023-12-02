@@ -785,60 +785,75 @@ func (p *Provider) managedRequestMetadata(s *rhpv3.Stream) error {
 		return err
 	}
 
-	resp := requestMetadataResponse{
-		metadata: fm,
-	}
-
-	if err := s.WriteResponse(&resp); err != nil {
-		err = fmt.Errorf("could not write response: %v", err)
-		s.WriteResponseErr(err)
-		return err
-	}
-
-	// Send the partial slab data one by one.
-	for _, md := range fm {
-		s.SetDeadline(time.Now().Add(30 * time.Second))
-		ur := uploadResponse{
-			Filesize: uint64(len(md.Data)),
+	// Send the metadata in batches.
+	for {
+		var resp requestMetadataResponse
+		var batch int
+		for _, md := range fm {
+			resp.metadata = append(resp.metadata, md)
+			batch += len(md.Slabs)
+			if batch >= requestMetadataBatchThreshold {
+				break
+			}
 		}
-		if err := s.WriteResponse(&ur); err != nil {
+		fm = fm[len(resp.metadata):]
+		resp.more = len(fm) > 0
+
+		if err := s.WriteResponse(&resp); err != nil {
 			err = fmt.Errorf("could not write response: %v", err)
 			s.WriteResponseErr(err)
 			return err
 		}
 
-		if len(md.Data) == 0 {
-			continue // No partial slab data with this object.
+		// Send the partial slab data one by one.
+		for _, md := range resp.metadata {
+			s.SetDeadline(time.Now().Add(30 * time.Second))
+			ur := uploadResponse{
+				Filesize: uint64(len(md.Data)),
+			}
+			if err := s.WriteResponse(&ur); err != nil {
+				err = fmt.Errorf("could not write response: %v", err)
+				s.WriteResponseErr(err)
+				return err
+			}
+
+			if len(md.Data) == 0 {
+				continue // No partial slab data with this object.
+			}
+
+			var ud uploadData
+			dataLen := 1048576
+			for len(md.Data) > 0 {
+				s.SetDeadline(time.Now().Add(30 * time.Second))
+				if len(md.Data) > dataLen {
+					ud.Data = md.Data[:dataLen]
+				} else {
+					ud.Data = md.Data
+				}
+				md.Data = md.Data[len(ud.Data):]
+				ud.More = len(md.Data) > 0
+				err = s.WriteResponse(&ud)
+				if err != nil {
+					err = fmt.Errorf("could not write data: %v", err)
+					s.WriteResponseErr(err)
+					return err
+				}
+				var ur uploadResponse
+				if err := s.ReadResponse(&ur, 1024); err != nil {
+					err = fmt.Errorf("could not read response: %v", err)
+					s.WriteResponseErr(err)
+					return err
+				}
+				if ur.Filesize != uint64(len(ud.Data)) {
+					err = errors.New("wrong data size received")
+					s.WriteResponseErr(err)
+					return err
+				}
+			}
 		}
 
-		var ud uploadData
-		dataLen := 1048576
-		for len(md.Data) > 0 {
-			s.SetDeadline(time.Now().Add(30 * time.Second))
-			if len(md.Data) > dataLen {
-				ud.Data = md.Data[:dataLen]
-			} else {
-				ud.Data = md.Data
-			}
-			md.Data = md.Data[len(ud.Data):]
-			ud.More = len(md.Data) > 0
-			err = s.WriteResponse(&ud)
-			if err != nil {
-				err = fmt.Errorf("could not write data: %v", err)
-				s.WriteResponseErr(err)
-				return err
-			}
-			var ur uploadResponse
-			if err := s.ReadResponse(&ur, 1024); err != nil {
-				err = fmt.Errorf("could not read response: %v", err)
-				s.WriteResponseErr(err)
-				return err
-			}
-			if ur.Filesize != uint64(len(ud.Data)) {
-				err = errors.New("wrong data size received")
-				s.WriteResponseErr(err)
-				return err
-			}
+		if !resp.more {
+			break
 		}
 	}
 

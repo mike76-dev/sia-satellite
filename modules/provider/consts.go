@@ -43,6 +43,10 @@ const (
 	// to retrieve the file metadata and send it.
 	requestMetadataTime = 1 * time.Minute
 
+	// requestMetadataBatchThreshold is the number of slabs to consider
+	// a batch.
+	requestMetadataBatchThreshold = 256
+
 	// updateSlabTime defines the amount of time that the provider has to
 	// update a single slab.
 	updateSlabTime = 15 * time.Second

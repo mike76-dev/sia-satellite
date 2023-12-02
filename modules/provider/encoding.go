@@ -583,6 +583,7 @@ func (rmr *requestMetadataRequest) EncodeTo(e *types.Encoder) {
 // requestMetadataResponse is a response type for requestMetadataRequest.
 type requestMetadataResponse struct {
 	metadata []modules.FileMetadata
+	more     bool
 }
 
 // EncodeTo implements requestBody.
@@ -592,6 +593,7 @@ func (rmr requestMetadataResponse) EncodeTo(e *types.Encoder) {
 		fm.EncodeTo(e)
 		e.WriteUint64(uint64(len(fm.Data)))
 	}
+	e.WriteBool(rmr.more)
 }
 
 // DecodeFrom implements requestBody.
