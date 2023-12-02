@@ -808,7 +808,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		_, err = c.db.Exec(`
 			UPDATE ctr_metadata
 			SET retrieved = ?
-			WHERE enc_key = ?
+			WHERE id = ?
 		`, time.Now().Unix(), objectID)
 		if err != nil {
 			return nil, modules.AddContext(err, "couldn't update timestamp")
@@ -1497,7 +1497,7 @@ func (c *Contractor) uploadPackedSlabs(rpk types.PublicKey) error {
 		_, err := tx.Exec(`
 			UPDATE ctr_metadata
 			SET modified = ?
-			WHERE enc_key = ?
+			WHERE id = ?
 		`, time.Now().Unix(), slab.objectID)
 		if err != nil {
 			tx.Rollback()
