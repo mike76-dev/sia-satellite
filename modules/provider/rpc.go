@@ -797,6 +797,7 @@ func (p *Provider) managedRequestMetadata(s *rhpv3.Stream) error {
 
 	// Send the partial slab data one by one.
 	for _, md := range fm {
+		s.SetDeadline(time.Now().Add(30 * time.Second))
 		ur := uploadResponse{
 			Filesize: uint64(len(md.Data)),
 		}
