@@ -318,6 +318,9 @@ type Manager interface {
 	// DeleteMetadata deletes the renter's saved file metadata.
 	DeleteMetadata(types.PublicKey) error
 
+	// DeleteMultipart deletes an aborted multipart upload.
+	DeleteMultipart(types.PublicKey, types.Hash256) error
+
 	// DeleteMultipartUploads deletes the unfinished multipart uploads.
 	DeleteMultipartUploads(types.PublicKey) error
 

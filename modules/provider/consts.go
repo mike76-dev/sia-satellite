@@ -63,6 +63,10 @@ const (
 	// register a multipart upload.
 	registerMultipartTime = 15 * time.Second
 
+	// deleteMultipartTime defines the amount of time that the provider has to
+	// delete an aborted multipart upload.
+	deleteMultipartTime = 1 * time.Minute
+
 	// defaultConnectionDeadline is the default read and write deadline which is set
 	// on a connection. This ensures it times out if I/O exceeds this deadline.
 	defaultConnectionDeadline = 5 * time.Minute
@@ -126,4 +130,7 @@ var (
 
 	// registerMultipartSpecifier is used when a new multipart upload is created.
 	registerMultipartSpecifier = types.NewSpecifier("CreateMultipart")
+
+	// deleteMultipartSpecifier is used when a multipart upload is aborted.
+	deleteMultipartSpecifier = types.NewSpecifier("AbortMultipart")
 )

@@ -805,6 +805,61 @@ func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, buck
 	return
 }
 
+// DeleteMultipart deletes an aborted multipart upload.
+func (m *Manager) DeleteMultipart(rpk types.PublicKey, id types.Hash256) error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return modules.AddContext(err, "unable to start transaction")
+	}
+
+	rows, err := tx.Query("SELECT filename FROM ctr_parts WHERE upload_id = ?", id[:])
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "unable to query files")
+	}
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			tx.Rollback()
+			return modules.AddContext(err, "unable to retrieve filename")
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+
+	for _, name := range names {
+		p := filepath.Join(m.BufferedFilesDir(), name)
+		fi, err := os.Stat(p)
+		if err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "unable to get file size")
+		}
+		if err := os.Remove(p); err != nil {
+			tx.Rollback()
+			return modules.AddContext(err, "unable to delete file")
+		}
+		m.mu.Lock()
+		m.bufferSize -= uint64(fi.Size())
+		m.mu.Unlock()
+	}
+
+	_, err = tx.Exec("DELETE FROM ctr_parts WHERE upload_id = ?", id[:])
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "unable to delete file records")
+	}
+	_, err = tx.Exec("DELETE FROM ctr_multipart WHERE id = ?", id[:])
+	if err != nil {
+		tx.Rollback()
+		return modules.AddContext(err, "unable to delete multipart upload")
+	}
+
+	return tx.Commit()
+}
+
 // managedPruneMultipartUploads deletes any multipart uploads that are older
 // than the threshold together with the associated parts.
 func (m *Manager) managedPruneMultipartUploads() {

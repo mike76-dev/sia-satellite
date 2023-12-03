@@ -1153,3 +1153,35 @@ func (p *Provider) managedRegisterMultipart(s *modules.RPCSession) error {
 
 	return s.WriteResponse(&resp)
 }
+
+// managedDeleteMultipart deletes an aborted multipart upload.
+func (p *Provider) managedDeleteMultipart(s *modules.RPCSession) error {
+	// Extend the deadline.
+	s.Conn.SetDeadline(time.Now().Add(deleteMultipartTime))
+
+	// Read the request.
+	var dmr deleteMultipartRequest
+	hash, err := s.ReadRequest(&dmr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	if !dmr.PubKey.VerifyHash(hash, dmr.Signature) {
+		err = errors.New("could not verify renter signature")
+		s.WriteError(err)
+		return err
+	}
+
+	// Delete the multipart upload.
+	err = p.m.DeleteMultipart(dmr.PubKey, dmr.UploadID)
+	if err != nil {
+		err = fmt.Errorf("couldn't delete multipart upload: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	return s.WriteResponse(nil)
+}

@@ -788,3 +788,24 @@ func (rmr *registerMultipartResponse) DecodeFrom(d *types.Decoder) {
 func (rmr *registerMultipartResponse) EncodeTo(e *types.Encoder) {
 	e.Write(rmr.UploadID[:])
 }
+
+// deleteMultipartRequest is used when an incomplete S3 multipart upload
+// is aborted.
+type deleteMultipartRequest struct {
+	PubKey    types.PublicKey
+	UploadID  types.Hash256
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (dmr *deleteMultipartRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(dmr.PubKey[:])
+	d.Read(dmr.UploadID[:])
+	dmr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (dmr *deleteMultipartRequest) EncodeTo(e *types.Encoder) {
+	e.Write(dmr.PubKey[:])
+	e.Write(dmr.UploadID[:])
+}

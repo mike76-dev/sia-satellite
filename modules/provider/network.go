@@ -405,6 +405,11 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		if err != nil {
 			err = modules.AddContext(err, "incoming RPCCreateMultipart failed")
 		}
+	case deleteMultipartSpecifier:
+		err = p.managedDeleteMultipart(s)
+		if err != nil {
+			err = modules.AddContext(err, "incoming RPCAbortMultipart failed")
+		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
 	}
