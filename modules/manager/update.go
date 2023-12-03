@@ -117,8 +117,6 @@ func (m *Manager) calculateAverages() {
 	if err := dbPutAverages(m.dbTx, m.hostAverages); err != nil {
 		m.log.Println("ERROR: couldn't save network averages:", err)
 	}
-
-	return
 }
 
 // threadedCalculateAverages performs the calculation with set intervals.
@@ -352,6 +350,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					// Insufficient balance, delete the file metadata.
 					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
 					m.DeleteBufferedFiles(renter.PublicKey)
+					m.DeleteMultipartUploads(renter.PublicKey)
 					m.DeleteMetadata(renter.PublicKey)
 					continue
 				}
@@ -359,6 +358,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					// Account on hold, delete the file metadata.
 					m.log.Println("WARN: account on hold, deleting stored metadata")
 					m.DeleteBufferedFiles(renter.PublicKey)
+					m.DeleteMultipartUploads(renter.PublicKey)
 					m.DeleteMetadata(renter.PublicKey)
 					continue
 				}

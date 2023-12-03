@@ -318,6 +318,9 @@ type Manager interface {
 	// DeleteMetadata deletes the renter's saved file metadata.
 	DeleteMetadata(types.PublicKey) error
 
+	// DeleteMultipartUploads deletes the unfinished multipart uploads.
+	DeleteMultipartUploads(types.PublicKey) error
+
 	// DeleteObject deletes the saved file metadata object.
 	DeleteObject(types.PublicKey, [255]byte, [255]byte) error
 
@@ -395,6 +398,9 @@ type Manager interface {
 
 	// RefreshedContract returns a bool indicating if the contract was refreshed.
 	RefreshedContract(types.FileContractID) bool
+
+	// RegisterMultipart registers a new multipart upload.
+	RegisterMultipart(types.PublicKey, types.Hash256, [255]byte, [255]byte, [255]byte) (types.Hash256, error)
 
 	// RegisterUpload associates the uploaded file with the object.
 	RegisterUpload(types.PublicKey, [255]byte, [255]byte, [255]byte, string, bool) error

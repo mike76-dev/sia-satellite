@@ -13,6 +13,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/rs/xid"
+	"lukechampine.com/frand"
 
 	"go.sia.tech/core/types"
 )
@@ -615,7 +616,7 @@ func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path [255]byte, mim
 
 // GetBufferSize returns the total size of the temporary files.
 func (m *Manager) GetBufferSize() (total uint64, err error) {
-	rows, err := m.db.Query("SELECT filename FROM ctr_uploads")
+	rows, err := m.db.Query("SELECT filename FROM ctr_uploads UNION SELECT filename FROM ctr_parts")
 	if err != nil {
 		return 0, modules.AddContext(err, "unable to query files")
 	}
@@ -721,4 +722,75 @@ func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path [255]byte)
 	}
 
 	return nil
+}
+
+// DeleteMultipartUploads deletes the unfinished multipart uploads.
+func (m *Manager) DeleteMultipartUploads(pk types.PublicKey) error {
+	// Make a list of file names.
+	rows, err := m.db.Query("SELECT filename FROM ctr_parts WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		m.log.Println("ERROR: unable to query files:", err)
+		return modules.AddContext(err, "unable to query files")
+	}
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			m.log.Println("ERROR: unable to retrieve filename:", err)
+			return modules.AddContext(err, "unable to retrieve filename")
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+
+	// Delete the files one by one.
+	for _, name := range names {
+		p := filepath.Join(m.BufferedFilesDir(), name)
+		fi, err := os.Stat(p)
+		if err != nil {
+			m.log.Println("ERROR: unable to get file size:", err)
+			return modules.AddContext(err, "unable to get file size")
+		}
+		if err := os.Remove(p); err != nil {
+			m.log.Println("ERROR: unable to delete file:", err)
+			return modules.AddContext(err, "unable to delete file")
+		}
+		m.mu.Lock()
+		m.bufferSize -= uint64(fi.Size())
+		m.mu.Unlock()
+		_, err = m.db.Exec("DELETE FROM ctr_parts WHERE filename = ?", name)
+		if err != nil {
+			m.log.Println("ERROR: unable to delete file record:", err)
+			return modules.AddContext(err, "unable to delete file record")
+		}
+	}
+
+	// Delete multipart uploads.
+	_, err = m.db.Exec("DELETE FROM ctr_multipart WHERE renter_pk = ?", pk[:])
+	if err != nil {
+		m.log.Println("ERROR: unable to delete multipart uploads:", err)
+		return modules.AddContext(err, "unable to delete multipart uploads")
+	}
+
+	return nil
+}
+
+// RegisterMultipart registers a new multipart upload.
+func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, bucket, path, mimeType [255]byte) (id types.Hash256, err error) {
+	frand.Read(id[:])
+	_, err = m.db.Exec(`
+		INSERT INTO ctr_multipart (id, enc_key, bucket, filepath, mime, renter_pk, created)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`,
+		id[:],
+		key[:],
+		bucket[:],
+		path[:],
+		mimeType[:],
+		rpk[:],
+		time.Now().Unix(),
+	)
+	return
 }

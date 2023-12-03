@@ -744,3 +744,47 @@ func (ud *uploadData) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(ud.Data)
 	e.WriteBool(ud.More)
 }
+
+// registerMultipartRequest is used when a new S3 multipart upload is created.
+type registerMultipartRequest struct {
+	PubKey    types.PublicKey
+	Key       types.Hash256
+	Bucket    [255]byte
+	Path      [255]byte
+	MimeType  [255]byte
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (rmr *registerMultipartRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(rmr.PubKey[:])
+	d.Read(rmr.Key[:])
+	d.Read(rmr.Bucket[:])
+	d.Read(rmr.Path[:])
+	d.Read(rmr.MimeType[:])
+	rmr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (rmr *registerMultipartRequest) EncodeTo(e *types.Encoder) {
+	e.Write(rmr.PubKey[:])
+	e.Write(rmr.Key[:])
+	e.Write(rmr.Bucket[:])
+	e.Write(rmr.Path[:])
+	e.Write(rmr.MimeType[:])
+}
+
+// registerMultipartResponse is the response type for registerMultipartRequest.
+type registerMultipartResponse struct {
+	UploadID types.Hash256
+}
+
+// DecodeFrom implements requestBody.
+func (rmr *registerMultipartResponse) DecodeFrom(d *types.Decoder) {
+	// Nothing to do here.
+}
+
+// EncodeTo implements requestBody.
+func (rmr *registerMultipartResponse) EncodeTo(e *types.Encoder) {
+	e.Write(rmr.UploadID[:])
+}

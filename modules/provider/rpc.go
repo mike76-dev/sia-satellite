@@ -615,9 +615,10 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		return err
 	}
 
-	// Delete buffered files if opted out.
+	// Delete buffered files and multipart uploads if opted out.
 	if !usr.ProxyUploads {
 		p.m.DeleteBufferedFiles(usr.PubKey)
+		p.m.DeleteMultipartUploads(usr.PubKey)
 	}
 
 	// Delete file metadata if opted out.
@@ -1114,4 +1115,41 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 	}
 
 	return nil
+}
+
+// managedRegisterMultipart registers a new multipart upload and
+// sends back the upload ID.
+func (p *Provider) managedRegisterMultipart(s *modules.RPCSession) error {
+	// Extend the deadline.
+	s.Conn.SetDeadline(time.Now().Add(registerMultipartTime))
+
+	// Read the request.
+	var rmr registerMultipartRequest
+	hash, err := s.ReadRequest(&rmr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	if !rmr.PubKey.VerifyHash(hash, rmr.Signature) {
+		err = errors.New("could not verify renter signature")
+		s.WriteError(err)
+		return err
+	}
+
+	// Register the multipart upload.
+	id, err := p.m.RegisterMultipart(rmr.PubKey, rmr.Key, rmr.Bucket, rmr.Path, rmr.MimeType)
+	if err != nil {
+		err = fmt.Errorf("couldn't register multipart upload: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	resp := registerMultipartResponse{
+		UploadID: id,
+	}
+
+	return s.WriteResponse(&resp)
 }

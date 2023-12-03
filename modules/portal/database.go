@@ -142,6 +142,10 @@ func (p *Portal) deleteAccount(email string) error {
 	err = p.manager.DeleteBufferedFiles(rpk)
 	errs = append(errs, err)
 
+	// Delete multipart uploads.
+	err = p.manager.DeleteMultipartUploads(rpk)
+	errs = append(errs, err)
+
 	// Delete file metadata.
 	err = p.manager.DeleteMetadata(rpk)
 	errs = append(errs, err)

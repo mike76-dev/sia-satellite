@@ -480,15 +480,16 @@ CREATE TABLE hdb_info (
 /* contractor */
 
 DROP TABLE IF EXISTS ctr_contracts;
-DROP TABLE IF EXISTS ctr_buffers;
 DROP TABLE IF EXISTS ctr_uploads;
-DROP TABLE IF EXISTS ctr_renters;
 DROP TABLE IF EXISTS ctr_info;
 DROP TABLE IF EXISTS ctr_dspent;
 DROP TABLE IF EXISTS ctr_watchdog;
 DROP TABLE IF EXISTS ctr_shards;
 DROP TABLE IF EXISTS ctr_slabs;
 DROP TABLE IF EXISTS ctr_metadata;
+DROP TABLE IF EXISTS ctr_parts;
+DROP TABLE IF EXISTS ctr_multipart;
+DROP TABLE IF EXISTS ctr_renters;
 
 CREATE TABLE ctr_renters (
 	id                   INT NOT NULL AUTO_INCREMENT,
@@ -582,6 +583,28 @@ CREATE TABLE ctr_uploads (
 	mime      BINARY(255) NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
 	ready     BOOL NOT NULL,
+	PRIMARY KEY (filename),
+	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
+);
+
+CREATE TABLE ctr_multipart (
+	id        BINARY(32) NOT NULL,
+	enc_key   BINARY(32) NOT NULL,
+	bucket    BINARY(255) NOT NULL,
+	filepath  BINARY(255) NOT NULL,
+	mime      BINARY(255) NOT NULL,
+	renter_pk BINARY(32) NOT NULL,
+	created   BIGINT UNSIGNED NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
+);
+
+CREATE TABLE ctr_parts (
+	filename  CHAR(20) NOT NULL,
+	etag      VARCHAR(64) NOT NULL,
+	num       INT NOT NULL,
+	upload_id BINARY(32) NOT NULL,
+	renter_pk BINARY(32) NOT NULL,
 	PRIMARY KEY (filename),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );

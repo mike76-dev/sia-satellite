@@ -59,6 +59,10 @@ const (
 	// accept a set of contracts from the renter.
 	shareContractsTime = 1 * time.Minute
 
+	// registerMultipartTime defines the amount of time that the provider has to
+	// register a multipart upload.
+	registerMultipartTime = 15 * time.Second
+
 	// defaultConnectionDeadline is the default read and write deadline which is set
 	// on a connection. This ensures it times out if I/O exceeds this deadline.
 	defaultConnectionDeadline = 5 * time.Minute
@@ -119,4 +123,7 @@ var (
 
 	// uploadFileSpecifier is used when a renter wants to upload a file.
 	uploadFileSpecifier = types.NewSpecifier("UploadFile")
+
+	// registerMultipartSpecifier is used when a new multipart upload is created.
+	registerMultipartSpecifier = types.NewSpecifier("CreateMultipart")
 )

@@ -400,6 +400,11 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		if err != nil {
 			err = modules.AddContext(err, "incoming RPCShareContracts failed")
 		}
+	case registerMultipartSpecifier:
+		err = p.managedRegisterMultipart(s)
+		if err != nil {
+			err = modules.AddContext(err, "incoming RPCCreateMultipart failed")
+		}
 	default:
 		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
 	}
