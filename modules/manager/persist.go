@@ -109,8 +109,6 @@ func (m *Manager) initPersist(dir string) error {
 	}
 	m.tg.AfterStop(func() {
 		m.mu.Lock()
-		for m.syncing {
-		}
 		err := m.dbTx.Commit()
 		m.mu.Unlock()
 		if err != nil {
@@ -134,8 +132,11 @@ func (m *Manager) initPersist(dir string) error {
 	// Spawn a thread to calculate the host network averages.
 	go m.threadedCalculateAverages()
 
-	// Spawn the threads to fetch the exchange rates.
+	// Spawn a thread to fetch the exchange rates.
 	go m.threadedFetchExchangeRates()
+
+	// Spawn a thread to prune incomplete multipart uploads.
+	go m.threadedPruneMultipartUploads()
 
 	// Subscribe to the consensus set using the most recent consensus change.
 	go func() {

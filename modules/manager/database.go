@@ -18,6 +18,16 @@ import (
 	"go.sia.tech/core/types"
 )
 
+const (
+	// multipartUploadPruneInterval determines how often incomplete
+	// multipart uploads are pruned.
+	multipartUploadPruneInterval = 30 * time.Minute
+
+	// multipartUploadPruneThreshold determines how old an incomplete
+	// multipart upload has to be to get pruned.
+	multipartUploadPruneThreshold = 24 * time.Hour
+)
+
 // dbGetBlockTimestamps retrieves the block timestamps from the database.
 func dbGetBlockTimestamps(tx *sql.Tx) (curr blockTimestamp, prev blockTimestamp, err error) {
 	var height, timestamp uint64
@@ -793,4 +803,126 @@ func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, buck
 		time.Now().Unix(),
 	)
 	return
+}
+
+// managedPruneMultipartUploads deletes any multipart uploads that are older
+// than the threshold together with the associated parts.
+func (m *Manager) managedPruneMultipartUploads() {
+	tx, err := m.db.Begin()
+	if err != nil {
+		m.log.Println("ERROR: unable to start transaction:", err)
+		return
+	}
+
+	// Make a list of multipart uploads that are old enough to be pruned.
+	rows, err := tx.Query(`
+		SELECT id
+		FROM ctr_multipart
+		WHERE created < ?
+	`, uint64(time.Now().Add(-multipartUploadPruneThreshold).Unix()))
+	if err != nil {
+		m.log.Println("ERROR: unable to query multipart uploads:", err)
+		tx.Rollback()
+		return
+	}
+
+	var ids []types.Hash256
+	for rows.Next() {
+		key := make([]byte, 32)
+		if err := rows.Scan(&key); err != nil {
+			m.log.Println("ERROR: unable to get upload ID:", err)
+			rows.Close()
+			tx.Rollback()
+			return
+		}
+		var id types.Hash256
+		copy(id[:], key)
+		ids = append(ids, id)
+	}
+	rows.Close()
+
+	// Delete the files associated with the parts and the parts themselves.
+	var numParts int64
+	for _, id := range ids {
+		rows, err = tx.Query("SELECT filename FROM ctr_parts WHERE upload_id = ?", id[:])
+		if err != nil {
+			m.log.Println("ERROR: unable to query files:", err)
+			tx.Rollback()
+			return
+		}
+
+		var names []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				rows.Close()
+				m.log.Println("ERROR: unable to retrieve filename:", err)
+				tx.Rollback()
+				return
+			}
+			names = append(names, name)
+		}
+		rows.Close()
+
+		for _, name := range names {
+			p := filepath.Join(m.BufferedFilesDir(), name)
+			fi, err := os.Stat(p)
+			if err != nil {
+				m.log.Println("ERROR: unable to get file size:", err)
+				tx.Rollback()
+				return
+			}
+			if err := os.Remove(p); err != nil {
+				m.log.Println("ERROR: unable to delete file:", err)
+				tx.Rollback()
+				return
+			}
+			m.mu.Lock()
+			m.bufferSize -= uint64(fi.Size())
+			m.mu.Unlock()
+			res, err := tx.Exec("DELETE FROM ctr_parts WHERE filename = ?", name)
+			if err != nil {
+				m.log.Println("ERROR: unable to delete file record:", err)
+				tx.Rollback()
+				return
+			}
+			numParts, _ = res.RowsAffected()
+		}
+	}
+
+	// Delete the multipart uploads.
+	res, err := tx.Exec("DELETE FROM ctr_multipart WHERE created < ?", uint64(time.Now().Add(-multipartUploadPruneThreshold).Unix()))
+	if err != nil {
+		m.log.Println("ERROR: unable to prune multipart uploads:", err)
+		tx.Rollback()
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		m.log.Println("ERROR: unable to commit transaction:", err)
+		return
+	}
+
+	numUploads, _ := res.RowsAffected()
+	if numUploads > 0 {
+		m.log.Printf("INFO: puned %d multipart uploads with %d parts\n", numUploads, numParts)
+	}
+}
+
+// threadedPruneMultipartUploads prunes the incomplete multipart
+// uploads with the certain interval.
+func (m *Manager) threadedPruneMultipartUploads() {
+	if err := m.tg.Add(); err != nil {
+		return
+	}
+	defer m.tg.Done()
+
+	for {
+		select {
+		case <-m.tg.StopChan():
+			return
+		case <-time.After(multipartUploadPruneInterval):
+		}
+		m.managedPruneMultipartUploads()
+	}
 }
