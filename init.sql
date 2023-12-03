@@ -601,7 +601,6 @@ CREATE TABLE ctr_multipart (
 
 CREATE TABLE ctr_parts (
 	filename  CHAR(20) NOT NULL,
-	etag      VARCHAR(64) NOT NULL,
 	num       INT NOT NULL,
 	upload_id BINARY(32) NOT NULL,
 	renter_pk BINARY(32) NOT NULL,

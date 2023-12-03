@@ -809,3 +809,27 @@ func (dmr *deleteMultipartRequest) EncodeTo(e *types.Encoder) {
 	e.Write(dmr.PubKey[:])
 	e.Write(dmr.UploadID[:])
 }
+
+// uploadPartRequest is used when the renter wants to upload a part
+// of an S3 multipart upload.
+type uploadPartRequest struct {
+	PubKey    types.PublicKey
+	UploadID  types.Hash256
+	PartNo    int
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (upr *uploadPartRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(upr.PubKey[:])
+	d.Read(upr.UploadID[:])
+	upr.PartNo = int(d.ReadUint64())
+	upr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (upr *uploadPartRequest) EncodeTo(e *types.Encoder) {
+	e.Write(upr.PubKey[:])
+	e.Write(upr.UploadID[:])
+	e.WriteUint64(uint64(upr.PartNo))
+}

@@ -474,6 +474,11 @@ func (p *Provider) threadedHandleStream(s *rhpv3.Stream, addr string) {
 		if err != nil {
 			err = modules.AddContext(err, "incoming RPCUploadFile failed")
 		}
+	case uploadPartSpecifier:
+		err = p.managedReceivePart(s)
+		if err != nil {
+			err = modules.AddContext(err, "incoming RPCUploadPart failed")
+		}
 	default:
 		p.log.Println("INFO: unknown inbound stream from", addr) //TODO
 	}

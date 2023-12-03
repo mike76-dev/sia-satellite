@@ -133,4 +133,8 @@ var (
 
 	// deleteMultipartSpecifier is used when a multipart upload is aborted.
 	deleteMultipartSpecifier = types.NewSpecifier("AbortMultipart")
+
+	// uploadPartSpecifier is used when a renter wants to upload a part
+	// of an S3 multipart upload.
+	uploadPartSpecifier = types.NewSpecifier("UploadPart")
 )

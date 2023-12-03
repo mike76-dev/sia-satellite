@@ -941,7 +941,8 @@ func (m *Manager) managedPruneMultipartUploads() {
 				tx.Rollback()
 				return
 			}
-			numParts, _ = res.RowsAffected()
+			np, _ := res.RowsAffected()
+			numParts += np
 		}
 	}
 
@@ -980,4 +981,54 @@ func (m *Manager) threadedPruneMultipartUploads() {
 		}
 		m.managedPruneMultipartUploads()
 	}
+}
+
+// PutMultipartPart associates the uploaded file with the part of
+// a multipart upload.
+func (m *Manager) PutMultipartPart(pk types.PublicKey, id types.Hash256, part int, filename string) error {
+	// Delete the old part if it exists.
+	var name string
+	err := m.db.QueryRow(`
+		SELECT filename
+		FROM ctr_parts
+		WHERE upload_id = ?
+		AND num = ?
+	`, id[:], part).Scan(&name)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return modules.AddContext(err, "couldn't get filename")
+	}
+	if err == nil {
+		path := filepath.Join(m.BufferedFilesDir(), name)
+		fi, err := os.Stat(path)
+		if err != nil {
+			return modules.AddContext(err, "couldn't read file size")
+		}
+		if err := os.Remove(path); err != nil {
+			return modules.AddContext(err, "couldn't delete file")
+		}
+		m.mu.Lock()
+		m.bufferSize -= uint64(fi.Size())
+		m.mu.Unlock()
+		_, err = m.db.Exec("DELETE FROM ctr_parts WHERE filename = ?", name)
+		if err != nil {
+			return modules.AddContext(err, "couldn't delete part")
+		}
+	}
+
+	path := filepath.Join(m.BufferedFilesDir(), filename)
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	m.bufferSize += uint64(fi.Size())
+	m.mu.Unlock()
+
+	_, err = m.db.Exec(`
+		INSERT INTO ctr_parts
+			(filename, num, upload_id, renter_pk)
+		VALUES (?, ?, ?, ?)
+	`, filename, part, id[:], pk[:])
+	return err
 }

@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/rs/xid"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
@@ -1184,4 +1186,128 @@ func (p *Provider) managedDeleteMultipart(s *modules.RPCSession) error {
 	}
 
 	return s.WriteResponse(nil)
+}
+
+// managedReceivePart accepts a file from the renter.
+func (p *Provider) managedReceivePart(s *rhpv3.Stream) error {
+	// Read the request.
+	var upr uploadPartRequest
+	err := s.ReadResponse(&upr, 1024)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Verify the signature.
+	h := types.NewHasher()
+	upr.EncodeTo(h.E)
+	if ok := upr.PubKey.VerifyHash(h.Sum(), upr.Signature); !ok {
+		err = errors.New("could not verify renter signature")
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Check if we know this renter.
+	_, err = p.m.GetRenter(upr.PubKey)
+	if err != nil {
+		err = fmt.Errorf("could not find renter in the database: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Get the current size of the buffer.
+	currentSize, err := p.m.GetBufferSize()
+	if err != nil {
+		err = fmt.Errorf("could not calculate the buffer size: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Start receiving data in chunks.
+	var ud uploadData
+	maxLen := uint64(1048576) + 8 + 1
+	err = s.ReadResponse(&ud, maxLen)
+	if err != nil {
+		err = fmt.Errorf("could not read data: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Open the file and write data to it.
+	name := xid.New().String()
+	path := filepath.Join(p.m.BufferedFilesDir(), name)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0660)
+	if err != nil {
+		err = fmt.Errorf("could not open file: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	if currentSize+uint64(len(ud.Data)) > maxBufferSize {
+		err = errors.New("maximum buffer size exceeded")
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	numBytes, err := file.Write(ud.Data)
+	if err != nil {
+		err = fmt.Errorf("could not write data: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+	currentSize += uint64(len(ud.Data))
+
+	// Return the number of bytes written.
+	resp := uploadResponse{
+		Filesize: uint64(numBytes),
+	}
+	if err := s.WriteResponse(&resp); err != nil {
+		err = fmt.Errorf("could not write response: %v", err)
+		s.WriteResponseErr(err)
+		return err
+	}
+
+	// Continue as long as there is more data available.
+	for ud.More {
+		s.SetDeadline(time.Now().Add(30 * time.Second))
+		err = s.ReadResponse(&ud, maxLen)
+		if err != nil {
+			err = fmt.Errorf("could not read data: %v", err)
+			s.WriteResponseErr(err)
+			return err
+		}
+
+		if currentSize+uint64(len(ud.Data)) > maxBufferSize {
+			err = errors.New("maximum buffer size exceeded")
+			s.WriteResponseErr(err)
+			return err
+		}
+		currentSize += uint64(len(ud.Data))
+
+		numBytes, err = file.Write(ud.Data)
+		if err != nil {
+			err = fmt.Errorf("could not write data: %v", err)
+			s.WriteResponseErr(err)
+			return err
+		}
+
+		resp.Filesize = uint64(numBytes)
+		if err := s.WriteResponse(&resp); err != nil {
+			err = fmt.Errorf("could not write response: %v", err)
+			s.WriteResponseErr(err)
+			return err
+		}
+	}
+
+	// Save the file and register the part.
+	if err := file.Sync(); err != nil {
+		p.log.Println("ERROR: couldn't sync file:", err)
+	} else if err := file.Close(); err != nil {
+		p.log.Println("ERROR: couldn't close file:", err)
+	} else if err := p.m.PutMultipartPart(upr.PubKey, upr.UploadID, upr.PartNo, name); err != nil {
+		p.log.Println("ERROR: couldn't register part:", err)
+	}
+
+	return nil
 }

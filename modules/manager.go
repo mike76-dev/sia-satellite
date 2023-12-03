@@ -395,6 +395,10 @@ type Manager interface {
 	// OldContractsByRenter returns expired contracts filtered by the renter.
 	OldContractsByRenter(types.PublicKey) []RenterContract
 
+	// PutMultipartPart associates the uploaded file with the part of
+	// a multipart upload.
+	PutMultipartPart(types.PublicKey, types.Hash256, int, string) error
+
 	// RandomHosts picks up to the specified number of random hosts from the
 	// hostdb sorted by weight.
 	RandomHosts(uint64, Allowance) ([]HostDBEntry, error)
