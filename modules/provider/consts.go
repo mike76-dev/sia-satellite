@@ -67,6 +67,10 @@ const (
 	// delete an aborted multipart upload.
 	deleteMultipartTime = 1 * time.Minute
 
+	// completeMultipartTime defines the amount of time that the provider has to
+	// complete a multipart upload.
+	completeMultipartTime = 1 * time.Minute
+
 	// defaultConnectionDeadline is the default read and write deadline which is set
 	// on a connection. This ensures it times out if I/O exceeds this deadline.
 	defaultConnectionDeadline = 5 * time.Minute
@@ -137,4 +141,7 @@ var (
 	// uploadPartSpecifier is used when a renter wants to upload a part
 	// of an S3 multipart upload.
 	uploadPartSpecifier = types.NewSpecifier("UploadPart")
+
+	// completeMultipartSpecifier is used when a multipart upload is completed.
+	completeMultipartSpecifier = types.NewSpecifier("FinishMultipart")
 )

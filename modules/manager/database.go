@@ -961,7 +961,7 @@ func (m *Manager) managedPruneMultipartUploads() {
 
 	numUploads, _ := res.RowsAffected()
 	if numUploads > 0 {
-		m.log.Printf("INFO: puned %d multipart uploads with %d parts\n", numUploads, numParts)
+		m.log.Printf("INFO: pruned %d multipart uploads with %d parts\n", numUploads, numParts)
 	}
 }
 
@@ -986,6 +986,16 @@ func (m *Manager) threadedPruneMultipartUploads() {
 // PutMultipartPart associates the uploaded file with the part of
 // a multipart upload.
 func (m *Manager) PutMultipartPart(pk types.PublicKey, id types.Hash256, part int, filename string) error {
+	// Lock the upload.
+	m.mu.Lock()
+	m.multipartUploads[id] = struct{}{}
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.multipartUploads, id)
+		m.mu.Unlock()
+	}()
+
 	// Delete the old part if it exists.
 	var name string
 	err := m.db.QueryRow(`
@@ -1031,4 +1041,126 @@ func (m *Manager) PutMultipartPart(pk types.PublicKey, id types.Hash256, part in
 		VALUES (?, ?, ?, ?)
 	`, filename, part, id[:], pk[:])
 	return err
+}
+
+// AssembleParts puts together the parts of a multipart upload and
+// marks the resulting file as pending upload.
+func (m *Manager) AssembleParts(pk types.PublicKey, id types.Hash256) (err error) {
+	// Sleep until the upload is unlocked.
+	for {
+		var locked bool
+		select {
+		case <-m.tg.StopChan():
+			return
+		case <-time.After(time.Second):
+			m.mu.Lock()
+			_, locked = m.multipartUploads[id]
+			m.mu.Unlock()
+		}
+		if !locked {
+			break
+		}
+	}
+
+	// Retrieve necessary parameters.
+	bucket := make([]byte, 255)
+	path := make([]byte, 255)
+	mimeType := make([]byte, 255)
+	err = m.db.QueryRow(`
+		SELECT bucket, filepath, mime
+		FROM ctr_multipart
+		WHERE id = ?
+	`, id[:]).Scan(&bucket, &path, &mimeType)
+	if err != nil {
+		return modules.AddContext(err, "couldn't find multipart upload")
+	}
+
+	// Get the names of the parts.
+	rows, err := m.db.Query(`
+		SELECT filename
+		FROM ctr_parts
+		WHERE upload_id = ?
+		ORDER BY num ASC
+	`, id[:])
+	if err != nil {
+		return modules.AddContext(err, "couldn't query parts")
+	}
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			return modules.AddContext(err, "couldn't get filename")
+		}
+		names = append(names, filepath.Join(m.BufferedFilesDir(), name))
+	}
+	rows.Close()
+
+	// Return early if there are no parts to assemble.
+	if len(names) == 0 {
+		return nil
+	}
+
+	// Assemble the parts.
+	dst, err := os.OpenFile(names[0], os.O_APPEND|os.O_WRONLY, 0660)
+	if err != nil {
+		return modules.AddContext(err, "couldn't open file")
+	}
+
+	defer func() {
+		if fErr := dst.Sync(); fErr != nil {
+			err = modules.ComposeErrors(err, modules.AddContext(fErr, "couldn't sync file"))
+		} else if fErr := dst.Close(); fErr != nil {
+			err = modules.ComposeErrors(err, modules.AddContext(fErr, "couldn't close file"))
+		}
+	}()
+
+	for i := 1; i < len(names); i++ {
+		src, err := os.Open(names[i])
+		if err != nil {
+			return modules.AddContext(err, "couldn't open file")
+		}
+		_, err = io.Copy(dst, src)
+		if err != nil {
+			src.Close()
+			return modules.AddContext(err, "couldn't copy file contents")
+		}
+		if err = src.Close(); err != nil {
+			return modules.AddContext(err, "couldn't close file")
+		}
+		if err = os.Remove(names[i]); err != nil {
+			return modules.AddContext(err, "couldn't delete file")
+		}
+	}
+
+	// Delete the parts.
+	_, err = m.db.Exec("DELETE FROM ctr_parts WHERE upload_id = ?", id[:])
+	if err != nil {
+		return modules.AddContext(err, "couldn't delete parts")
+	}
+
+	// Delete the multipart upload.
+	_, err = m.db.Exec("DELETE FROM ctr_multipart WHERE id = ?", id[:])
+	if err != nil {
+		return modules.AddContext(err, "couldn't delete multipart upload")
+	}
+
+	// Register a new file to upload.
+	_, err = m.db.Exec(`
+		INSERT INTO ctr_uploads (filename, bucket, filepath, mime, renter_pk, ready)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`,
+		filepath.Base(names[0]),
+		bucket,
+		path,
+		mimeType,
+		pk[:],
+		true,
+	)
+	if err != nil {
+		return modules.AddContext(err, "couldn't register new upload")
+	}
+
+	return
 }

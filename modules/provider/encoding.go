@@ -833,3 +833,24 @@ func (upr *uploadPartRequest) EncodeTo(e *types.Encoder) {
 	e.Write(upr.UploadID[:])
 	e.WriteUint64(uint64(upr.PartNo))
 }
+
+// completeMultipartRequest is used when an S3 multipart upload
+// is completed.
+type completeMultipartRequest struct {
+	PubKey    types.PublicKey
+	UploadID  types.Hash256
+	Signature types.Signature
+}
+
+// DecodeFrom implements requestBody.
+func (cmr *completeMultipartRequest) DecodeFrom(d *types.Decoder) {
+	d.Read(cmr.PubKey[:])
+	d.Read(cmr.UploadID[:])
+	cmr.Signature.DecodeFrom(d)
+}
+
+// EncodeTo implements requestBody.
+func (cmr *completeMultipartRequest) EncodeTo(e *types.Encoder) {
+	e.Write(cmr.PubKey[:])
+	e.Write(cmr.UploadID[:])
+}

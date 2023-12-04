@@ -287,6 +287,10 @@ type Manager interface {
 	// AllHosts returns an array of all hosts.
 	AllHosts() ([]HostDBEntry, error)
 
+	// AssembleParts puts together the parts of a multipart upload and
+	// marks the resulting file as pending upload.
+	AssembleParts(types.PublicKey, types.Hash256) error
+
 	// BlockHeight returns the current block height.
 	BlockHeight() uint64
 

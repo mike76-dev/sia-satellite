@@ -181,6 +181,7 @@ type Manager struct {
 	exchRates           map[string]float64
 	maintenance         bool
 	bufferSize          uint64
+	multipartUploads    map[types.Hash256]struct{}
 
 	// Block heights at the start of the current and the previous months.
 	currentMonth blockTimestamp
@@ -250,7 +251,8 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gate
 		tpool:  tpool,
 		wallet: wallet,
 
-		exchRates: make(map[string]float64),
+		exchRates:        make(map[string]float64),
+		multipartUploads: make(map[types.Hash256]struct{}),
 
 		staticAlerter: modules.NewAlerter("manager"),
 		dir:           dir,

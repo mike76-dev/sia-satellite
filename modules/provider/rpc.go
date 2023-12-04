@@ -1311,3 +1311,35 @@ func (p *Provider) managedReceivePart(s *rhpv3.Stream) error {
 
 	return nil
 }
+
+// managedCompleteMultipart completes a multipart upload.
+func (p *Provider) managedCompleteMultipart(s *modules.RPCSession) error {
+	// Extend the deadline.
+	s.Conn.SetDeadline(time.Now().Add(completeMultipartTime))
+
+	// Read the request.
+	var cmr completeMultipartRequest
+	hash, err := s.ReadRequest(&cmr, 65536)
+	if err != nil {
+		err = fmt.Errorf("could not read renter request: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	// Verify the signature.
+	if !cmr.PubKey.VerifyHash(hash, cmr.Signature) {
+		err = errors.New("could not verify renter signature")
+		s.WriteError(err)
+		return err
+	}
+
+	// Complete the multipart upload.
+	err = p.m.AssembleParts(cmr.PubKey, cmr.UploadID)
+	if err != nil {
+		err = fmt.Errorf("couldn't complete multipart upload: %v", err)
+		s.WriteError(err)
+		return err
+	}
+
+	return s.WriteResponse(nil)
+}
