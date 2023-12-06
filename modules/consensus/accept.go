@@ -283,6 +283,12 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	}(tx)
 
 	if setErr != nil {
+		if errors.Is(setErr, errExternalRevert) {
+			cs.log.Println("INFO: reverting an invalid block")
+			popPath(tx)
+			tx.Commit()
+			return false, setErr
+		}
 		if len(changes) == 0 {
 			cs.log.Println("Consensus received an invalid block:", setErr)
 		} else {
