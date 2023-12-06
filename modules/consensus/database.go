@@ -295,6 +295,7 @@ func changeLogTailID(tx *sql.Tx) (tailID modules.ConsensusChangeID) {
 	id := make([]byte, 32)
 	err := tx.QueryRow("SELECT bytes FROM cs_changelog WHERE id = 1").Scan(&id)
 	if err != nil {
+		return
 	}
 	copy(tailID[:], id[:])
 	return
@@ -719,6 +720,7 @@ func checkDoSBlock(tx *sql.Tx, id types.BlockID) (known bool, err error) {
 	var count int
 	err = tx.QueryRow("SELECT COUNT(*) FROM cs_dos WHERE bid = ?", id[:]).Scan(&count)
 	if err != nil {
+		return
 	}
 	return count > 0, err
 }

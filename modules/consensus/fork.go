@@ -22,7 +22,7 @@ func backtrackToCurrentPath(tx *sql.Tx, pb *processedBlock) []*processedBlock {
 	for {
 		// Error is not checked in production code - an error can only indicate
 		// that pb.Height > blockHeight.
-		currentPathID, err := getBlockAtHeight(tx, pb.Height)
+		currentPathID, _ := getBlockAtHeight(tx, pb.Height)
 		if currentPathID == pb.Block.ID() {
 			break
 		}
