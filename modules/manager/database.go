@@ -285,15 +285,24 @@ func (m *Manager) numSlabs(pk types.PublicKey) (count int, partial uint64, err e
 		return 0, 0, modules.AddContext(err, "couldn't fetch slab count")
 	}
 
-	err = m.db.QueryRow(`
-		SELECT SUM(len)
+	rows, err := m.db.Query(`
+		SELECT len
 		FROM ctr_slabs
 		WHERE renter_pk = ?
 		AND partial = TRUE
 		AND orphan = FALSE
-	`, pk[:]).Scan(&partial)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, modules.AddContext(err, "couldn't fetch data length")
+	`, pk[:])
+	if err != nil {
+		return 0, 0, modules.AddContext(err, "couldn't query data length")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var data uint64
+		if err := rows.Scan(&partial); err != nil {
+			return 0, 0, modules.AddContext(err, "couldn't fetch data length")
+		}
+		partial += data
 	}
 
 	return
