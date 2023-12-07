@@ -1281,8 +1281,8 @@ function downloadFile(index) {
 					if (done) {
 						break;
 					}
-					cc.decrypt(value);
-					chunks.push(value);
+					let plaintext = cc.decrypt(value);
+					chunks.push(plaintext);
 					loaded += value.length;
 					downloads[downloads.findIndex(item => item.bucket == file.bucket && item.path == file.path)].loaded = loaded;
 					if (file.size > 0) {
@@ -1686,10 +1686,9 @@ function decryptString(base64) {
 	let cc = new ChaCha20(Uint8Array.from(userData.encryptionKey));
 	base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 	let ciphertext = Uint8Array.from(atob(base64), (m) => m.codePointAt(0));
-	cc.decrypt(ciphertext);
-	let i = ciphertext.indexOf(0);
-	if (i < 0) i = 255;
-	return new TextDecoder('utf-8').decode(ciphertext).slice(0, i);
+	if (ciphertext.length < 8) return '';
+	ciphertext = cc.decrypt(ciphertext);
+	return new TextDecoder('utf-8').decode(ciphertext);
 }
 
 class ChaCha20 {
@@ -1727,6 +1726,9 @@ class ChaCha20 {
 			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 		];
 		this.counter = 0;
+		this.length = 0;
+		this.bytesRead = 0;
+		this.lengthBytes = -1;
 	}
 	quarterRound(data, a, b, c, d) {
 		let rotl = (data, i) => (data << i) | (data >>> (32 - i));
@@ -1740,7 +1742,8 @@ class ChaCha20 {
 		data[d] >>>= 0;
 	}
 	decrypt(ciphertext) {
-		for (let i = 0; i < ciphertext.length; i++) {
+		let i = 0;
+		while (i < ciphertext.length) {
 			if (this.counter == 0 || this.counter == 64) {
 				let b = 0;
 				let temp = Array.from(this.state);
@@ -1765,6 +1768,32 @@ class ChaCha20 {
 				this.counter = 0;
 			}
 			ciphertext[i] ^= this.buf[this.counter++];
+			if (this.lengthBytes < 7) {
+				this.lengthBytes++;
+				this.length += ciphertext[i] * Math.pow(256, this.lengthBytes);
+				if (this.lengthBytes == 7) {
+					let splicedArray = new Uint8Array(ciphertext.length - 8);
+					let start = 0;
+					if (i > 7) {
+						splicedArray.set(ciphertext.subarray(0, i - 7), 0);
+						start = i - 7;
+					}
+					splicedArray.set(ciphertext.subarray(i + 1), start);
+					ciphertext = splicedArray;
+					i -= 8;
+				}
+			} else {
+				this.bytesRead++;
+				if (this.bytesRead >= this.length) {
+					this.state[12] = 0;
+					this.counter = 0;
+					this.length = 0;
+					this.bytesRead = 0;
+					this.lengthBytes = -1;
+				}
+			}
+			i++;
 		}
+		return ciphertext;
 	}
 }
