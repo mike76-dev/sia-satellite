@@ -876,7 +876,7 @@ func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _
 
 	// Download the file.
 	b := req.FormValue("bucket")
-	bb, err := base64.URLEncoding.DecodeString(b)
+	bucket, err := base64.URLEncoding.DecodeString(b)
 	if b == "" || err != nil {
 		writeError(w,
 			Error{
@@ -885,11 +885,9 @@ func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _
 			}, http.StatusBadRequest)
 		return
 	}
-	var bucket [255]byte
-	copy(bucket[:], bb)
 
 	p := req.FormValue("path")
-	pb, err := base64.URLEncoding.DecodeString(p)
+	path, err := base64.URLEncoding.DecodeString(p)
 	if p == "" || err != nil {
 		writeError(w,
 			Error{
@@ -898,8 +896,6 @@ func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _
 			}, http.StatusBadRequest)
 		return
 	}
-	var path [255]byte
-	copy(path[:], pb)
 
 	err = api.portal.manager.DownloadObject(w, renter.PublicKey, bucket, path)
 	if err != nil {

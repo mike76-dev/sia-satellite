@@ -299,7 +299,7 @@ func (m *Manager) numSlabs(pk types.PublicKey) (count int, partial uint64, err e
 
 	for rows.Next() {
 		var data uint64
-		if err := rows.Scan(&partial); err != nil {
+		if err := rows.Scan(&data); err != nil {
 			return 0, 0, modules.AddContext(err, "couldn't fetch data length")
 		}
 		partial += data
@@ -588,7 +588,7 @@ func (m *Manager) loadMaintenance() error {
 }
 
 // BytesUploaded returns the size of the file already uploaded.
-func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path [255]byte) (string, uint64, error) {
+func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path []byte) (string, uint64, error) {
 	var name string
 	err := m.db.QueryRow(`
 		SELECT filename
@@ -596,7 +596,7 @@ func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path [255]byte) (str
 		WHERE renter_pk = ?
 		AND bucket = ?
 		AND filepath = ?
-	`, pk[:], bucket[:], path[:]).Scan(&name)
+	`, pk[:], bucket, path).Scan(&name)
 	if err != nil && errors.Is(err, sql.ErrNoRows) {
 		name = xid.New().String()
 		return filepath.Join(filepath.Join(m.dir, bufferedFilesDir), name), 0, nil
@@ -615,7 +615,7 @@ func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path [255]byte) (str
 }
 
 // RegisterUpload associates the uploaded file with the object.
-func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path [255]byte, mimeType [255]byte, filename string, complete bool) error {
+func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, mimeType []byte, filename string, complete bool) error {
 	fi, err := os.Stat(filename)
 	if err != nil {
 		return err
@@ -629,7 +629,7 @@ func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path [255]byte, mim
 		REPLACE INTO ctr_uploads
 			(filename, bucket, filepath, mime, renter_pk, ready)
 		VALUES (?, ?, ?, ?, ?, ?)
-	`, filepath.Base(filename), bucket[:], path[:], mimeType[:], pk[:], complete)
+	`, filepath.Base(filename), bucket, path, mimeType, pk[:], complete)
 	return err
 }
 
@@ -710,7 +710,7 @@ func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 
 // DeleteBufferedFile deletes the specified file and the associated
 // database record.
-func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path [255]byte) error {
+func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path []byte) error {
 	var name string
 	err := m.db.QueryRow(`
 		SELECT filename
@@ -718,7 +718,7 @@ func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path [255]byte)
 		WHERE bucket = ?
 		AND filepath = ?
 		AND renter_pk = ?
-	`, bucket[:], path[:], pk[:]).Scan(&name)
+	`, bucket, path, pk[:]).Scan(&name)
 	if err != nil {
 		return modules.AddContext(err, "couldn't query buffered files")
 	}
@@ -797,7 +797,7 @@ func (m *Manager) DeleteMultipartUploads(pk types.PublicKey) error {
 }
 
 // RegisterMultipart registers a new multipart upload.
-func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, bucket, path, mimeType [255]byte) (id types.Hash256, err error) {
+func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, bucket, path, mimeType []byte) (id types.Hash256, err error) {
 	frand.Read(id[:])
 	_, err = m.db.Exec(`
 		INSERT INTO ctr_multipart (id, enc_key, bucket, filepath, mime, renter_pk, created)
@@ -805,9 +805,9 @@ func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, buck
 	`,
 		id[:],
 		key[:],
-		bucket[:],
-		path[:],
-		mimeType[:],
+		bucket,
+		path,
+		mimeType,
 		rpk[:],
 		time.Now().Unix(),
 	)
@@ -1072,9 +1072,7 @@ func (m *Manager) AssembleParts(pk types.PublicKey, id types.Hash256) (err error
 	}
 
 	// Retrieve necessary parameters.
-	bucket := make([]byte, 255)
-	path := make([]byte, 255)
-	mimeType := make([]byte, 255)
+	var bucket, path, mimeType []byte
 	err = m.db.QueryRow(`
 		SELECT bucket, filepath, mime
 		FROM ctr_multipart

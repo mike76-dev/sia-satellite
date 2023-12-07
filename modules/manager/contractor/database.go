@@ -443,13 +443,13 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 
 // dbDeleteObject deletes a single file metadata object from
 // the database.
-func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path [255]byte) error {
+func dbDeleteObject(tx *sql.Tx, pk types.PublicKey, bucket, path []byte) error {
 	objectID := make([]byte, 32)
 	err := tx.QueryRow(`
 		SELECT id
 		FROM ctr_metadata
 		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
-	`, bucket[:], path[:], pk[:]).Scan(&objectID)
+	`, bucket, path, pk[:]).Scan(&objectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -537,10 +537,10 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 	`,
 		objectID,
 		fm.Key[:],
-		fm.Bucket[:],
-		fm.Path[:],
+		fm.Bucket,
+		fm.Path,
 		fm.ETag,
-		fm.MimeType[:],
+		fm.MimeType,
 		pk[:],
 		modified,
 		modified,
@@ -666,7 +666,7 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 }
 
 // DeleteObject deletes the saved file metadata object.
-func (c *Contractor) DeleteObject(pk types.PublicKey, bucket, path [255]byte) error {
+func (c *Contractor) DeleteObject(pk types.PublicKey, bucket, path []byte) error {
 	tx, err := c.db.Begin()
 	if err != nil {
 		return err
@@ -683,13 +683,13 @@ func (c *Contractor) DeleteObject(pk types.PublicKey, bucket, path [255]byte) er
 // retrieveMetadata retrieves the file metadata from the database.
 func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.BucketFiles) (fm []modules.FileMetadata, err error) {
 	// Create a map of the present objects for convenience.
-	po := make(map[[255]byte]map[[255]byte]struct{})
+	po := make(map[string]map[string]struct{})
 	for _, bucket := range present {
 		for _, path := range bucket.Paths {
-			if po[bucket.Name] == nil {
-				po[bucket.Name] = make(map[[255]byte]struct{})
+			if po[string(bucket.Name)] == nil {
+				po[string(bucket.Name)] = make(map[string]struct{})
 			}
-			po[bucket.Name][path] = struct{}{}
+			po[string(bucket.Name)][string(path)] = struct{}{}
 		}
 	}
 
@@ -715,22 +715,16 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		var slabs []modules.Slab
 		objectID := make([]byte, 32)
 		ec := make([]byte, 32)
-		b := make([]byte, 255)
-		p := make([]byte, 255)
-		m := make([]byte, 255)
+		var bucket, path, mimeType []byte
 		var eTag string
 		var modified, retrieved uint64
-		if err := rows.Scan(&objectID, &ec, &b, &p, &eTag, &m, &modified, &retrieved); err != nil {
+		if err := rows.Scan(&objectID, &ec, &bucket, &path, &eTag, &mimeType, &modified, &retrieved); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
 		// If the object is present in the map and hasn't beed modified, skip it.
-		var bucket, path, mimeType [255]byte
-		copy(bucket[:], b)
-		copy(path[:], p)
-		copy(mimeType[:], m)
-		if files, exists := po[bucket]; exists {
-			if _, exists := files[path]; exists {
+		if files, exists := po[string(bucket)]; exists {
+			if _, exists := files[string(path)]; exists {
 				if retrieved >= modified {
 					continue
 				}
@@ -1048,7 +1042,7 @@ func (c *Contractor) getSlabs() (slabs []slabInfo, err error) {
 }
 
 // getObject tries to find an object by its path.
-func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (object.Object, types.Hash256, error) {
+func (c *Contractor) getObject(pk types.PublicKey, bucket, path []byte) (object.Object, types.Hash256, error) {
 	// Start a transaction.
 	tx, err := c.db.Begin()
 	if err != nil {
@@ -1062,7 +1056,7 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path [255]byte) (obje
 		SELECT id, enc_key
 		FROM ctr_metadata
 		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
-	`, bucket[:], path[:], pk[:]).Scan(&id, &ec)
+	`, bucket, path, pk[:]).Scan(&id, &ec)
 	if err != nil {
 		tx.Rollback()
 		return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't find object")
@@ -1558,20 +1552,14 @@ func (c *Contractor) managedUploadBufferedFiles() {
 	for rows.Next() {
 		var n string
 		pk := make([]byte, 32)
-		b := make([]byte, 255)
-		p := make([]byte, 255)
-		m := make([]byte, 255)
-		if err := rows.Scan(&n, &b, &p, &m, &pk); err != nil {
+		var bucket, path, mimeType []byte
+		if err := rows.Scan(&n, &bucket, &path, &mimeType, &pk); err != nil {
 			rows.Close()
 			c.log.Println("ERROR: couldn't scan file record:", err)
 			return
 		}
 		var rpk types.PublicKey
-		var bucket, path, mimeType [255]byte
 		copy(rpk[:], pk)
-		copy(bucket[:], b)
-		copy(path[:], p)
-		copy(mimeType[:], m)
 
 		// Read the file.
 		err = func() error {
@@ -1595,7 +1583,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 						AND filename = ?
 						AND bucket = ?
 						AND filepath = ?
-					`, pk, n, bucket[:], path[:])
+					`, pk, n, bucket, path)
 					if err != nil {
 						c.log.Println("ERROR: couldn't delete file record:", err)
 						return

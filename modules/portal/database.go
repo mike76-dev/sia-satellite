@@ -635,8 +635,7 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 
 	var sf []savedFile
 	for rows.Next() {
-		bucket := make([]byte, 255)
-		path := make([]byte, 255)
+		var bucket, path []byte
 		var timestamp uint64
 		id := make([]byte, 32)
 		if err = rows.Scan(&id, &bucket, &path, &timestamp); err != nil {
@@ -692,8 +691,7 @@ func (p *Portal) getBufferedFiles(pk types.PublicKey) ([]savedFile, error) {
 	var sf []savedFile
 	for rows.Next() {
 		var name string
-		bucket := make([]byte, 255)
-		path := make([]byte, 255)
+		var bucket, path []byte
 		if err = rows.Scan(&name, &bucket, &path); err != nil {
 			return nil, modules.AddContext(err, "couldn't retrieve record")
 		}
@@ -730,7 +728,6 @@ func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
 			continue
 		}
 		var bs, ps string
-		var bucket, path [255]byte
 		if index < len(sf) {
 			bs = sf[index].Bucket
 			ps = sf[index].Path
@@ -738,16 +735,14 @@ func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
 			bs = bf[index-len(sf)].Bucket
 			ps = bf[index-len(sf)].Path
 		}
-		bb, err := base64.URLEncoding.DecodeString(bs)
+		bucket, err := base64.URLEncoding.DecodeString(bs)
 		if err != nil {
 			return modules.AddContext(err, "couldn't decode bucket")
 		}
-		pb, err := base64.URLEncoding.DecodeString(ps)
+		path, err := base64.URLEncoding.DecodeString(ps)
 		if err != nil {
 			return modules.AddContext(err, "couldn't decode path")
 		}
-		copy(bucket[:], bb)
-		copy(path[:], pb)
 		if index < len(sf) {
 			if err := p.manager.DeleteObject(pk, bucket, path); err != nil {
 				return modules.AddContext(err, "couldn't delete file")

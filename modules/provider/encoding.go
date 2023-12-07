@@ -558,10 +558,10 @@ func (rmr *requestMetadataRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(rmr.PubKey[:])
 	rmr.PresentObjects = make([]modules.BucketFiles, d.ReadPrefix())
 	for i := 0; i < len(rmr.PresentObjects); i++ {
-		d.Read(rmr.PresentObjects[i].Name[:])
-		rmr.PresentObjects[i].Paths = make([][255]byte, d.ReadPrefix())
+		rmr.PresentObjects[i].Name = d.ReadBytes()
+		rmr.PresentObjects[i].Paths = make([][]byte, d.ReadPrefix())
 		for j := 0; j < len(rmr.PresentObjects[i].Paths); j++ {
-			d.Read(rmr.PresentObjects[i].Paths[j][:])
+			rmr.PresentObjects[i].Paths[j] = d.ReadBytes()
 		}
 	}
 	rmr.Signature.DecodeFrom(d)
@@ -572,10 +572,10 @@ func (rmr *requestMetadataRequest) EncodeTo(e *types.Encoder) {
 	e.Write(rmr.PubKey[:])
 	e.WritePrefix(len(rmr.PresentObjects))
 	for _, po := range rmr.PresentObjects {
-		e.Write(po.Name[:])
+		e.WriteBytes(po.Name)
 		e.WritePrefix(len(po.Paths))
 		for _, p := range po.Paths {
-			e.Write(p[:])
+			e.WriteBytes(p)
 		}
 	}
 }
@@ -689,27 +689,27 @@ func (sr *shareRequest) EncodeTo(e *types.Encoder) {
 // uploadRequest is used when the renter wants to upload a file.
 type uploadRequest struct {
 	PubKey    types.PublicKey
-	Bucket    [255]byte
-	Path      [255]byte
-	MimeType  [255]byte
+	Bucket    []byte
+	Path      []byte
+	MimeType  []byte
 	Signature types.Signature
 }
 
 // DecodeFrom implements requestBody.
 func (ur *uploadRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(ur.PubKey[:])
-	d.Read(ur.Bucket[:])
-	d.Read(ur.Path[:])
-	d.Read(ur.MimeType[:])
+	ur.Bucket = d.ReadBytes()
+	ur.Path = d.ReadBytes()
+	ur.MimeType = d.ReadBytes()
 	ur.Signature.DecodeFrom(d)
 }
 
 // EncodeTo implements requestBody.
 func (ur *uploadRequest) EncodeTo(e *types.Encoder) {
 	e.Write(ur.PubKey[:])
-	e.Write(ur.Bucket[:])
-	e.Write(ur.Path[:])
-	e.Write(ur.MimeType[:])
+	e.WriteBytes(ur.Bucket)
+	e.WriteBytes(ur.Path)
+	e.WriteBytes(ur.MimeType)
 }
 
 // uploadResponse is used to respond with the filesize already uploaded.
@@ -749,9 +749,9 @@ func (ud *uploadData) EncodeTo(e *types.Encoder) {
 type registerMultipartRequest struct {
 	PubKey    types.PublicKey
 	Key       types.Hash256
-	Bucket    [255]byte
-	Path      [255]byte
-	MimeType  [255]byte
+	Bucket    []byte
+	Path      []byte
+	MimeType  []byte
 	Signature types.Signature
 }
 
@@ -759,9 +759,9 @@ type registerMultipartRequest struct {
 func (rmr *registerMultipartRequest) DecodeFrom(d *types.Decoder) {
 	d.Read(rmr.PubKey[:])
 	d.Read(rmr.Key[:])
-	d.Read(rmr.Bucket[:])
-	d.Read(rmr.Path[:])
-	d.Read(rmr.MimeType[:])
+	rmr.Bucket = d.ReadBytes()
+	rmr.Path = d.ReadBytes()
+	rmr.MimeType = d.ReadBytes()
 	rmr.Signature.DecodeFrom(d)
 }
 
@@ -769,9 +769,9 @@ func (rmr *registerMultipartRequest) DecodeFrom(d *types.Decoder) {
 func (rmr *registerMultipartRequest) EncodeTo(e *types.Encoder) {
 	e.Write(rmr.PubKey[:])
 	e.Write(rmr.Key[:])
-	e.Write(rmr.Bucket[:])
-	e.Write(rmr.Path[:])
-	e.Write(rmr.MimeType[:])
+	e.WriteBytes(rmr.Bucket)
+	e.WriteBytes(rmr.Path)
+	e.WriteBytes(rmr.MimeType)
 }
 
 // registerMultipartResponse is the response type for registerMultipartRequest.

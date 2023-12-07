@@ -298,7 +298,7 @@ type Manager interface {
 	BufferedFilesDir() string
 
 	// BytesUploaded returns the size of the file already uploaded.
-	BytesUploaded(types.PublicKey, [255]byte, [255]byte) (string, uint64, error)
+	BytesUploaded(types.PublicKey, []byte, []byte) (string, uint64, error)
 
 	// Close safely shuts down the manager.
 	Close() error
@@ -314,7 +314,7 @@ type Manager interface {
 
 	// DeleteBufferedFile deletes the specified file and the associated
 	// database record.
-	DeleteBufferedFile(types.PublicKey, [255]byte, [255]byte) error
+	DeleteBufferedFile(types.PublicKey, []byte, []byte) error
 
 	// DeleteBufferedFiles deletes the files waiting to be uploaded.
 	DeleteBufferedFiles(types.PublicKey) error
@@ -329,13 +329,13 @@ type Manager interface {
 	DeleteMultipartUploads(types.PublicKey) error
 
 	// DeleteObject deletes the saved file metadata object.
-	DeleteObject(types.PublicKey, [255]byte, [255]byte) error
+	DeleteObject(types.PublicKey, []byte, []byte) error
 
 	// DeleteRenter deletes the renter data from the memory.
 	DeleteRenter(string)
 
 	// DownloadObject downloads an object and returns it.
-	DownloadObject(io.Writer, types.PublicKey, [255]byte, [255]byte) error
+	DownloadObject(io.Writer, types.PublicKey, []byte, []byte) error
 
 	// FeeEstimation returns the minimum and the maximum estimated fees for
 	// a transaction.
@@ -411,10 +411,10 @@ type Manager interface {
 	RefreshedContract(types.FileContractID) bool
 
 	// RegisterMultipart registers a new multipart upload.
-	RegisterMultipart(types.PublicKey, types.Hash256, [255]byte, [255]byte, [255]byte) (types.Hash256, error)
+	RegisterMultipart(types.PublicKey, types.Hash256, []byte, []byte, []byte) (types.Hash256, error)
 
 	// RegisterUpload associates the uploaded file with the object.
-	RegisterUpload(types.PublicKey, [255]byte, [255]byte, [255]byte, string, bool) error
+	RegisterUpload(types.PublicKey, []byte, []byte, []byte, string, bool) error
 
 	// RenewContract renews a contract.
 	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
@@ -796,10 +796,10 @@ func (r *Renter) ContractEndHeight() uint64 {
 // FileMetadata contains the uploaded file metadata.
 type FileMetadata struct {
 	Key      types.Hash256 `json:"key"`
-	Bucket   [255]byte     `json:"bucket"`
-	Path     [255]byte     `json:"path"`
+	Bucket   []byte        `json:"bucket"`
+	Path     []byte        `json:"path"`
 	ETag     string        `json:"etag"`
-	MimeType [255]byte     `json:"mime"`
+	MimeType []byte        `json:"mime"`
 	Slabs    []Slab        `json:"slabs"`
 	Data     []byte        `json:"data"`
 }
@@ -861,10 +861,10 @@ func (s *Slab) DecodeFrom(d *types.Decoder) {
 // EncodeTo implements types.ProtocolObject.
 func (fm *FileMetadata) EncodeTo(e *types.Encoder) {
 	fm.Key.EncodeTo(e)
-	e.Write(fm.Bucket[:])
-	e.Write(fm.Path[:])
+	e.WriteBytes(fm.Bucket)
+	e.WriteBytes(fm.Path)
 	e.WriteString(fm.ETag)
-	e.Write(fm.MimeType[:])
+	e.WriteBytes(fm.MimeType)
 	e.WritePrefix(len(fm.Slabs))
 	for _, s := range fm.Slabs {
 		s.EncodeTo(e)
@@ -874,10 +874,10 @@ func (fm *FileMetadata) EncodeTo(e *types.Encoder) {
 // DecodeFrom implements types.ProtocolObject.
 func (fm *FileMetadata) DecodeFrom(d *types.Decoder) {
 	fm.Key.DecodeFrom(d)
-	d.Read(fm.Bucket[:])
-	d.Read(fm.Path[:])
+	fm.Bucket = d.ReadBytes()
+	fm.Path = d.ReadBytes()
 	fm.ETag = d.ReadString()
-	d.Read(fm.MimeType[:])
+	fm.MimeType = d.ReadBytes()
 	fm.Slabs = make([]Slab, d.ReadPrefix())
 	for i := 0; i < len(fm.Slabs); i++ {
 		fm.Slabs[i].DecodeFrom(d)
@@ -886,24 +886,24 @@ func (fm *FileMetadata) DecodeFrom(d *types.Decoder) {
 
 // BucketFiles contains a list of filepaths within a single bucket.
 type BucketFiles struct {
-	Name  [255]byte   `json:"name"`
-	Paths [][255]byte `json:"paths"`
+	Name  []byte   `json:"name"`
+	Paths [][]byte `json:"paths"`
 }
 
 // EncodeTo implements types.ProtocolObject.
 func (bf *BucketFiles) EncodeTo(e *types.Encoder) {
-	e.Write(bf.Name[:])
+	e.WriteBytes(bf.Name)
 	e.WritePrefix(len(bf.Paths))
 	for _, p := range bf.Paths {
-		e.Write(p[:])
+		e.WriteBytes(p)
 	}
 }
 
 // DecodeFrom implements types.ProtocolObject.
 func (bf *BucketFiles) DecodeFrom(d *types.Decoder) {
-	d.Read(bf.Name[:])
-	bf.Paths = make([][255]byte, d.ReadPrefix())
+	bf.Name = d.ReadBytes()
+	bf.Paths = make([][]byte, d.ReadPrefix())
 	for i := 0; i < len(bf.Paths); i++ {
-		d.Read(bf.Paths[i][:])
+		bf.Paths[i] = d.ReadBytes()
 	}
 }
