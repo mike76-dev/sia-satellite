@@ -411,10 +411,10 @@ type Manager interface {
 	RefreshedContract(types.FileContractID) bool
 
 	// RegisterMultipart registers a new multipart upload.
-	RegisterMultipart(types.PublicKey, types.Hash256, []byte, []byte, []byte) (types.Hash256, error)
+	RegisterMultipart(types.PublicKey, types.Hash256, []byte, []byte, []byte, bool) (types.Hash256, error)
 
 	// RegisterUpload associates the uploaded file with the object.
-	RegisterUpload(types.PublicKey, []byte, []byte, []byte, string, bool) error
+	RegisterUpload(types.PublicKey, []byte, []byte, []byte, bool, string, bool) error
 
 	// RenewContract renews a contract.
 	RenewContract(*RPCSession, types.PublicKey, types.FileContractID, uint64, uint64, uint64, uint64, uint64, uint64) (RenterContract, error)
@@ -795,13 +795,14 @@ func (r *Renter) ContractEndHeight() uint64 {
 
 // FileMetadata contains the uploaded file metadata.
 type FileMetadata struct {
-	Key      types.Hash256 `json:"key"`
-	Bucket   []byte        `json:"bucket"`
-	Path     []byte        `json:"path"`
-	ETag     string        `json:"etag"`
-	MimeType []byte        `json:"mime"`
-	Slabs    []Slab        `json:"slabs"`
-	Data     []byte        `json:"data"`
+	Key       types.Hash256 `json:"key"`
+	Bucket    []byte        `json:"bucket"`
+	Path      []byte        `json:"path"`
+	ETag      string        `json:"etag"`
+	MimeType  []byte        `json:"mime"`
+	Encrypted string        `json:"encrypted"`
+	Slabs     []Slab        `json:"slabs"`
+	Data      []byte        `json:"data"`
 }
 
 // Slab is a collection of shards.
@@ -865,6 +866,7 @@ func (fm *FileMetadata) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(fm.Path)
 	e.WriteString(fm.ETag)
 	e.WriteBytes(fm.MimeType)
+	e.WriteString(fm.Encrypted)
 	e.WritePrefix(len(fm.Slabs))
 	for _, s := range fm.Slabs {
 		s.EncodeTo(e)
@@ -878,6 +880,7 @@ func (fm *FileMetadata) DecodeFrom(d *types.Decoder) {
 	fm.Path = d.ReadBytes()
 	fm.ETag = d.ReadString()
 	fm.MimeType = d.ReadBytes()
+	fm.Encrypted = d.ReadString()
 	fm.Slabs = make([]Slab, d.ReadPrefix())
 	for i := 0; i < len(fm.Slabs); i++ {
 		fm.Slabs[i].DecodeFrom(d)

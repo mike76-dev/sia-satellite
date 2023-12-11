@@ -227,7 +227,7 @@ func (mgr *uploadManager) migrate(ctx context.Context, rpk types.PublicKey, shar
 }
 
 // managedUploadObject uploads an object and returns its metadata.
-func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucket, path, mimeType []byte) (fm modules.FileMetadata, err error) {
+func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucket, path, mimeType []byte, encrypted string) (fm modules.FileMetadata, err error) {
 	// Create the context and setup its cancelling.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -247,12 +247,13 @@ func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucke
 	// Construct the metadata object.
 	key, _ := convertEncryptionKey(obj.Key)
 	fm = modules.FileMetadata{
-		Key:      key,
-		Bucket:   bucket,
-		Path:     path,
-		ETag:     eTag,
-		MimeType: mimeType,
-		Data:     ps,
+		Key:       key,
+		Bucket:    bucket,
+		Path:      path,
+		ETag:      eTag,
+		MimeType:  mimeType,
+		Encrypted: encrypted,
+		Data:      ps,
 	}
 	for _, slab := range obj.Slabs {
 		key, _ := convertEncryptionKey(slab.Key)

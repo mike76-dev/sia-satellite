@@ -3,12 +3,10 @@ package contractor
 import (
 	"bytes"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/internal/object"
@@ -531,9 +529,10 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 			renter_pk,
 			uploaded,
 			modified,
-			retrieved
+			retrieved,
+			encrypted
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		objectID,
 		fm.Key[:],
@@ -545,6 +544,7 @@ func (c *Contractor) updateMetadata(pk types.PublicKey, fm modules.FileMetadata,
 		modified,
 		modified,
 		retrieved,
+		fm.Encrypted,
 	)
 	if err != nil {
 		tx.Rollback()
@@ -702,7 +702,8 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 			etag,
 			mime,
 			modified,
-			retrieved
+			retrieved,
+			encrypted
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 	`, pk[:])
@@ -716,9 +717,9 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		objectID := make([]byte, 32)
 		ec := make([]byte, 32)
 		var bucket, path, mimeType []byte
-		var eTag string
+		var eTag, encrypted string
 		var modified, retrieved uint64
-		if err := rows.Scan(&objectID, &ec, &bucket, &path, &eTag, &mimeType, &modified, &retrieved); err != nil {
+		if err := rows.Scan(&objectID, &ec, &bucket, &path, &eTag, &mimeType, &modified, &retrieved, &encrypted); err != nil {
 			return nil, modules.AddContext(err, "unable to retrieve object")
 		}
 
@@ -795,6 +796,7 @@ func (c *Contractor) retrieveMetadata(pk types.PublicKey, present []modules.Buck
 		md.Path = path
 		md.ETag = eTag
 		md.MimeType = mimeType
+		md.Encrypted = encrypted
 		md.Slabs = slabs
 		fm = append(fm, md)
 
@@ -901,19 +903,14 @@ func (c *Contractor) updateSlab(rpk types.PublicKey, slab modules.Slab, packed b
 // encryptionKey is a helper function that converts a types.Hash256
 // to an object.EncryptionKey.
 func encryptionKey(id types.Hash256) (key object.EncryptionKey, err error) {
-	keyStr := hex.EncodeToString(id[:])
-	err = key.UnmarshalText([]byte(keyStr))
-	if err != nil {
-		return object.EncryptionKey{}, err
-	}
+	err = key.UnmarshalBinary(id[:])
 	return
 }
 
 // convertEncryptionKey converts an object.EncryptionKey to a
 // types.Hash256.
 func convertEncryptionKey(key object.EncryptionKey) (id types.Hash256, err error) {
-	s := strings.TrimPrefix(key.String(), "key:")
-	b, err := hex.DecodeString(s)
+	b, err := key.MarshalBinary()
 	copy(id[:], b)
 	return
 }
@@ -1052,11 +1049,12 @@ func (c *Contractor) getObject(pk types.PublicKey, bucket, path []byte) (object.
 	// Find the object ID.
 	id := make([]byte, 32)
 	ec := make([]byte, 32)
+	var encrypted string
 	err = tx.QueryRow(`
-		SELECT id, enc_key
+		SELECT id, enc_key, encrypted
 		FROM ctr_metadata
 		WHERE bucket = ? AND filepath = ? AND renter_pk = ?
-	`, bucket, path, pk[:]).Scan(&id, &ec)
+	`, bucket, path, pk[:]).Scan(&id, &ec, &encrypted)
 	if err != nil {
 		tx.Rollback()
 		return object.Object{}, types.Hash256{}, modules.AddContext(err, "couldn't find object")
@@ -1538,7 +1536,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 
 	// Sort the files by the upload timestamp, the older come first.
 	rows, err := c.db.Query(`
-		SELECT filename, bucket, filepath, mime, renter_pk
+		SELECT filename, bucket, filepath, mime, renter_pk, encrypted
 		FROM ctr_uploads
 		WHERE ready = TRUE
 		ORDER BY filename ASC
@@ -1550,10 +1548,10 @@ func (c *Contractor) managedUploadBufferedFiles() {
 	defer rows.Close()
 
 	for rows.Next() {
-		var n string
+		var n, encrypted string
 		pk := make([]byte, 32)
 		var bucket, path, mimeType []byte
-		if err := rows.Scan(&n, &bucket, &path, &mimeType, &pk); err != nil {
+		if err := rows.Scan(&n, &bucket, &path, &mimeType, &pk, &encrypted); err != nil {
 			rows.Close()
 			c.log.Println("ERROR: couldn't scan file record:", err)
 			return
@@ -1592,7 +1590,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 			}()
 
 			// Upload the data.
-			fm, err := c.managedUploadObject(file, rpk, bucket, path, mimeType)
+			fm, err := c.managedUploadObject(file, rpk, bucket, path, mimeType, encrypted)
 			if err != nil {
 				c.log.Println("ERROR: couldn't upload object:", err)
 				return err

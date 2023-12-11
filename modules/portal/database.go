@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"text/template"
 	"time"
 
@@ -623,7 +625,7 @@ func (p *Portal) loadCredits() error {
 // getFiles retrieves the information about the stored file metadata.
 func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 	rows, err := p.db.Query(`
-		SELECT id, bucket, filepath, uploaded
+		SELECT id, bucket, filepath, uploaded, encrypted
 		FROM ctr_metadata
 		WHERE renter_pk = ?
 		ORDER BY bucket ASC, uploaded DESC
@@ -637,8 +639,9 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 	for rows.Next() {
 		var bucket, path []byte
 		var timestamp uint64
+		var encrypted string
 		id := make([]byte, 32)
-		if err = rows.Scan(&id, &bucket, &path, &timestamp); err != nil {
+		if err = rows.Scan(&id, &bucket, &path, &timestamp, &encrypted); err != nil {
 			return nil, modules.AddContext(err, "couldn't retrieve object")
 		}
 		slabRows, err := p.db.Query("SELECT len, partial FROM ctr_slabs WHERE object_id = ?", id)
@@ -669,6 +672,7 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 			Uploaded:    timestamp,
 			PartialData: dataLen,
 			Buffered:    false,
+			Parts:       parseParts(encrypted),
 		})
 	}
 
@@ -678,7 +682,7 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 // getBufferedFiles retrieves the information about the temporary files.
 func (p *Portal) getBufferedFiles(pk types.PublicKey) ([]savedFile, error) {
 	rows, err := p.db.Query(`
-		SELECT filename, bucket, filepath
+		SELECT filename, bucket, filepath, encrypted
 		FROM ctr_uploads
 		WHERE renter_pk = ?
 		ORDER BY bucket ASC, filename DESC
@@ -690,9 +694,9 @@ func (p *Portal) getBufferedFiles(pk types.PublicKey) ([]savedFile, error) {
 
 	var sf []savedFile
 	for rows.Next() {
-		var name string
+		var name, encrypted string
 		var bucket, path []byte
-		if err = rows.Scan(&name, &bucket, &path); err != nil {
+		if err = rows.Scan(&name, &bucket, &path, &encrypted); err != nil {
 			return nil, modules.AddContext(err, "couldn't retrieve record")
 		}
 		fs, err := os.Stat(filepath.Join(p.manager.BufferedFilesDir(), name))
@@ -705,10 +709,33 @@ func (p *Portal) getBufferedFiles(pk types.PublicKey) ([]savedFile, error) {
 			Size:     uint64(fs.Size()),
 			Uploaded: uint64(fs.ModTime().Unix()),
 			Buffered: true,
+			Parts:    parseParts(encrypted),
 		})
 	}
 
 	return sf, nil
+}
+
+// parseParts is a helper function that converts a comma-separated
+// number string to a number slice.
+func parseParts(s string) (parts []uint64) {
+	for len(s) > 0 {
+		i := strings.Index(s, ",")
+		if i < 0 {
+			i = len(s)
+		}
+		num, err := strconv.ParseUint(s[:i], 10, 64)
+		if err != nil {
+			return nil
+		}
+		parts = append(parts, num)
+		if len(s) > i+1 {
+			s = s[i+1:]
+		} else {
+			s = ""
+		}
+	}
+	return
 }
 
 // deleteFiles deletes the specified metadata from the database.

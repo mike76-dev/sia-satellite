@@ -692,6 +692,7 @@ type uploadRequest struct {
 	Bucket    []byte
 	Path      []byte
 	MimeType  []byte
+	Enctypted bool
 	Signature types.Signature
 }
 
@@ -701,6 +702,7 @@ func (ur *uploadRequest) DecodeFrom(d *types.Decoder) {
 	ur.Bucket = d.ReadBytes()
 	ur.Path = d.ReadBytes()
 	ur.MimeType = d.ReadBytes()
+	ur.Enctypted = d.ReadBool()
 	ur.Signature.DecodeFrom(d)
 }
 
@@ -710,6 +712,7 @@ func (ur *uploadRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(ur.Bucket)
 	e.WriteBytes(ur.Path)
 	e.WriteBytes(ur.MimeType)
+	e.WriteBool(ur.Enctypted)
 }
 
 // uploadResponse is used to respond with the filesize already uploaded.
@@ -752,6 +755,7 @@ type registerMultipartRequest struct {
 	Bucket    []byte
 	Path      []byte
 	MimeType  []byte
+	Encrypted bool
 	Signature types.Signature
 }
 
@@ -762,6 +766,7 @@ func (rmr *registerMultipartRequest) DecodeFrom(d *types.Decoder) {
 	rmr.Bucket = d.ReadBytes()
 	rmr.Path = d.ReadBytes()
 	rmr.MimeType = d.ReadBytes()
+	rmr.Encrypted = d.ReadBool()
 	rmr.Signature.DecodeFrom(d)
 }
 
@@ -772,6 +777,7 @@ func (rmr *registerMultipartRequest) EncodeTo(e *types.Encoder) {
 	e.WriteBytes(rmr.Bucket)
 	e.WriteBytes(rmr.Path)
 	e.WriteBytes(rmr.MimeType)
+	e.WriteBool(rmr.Encrypted)
 }
 
 // registerMultipartResponse is the response type for registerMultipartRequest.

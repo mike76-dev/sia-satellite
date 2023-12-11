@@ -650,7 +650,7 @@ func (p *Provider) managedUpdateSettings(s *modules.RPCSession) error {
 		MaxContractPrice:          usr.MaxContractPrice,
 		MaxDownloadBandwidthPrice: usr.MaxDownloadPrice,
 		MaxSectorAccessPrice:      usr.MaxSectorAccessPrice,
-		MaxStoragePrice:           usr.MaxStoragePrice.Mul64(modules.BlocksPerMonth).Mul64(modules.BytesPerTerabyte),
+		MaxStoragePrice:           usr.MaxStoragePrice,
 		MaxUploadBandwidthPrice:   usr.MaxUploadPrice,
 		MinMaxCollateral:          usr.MinMaxCollateral,
 		BlockHeightLeeway:         usr.BlockHeightLeeway,
@@ -1057,7 +1057,7 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 			p.log.Println("ERROR: couldn't sync file:", err)
 		} else if err := file.Close(); err != nil {
 			p.log.Println("ERROR: couldn't close file:", err)
-		} else if err := p.m.RegisterUpload(ur.PubKey, ur.Bucket, ur.Path, ur.MimeType, path, !ud.More); err != nil {
+		} else if err := p.m.RegisterUpload(ur.PubKey, ur.Bucket, ur.Path, ur.MimeType, ur.Enctypted, path, !ud.More); err != nil {
 			p.log.Println("ERROR: couldn't register file:", err)
 		}
 	}()
@@ -1142,7 +1142,7 @@ func (p *Provider) managedRegisterMultipart(s *modules.RPCSession) error {
 	}
 
 	// Register the multipart upload.
-	id, err := p.m.RegisterMultipart(rmr.PubKey, rmr.Key, rmr.Bucket, rmr.Path, rmr.MimeType)
+	id, err := p.m.RegisterMultipart(rmr.PubKey, rmr.Key, rmr.Bucket, rmr.Path, rmr.MimeType, rmr.Encrypted)
 	if err != nil {
 		err = fmt.Errorf("couldn't register multipart upload: %v", err)
 		s.WriteError(err)

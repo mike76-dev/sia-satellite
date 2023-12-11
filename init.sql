@@ -550,6 +550,7 @@ CREATE TABLE ctr_metadata (
 	uploaded  BIGINT UNSIGNED NOT NULL,
 	modified  BIGINT UNSIGNED NOT NULL,
 	retrieved BIGINT UNSIGNED NOT NULL,
+	encrypted TEXT NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );
@@ -583,6 +584,7 @@ CREATE TABLE ctr_uploads (
 	mime      BLOB NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
 	ready     BOOL NOT NULL,
+	encrypted TEXT NOT NULL,
 	PRIMARY KEY (filename),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );
@@ -595,6 +597,7 @@ CREATE TABLE ctr_multipart (
 	mime      BLOB NOT NULL,
 	renter_pk BINARY(32) NOT NULL,
 	created   BIGINT UNSIGNED NOT NULL,
+	encrypted BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (renter_pk) REFERENCES ctr_renters(public_key)
 );

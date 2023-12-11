@@ -615,7 +615,7 @@ func (m *Manager) BytesUploaded(pk types.PublicKey, bucket, path []byte) (string
 }
 
 // RegisterUpload associates the uploaded file with the object.
-func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, mimeType []byte, filename string, complete bool) error {
+func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, mimeType []byte, encrypted bool, filename string, complete bool) error {
 	fi, err := os.Stat(filename)
 	if err != nil {
 		return err
@@ -625,11 +625,23 @@ func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, mimeType []by
 	m.bufferSize += uint64(fi.Size())
 	m.mu.Unlock()
 
+	var encText string
+	if encrypted {
+		encText = fmt.Sprintf("%d", fi.Size())
+	}
 	_, err = m.db.Exec(`
 		REPLACE INTO ctr_uploads
-			(filename, bucket, filepath, mime, renter_pk, ready)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, filepath.Base(filename), bucket, path, mimeType, pk[:], complete)
+			(filename, bucket, filepath, mime, renter_pk, ready, encrypted)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`,
+		filepath.Base(filename),
+		bucket,
+		path,
+		mimeType,
+		pk[:],
+		complete,
+		encText,
+	)
 	return err
 }
 
@@ -797,11 +809,11 @@ func (m *Manager) DeleteMultipartUploads(pk types.PublicKey) error {
 }
 
 // RegisterMultipart registers a new multipart upload.
-func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, bucket, path, mimeType []byte) (id types.Hash256, err error) {
+func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, bucket, path, mimeType []byte, encrypted bool) (id types.Hash256, err error) {
 	frand.Read(id[:])
 	_, err = m.db.Exec(`
-		INSERT INTO ctr_multipart (id, enc_key, bucket, filepath, mime, renter_pk, created)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO ctr_multipart (id, enc_key, bucket, filepath, mime, renter_pk, created, encrypted)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		id[:],
 		key[:],
@@ -810,6 +822,7 @@ func (m *Manager) RegisterMultipart(rpk types.PublicKey, key types.Hash256, buck
 		mimeType,
 		rpk[:],
 		time.Now().Unix(),
+		encrypted,
 	)
 	return
 }
@@ -1073,11 +1086,12 @@ func (m *Manager) AssembleParts(pk types.PublicKey, id types.Hash256) (err error
 
 	// Retrieve necessary parameters.
 	var bucket, path, mimeType []byte
+	var encrypted bool
 	err = m.db.QueryRow(`
-		SELECT bucket, filepath, mime
+		SELECT bucket, filepath, mime, encrypted
 		FROM ctr_multipart
 		WHERE id = ?
-	`, id[:]).Scan(&bucket, &path, &mimeType)
+	`, id[:]).Scan(&bucket, &path, &mimeType, &encrypted)
 	if err != nil {
 		return modules.AddContext(err, "couldn't find multipart upload")
 	}
@@ -1115,6 +1129,15 @@ func (m *Manager) AssembleParts(pk types.PublicKey, id types.Hash256) (err error
 		return modules.AddContext(err, "couldn't open file")
 	}
 
+	var encText string
+	if encrypted {
+		fi, err := dst.Stat()
+		if err != nil {
+			return modules.AddContext(err, "couldn't read file size")
+		}
+		encText = fmt.Sprintf("%d", fi.Size())
+	}
+
 	defer func() {
 		if fErr := dst.Sync(); fErr != nil {
 			err = modules.ComposeErrors(err, modules.AddContext(fErr, "couldn't sync file"))
@@ -1127,6 +1150,16 @@ func (m *Manager) AssembleParts(pk types.PublicKey, id types.Hash256) (err error
 		src, err := os.Open(names[i])
 		if err != nil {
 			return modules.AddContext(err, "couldn't open file")
+		}
+		if encrypted {
+			fi, err := src.Stat()
+			if err != nil {
+				return modules.AddContext(err, "couldn't read file size")
+			}
+			if len(encText) > 0 {
+				encText += ","
+			}
+			encText += fmt.Sprintf("%d", fi.Size())
 		}
 		_, err = io.Copy(dst, src)
 		if err != nil {
@@ -1155,8 +1188,8 @@ func (m *Manager) AssembleParts(pk types.PublicKey, id types.Hash256) (err error
 
 	// Register a new file to upload.
 	_, err = m.db.Exec(`
-		INSERT INTO ctr_uploads (filename, bucket, filepath, mime, renter_pk, ready)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO ctr_uploads (filename, bucket, filepath, mime, renter_pk, ready, encrypted)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`,
 		filepath.Base(names[0]),
 		bucket,
@@ -1164,6 +1197,7 @@ func (m *Manager) AssembleParts(pk types.PublicKey, id types.Hash256) (err error
 		mimeType,
 		pk[:],
 		true,
+		encText,
 	)
 	if err != nil {
 		return modules.AddContext(err, "couldn't register new upload")

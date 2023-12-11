@@ -1205,8 +1205,8 @@ function renderFiles() {
 		if (i >= filesFrom + userData.filesStep - 1) return;
 		timestamp = new Date(row.uploaded * 1000);
 		let index = downloads.findIndex(item => item.bucket == row.bucket && item.path == row.path);
-		let bucket = decryptString(row.bucket);
-		let path = decryptString(row.path);
+		let bucket = decryptString(row.bucket, row.parts);
+		let path = decryptString(row.path, row.parts);
 		let tr = document.createElement('tr');
 		tr.innerHTML = '<td><label class="checkbox" style="margin-left: 0.5rem"><input type="checkbox" onchange="selectFile(this)"><span class="checkmark"></span></label></td>';
 		tr.innerHTML += `<td>${i + 1}</td>`;
@@ -1275,14 +1275,19 @@ function downloadFile(index) {
 				let loaded = 0;
 				let percent = 0;
 				let chunks = [];
-				let cc = new ChaCha20(Uint8Array.from(userData.encryptionKey));
+				let cc;
+				if (file.parts) {
+					cc = new ChaCha20(Uint8Array.from(userData.encryptionKey), file.parts);
+				}
 				while(true) {
 					const {done, value} = await reader.read();
 					if (done) {
 						break;
 					}
-					let plaintext = cc.decrypt(value);
-					chunks.push(plaintext);
+					if (file.parts) {
+						cc.decrypt(value);
+					}
+					chunks.push(value);
 					loaded += value.length;
 					downloads[downloads.findIndex(item => item.bucket == file.bucket && item.path == file.path)].loaded = loaded;
 					if (file.size > 0) {
@@ -1304,7 +1309,7 @@ function downloadFile(index) {
 			let url = window.URL.createObjectURL(blob);
 			let a = document.createElement("a");
 			a.href = url;
-			a.setAttribute("download", decryptString(file.path).slice(1));
+			a.setAttribute("download", decryptString(file.path, file.parts).slice(1));
 			a.click();
 			window.URL.revokeObjectURL(url);
 		})
@@ -1682,17 +1687,16 @@ function changeEncryptionKey() {
 	document.getElementById('files-results').classList.remove('disabled');
 }
 
-function decryptString(base64) {
+function decryptString(base64, parts) {
 	let cc = new ChaCha20(Uint8Array.from(userData.encryptionKey));
 	base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 	let ciphertext = Uint8Array.from(atob(base64), (m) => m.codePointAt(0));
-	if (ciphertext.length < 8) return '';
-	ciphertext = cc.decrypt(ciphertext);
+	if (parts) cc.decrypt(ciphertext);
 	return new TextDecoder('utf-8').decode(ciphertext);
 }
 
 class ChaCha20 {
-	constructor(key) {
+	constructor(key, parts) {
 		let get32 = (data, i) => data[i++] ^ (data[i++] << 8) ^ (data[i++] << 16) ^ (data[i] << 24);
 		this.state = [
 			0x61707865, 0x3320646e, 0x79622d32, 0x6b206574,
@@ -1726,9 +1730,9 @@ class ChaCha20 {
 			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 		];
 		this.counter = 0;
-		this.length = 0;
 		this.bytesRead = 0;
-		this.lengthBytes = -1;
+		this.parts = parts;
+		this.part = 0;
 	}
 	quarterRound(data, a, b, c, d) {
 		let rotl = (data, i) => (data << i) | (data >>> (32 - i));
@@ -1742,8 +1746,7 @@ class ChaCha20 {
 		data[d] >>>= 0;
 	}
 	decrypt(ciphertext) {
-		let i = 0;
-		while (i < ciphertext.length) {
+		for (let i = 0; i < ciphertext.length; i++) {
 			if (this.counter == 0 || this.counter == 64) {
 				let b = 0;
 				let temp = Array.from(this.state);
@@ -1768,32 +1771,13 @@ class ChaCha20 {
 				this.counter = 0;
 			}
 			ciphertext[i] ^= this.buf[this.counter++];
-			if (this.lengthBytes < 7) {
-				this.lengthBytes++;
-				this.length += ciphertext[i] * Math.pow(256, this.lengthBytes);
-				if (this.lengthBytes == 7) {
-					let splicedArray = new Uint8Array(ciphertext.length - 8);
-					let start = 0;
-					if (i > 7) {
-						splicedArray.set(ciphertext.subarray(0, i - 7), 0);
-						start = i - 7;
-					}
-					splicedArray.set(ciphertext.subarray(i + 1), start);
-					ciphertext = splicedArray;
-					i -= 8;
-				}
-			} else {
-				this.bytesRead++;
-				if (this.bytesRead >= this.length) {
-					this.state[12] = 0;
-					this.counter = 0;
-					this.length = 0;
-					this.bytesRead = 0;
-					this.lengthBytes = -1;
-				}
+			this.bytesRead++;
+			if (this.parts && this.bytesRead >= this.parts[this.part]) {
+				this.state[12] = 0;
+				this.counter = 0;
+				this.bytesRead = 0;
+				this.part++;
 			}
-			i++;
 		}
-		return ciphertext;
 	}
 }
