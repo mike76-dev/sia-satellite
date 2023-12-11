@@ -6,6 +6,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/contractor/contractset"
+	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
 
 	"go.sia.tech/core/types"
 )
@@ -118,7 +119,7 @@ func (c *Contractor) managedCheckHostScore(contract modules.RenterContract, sb m
 
 // managedCriticalUtilityChecks performs critical checks on a contract that
 // would require, with no exceptions, marking the contract as !GFR and/or !GFU.
-// Returns true if and only if and of the checks passed and require the utility
+// Returns true if and only if all of the checks passed and require the utility
 // to be updated.
 //
 // NOTE: 'needsUpdate' should return 'true' if the contract should be marked as
@@ -176,6 +177,11 @@ func (c *Contractor) managedCriticalUtilityChecks(fc *contractset.FileContract, 
 	}
 
 	u, needsUpdate = c.outOfStorageCheck(contract, blockHeight)
+	if needsUpdate {
+		return u, needsUpdate
+	}
+
+	u, needsUpdate = c.gougingCheck(contract, host, blockHeight)
 	if needsUpdate {
 		return u, needsUpdate
 	}
@@ -299,5 +305,46 @@ func (c *Contractor) outOfStorageCheck(contract modules.RenterContract, blockHei
 		u.GoodForRenew = true
 		return u, true
 	}
+	return u, false
+}
+
+// gougingCheck checks if the host is gouging.
+func (c *Contractor) gougingCheck(contract modules.RenterContract, host modules.HostDBEntry, blockHeight uint64) (modules.ContractUtility, bool) {
+	u := contract.Utility
+
+	// Get the renter.
+	rpk, err := c.staticContracts.RenterByContractID(contract.ID)
+	if err != nil {
+		c.log.Println("ERROR: no renter found that has this contract:", err)
+		return u, false
+	}
+	c.mu.Lock()
+	renter, exists := c.renters[rpk]
+	c.mu.Unlock()
+	if !exists {
+		c.log.Println("ERROR: renter not found in the database:", rpk)
+		return u, false
+	}
+
+	// Fetch the price table.
+	pt, err := proto.FetchPriceTable(host)
+	if err != nil {
+		c.log.Printf("WARN: unable to fetch price table from %s: %v", host.Settings.NetAddress, err)
+		return u, false
+	}
+
+	// Contract has no utility if the host is gouging.
+	_, maxFee := c.tpool.FeeEstimation()
+	err = modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, maxFee)
+	if err != nil {
+		// Log if the utility has changed.
+		if u.GoodForUpload || u.GoodForRenew {
+			c.log.Println("INFO: marking contract as having no utility because the host is gouging:", contract.ID)
+		}
+		u.GoodForUpload = false
+		u.GoodForRenew = false
+		return u, true
+	}
+
 	return u, false
 }

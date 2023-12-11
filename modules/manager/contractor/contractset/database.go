@@ -131,3 +131,14 @@ func (cs *ContractSet) managedFindIDs(rpk types.PublicKey) []types.FileContractI
 
 	return ids
 }
+
+// RenterByContractID tries to find a renter by the provided contract ID.
+func (cs *ContractSet) RenterByContractID(fcid types.FileContractID) (rpk types.PublicKey, err error) {
+	pk := make([]byte, 32)
+	err = cs.db.QueryRow("SELECT renter_pk FROM ctr_contracts WHERE id = ?", fcid[:]).Scan(&pk)
+	if err != nil {
+		return
+	}
+	copy(rpk[:], pk)
+	return
+}
