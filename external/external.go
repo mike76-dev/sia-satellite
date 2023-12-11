@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/mike76-dev/sia-satellite/modules"
 )
 
 const (
@@ -38,5 +40,5 @@ func FetchSCRates() (map[string]float64, error) {
 		}
 		return data.Price, nil
 	}
-	return nil, errors.New("falied to fetch SC exchange rates")
+	return nil, modules.AddContext(err, "falied to fetch SC exchange rates")
 }
