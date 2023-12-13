@@ -273,9 +273,10 @@ function loginEmailChange() {
 	err.classList.add('invisible');
 }
 
-function loginPasswordChange() {
+function loginPasswordChange(e) {
 	let err = document.getElementById('login-password-error');
 	err.classList.add('invisible');
+	if (e.key == 'Enter') loginClick();
 }
 
 function loginClick() {

@@ -62,7 +62,7 @@
 				<label for="login-password">Password</label>
 				<div class="password">
 					<input id="login-password" type="password" class="input"
-						onkeypress="loginPasswordChange()" onchange="loginPasswordChange()">
+						onkeypress="loginPasswordChange(event, this)" onchange="loginPasswordChange()">
 					<img id="login-password-icon" src="assets/show-password.png"
 						class="toggle-icon">
 					<input id="login-password-toggle" type="checkbox"
