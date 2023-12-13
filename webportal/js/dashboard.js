@@ -1200,6 +1200,19 @@ function renderFiles() {
 		filesFrom = 1;
 		return;
 	}
+	if (!userData.encryptionKey) {
+		let encrypted = false;
+		files.forEach((file) => {
+			if (file.parts) {
+				encrypted = true;
+			}
+		});
+		if (encrypted) {
+			document.getElementById('files-results').classList.add('disabled');
+			document.getElementById('files-nokey').classList.remove('disabled');
+			return;
+		}
+	}
 	files.forEach((row, i) => {
 		if (i < filesFrom - 1) return;
 		if (i >= filesFrom + userData.filesStep - 1) return;
@@ -1239,6 +1252,8 @@ function renderFiles() {
 			});
 		}
 	});
+	document.getElementById('files-nokey').classList.add('disabled');
+	document.getElementById('files-results').classList.remove('disabled');
 	document.getElementById('files-empty').classList.add('disabled');
 	document.getElementById('files-non-empty').classList.remove('disabled');
 	document.getElementById('files-prev').disabled = filesFrom == 1;
@@ -1672,8 +1687,7 @@ function changeEncryptionKey() {
 	if (key.length != 64 || /[^a-f0-9]/.test(key)) {
 		userData.encryptionKey = null;
 		window.localStorage.setItem('userData', JSON.stringify(userData));
-		document.getElementById('files-results').classList.add('disabled');
-		document.getElementById('files-nokey').classList.remove('disabled');
+		renderFiles();
 		return;
 	}
 	let bytes = [];
@@ -1683,15 +1697,16 @@ function changeEncryptionKey() {
 	}
 	userData.encryptionKey = bytes;
 	window.localStorage.setItem('userData', JSON.stringify(userData));
-	document.getElementById('files-nokey').classList.add('disabled');
-	document.getElementById('files-results').classList.remove('disabled');
+	renderFiles();
 }
 
 function decryptString(base64, parts) {
-	let cc = new ChaCha20(Uint8Array.from(userData.encryptionKey));
 	base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 	let ciphertext = Uint8Array.from(atob(base64), (m) => m.codePointAt(0));
-	if (parts) cc.decrypt(ciphertext);
+	if (parts) {
+		let cc = new ChaCha20(Uint8Array.from(userData.encryptionKey));
+		cc.decrypt(ciphertext);
+	}
 	return new TextDecoder('utf-8').decode(ciphertext);
 }
 
