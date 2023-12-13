@@ -116,7 +116,7 @@ func validStorageProofs(tx *sql.Tx, t types.Transaction) error {
 		// If this segment chosen is the final segment, it should only be as
 		// long as necessary to complete the filesize.
 		height := blockHeight(tx)
-		if segmentIndex == leaves - 1 && height >= 21e3 {
+		if segmentIndex == leaves-1 && height >= 21e3 {
 			segmentLen = fc.Filesize % modules.SegmentSize
 		}
 		if segmentLen == 0 {
@@ -343,7 +343,7 @@ func (cs *ConsensusSet) tryTransactionSet(txns []types.Transaction) (modules.Con
 			SiafundPoolDiffs:          diffHolder.SiafundPoolDiffs,
 		},
 	}
-	
+
 	return cc, nil
 }
 

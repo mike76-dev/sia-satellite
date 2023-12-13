@@ -39,9 +39,12 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 	}
 
 	// Check if the block is already known.
-	_, _, err = findBlockByID(tx, id)
+	_, exists, err = findBlockByID(tx, id)
 	if err != nil {
 		return nil, errDatabaseError
+	}
+	if exists {
+		return nil, modules.ErrBlockKnown
 	}
 
 	// Check for the parent.
@@ -85,9 +88,12 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	}
 
 	// Check if the block is already known.
-	_, _, err = findBlockByID(tx, id)
+	_, exists, err = findBlockByID(tx, id)
 	if err != nil {
 		return errDatabaseError
+	}
+	if exists {
+		return modules.ErrBlockKnown
 	}
 
 	// Check for the parent.
@@ -283,12 +289,6 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	}(tx)
 
 	if setErr != nil {
-		if errors.Is(setErr, errExternalRevert) {
-			cs.log.Println("INFO: reverting an invalid block")
-			popPath(tx)
-			tx.Commit()
-			return false, setErr
-		}
 		if len(changes) == 0 {
 			cs.log.Println("Consensus received an invalid block:", setErr)
 		} else {
@@ -300,7 +300,9 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 
 	// Stop here if the blocks did not extend the longest blockchain.
 	if !chainExtended {
-		tx.Rollback()
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
 		return false, modules.ErrNonExtendingBlock
 	}
 

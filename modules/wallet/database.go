@@ -129,7 +129,11 @@ func dbPutSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, output types.Siaco
 	e := types.NewEncoder(&buf)
 	output.EncodeTo(e)
 	e.Flush()
-	_, err := tx.Exec("REPLACE INTO wt_sco (scoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec(`
+		INSERT INTO wt_sco (scoid, bytes)
+		VALUES (?, ?) AS new
+		ON DUPLICATE KEY UPDATE bytes = new.bytes
+	`, id[:], buf.Bytes())
 	return err
 }
 
@@ -181,7 +185,11 @@ func dbPutSiafundOutput(tx *sql.Tx, id types.SiafundOutputID, output types.Siafu
 	e := types.NewEncoder(&buf)
 	output.EncodeTo(e)
 	e.Flush()
-	_, err := tx.Exec("REPLACE INTO wt_sfo (sfoid, bytes) VALUES (?, ?)", id[:], buf.Bytes())
+	_, err := tx.Exec(`
+		INSERT INTO wt_sfo (sfoid, bytes)
+		VALUES (?, ?) AS new
+		ON DUPLICATE KEY UPDATE bytes = new.bytes
+	`, id[:], buf.Bytes())
 	return err
 }
 
@@ -242,7 +250,11 @@ func dbForEachSiafundOutput(tx *sql.Tx, fn func(types.SiafundOutputID, types.Sia
 
 // dbPutSpentOutput inserts a new spent output into the database.
 func dbPutSpentOutput(tx *sql.Tx, id types.Hash256, height uint64) error {
-	_, err := tx.Exec("REPLACE INTO wt_spo (oid, height) VALUES (?, ?)", id[:], height)
+	_, err := tx.Exec(`
+		INSERT INTO wt_spo (oid, height)
+		VALUES (?, ?) AS new
+		ON DUPLICATE KEY UPDATE height = new.height
+	`, id[:], height)
 	return err
 }
 
@@ -256,17 +268,6 @@ func dbGetSpentOutput(tx *sql.Tx, id types.Hash256) (height uint64, err error) {
 func dbDeleteSpentOutput(tx *sql.Tx, id types.Hash256) error {
 	_, err := tx.Exec("DELETE FROM wt_spo WHERE oid = ?", id[:])
 	return err
-}
-
-// dbPutAddrTransactions inserts a new address-txn mapping.
-func dbPutAddrTransactions(tx *sql.Tx, addr types.Address, txns []types.TransactionID) error {
-	for _, txid := range txns {
-		_, err := tx.Exec("INSERT INTO wt_addr (addr, txid) VALUES (?, ?)", addr[:], txid[:])
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // dbGetAddrTransactions retrieves an address-txn mapping from the database.
@@ -295,7 +296,11 @@ func dbPutUnlockConditions(tx *sql.Tx, uc types.UnlockConditions) error {
 	uc.EncodeTo(e)
 	e.Flush()
 	uh := uc.UnlockHash()
-	_, err := tx.Exec("INSERT INTO wt_uc (addr, bytes) VALUES (?, ?)", uh[:], buf.Bytes())
+	_, err := tx.Exec(`
+		INSERT INTO wt_uc (addr, bytes)
+		VALUES (?, ?) AS new
+		ON DUPLICATE KEY UPDATE bytes = new.bytes
+	`, uh[:], buf.Bytes())
 	return err
 }
 

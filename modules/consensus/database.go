@@ -472,8 +472,7 @@ func findSiacoinOutput(tx *sql.Tx, scoid types.SiacoinOutputID) (sco types.Siaco
 	return sco, true, d.Err()
 }
 
-// addSiacoinOutput adds a Siacoin output to the database. An error is returned
-// if the Siacoin output is already in the database.
+// addSiacoinOutput adds a Siacoin output to the database.
 func addSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, sco types.SiacoinOutput) error {
 	var buf bytes.Buffer
 	e := types.NewEncoder(&buf)
@@ -483,8 +482,7 @@ func addSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, sco types.SiacoinOut
 	return err
 }
 
-// removeSiacoinOutput removes a Siacoin output from the database. An error is
-// returned if the Siacoin output is not in the database prior to removal.
+// removeSiacoinOutput removes a Siacoin output from the database.
 func removeSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID) error {
 	_, err := tx.Exec("DELETE FROM cs_sco WHERE scoid = ?", id[:])
 	return err
@@ -515,8 +513,7 @@ func findSiafundOutput(tx *sql.Tx, sfoid types.SiafundOutputID) (sfo types.Siafu
 	return sfo, claimStart, true, err
 }
 
-// addSiafundOutput adds a Siafund output to the database. An error is returned
-// if the Siafund output is already in the database.
+// addSiafundOutput adds a Siafund output to the database.
 func addSiafundOutput(tx *sql.Tx, id types.SiafundOutputID, sfo types.SiafundOutput, claimStart types.Currency) error {
 	if sfo.Value == 0 {
 		return errors.New("zero value Siafund being added")
@@ -531,8 +528,7 @@ func addSiafundOutput(tx *sql.Tx, id types.SiafundOutputID, sfo types.SiafundOut
 	return err
 }
 
-// removeSiafundOutput removes a Siafund output from the database. An error is
-// returned if the Siafund output is not in the database prior to removal.
+// removeSiafundOutput removes a Siafund output from the database.
 func removeSiafundOutput(tx *sql.Tx, id types.SiafundOutputID) error {
 	_, err := tx.Exec("DELETE FROM cs_sfo WHERE sfoid = ?", id[:])
 	return err
@@ -555,8 +551,7 @@ func findFileContract(tx *sql.Tx, fcid types.FileContractID) (fc types.FileContr
 	return fc, true, d.Err()
 }
 
-// addFileContract adds a file contract to the database. An error is returned
-// if the file contract is already in the database.
+// addFileContract adds a file contract to the database.
 func addFileContract(tx *sql.Tx, id types.FileContractID, fc types.FileContract) error {
 	// Sanity check - should not be adding a zero-payout file contract.
 	if fc.Payout.IsZero() {

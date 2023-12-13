@@ -14,7 +14,6 @@ import (
 var (
 	errOutputAlreadyMature = errors.New("delayed siacoin output is already in the matured outputs set")
 	errPayoutsAlreadyPaid  = errors.New("payouts are already in the consensus set")
-	errStorageProofTiming  = errors.New("missed proof triggered for file contract that is not expiring")
 )
 
 // applyFoundationSubsidy adds a Foundation subsidy to the consensus set as a
@@ -24,7 +23,7 @@ func applyFoundationSubsidy(tx *sql.Tx, pb *processedBlock) error {
 	// NOTE: this conditional is split up to better visualize test coverage.
 	if pb.Height < modules.FoundationHardforkHeight {
 		return nil
-	} else if (pb.Height - modules.FoundationHardforkHeight) % modules.FoundationSubsidyFrequency != 0 {
+	} else if (pb.Height-modules.FoundationHardforkHeight)%modules.FoundationSubsidyFrequency != 0 {
 		return nil
 	}
 	value := modules.FoundationSubsidyPerBlock.Mul64(modules.FoundationSubsidyFrequency)

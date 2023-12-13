@@ -47,7 +47,7 @@ func (cs *ConsensusSet) childTargetOak(parentTotalTime int64, parentTotalTarget,
 		// Rules elsewhere in consensus ensure that the timestamp of the parent
 		// block has not been manipulated by more than a few hours, which is
 		// accurate enough for this logic to be safe.
-		expectedTime := int64(modules.BlockFrequency * parentHeight) + modules.GenesisTimestamp.Unix()
+		expectedTime := int64(modules.BlockFrequency*parentHeight) + modules.GenesisTimestamp.Unix()
 		delta = expectedTime - parentTimestamp.Unix()
 	}
 	// Convert the delta in to a target block time.
@@ -60,10 +60,10 @@ func (cs *ConsensusSet) childTargetOak(parentTotalTime int64, parentTotalTarget,
 	targetBlockTime := int64(modules.BlockFrequency) + shift
 
 	// Clamp the block time to 1/3 and 3x the target block time.
-	if targetBlockTime < int64(modules.BlockFrequency) / modules.OakMaxBlockShift {
+	if targetBlockTime < int64(modules.BlockFrequency)/modules.OakMaxBlockShift {
 		targetBlockTime = int64(modules.BlockFrequency) / modules.OakMaxBlockShift
 	}
-	if targetBlockTime > int64(modules.BlockFrequency) * modules.OakMaxBlockShift {
+	if targetBlockTime > int64(modules.BlockFrequency)*modules.OakMaxBlockShift {
 		targetBlockTime = int64(modules.BlockFrequency) * modules.OakMaxBlockShift
 	}
 
@@ -88,10 +88,10 @@ func (cs *ConsensusSet) childTargetOak(parentTotalTime int64, parentTotalTarget,
 	maxNewTarget := currentTarget.MulDifficulty(modules.OakMaxRise) // Max = difficulty increase (target decrease)
 	minNewTarget := currentTarget.MulDifficulty(modules.OakMaxDrop) // Min = difficulty decrease (target increase)
 	newTarget := modules.RatToTarget(new(big.Rat).SetFrac(modules.RootDepth.Int(), visibleHashrate.Mul64(uint64(targetBlockTime)).Big()))
-	if newTarget.Cmp(maxNewTarget) < 0 && parentHeight + 1 != modules.ASICHardforkHeight {
+	if newTarget.Cmp(maxNewTarget) < 0 && parentHeight+1 != modules.ASICHardforkHeight {
 		newTarget = maxNewTarget
 	}
-	if newTarget.Cmp(minNewTarget) > 0 && parentHeight + 1 != modules.ASICHardforkHeight {
+	if newTarget.Cmp(minNewTarget) > 0 && parentHeight+1 != modules.ASICHardforkHeight {
 		// This can only possibly trigger if the BlockFrequency is less than 3
 		// seconds.
 		newTarget = minNewTarget
@@ -124,7 +124,7 @@ func (cs *ConsensusSet) storeBlockTotals(tx *sql.Tx, currentHeight uint64, curre
 	// correct to not have them.
 	//
 	// This code is incorrect, and introduces an unfortunate drop in difficulty,
-	// because this is an uncompreesed prevTotalTime, but really it should be
+	// because this is an uncompressed prevTotalTime, but really it should be
 	// getting set to a compressed prevTotalTime. And, actually, a compressed
 	// prevTotalTime doesn't have much meaning, so this code block shouldn't be
 	// here at all. But... this is the code that was running for the block
@@ -133,7 +133,7 @@ func (cs *ConsensusSet) storeBlockTotals(tx *sql.Tx, currentHeight uint64, curre
 	//
 	// The disruption will be complete well before we can deploy a fix, so
 	// there's no point in fixing it.
-	if currentHeight == modules.OakHardforkBlock - 1 {
+	if currentHeight == modules.OakHardforkBlock-1 {
 		prevTotalTime = int64(modules.BlockFrequency * currentHeight)
 	}
 
@@ -144,7 +144,7 @@ func (cs *ConsensusSet) storeBlockTotals(tx *sql.Tx, currentHeight uint64, curre
 
 	// At the hardfork height to adjust the acceptable nonce conditions, reset
 	// the total time and total target.
-	if currentHeight + 1 == modules.ASICHardforkHeight {
+	if currentHeight+1 == modules.ASICHardforkHeight {
 		newTotalTime = modules.ASICHardforkTotalTime
 		newTotalTarget = modules.ASICHardforkTotalTarget
 	}

@@ -350,6 +350,10 @@ func (w *Wallet) managedAsyncUnlock(lastChange modules.ConsensusChangeID) error 
 			if err != nil {
 				return fmt.Errorf("failed to reset wallet history during rescan: %v", err)
 			}
+			err = w.syncDB()
+			if err != nil {
+				return fmt.Errorf("failed to sync database: %v", err)
+			}
 			err = w.cs.ConsensusSetSubscribe(w, modules.ConsensusChangeBeginning, w.tg.StopChan())
 		}
 		if err != nil {
@@ -474,6 +478,10 @@ func (w *Wallet) Reset() error {
 	defer w.mu.Unlock()
 
 	err := dbReset(w.dbTx)
+	if err != nil {
+		return err
+	}
+	err = w.syncDB()
 	if err != nil {
 		return err
 	}
@@ -762,19 +770,11 @@ func (w *Wallet) managedChangeKey(masterKey modules.WalletKey, newKey modules.Wa
 			return modules.AddContext(err, "unable to put unseeded key into db")
 		}
 
-		// TODO remove.
-		uk := saltedEncryptionKey(newKey, dbGetWalletSalt(w.dbTx))
-		encrypted, err := modules.Encrypt(uk, verificationPlaintext)
-		if err != nil {
-			return modules.AddContext(err, "failed to encrypt verification")
-		}
-		err = dbPutEncryptedVerification(w.dbTx, encrypted)
-		if err != nil {
-			return modules.AddContext(err, "unable to put key encryption verification into db")
-		}
-
 		wpk := walletPasswordEncryptionKey(primarySeed, dbGetWalletSalt(w.dbTx))
-		encrypted, err = modules.Encrypt(wpk, newKey)
+		encrypted, err := modules.Encrypt(wpk, newKey)
+		if err != nil {
+			return modules.AddContext(err, "unable to encrypt wallet password")
+		}
 		err = dbPutWalletPassword(w.dbTx, encrypted)
 		if err != nil {
 			return modules.AddContext(err, "unable to put wallet password into db")

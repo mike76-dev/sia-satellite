@@ -8,14 +8,7 @@ import (
 )
 
 var (
-	errApplySiafundPoolDiffMismatch  = errors.New("committing a siafund pool diff with an invalid 'previous' field")
-	errDiffsNotGenerated             = errors.New("applying diff set before generating errors")
-	errInvalidSuccessor              = errors.New("generating diffs for a block that's an invalid successsor to the current block")
-	errNegativePoolAdjustment        = errors.New("committing a siafund pool diff with a negative adjustment")
-	errNonApplySiafundPoolDiff       = errors.New("committing a siafund pool diff that doesn't have the 'apply' direction")
-	errRevertSiafundPoolDiffMismatch = errors.New("committing a siafund pool diff with an invalid 'adjusted' field")
-	errWrongAppliedDiffSet           = errors.New("applying a diff set that isn't the current block")
-	errWrongRevertDiffSet            = errors.New("reverting a diff set that isn't the current block")
+	errInvalidSuccessor = errors.New("generating diffs for a block that's an invalid successsor to the current block")
 )
 
 // commitSiacoinOutputDiff applies or reverts a SiacoinOutputDiff.
@@ -25,7 +18,6 @@ func commitSiacoinOutputDiff(tx *sql.Tx, scod modules.SiacoinOutputDiff, dir mod
 	} else {
 		return removeSiacoinOutput(tx, scod.ID)
 	}
-	return nil
 }
 
 // commitFileContractDiff applies or reverts a FileContractDiff.
@@ -35,7 +27,6 @@ func commitFileContractDiff(tx *sql.Tx, fcd modules.FileContractDiff, dir module
 	} else {
 		return removeFileContract(tx, fcd.ID)
 	}
-	return nil
 }
 
 // commitSiafundOutputDiff applies or reverts a Siafund output diff.
@@ -45,7 +36,6 @@ func commitSiafundOutputDiff(tx *sql.Tx, sfod modules.SiafundOutputDiff, dir mod
 	} else {
 		return removeSiafundOutput(tx, sfod.ID)
 	}
-	return nil
 }
 
 // commitDelayedSiacoinOutputDiff applies or reverts a delayedSiacoinOutputDiff.
@@ -55,7 +45,6 @@ func commitDelayedSiacoinOutputDiff(tx *sql.Tx, dscod modules.DelayedSiacoinOutp
 	} else {
 		return removeDSCO(tx, dscod.MaturityHeight, dscod.ID)
 	}
-	return nil
 }
 
 // commitSiafundPoolDiff applies or reverts a SiafundPoolDiff.
@@ -133,7 +122,6 @@ func updateCurrentPath(tx *sql.Tx, pb *processedBlock, dir modules.DiffDirection
 	} else {
 		return popPath(tx)
 	}
-	return nil
 }
 
 // commitFoundationUpdate updates the current Foundation unlock hashes in
