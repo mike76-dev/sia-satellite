@@ -138,6 +138,9 @@ func (m *Manager) initPersist(dir string) error {
 	// Spawn a thread to prune incomplete multipart uploads.
 	go m.threadedPruneMultipartUploads()
 
+	// Spawn a thread to check if the satellite is out od sync.
+	go m.threadedCheckOutOfSync()
+
 	// Subscribe to the consensus set using the most recent consensus change.
 	go func() {
 		err := m.cs.ConsensusSetSubscribe(m, modules.ConsensusChangeRecent, m.tg.StopChan())

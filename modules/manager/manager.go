@@ -192,6 +192,9 @@ type Manager struct {
 	email         string
 	warnThreshold types.Currency
 
+	// Last found block timestamp.
+	lastBlockTimestamp time.Time
+
 	// A global DB transaction.
 	dbTx    *sql.Tx
 	syncing bool

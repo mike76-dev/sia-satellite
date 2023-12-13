@@ -18,6 +18,8 @@ const (
 	// Intervals for the threads.
 	calculateAveragesInterval = 10 * time.Minute
 	exchangeRateFetchInterval = 10 * time.Minute
+	checkOutOfSyncInterval    = 10 * time.Minute
+	outOfSyncThreshold        = 90 * time.Minute
 )
 
 var (
@@ -255,10 +257,11 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 
 	// Process the applied blocks till the first found in the following month.
 	for _, block := range cc.AppliedBlocks {
-		m.mu.RLock()
+		m.mu.Lock()
+		m.lastBlockTimestamp = block.Timestamp
 		currentMonth := m.currentMonth.Timestamp.Month()
 		currentYear := m.currentMonth.Timestamp.Year()
-		m.mu.RUnlock()
+		m.mu.Unlock()
 		newMonth := block.Timestamp.Month()
 		if newMonth != currentMonth {
 			m.mu.Lock()
@@ -445,4 +448,88 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 
 	// Send a warning email if the wallet balance becomes low.
 	m.sendWarning()
+}
+
+// outOfSyncTemplate contains the text send by email when the last
+// block was found too long ago, meaning that the satellite is possibly
+// out of sync.
+const outOfSyncTemplate = `
+	<!-- template.html -->
+	<!DOCTYPE html>
+	<html>
+	<body>
+   	<h2>Satellite Is Possibly Out Of Sync</h2>
+    <p>The satellite <strong>{{.Name}}</strong> is possibly out of sync.</p>
+	<p>The last block {{.Height}} was found {{.Since}} ago.</p>
+	</body>
+	</html>
+`
+
+// sendOutOfSyncWarning sends an email to the satellite operator
+// that the satellite is possibly out of sync.
+func (m *Manager) sendOutOfSyncWarning() {
+	// Skip if the email was not provided.
+	if m.email == "" {
+		return
+	}
+
+	// Skip if a warning has been sent already.
+	m.mu.RLock()
+	timestamp := m.lastBlockTimestamp
+	m.mu.RUnlock()
+	if timestamp.Unix() <= 0 {
+		return
+	}
+
+	// Check the last found block timestamp.
+	since := time.Since(timestamp)
+	if since < outOfSyncThreshold {
+		return
+	}
+
+	// Send a warning.
+	type warning struct {
+		Name   string
+		Height uint64
+		Since  string
+	}
+	t := template.New("warning")
+	t, err := t.Parse(outOfSyncTemplate)
+	if err != nil {
+		m.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		return
+	}
+	var b bytes.Buffer
+	t.Execute(&b, warning{
+		Name:   m.name,
+		Height: m.cs.Height(),
+		Since:  fmt.Sprintf("%.0fh%.0fm", since.Hours(), since.Minutes()),
+	})
+	err = m.ms.SendMail("Sia Satellite", m.email, "Out Of Sync Warning", &b)
+	if err != nil {
+		m.log.Println("ERROR: unable to send a warning:", err)
+		return
+	}
+
+	// Update the timestamp to prevent spamming.
+	m.mu.Lock()
+	m.lastBlockTimestamp = time.Unix(0, 0)
+	m.mu.Unlock()
+}
+
+// threadedCheckOutOfSync does periodical out-of-sync checks.
+func (m *Manager) threadedCheckOutOfSync() {
+	if err := m.tg.Add(); err != nil {
+		return
+	}
+	defer m.tg.Done()
+
+	for {
+		select {
+		case <-m.tg.StopChan():
+			return
+		case <-time.After(checkOutOfSyncInterval):
+		}
+		m.sendOutOfSyncWarning()
+	}
 }
