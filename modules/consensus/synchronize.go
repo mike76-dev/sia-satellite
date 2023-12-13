@@ -571,7 +571,7 @@ func (cs *ConsensusSet) managedReceiveBlock(id types.BlockID) modules.RPCFunc {
 		if chainExtended {
 			cs.managedBroadcastBlock(block)
 		}
-		if err != nil {
+		if err != nil && !errors.Is(err, modules.ErrNonExtendingBlock) {
 			return err
 		}
 		return nil
