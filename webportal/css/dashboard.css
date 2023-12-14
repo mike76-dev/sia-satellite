@@ -471,6 +471,12 @@ tbody > tr:nth-child(odd) {
 	border-radius: 0.25rem;
 	position: relative;
 	margin: 0.25rem;
+	max-width: 6rem;
+}
+
+.files-item > div {
+	font-size: 0.9rem;
+	text-align: center;
 }
 
 .files-item-temp > div {
