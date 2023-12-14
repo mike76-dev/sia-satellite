@@ -628,7 +628,7 @@ func (p *Portal) getFiles(pk types.PublicKey) ([]savedFile, error) {
 		SELECT id, bucket, filepath, uploaded, encrypted
 		FROM ctr_metadata
 		WHERE renter_pk = ?
-		ORDER BY bucket ASC, uploaded DESC
+		ORDER BY bucket ASC, filepath ASC
 	`, pk[:])
 	if err != nil {
 		return nil, modules.AddContext(err, "couldn't retrieve metadata")
@@ -685,7 +685,7 @@ func (p *Portal) getBufferedFiles(pk types.PublicKey) ([]savedFile, error) {
 		SELECT filename, bucket, filepath, encrypted
 		FROM ctr_uploads
 		WHERE renter_pk = ?
-		ORDER BY bucket ASC, filename DESC
+		ORDER BY bucket ASC, filepath ASC
 	`, pk[:])
 	if err != nil {
 		return nil, modules.AddContext(err, "couldn't query buffered files")
@@ -739,44 +739,23 @@ func parseParts(s string) (parts []uint64) {
 }
 
 // deleteFiles deletes the specified metadata from the database.
-func (p *Portal) deleteFiles(pk types.PublicKey, indices []int) error {
-	sf, err := p.getFiles(pk)
-	if err != nil {
-		return modules.AddContext(err, "couldn't retrieve files")
-	}
-	bf, err := p.getBufferedFiles(pk)
-	if err != nil {
-		return modules.AddContext(err, "couldn't retrieve buffered files")
-	}
-
-	for _, index := range indices {
-		if index >= len(sf)+len(bf) {
-			p.log.Printf("ERROR: index %v out of range (%v)\n", index, len(sf)+len(bf))
-			continue
-		}
-		var bs, ps string
-		if index < len(sf) {
-			bs = sf[index].Bucket
-			ps = sf[index].Path
-		} else {
-			bs = bf[index-len(sf)].Bucket
-			ps = bf[index-len(sf)].Path
-		}
-		bucket, err := base64.URLEncoding.DecodeString(bs)
+func (p *Portal) deleteFiles(pk types.PublicKey, files []fileInfo) error {
+	for _, file := range files {
+		bucket, err := base64.URLEncoding.DecodeString(file.Bucket)
 		if err != nil {
 			return modules.AddContext(err, "couldn't decode bucket")
 		}
-		path, err := base64.URLEncoding.DecodeString(ps)
+		path, err := base64.URLEncoding.DecodeString(file.Path)
 		if err != nil {
 			return modules.AddContext(err, "couldn't decode path")
 		}
-		if index < len(sf) {
-			if err := p.manager.DeleteObject(pk, bucket, path); err != nil {
-				return modules.AddContext(err, "couldn't delete file")
-			}
-		} else {
+		if file.Buffered {
 			if err := p.manager.DeleteBufferedFile(pk, bucket, path); err != nil {
 				return modules.AddContext(err, "couldn't delete buffered file")
+			}
+		} else {
+			if err := p.manager.DeleteObject(pk, bucket, path); err != nil {
+				return modules.AddContext(err, "couldn't delete file")
 			}
 		}
 	}

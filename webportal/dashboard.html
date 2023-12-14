@@ -228,46 +228,34 @@
 								This key should be provided by the renting software.
 							</p>
 							<section id="files-results" class="disabled">
-								<div>
-									<label for="files-rows">Rows to Display:</label>
-									<select id="files-rows"
-										onchange="changeFilesStep(this)">
-										<option value="10">10</option>
-										<option value="20">20</option>
-										<option value="50">50</option>
-									</select>
-									<button id="files-prev" class="history-button"
-										onclick="filesPrev()" disabled>&lt;
-									</button>
-									<button id="files-next" class="history-button"
-										onclick="filesNext()" disabled>&gt;
-									</button>
+								<div id="files-container" class="files-container" onclick="deselect(this, event)"></div>
+								<p class="fineprint">Click to select or deselect a file.
+									Shift+Click to select or deselect a directory.</p>
+								<p id="files-selected" class="disabled"></p>
+								<div class="files-button-container">
+									<button id="files-download" onclick="downloadFiles()" disabled>Download</button>
+									<button id="files-delete" onclick="deleteFiles()" disabled>Delete</button>
 								</div>
+								<p class="fineprint">By clicking on Delete, you only delete the metadata saved on the Satellite, not the actual files.</p>
+							</section>
+							<section id="files-downloads" class="disabled">
+								<h2>Running Downloads:</h2>
 								<div class="table-container">
 									<table>
 										<thead>
 											<tr>
-												<th style="width: 4rem">
-													<label class="checkbox" style="margin-left: 0.5rem">
-														<input id="files-all" type="checkbox"
-															onchange="selectFiles()">
-														<span class="checkmark"></span>
-													</label>
-												</th>
 												<th style="width: 4rem">No.</th>
+												<th style="width: 4rem"></th>
 												<th style="width: 12rem">Bucket</th>
 												<th style="width: 20rem">Path</th>
 												<th style="width: 6rem">Size</th>
-												<th style="width: 6rem">Slabs</th>
-												<th style="width: 13rem">Uploaded</th>
+												<th>Progress</th>
 											</tr>
 										</thead>
 										<tbody id="files-table">
 										</tbody>
 									</table>
 								</div>
-								<p>By clicking on Delete, you only delete the metadata saved on the Satellite, not the actual files.</p>
-								<button id="files-delete" onclick="deleteFiles()" disabled>Delete</button>
 							</section>
 						</div>
 					</section>

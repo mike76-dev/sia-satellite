@@ -1045,6 +1045,25 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 		return err
 	}
 
+	// Catch edge case.
+	if len(ud.Data) == 0 && !ud.More {
+		var encText string
+		if ur.Enctypted {
+			encText = "0"
+		}
+		err = p.m.UpdateMetadata(ur.PubKey, modules.FileMetadata{
+			Bucket:    ur.Bucket,
+			Path:      ur.Path,
+			MimeType:  ur.MimeType,
+			Encrypted: encText,
+		})
+		if err != nil {
+			err = fmt.Errorf("could not save metadata: %v", err)
+			s.WriteResponseErr(err)
+			return err
+		}
+	}
+
 	// Open the file and write data to it.
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0660)
 	if err != nil {

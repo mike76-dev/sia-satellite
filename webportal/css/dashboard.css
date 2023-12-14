@@ -442,6 +442,100 @@ tbody > tr:nth-child(odd) {
 	fill: #ffffff;
 }
 
+#files-results {
+	padding-right: 1rem;
+}
+
+.files-container {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: baseline;
+	width: 100%;
+	min-height: 10rem;
+	max-height: 50vh;
+	overflow-y: auto;
+	border: 1px solid var(--textSecondary);
+	border-radius: 0.5rem;
+	padding: 1rem;
+	background-color: var(--tableRow);
+	user-select: none;
+}
+
+.files-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 0.5rem;
+	cursor: pointer;
+	border-radius: 0.25rem;
+	position: relative;
+	margin: 0.25rem;
+}
+
+.files-item-temp > div {
+	color: var(--buttonHoverEnd)!important;
+}
+
+.files-item:hover, .files-item-selected {
+	background-color: var(--backgroundEnd);
+}
+
+.files-item img {
+	width: 4rem;
+	height: 4rem;
+	border-radius: 0.25rem;
+	margin-bottom: 0.5rem;
+}
+
+.files-item div {
+	color: var(--textPrimary);
+}
+
+.files-hint {
+	position: absolute;
+	display: none;
+	flex-direction: column;
+	left: 1rem;
+	bottom: 3rem;
+	background-color: var(--buttonHoverEnd);
+	border: 1px solid var(--textSecondary);
+	border-radius: 0.25rem;
+	padding: 0.25rem;
+	min-width: 8rem;
+	z-index: 1;
+}
+
+.files-item:hover .files-hint {
+	display: flex;
+}
+
+.files-hint > div {
+	display: flex;
+	flex-direction: row;
+}
+
+.files-hint label {
+	flex-grow: 1;
+	margin: 0;
+	font-size: 0.8rem;
+	color: var(--textSecondary);
+}
+
+.files-hint span {
+	font-size: 0.8rem;
+	color: var(--textSecondary);
+}
+
+.files-button-container {
+	display: flex;
+	flex-direction: row;
+}
+
+.files-button-container button {
+	margin-right: 0.5rem;
+}
+
 #reveal > div, #sc > div {
 	width: 100%;
 }
@@ -605,5 +699,9 @@ label[for='reveal-text'] {
 	
 	.subcontent-item {
 		margin-right: 0;
+	}
+
+	#files-results {
+		padding-right: 0;
 	}
 }

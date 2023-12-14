@@ -223,6 +223,11 @@ func newDownloader(c *Contractor, rpk, hpk types.PublicKey) *downloader {
 
 // managedDownloadObject downloads the whole object.
 func (mgr *downloadManager) managedDownloadObject(ctx context.Context, w io.Writer, rpk types.PublicKey, o object.Object, id types.Hash256, offset, length uint64, contracts []modules.RenterContract) (err error) {
+	// Check if the object is empty. This can be in the case of a directory.
+	if len(o.Slabs) == 0 {
+		return nil
+	}
+
 	// Calculate what slabs we need.
 	var ss []slabSlice
 	for _, s := range o.Slabs {

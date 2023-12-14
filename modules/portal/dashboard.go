@@ -103,9 +103,16 @@ type (
 		Parts       []uint64 `json:"parts"`
 	}
 
-	// fileIndices contains the indices of files to delete.
-	fileIndices struct {
-		Indices []int `json:"files"`
+	// fileInfo identifies the stored file metadata.
+	fileInfo struct {
+		Bucket   string `json:"bucket"`
+		Path     string `json:"path"`
+		Buffered bool   `json:"buffered"`
+	}
+
+	// fileDeleteRequest is the request type for POST /dashboard/files requests.
+	fileDeleteRequest struct {
+		Files []fileInfo `json:"files"`
 	}
 
 	// satelliteSettings contains the public settings of the satellite.
@@ -751,7 +758,7 @@ func (api *portalAPI) filesHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	var data fileIndices
+	var data fileDeleteRequest
 	hdErr, code := api.handleDecodeError(w, dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, hdErr, code)
@@ -769,7 +776,7 @@ func (api *portalAPI) filesHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	// Delete the files.
-	err = api.portal.deleteFiles(renter.PublicKey, data.Indices)
+	err = api.portal.deleteFiles(renter.PublicKey, data.Files)
 	if err != nil {
 		api.portal.log.Printf("ERROR: couldn't delete files: %v\n", err)
 		writeError(w,
