@@ -16,11 +16,11 @@ You will also need an email account, from which the users will be receiving emai
 
 ## To Start With
 
-Log into your server and download the Satellite files. This guide assumes that you will use the version `0.8.0` for an x86 CPU:
+Log into your server and download the Satellite files. This guide assumes that you will use the version `0.9.0` for an x86 CPU:
 ```
 mkdir ~/satellite
 cd ~/satellite
-wget -q https://github.com/mike76-dev/satellite/releases/download/v0.8.0/satellite_linux_amd64.zip
+wget -q https://github.com/mike76-dev/satellite/releases/download/v0.9.0/satellite_linux_amd64.zip
 unzip satellite_linux_amd64.zip
 rm satellite_linux_amd64.zip
 ```
@@ -510,7 +510,7 @@ Nov 18 15:16:17 <host> systemd[1]: Started satd.
 Nov 18 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
 Nov 18 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
 Nov 18 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
-Nov 18 15:16:17 <host> satd[226480]: satd v0.8.0
+Nov 18 15:16:17 <host> satd[226480]: satd v0.9.0
 Nov 18 15:16:17 <host> satd[226480]: Git Revision 2f5a918
 Nov 18 15:16:17 <host> satd[226480]: Loading...
 Nov 18 15:16:17 <host> satd[226480]: Creating mail client...
@@ -540,10 +540,10 @@ Once the node is synced, the output will change:
 ```
 Output:
 Synced: Yes
-Block:      bid:00000000000000000b9b687a2794ff4dd450bfed6f7fc452e27bcf2a433d8d93
-Height:     444562
-Target:     [0 0 0 0 0 0 0 1 35 47 52 114 83 128 110 166 227 1 23 115 197 236 127 4 15 91 59 30 228 136 86 160]
-Difficulty: ~16.22 uS
+Block:      bid:0000000000000001090c306294fd37218f2dcfd851ea52b43fb608a8479887f3
+Height:     448299
+Target:     [0 0 0 0 0 0 0 1 18 199 150 23 29 10 55 177 95 226 182 18 239 59 254 34 226 48 104 226 81 92 121 204]
+Difficulty: ~17.19 uS
 ```
 You should now create a wallet. You will need the password you set in your `systemd` unit earlier. When prompted type in the wallet password you chose.
 ```
