@@ -27,19 +27,19 @@ import (
 
 // A Server is a collection of modules that can be communicated with over an http API.
 type Server struct {
-	api               *api.API
-	apiServer         *http.Server
-	listener          net.Listener
+	api       *api.API
+	apiServer *http.Server
+	listener  net.Listener
 
 	node              *node.Node
 	requiredUserAgent string
 
-	serveChan         chan struct{}
-	serveErr          error
+	serveChan chan struct{}
+	serveErr  error
 
-	closeChan         chan struct{}
+	closeChan chan struct{}
 
-	closeMu           sync.Mutex
+	closeMu sync.Mutex
 }
 
 // serve listens for and handles API calls. It is a blocking function.
@@ -70,7 +70,7 @@ func (srv *Server) Close() error {
 	if srv.node != nil {
 		err = modules.ComposeErrors(err, srv.node.Close())
 	}
-	return fmt.Errorf("error while closing server: %s", err)
+	return modules.AddContext(err, "error while closing server")
 }
 
 // WaitClose blocks until the server is done shutting down.
@@ -114,7 +114,7 @@ func (srv *Server) Unlock(password string) error {
 		frand.Read(h[:])
 	}
 	h := blake2b.Sum256([]byte(password))
-	buf := make([]byte, 32 + 8)
+	buf := make([]byte, 32+8)
 	copy(buf[:32], h[:])
 	binary.LittleEndian.PutUint64(buf[32:], 0)
 	h = blake2b.Sum256(buf)
@@ -189,9 +189,9 @@ func NewAsync(config *persist.SatdConfig, apiPassword string, dbPassword string,
 		n, errChan = node.New(config, dbPassword, loadStartTime)
 		if err := modules.PeekErr(errChan); err != nil {
 			if isAddrInUseErr(err) {
-				return nil, fmt.Errorf("%v; are you running another instance of siad?", err.Error())
+				return nil, fmt.Errorf("%v; are you running another instance of satd?", err.Error())
 			}
-			return nil, fmt.Errorf("server is unable to create the Sia node: %s", err)
+			return nil, fmt.Errorf("server is unable to create the satellite node: %s", err)
 		}
 
 		// Make sure that the server wasn't shut down while loading the modules.
@@ -234,7 +234,6 @@ func New(config *persist.SatdConfig, apiPassword string, dbPassword string, load
 	}
 	return srv, nil
 }
-
 
 // isAddrInUseErr checks if the error corresponds to syscall.EADDRINUSE.
 func isAddrInUseErr(err error) bool {

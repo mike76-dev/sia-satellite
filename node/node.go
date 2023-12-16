@@ -25,9 +25,6 @@ type Node struct {
 	// MySQL database.
 	DB *sql.DB
 
-	// Mail client.
-	ms *mail.MailSender
-
 	// The modules of the node.
 	ConsensusSet    modules.ConsensusSet
 	Gateway         modules.Gateway
@@ -37,8 +34,7 @@ type Node struct {
 	TransactionPool modules.TransactionPool
 	Wallet          modules.Wallet
 
-	// The high level directory where all the persistence gets stored for the
-	// modules.
+	// The directory where all the logs are stored.
 	Dir string
 }
 
