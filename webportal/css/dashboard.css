@@ -500,25 +500,25 @@ tbody > tr:nth-child(odd) {
 
 .files-hint {
 	position: absolute;
-	display: none;
+	display: flex;
 	flex-direction: column;
-	left: 1rem;
-	bottom: 3rem;
+	align-items: baseline;
 	background-color: var(--buttonHoverEnd);
 	border: 1px solid var(--textSecondary);
 	border-radius: 0.25rem;
 	padding: 0.25rem;
 	min-width: 8rem;
-	z-index: 1;
+	z-index: -1;
 }
 
 .files-item:hover .files-hint {
-	display: flex;
+	z-index: 1;
 }
 
 .files-hint > div {
 	display: flex;
 	flex-direction: row;
+	width: 100%;
 }
 
 .files-hint label {
@@ -526,6 +526,7 @@ tbody > tr:nth-child(odd) {
 	margin: 0;
 	font-size: 0.8rem;
 	color: var(--textSecondary);
+	text-align: left;
 }
 
 .files-hint span {

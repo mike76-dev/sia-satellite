@@ -15,6 +15,10 @@ if (!navigator.cookieEnabled || getCookie('satellite') == '') {
 	window.location.replace(window.location.href.slice(0, i) + '/rent.html');
 }
 
+function getRemSize() {
+	return parseInt(getComputedStyle(document.getElementsByTagName('body')[0]).fontSize);
+}
+
 function getCookie(name) {
 	let n = name + '=';
 	let ca = document.cookie.split(';');
@@ -1315,6 +1319,17 @@ function renderFiles() {
 				});
 			}
 			container.appendChild(i);
+			let h = i.lastElementChild;
+			if (i.offsetTop - container.offsetTop + i.clientHeight - h.clientHeight >= getRemSize() * 3) {
+				i.lastElementChild.style.bottom = '3rem';
+			} else {
+				i.lastElementChild.style.top = '-1rem';
+			}
+			if (container.offsetLeft + container.clientWidth - i.offsetLeft - h.clientWidth >= getRemSize() * 2) {
+				i.lastElementChild.style.left = '2rem';
+			} else {
+				i.lastElementChild.style.right = '2rem';
+			}
 		});
 	}
 	document.getElementById('files-nokey').classList.add('disabled');
@@ -1389,6 +1404,7 @@ function createFileHint(item) {
 	h.classList.add('files-hint');
 	h.innerHTML = `<div><label>Size:</label><span>${convertSize(item.item.size)}</span></div>`;
 	h.innerHTML += `<div><label>Slabs:</label><span>${item.item.buffered ? 'N/A' : item.item.slabs}</span></div>`;
+	h.innerHTML += `<div><label>Partial Slab:</label><span>${convertSize(item.item.partialdata)}</span></div>`;
 	h.innerHTML += `<div><label>${item.item.buffered ? 'Submitted' : 'Uploaded'}:</label><span>${new Date(item.item.uploaded * 1000).toLocaleString()}</span></div>`;
 	return h;
 }
