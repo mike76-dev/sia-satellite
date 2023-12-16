@@ -1062,6 +1062,9 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 			s.WriteResponseErr(err)
 			return err
 		}
+		resp.Filesize = 0
+		s.WriteResponse(&resp)
+		return nil
 	}
 
 	// Open the file and write data to it.
