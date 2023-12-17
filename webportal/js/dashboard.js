@@ -1208,7 +1208,7 @@ function renderFiles() {
 	}
 	let container = document.getElementById('files-container');
 	container.innerHTML = '';
-	let selected = document.getElementById('files-selected');
+	let filepath = document.getElementById('files-path');
 	if (currentBucket < 0) {
 		buckets.forEach((bucket, index) => {
 			let b = document.createElement('div');
@@ -1249,9 +1249,8 @@ function renderFiles() {
 							selectedFiles.splice(index, 1);
 							i.classList.remove('files-item-selected');
 							let count = countSelectedFiles();
-							selected.innerHTML = 'Selected ' + count + ' files';
+							filepath.innerHTML = `Current path: ${getCurrentPath()} (selected ${count} files)`;
 							if (count == 0) {
-								selected.classList.add('disabled');
 								document.getElementById('files-download').disabled = true;
 							}
 							if (selectedFiles.length == 0) {
@@ -1272,9 +1271,8 @@ function renderFiles() {
 							});
 							i.classList.add('files-item-selected');
 							let count = countSelectedFiles();
-							selected.innerHTML = 'Selected ' + count + ' files';
+							filepath.innerHTML = `Current path: ${getCurrentPath()} (selected ${count} files)`;
 							if (count > 0) {
-								selected.classList.remove('disabled');
 								document.getElementById('files-download').disabled = false;
 							}
 							document.getElementById('files-delete').disabled = false;
@@ -1295,9 +1293,8 @@ function renderFiles() {
 						selectedFiles.splice(index, 1);
 						i.classList.remove('files-item-selected');
 						let count = countSelectedFiles();
-						selected.innerHTML = 'Selected ' + count + ' files';
+						filepath.innerHTML = `Current path: ${getCurrentPath()} (selected ${count} files)`;
 						if (count == 0) {
-							selected.classList.add('disabled');
 							document.getElementById('files-download').disabled = true;
 						}
 						if (selectedFiles.length == 0) {
@@ -1311,8 +1308,7 @@ function renderFiles() {
 						});
 						i.classList.add('files-item-selected');
 						let count = countSelectedFiles();
-						selected.innerHTML = 'Selected ' + count + ' files';
-						selected.classList.remove('disabled');
+						filepath.innerHTML = `Current path: ${getCurrentPath()} (selected ${count} files)`;
 						document.getElementById('files-delete').disabled = false;
 						document.getElementById('files-download').disabled = false;
 					}
@@ -1372,18 +1368,21 @@ function getItems(path) {
 function expandBucket(index) {
 	cancelSelection();
 	currentBucket = index;
+	document.getElementById('files-path').innerHTML = `Current path: ${getCurrentPath()}`;
 	renderFiles();
 }
 
 function collapseBucket() {
 	cancelSelection();
 	currentBucket = -1;
+	document.getElementById('files-path').innerHTML = `Current path: ..`;
 	renderFiles();
 }
 
 function expandDir(path) {
 	cancelSelection();
 	currentPath = path;
+	document.getElementById('files-path').innerHTML = `Current path: ${getCurrentPath()}`;
 	renderFiles();
 }
 
@@ -1396,7 +1395,14 @@ function collapseDir() {
 	} else {
 		currentPath = currentPath.slice(0, i);
 	}
+	document.getElementById('files-path').innerHTML = `Current path: ${getCurrentPath()}`;
 	renderFiles();
+}
+
+function getCurrentPath() {
+	if (currentBucket < 0) return '..';
+	path = buckets[currentBucket].name + `>`;
+	return '<code>' + path + currentPath + '</code>';
 }
 
 function createFileHint(item) {
@@ -1446,7 +1452,6 @@ function countSelectedFiles() {
 
 function cancelSelection() {
 	selectedFiles = [];
-	document.getElementById('files-selected').classList.add('disabled');
 	document.getElementById('files-delete').disabled = true;
 	document.getElementById('files-download').disabled = true;
 	renderFiles();
