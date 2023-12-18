@@ -1522,6 +1522,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 	c.mu.Lock()
 	if c.uploadingBufferedFiles {
 		c.mu.Unlock()
+		c.log.Println("INFO: skipping file uploads since another thread is running already")
 		return
 	}
 	c.uploadingBufferedFiles = true
@@ -1548,6 +1549,11 @@ func (c *Contractor) managedUploadBufferedFiles() {
 	defer rows.Close()
 
 	for rows.Next() {
+		select {
+		case <-c.tg.StopChan():
+			return
+		default:
+		}
 		var n, encrypted string
 		pk := make([]byte, 32)
 		var bucket, path, mimeType []byte

@@ -230,7 +230,18 @@ func (mgr *uploadManager) migrate(ctx context.Context, rpk types.PublicKey, shar
 func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucket, path, mimeType []byte, encrypted string) (fm modules.FileMetadata, err error) {
 	// Create the context and setup its cancelling.
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	pk := make([]byte, 32)
+	copy(pk, rpk[:])
+	mapKey := string(pk) + string(bucket) + ":" + string(path)
+	c.mu.Lock()
+	c.runningUploads[mapKey] = cancel
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.runningUploads, mapKey)
+		cancel()
+		c.mu.Unlock()
+	}()
 
 	// Fetch necessary params.
 	c.mu.RLock()

@@ -642,7 +642,14 @@ func (m *Manager) RegisterUpload(pk types.PublicKey, bucket, path, mimeType []by
 		complete,
 		encText,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Initiate the upload.
+	go m.hostContractor.StartUploading()
+
+	return nil
 }
 
 // GetBufferSize returns the total size of the temporary files.
@@ -677,20 +684,27 @@ func (m *Manager) GetBufferSize() (total uint64, err error) {
 // DeleteBufferedFiles deletes the files waiting to be uploaded.
 func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 	// Make a list of file names.
-	rows, err := m.db.Query("SELECT filename FROM ctr_uploads WHERE renter_pk = ?", pk[:])
+	rows, err := m.db.Query(`
+		SELECT filename, bucket, filepath
+		FROM ctr_uploads
+		WHERE renter_pk = ?
+	`, pk[:])
 	if err != nil {
 		m.log.Println("ERROR: unable to query files:", err)
 		return modules.AddContext(err, "unable to query files")
 	}
 
+	// Make a list of filenames and also cancel any running uploads.
 	var names []string
 	for rows.Next() {
 		var name string
-		if err := rows.Scan(&name); err != nil {
+		var bucket, path []byte
+		if err := rows.Scan(&name, &bucket, &path); err != nil {
 			rows.Close()
 			m.log.Println("ERROR: unable to retrieve filename:", err)
 			return modules.AddContext(err, "unable to retrieve filename")
 		}
+		m.hostContractor.CancelUpload(pk, bucket, path)
 		names = append(names, name)
 	}
 	rows.Close()
@@ -723,6 +737,9 @@ func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 // DeleteBufferedFile deletes the specified file and the associated
 // database record.
 func (m *Manager) DeleteBufferedFile(pk types.PublicKey, bucket, path []byte) error {
+	// Cancel the upload.
+	m.hostContractor.CancelUpload(pk, bucket, path)
+
 	var name string
 	err := m.db.QueryRow(`
 		SELECT filename
@@ -1202,6 +1219,9 @@ func (m *Manager) AssembleParts(pk types.PublicKey, id types.Hash256) (err error
 	if err != nil {
 		return modules.AddContext(err, "couldn't register new upload")
 	}
+
+	// Initiate the upload.
+	go m.hostContractor.StartUploading()
 
 	return
 }

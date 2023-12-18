@@ -56,6 +56,9 @@ type hostContractor interface {
 	// CancelContract cancels the renter's contract.
 	CancelContract(types.FileContractID) error
 
+	// CancelUpload cancels a running upload.
+	CancelUpload(types.PublicKey, []byte, []byte)
+
 	// Contract returns the contract with the given ID.
 	Contract(types.FileContractID) (modules.RenterContract, bool)
 
@@ -135,6 +138,9 @@ type hostContractor interface {
 
 	// RetrieveMetadata retrieves the file metadata from the database.
 	RetrieveMetadata(types.PublicKey, []modules.BucketFiles) ([]modules.FileMetadata, error)
+
+	// StartUploading initiates uploading buffered files.
+	StartUploading()
 
 	// Synced returns a channel that is closed when the contractor is fully
 	// synced with the peer-to-peer network.

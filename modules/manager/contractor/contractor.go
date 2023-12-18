@@ -49,6 +49,7 @@ type Contractor struct {
 	interruptMaintenance   chan struct{}
 	maintenanceLock        siasync.TryMutex
 	uploadingBufferedFiles bool
+	runningUploads         map[string]func()
 
 	blockHeight uint64
 	synced      chan struct{}
@@ -336,6 +337,7 @@ func contractorBlockingStartup(db *sql.DB, cs modules.ConsensusSet, m modules.Ma
 
 		interruptMaintenance: make(chan struct{}),
 		synced:               make(chan struct{}),
+		runningUploads:       make(map[string]func()),
 
 		renters: make(map[types.PublicKey]modules.Renter),
 
@@ -689,4 +691,30 @@ func (c *Contractor) DownloadObject(w io.Writer, rpk types.PublicKey, bucket, pa
 	err = c.dm.managedDownloadObject(ctx, w, rpk, obj, id, 0, length, contracts)
 
 	return err
+}
+
+// StartUploading initiates uploading buffered files.
+func (c *Contractor) StartUploading() {
+	if err := c.tg.Add(); err != nil {
+		return
+	}
+	defer c.tg.Done()
+	c.managedUploadBufferedFiles()
+}
+
+// CancelUpload cancels a running upload.
+func (c *Contractor) CancelUpload(rpk types.PublicKey, bucket, path []byte) {
+	pk := make([]byte, 32)
+	copy(pk, rpk[:])
+	mapKey := string(pk) + string(bucket) + ":" + string(path)
+	c.mu.Lock()
+	cancelFunc, ok := c.runningUploads[mapKey]
+	if ok {
+		delete(c.runningUploads, mapKey)
+		cancelFunc()
+		if len(c.runningUploads) == 0 {
+			c.uploadingBufferedFiles = false
+		}
+	}
+	c.mu.Unlock()
 }
