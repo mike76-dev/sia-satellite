@@ -92,7 +92,7 @@ var refreshing = false;
 var keyValue = '';
 
 var buckets = [];
-var currentBucket = -1;
+var currentBucket = '';
 var currentPath = '';
 
 loadFromStorage();
@@ -1209,12 +1209,12 @@ function renderFiles() {
 	let container = document.getElementById('files-container');
 	container.innerHTML = '';
 	let filepath = document.getElementById('files-path');
-	if (currentBucket < 0) {
-		buckets.forEach((bucket, index) => {
+	if (currentBucket == '') {
+		buckets.forEach((bucket) => {
 			let b = document.createElement('div');
 			b.classList.add('files-item');
 			b.innerHTML = `<img src="assets/bucket.png"><div>${bucket.name}</div>`;
-			b.addEventListener("click", () => {expandBucket(index)});
+			b.addEventListener("click", () => {expandBucket(bucket)});
 			container.appendChild(b);
 		});
 	} else {
@@ -1249,8 +1249,10 @@ function renderFiles() {
 							selectedFiles.splice(index, 1);
 							i.classList.remove('files-item-selected');
 							let count = countSelectedFiles();
-							filepath.innerHTML = `Current path: ${getCurrentPath()} (selected ${count} files)`;
-							if (count == 0) {
+							filepath.innerHTML = `Current path: ${getCurrentPath()}`;
+							if (count > 0) {
+								filepath.innerHTML += ` (selected ${count} files)`;
+							} else {
 								document.getElementById('files-download').disabled = true;
 							}
 							if (selectedFiles.length == 0) {
@@ -1271,8 +1273,9 @@ function renderFiles() {
 							});
 							i.classList.add('files-item-selected');
 							let count = countSelectedFiles();
-							filepath.innerHTML = `Current path: ${getCurrentPath()} (selected ${count} files)`;
+							filepath.innerHTML = `Current path: ${getCurrentPath()}`;
 							if (count > 0) {
+								filepath.innerHTML += ` (selected ${count} files)`;
 								document.getElementById('files-download').disabled = false;
 							}
 							document.getElementById('files-delete').disabled = false;
@@ -1293,8 +1296,10 @@ function renderFiles() {
 						selectedFiles.splice(index, 1);
 						i.classList.remove('files-item-selected');
 						let count = countSelectedFiles();
-						filepath.innerHTML = `Current path: ${getCurrentPath()} (selected ${count} files)`;
-						if (count == 0) {
+						filepath.innerHTML = `Current path: ${getCurrentPath()}`;
+						if (count > 0) {
+							filepath.innerHTML += ` (selected ${count} files)`;
+						} else {
 							document.getElementById('files-download').disabled = true;
 						}
 						if (selectedFiles.length == 0) {
@@ -1308,7 +1313,8 @@ function renderFiles() {
 						});
 						i.classList.add('files-item-selected');
 						let count = countSelectedFiles();
-						filepath.innerHTML = `Current path: ${getCurrentPath()} (selected ${count} files)`;
+						filepath.innerHTML = `Current path: ${getCurrentPath()}`;
+						if (count > 0) filepath.innerHTML += ` (selected ${count} files)`;
 						document.getElementById('files-delete').disabled = false;
 						document.getElementById('files-download').disabled = false;
 					}
@@ -1358,23 +1364,25 @@ function renderFiles() {
 }
 
 function getItems(path) {
+	let bucket = buckets.find(b => b.name == currentBucket);
 	if (path == '') {
-		return buckets[currentBucket].files;
+		return bucket ? bucket.files : [];
 	}
-	let dir = buckets[currentBucket].files.find(item => item.path == path);
-	return dir.files;
+	let dir = findItem(bucket, item => item.path == path);
+	return dir ? dir.files : [];
 }
 
-function expandBucket(index) {
+function expandBucket(bucket) {
 	cancelSelection();
-	currentBucket = index;
+	currentBucket = buckets.find(b => b.name == bucket.name).name;
 	document.getElementById('files-path').innerHTML = `Current path: ${getCurrentPath()}`;
 	renderFiles();
 }
 
 function collapseBucket() {
 	cancelSelection();
-	currentBucket = -1;
+	currentBucket = '';
+	currentPath = '';
 	document.getElementById('files-path').innerHTML = `Current path: ..`;
 	renderFiles();
 }
@@ -1393,15 +1401,15 @@ function collapseDir() {
 	if (i < 0) {
 		currentPath = '';
 	} else {
-		currentPath = currentPath.slice(0, i);
+		currentPath = currentPath.slice(0, i) + '/';
 	}
 	document.getElementById('files-path').innerHTML = `Current path: ${getCurrentPath()}`;
 	renderFiles();
 }
 
 function getCurrentPath() {
-	if (currentBucket < 0) return '..';
-	path = buckets[currentBucket].name + `>`;
+	if (currentBucket == '') return '..';
+	path = currentBucket + `>`;
 	return '<code>' + path + currentPath + '</code>';
 }
 
@@ -1442,6 +1450,15 @@ function iterateOverAll(item, func) {
 	});
 }
 
+function findItem(item, func) {
+	let res = item.files.find(i => func(i));
+	if (res) return res;
+	for (let i = 0; i < item.files.length; i++) {
+		if (item.files[i].files) return findItem(item.files[i], func);
+	}
+	return null;
+}
+
 function countSelectedFiles() {
 	let count = 0;
 	selectedFiles.forEach((item) => {
@@ -1454,11 +1471,14 @@ function cancelSelection() {
 	selectedFiles = [];
 	document.getElementById('files-delete').disabled = true;
 	document.getElementById('files-download').disabled = true;
-	renderFiles();
+	document.getElementById('files-path').innerHTML = `Current path: ${getCurrentPath()}`;
 }
 
 function deselect(obj, e) {
-	if (e.target == obj) cancelSelection();
+	if (e.target == obj) {
+		cancelSelection();
+		renderFiles();
+	}
 }
 
 function downloadFiles() {
@@ -1565,6 +1585,12 @@ function getFiles() {
 				files.forEach((item) => {
 					addItem(item);
 				});
+				if (currentPath == '') {
+					let items = getItems(currentPath);
+					if (items.length == 0) {
+						collapseBucket();
+					}
+				}
 				renderFiles();
 				loading.classList.add('disabled');
 				let slabs = 0;
