@@ -1531,6 +1531,14 @@ func (c *Contractor) managedUploadBufferedFiles() {
 		c.mu.Lock()
 		c.uploadingBufferedFiles = false
 		c.mu.Unlock()
+		pending, err := c.uploadPending()
+		if err != nil {
+			c.log.Println("ERROR: couldn't check files pending upload")
+			return
+		}
+		if pending {
+			go c.managedUploadBufferedFiles()
+		}
 	}()
 
 	c.log.Println("INFO: uploading buffered files")
@@ -1745,4 +1753,12 @@ func (c *Contractor) threadedPruneOrphanedSlabs() {
 		}
 		c.managedPruneOrphanedSlabs()
 	}
+}
+
+// uploadPending returns true if there is any file pending upload.
+func (c *Contractor) uploadPending() (pending bool, err error) {
+	var count int
+	err = c.db.QueryRow("SELECT COUNT(*) FROM ctr_uploads").Scan(&count)
+	pending = count > 0
+	return
 }
