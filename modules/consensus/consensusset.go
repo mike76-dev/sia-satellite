@@ -9,7 +9,7 @@ import (
 	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
-	
+
 	"go.sia.tech/core/types"
 )
 
@@ -195,6 +195,11 @@ func (cs *ConsensusSet) BlockAtHeight(height uint64) (block types.Block, exists 
 	pb, exists, err := findBlockByID(tx, id)
 	if err != nil {
 		cs.log.Println("ERROR: unable to find block:", err)
+		tx.Rollback()
+		return types.Block{}, false
+	}
+	if !exists {
+		cs.log.Println("ERROR: unable to find block", id)
 		tx.Rollback()
 		return types.Block{}, false
 	}
