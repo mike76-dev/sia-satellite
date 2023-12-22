@@ -8,7 +8,6 @@ import (
 	"strings"
 	"text/template"
 	"time"
-	"unicode"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -83,26 +82,6 @@ func checkPassword(pwd string) Error {
 		return Error{
 			Code:    httpErrorPasswordTooLong,
 			Message: "the password is too long",
-		}
-	}
-	var smalls, caps, digits, specials bool
-	for _, c := range pwd {
-		switch {
-		case unicode.IsNumber(c):
-			digits = true
-		case unicode.IsLower(c):
-			smalls = true
-		case unicode.IsUpper(c):
-			caps = true
-		case unicode.IsPunct(c) || unicode.IsSymbol(c):
-			specials = true
-		default:
-		}
-	}
-	if !smalls || !caps || !digits || !specials {
-		return Error{
-			Code:    httpErrorPasswordNotCompliant,
-			Message: "insecure password",
 		}
 	}
 	return Error{}

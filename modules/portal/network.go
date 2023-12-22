@@ -33,9 +33,8 @@ const (
 	httpErrorEmailUsed    = 11
 	httpErrorEmailTooLong = 12
 
-	httpErrorPasswordTooShort     = 20
-	httpErrorPasswordTooLong      = 21
-	httpErrorPasswordNotCompliant = 22
+	httpErrorPasswordTooShort = 20
+	httpErrorPasswordTooLong  = 21
 
 	httpErrorWrongCredentials = 30
 	httpErrorTooManyRequests  = 31
@@ -164,7 +163,6 @@ func (api *portalAPI) buildHTTPRoutes() {
 	api.routerMu.Lock()
 	api.router = router
 	api.routerMu.Unlock()
-	return
 }
 
 // initNetworking starts the portal server listening at the

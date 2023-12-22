@@ -2,12 +2,6 @@ if (apiBaseURL == '') {
 	throw new Error('API base URL not specified');
 }
 
-const specialChars = [
-	'`', '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
-	'-', '_', '=', '+', '[', ']', '{', '}', ';', ':', "'", '"',
-	'\\', '|', ',', '.', '<', '>', '/', '?'
-];
-
 const month = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 if (!navigator.cookieEnabled || getCookie('satellite') == '') {
@@ -194,19 +188,6 @@ function documentClickHandler() {
 	document.getElementById('menu-container').classList.add('mobile-hidden');
 }
 
-function validatePassword(pass) {
-	if (pass.length < 8) return false;
-	if (pass.length > 255) return false;
-	let l = 0, u = 0, d = 0, s = 0;
-	for (let i = 0; i < pass.length; i++) {
-		if (/[a-z]/.test(pass[i])) l++;
-		if (/[A-Z]/.test(pass[i])) u++;
-		if (/[0-9]/.test(pass[i])) d++;
-		if (specialChars.includes(pass[i])) s++;
-	}
-	return l > 0 && u > 0 && d > 0 && s > 0;
-}
-
 function toggleChangePassword() {
 	let c = document.getElementById('change-password-toggle');
 	let i = document.getElementById('change-password-icon');
@@ -255,9 +236,15 @@ function clearPassword() {
 
 function changeClick() {
 	let p = document.getElementById('change-password');
-	if (!validatePassword(p.value)) {
+	if (p.value.length < 8) {
 		let err = document.getElementById('change-password-error');
-		err.innerHTML = 'Provided password is invalid';
+		err.innerHTML = 'Provided password is too short';
+		err.classList.remove('invisible');
+		return;
+	}
+	if (p.value.length > 255) {
+		let err = document.getElementById('change-password-error');
+		err.innerHTML = 'Provided password is too long';
 		err.classList.remove('invisible');
 		return;
 	}
@@ -298,10 +285,6 @@ function changeClick() {
 					break;
 				case 21:
 					passErr.innerHTML = 'Password is too long';
-					passErr.classList.remove('invisible');
-					break;
-				case 22:
-					passErr.innerHTML = 'Password is not secure enough';
 					passErr.classList.remove('invisible');
 					break;
 				case 40:

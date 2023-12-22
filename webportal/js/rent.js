@@ -9,12 +9,6 @@ if (!navigator.cookieEnabled) {
 	throw new Error('Cookies disabled');
 }
 
-const specialChars = [
-	'`', '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
-	'-', '_', '=', '+', '[', ']', '{', '}', ';', ':', "'", '"',
-	'\\', '|', ',', '.', '<', '>', '/', '?'
-];
-
 var status = '';
 
 var query = window.location.search;
@@ -255,19 +249,6 @@ function validateEmail(addr) {
 	return true;
 }
 
-function validatePassword(pass) {
-	if (pass.length < 8) return false;
-	if (pass.length > 255) return false;
-	let l = 0, u = 0, d = 0, s = 0;
-	for (let i = 0; i < pass.length; i++) {
-		if (/[a-z]/.test(pass[i])) l++;
-		if (/[A-Z]/.test(pass[i])) u++;
-		if (/[0-9]/.test(pass[i])) d++;
-		if (specialChars.includes(pass[i])) s++;
-	}
-	return l > 0 && u > 0 && d > 0 && s > 0;
-}
-
 function loginEmailChange() {
 	let err = document.getElementById('login-email-error');
 	err.classList.add('invisible');
@@ -367,9 +348,15 @@ function signupClick() {
 		return;
 	}
 	let p = document.getElementById('signup-password');
-	if (!validatePassword(p.value)) {
+	if (p.value.length < 8) {
 		let err = document.getElementById('signup-password-error');
-		err.innerHTML = 'Provided password is invalid';
+		err.innerHTML = 'Provided password is too short';
+		err.classList.remove('invisible');
+		return;
+	}
+	if (p.value.length > 255) {
+		let err = document.getElementById('signup-password-error');
+		err.innerHTML = 'Provided password is too long';
 		err.classList.remove('invisible');
 		return;
 	}
@@ -430,10 +417,6 @@ function signupClick() {
 					break;
 				case 21:
 					passErr.innerHTML = 'Password is too long';
-					passErr.classList.remove('invisible');
-					break;
-				case 22:
-					passErr.innerHTML = 'Password is not secure enough';
 					passErr.classList.remove('invisible');
 					break;
 				case 30:
@@ -577,9 +560,15 @@ function changeRetypeChange() {
 
 function changeClick() {
 	let p = document.getElementById('change-password');
-	if (!validatePassword(p.value)) {
+	if (p.value.length < 8) {
 		let err = document.getElementById('change-password-error');
-		err.innerHTML = 'Provided password is invalid';
+		err.innerHTML = 'Provided password is too short';
+		err.classList.remove('invisible');
+		return;
+	}
+	if (p.value.length > 255) {
+		let err = document.getElementById('change-password-error');
+		err.innerHTML = 'Provided password is too long';
 		err.classList.remove('invisible');
 		return;
 	}
@@ -623,10 +612,6 @@ function changeClick() {
 					break;
 				case 21:
 					passErr.innerHTML = 'Password is too long';
-					passErr.classList.remove('invisible');
-					break;
-				case 22:
-					passErr.innerHTML = 'Password is not secure enough';
 					passErr.classList.remove('invisible');
 					break;
 				case 40:
