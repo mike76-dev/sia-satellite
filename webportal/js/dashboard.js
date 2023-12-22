@@ -427,7 +427,7 @@ function retrieveBalance() {
 					document.getElementById('reveal').classList.remove('disabled');
 				}
 				if ((data.subscribed || data.isrenter) && data.stripeid != '') {
-					sc.disabled = false;
+					sc.classList.remove('disabled');
 				}
 				sc.innerHTML = data.subscribed ? 'Switch to Pre-Payment' : 'Switch to Invoicing';
 			}
@@ -1839,6 +1839,7 @@ function changePaymentPlan() {
 			if (response.status == 204) {
 				sc.innerHTML = 'Success!';
 				window.setTimeout(function() {
+					sc.disabled = false;
 					retrieveBalance();
 				}, 1000);
 			} else {
@@ -1858,7 +1859,7 @@ function changePaymentPlan() {
 				document.getElementById('to-pay').innerHTML = paymentAmount.toFixed(2) + ' ' +
 					paymentCurrency;
 				document.getElementById('select').classList.add('disabled');
-				document.getElementById('sc').classList.add('disabled');
+				sc.classList.add('disabled');
 				document.getElementById('payment').classList.remove('disabled');
 			}
 		})
