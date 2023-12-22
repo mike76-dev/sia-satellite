@@ -39,12 +39,9 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx *sql.Tx, b types.Block, id typ
 	}
 
 	// Check if the block is already known.
-	_, exists, err = findBlockByID(tx, id)
+	_, _, err = findBlockByID(tx, id)
 	if err != nil {
 		return nil, errDatabaseError
-	}
-	if exists {
-		return nil, modules.ErrBlockKnown
 	}
 
 	// Check for the parent.
@@ -88,12 +85,9 @@ func (cs *ConsensusSet) validateHeader(tx *sql.Tx, h types.BlockHeader) error {
 	}
 
 	// Check if the block is already known.
-	_, exists, err = findBlockByID(tx, id)
+	_, _, err = findBlockByID(tx, id)
 	if err != nil {
 		return errDatabaseError
-	}
-	if exists {
-		return modules.ErrBlockKnown
 	}
 
 	// Check for the parent.
@@ -252,10 +246,6 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 		for i := 0; i < len(blocks); i++ {
 			// Start by checking the header of the block.
 			parent, err := cs.validateHeaderAndBlock(tx, blocks[i], blockIDs[i])
-			if modules.ContainsError(err, modules.ErrBlockKnown) {
-				// Skip over known blocks.
-				continue
-			}
 			if modules.ContainsError(err, ErrFutureTimestamp) {
 				// Queue the block to be tried again if it is a future block.
 				go cs.threadedSleepOnFutureBlock(blocks[i])
@@ -289,6 +279,13 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	}(tx)
 
 	if setErr != nil {
+		if errors.Is(setErr, errExternalRevert) {
+			block := currentProcessedBlock(tx)
+			if err := commitDiffSet(tx, block, modules.DiffRevert); err != nil {
+				return false, err
+			}
+			return false, tx.Commit()
+		}
 		if len(changes) == 0 {
 			cs.log.Println("Consensus received an invalid block:", setErr)
 		} else {
