@@ -351,10 +351,6 @@ func isDefaultPaymentMethodSet(id string) (bool, error) {
 	return cust.InvoiceSettings.DefaultPaymentMethod != nil, nil
 }
 
-func init() {
-	stripe.Key = os.Getenv("SATD_STRIPE_KEY")
-}
-
 // getInvoiceAmount is a helper function that retrieves the due
 // amount of an invoice.
 func getInvoiceAmount(id string) float64 {
@@ -368,4 +364,9 @@ func getInvoiceAmount(id string) float64 {
 		amount = amount / 100
 	}
 	return amount
+}
+
+// initStripe loads the Stripe key.
+func initStripe() {
+	stripe.Key = os.Getenv("SATD_STRIPE_KEY")
 }

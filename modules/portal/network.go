@@ -71,6 +71,9 @@ func (api *portalAPI) buildHTTPRoutes() {
 	router.POST("/auth/login", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.loginHandlerPOST(w, req, ps)
 	})
+	router.POST("/auth/login/:provider", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		api.authHandlerPOST(w, req, ps)
+	})
 	router.POST("/auth/register", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		api.registerHandlerPOST(w, req, ps)
 	})

@@ -7,11 +7,17 @@
 	<link rel="stylesheet" href="css/main.css">
 	<link rel="stylesheet" href="css/rent.css">
 	<script src="js/config.js"></script>
+	<script defer src="js/google.js"></script>
+	<script async defer src="https://accounts.google.com/gsi/client"></script>
 	<script defer src="js/rent.js"></script>
 	<script defer src="js/announcement.js"></script>
 	<title>Sia Satellite - Rent Decentralized Storage</title>
 </head>
 <body>
+	<div id="g_id_onload"
+         data-client_id=""
+         data-callback="handleCredentialResponse">
+    </div>
 	<div id="announcement-container" class="announcement-container disabled">
 		<div id="announcement" class="announcement"></div>
 	</div>
@@ -79,6 +85,7 @@
 			<p>New to Sia Satellite?
 				<span class="link" onclick="setStatus('signup')">Create an account</span>
 			</p>
+			<div class="g_id_signin" data-type="standard"></div>
 		</div>
 		<div id="signup" class="frame disabled">
 			<h2>Create an Account</h2>
@@ -141,6 +148,7 @@
 			<p>Already have an account?
 				<span class="link" onclick="setStatus('login')">Login</span>
 			</p>
+			<div class="g_id_signin" data-type="standard"></div>
 		</div>
 		<div id="reset" class="frame disabled">
 			<h2>Reset Your Password</h2>

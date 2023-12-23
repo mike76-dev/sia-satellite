@@ -216,3 +216,9 @@ func (p *Portal) SetCredits(c modules.CreditData) {
 
 // enforce that Portal satisfies the modules.Portal interface.
 var _ modules.Portal = (*Portal)(nil)
+
+// init performs the initialization.
+func init() {
+	initStripe()
+	initGoogle()
+}

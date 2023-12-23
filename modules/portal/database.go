@@ -69,13 +69,16 @@ func (p *Portal) updateAccount(email, password string, verified bool) error {
 
 	// No entries, create a new account.
 	if !exists {
-		if password == "" {
+		if password == "" && !verified {
 			return errors.New("password may not be empty")
 		}
-		pwHash := passwordHash(password)
+		var pwHash types.Hash256
+		if password != "" {
+			pwHash = passwordHash(password)
+		}
 		_, err := p.db.Exec(`
 			INSERT INTO pt_accounts (email, password_hash, verified, time, nonce, sc_address)
-			VALUES (?, ?, ?, ?, ?, ?)`, email, pwHash[:], false, time.Now().Unix(), []byte{}, []byte{})
+			VALUES (?, ?, ?, ?, ?, ?)`, email, pwHash[:], verified, time.Now().Unix(), []byte{}, []byte{})
 		return err
 	}
 

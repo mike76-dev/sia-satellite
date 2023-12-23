@@ -288,17 +288,17 @@ function loginClick() {
 	}
 	fetch(apiBaseURL + '/auth/login', options)
 		.then(response => {
-				if (response.status == 204) {
-					setStatus('');
-					let m = document.getElementById('message');
-					m.innerHTML = 'Congratulations, you are logged in!';
-					m.classList.remove('disabled');
-					window.setTimeout(function() {
-						let i = window.location.href.lastIndexOf('/');
-						window.location.replace(window.location.href.slice(0, i) + '/dashboard.html');
-					}, 3000);
-					return 'request successful';
-				} else return response.json();
+			if (response.status == 204) {
+				setStatus('');
+				let m = document.getElementById('message');
+				m.innerHTML = 'Congratulations, you are logged in!';
+				m.classList.remove('disabled');
+				window.setTimeout(function() {
+					let i = window.location.href.lastIndexOf('/');
+					window.location.replace(window.location.href.slice(0, i) + '/dashboard.html');
+				}, 3000);
+				return 'request successful';
+			} else return response.json();
 		})
 		.then(data => {
 			let emailErr = document.getElementById('login-email-error');

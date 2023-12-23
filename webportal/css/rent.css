@@ -1,3 +1,7 @@
+#credential_picker_container {
+	display: none;
+}
+
 button {
 	width: 50%;
 	height: 2.5rem;
