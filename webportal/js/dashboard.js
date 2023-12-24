@@ -405,7 +405,8 @@ function retrieveBalance() {
 			}
 			else {
 				document.getElementById('overview-email').innerHTML = data.email;
-				document.getElementById('overview-status').innerHTML = data.isrenter ? 'complete' : 'incomplete';
+				document.getElementById('overview-status').innerHTML = data.isrenter ? 'complete' :
+					'<span style="cursor: pointer" onclick="setActiveMenuIndex(4)">incomplete</span>';
 				document.getElementById('overview-plan').innerHTML =
 					(data.subscribed ? 'Invoicing' : 'Pre-payment');
 				let bp = document.getElementById('balance-primary');
