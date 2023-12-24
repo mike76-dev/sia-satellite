@@ -408,7 +408,7 @@ function retrieveBalance() {
 				document.getElementById('overview-status').innerHTML = data.isrenter ? 'complete' :
 					'<span style="cursor: pointer" onclick="setActiveMenuIndex(4)">incomplete</span>';
 				document.getElementById('overview-plan').innerHTML =
-					(data.subscribed ? 'Invoicing' : 'Pre-payment');
+					(data.subscribed ? 'invoicing' : 'pre-payment');
 				let bp = document.getElementById('balance-primary');
 				let bs = document.getElementById('balance-secondary');
 				let lp = document.getElementById('locked-primary');
@@ -425,7 +425,7 @@ function retrieveBalance() {
 					retrieveAverages();
 				}
 				document.getElementById('select-plan').innerHTML =
-					(data.subscribed ? 'Invoicing' : 'Pre-payment');
+					(data.subscribed ? 'invoicing' : 'pre-payment');
 				document.getElementById('select-balance-primary').innerHTML = 
 					(data.balance * data.scrate).toFixed(2) + ' ' + c;
 				document.getElementById('select-balance-secondary').innerHTML = 
@@ -1279,6 +1279,7 @@ function renderFiles() {
 		if (encrypted) {
 			document.getElementById('files-results').classList.add('disabled');
 			document.getElementById('files-nokey').classList.remove('disabled');
+			document.getElementById('files-non-empty').classList.remove('disabled');
 			return;
 		}
 	}
@@ -1976,13 +1977,13 @@ function changeEncryptionKey() {
 	}
 	userData.encryptionKey = bytes;
 	window.localStorage.setItem('userData', JSON.stringify(userData));
-	renderFiles();
+	getFiles();
 }
 
 function decryptString(base64, parts) {
 	base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 	let ciphertext = Uint8Array.from(atob(base64), (m) => m.codePointAt(0));
-	if (parts) {
+	if (parts && userData.encryptionKey) {
 		let cc = new ChaCha20(Uint8Array.from(userData.encryptionKey));
 		cc.decrypt(ciphertext);
 	}
