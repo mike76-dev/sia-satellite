@@ -97,12 +97,12 @@ retrieveBalance();
 retrieveAverages();
 retrieveContracts();
 retrieveFiles();
-window.setInterval(retrieveBlockHeight, 30000);
-window.setInterval(retrieveBalance, 30000);
-window.setInterval(retrieveAverages, 600000);
-window.setInterval(retrieveContracts, 300000);
-window.setInterval(retrieveFiles, 30000);
-window.setInterval(refresh, 30000);
+var blockHeightInterval = window.setInterval(retrieveBlockHeight, 30000);
+var balanceInterval = window.setInterval(retrieveBalance, 30000);
+var averagesInterval = window.setInterval(retrieveAverages, 600000);
+var contractsInterval = window.setInterval(retrieveContracts, 300000);
+var filesInterval = window.setInterval(retrieveFiles, 30000);
+var refreshInterval = window.setInterval(refresh, 30000);
 retrieveKey();
 
 function loadFromStorage() {
@@ -375,6 +375,13 @@ function deleteClick() {
 
 function logout() {
 	deleteCookie('satellite');
+	window.localStorage.removeItem('userData');
+	window.clearInterval(blockHeightInterval);
+	window.clearInterval(balanceInterval);
+	window.clearInterval(averagesInterval);
+	window.clearInterval(contractsInterval);
+	window.clearInterval(filesInterval);
+	window.clearInterval(refreshInterval);
 	let i = window.location.href.lastIndexOf('/');
 	window.location.replace(window.location.href.slice(0, i) + '/rent.html');
 }
