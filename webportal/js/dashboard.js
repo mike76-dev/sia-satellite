@@ -95,9 +95,11 @@ getCurrencies();
 retrieveBlockHeight();
 retrieveBalance();
 retrieveAverages();
+retrieveContracts();
 window.setInterval(retrieveBlockHeight, 30000);
 window.setInterval(retrieveBalance, 30000);
 window.setInterval(retrieveAverages, 600000);
+window.setInterval(retrieveContracts, 300000);
 window.setInterval(refresh, 30000);
 retrieveKey();
 
@@ -494,6 +496,50 @@ function blocksToTime(blocks) {
 	if (blocks < 144 * 7) return (blocks / 144).toFixed(1) + ' days';
 	if (blocks < 144 * 30) return (blocks / 144 / 7).toFixed(1) + ' weeks';
 	return (blocks / 144 / 30).toFixed(1) + ' months';
+}
+
+function retrieveContracts() {
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/contracts?&current=true&old=false', options)
+		.then(response => response.json())
+		.then(data => {
+			if (!data) return;
+			if (data.code) {
+				console.log(data.message);
+			} else {
+				let active = 0;
+				let passive = 0;
+				let refreshed = 0;
+				let disabled = 0;
+				data.forEach((contract) => {
+					switch (contract.status) {
+					case 'active':
+						active++;
+						break;
+					case 'passive':
+						passive++;
+						break;
+					case 'refreshed':
+						refreshed++;
+						break;
+					case 'disabled':
+						disabled++;
+						break;
+					}
+				});
+				document.getElementById('overview-contracts-active').innerHTML = active;
+				document.getElementById('overview-contracts-passive').innerHTML = passive;
+				document.getElementById('overview-contracts-refreshed').innerHTML = refreshed;
+				document.getElementById('overview-contracts-disabled').innerHTML = disabled;
+				document.getElementById('overview-contracts-total').innerHTML = active + passive + refreshed + disabled;
+			}
+		})
+		.catch(error => console.log(error));
 }
 
 function changeCurrency(s) {

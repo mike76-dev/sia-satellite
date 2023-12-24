@@ -79,46 +79,82 @@
 							</div>
 						</section>
 					</div>
-					<section>
-						<h2>Network averages:</h2>
-						<div class="content">
-							<div class="content-item">
-								<p class="content-label">
-									Average storage price:<br>&nbsp;(per TiB/month)
-								</p>
-								<div class="content-subitem">
-									<p id="storage-primary" class="content-primary"></p>
-									<p id="storage-secondary" class="content-secondary"></p>
+					<div class="flex">
+						<section>
+							<h2>Network averages:</h2>
+							<div class="content">
+								<div class="content-item">
+									<p class="content-label">
+										Average storage price:<br>&nbsp;(per TiB/month)
+									</p>
+									<div class="content-subitem">
+										<p id="storage-primary" class="content-primary"></p>
+										<p id="storage-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">
+										Average upload price:<br>&nbsp;(per TiB)
+									</p>
+									<div class="content-subitem">
+										<p id="upload-primary" class="content-primary"></p>
+										<p id="upload-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">
+										Average download price:<br>&nbsp;(per TiB)
+									</p>
+									<div class="content-subitem">
+										<p id="download-primary" class="content-primary"></p>
+										<p id="download-secondary" class="content-secondary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Average contract duration:</p>
+									<div class="content-subitem">
+										<p id="duration-primary" class="content-primary"></p>
+										<p id="duration-secondary" class="content-secondary"></p>
+									</div>
 								</div>
 							</div>
-							<div class="content-item">
-								<p class="content-label">
-									Average upload price:<br>&nbsp;(per TiB)
-								</p>
-								<div class="content-subitem">
-									<p id="upload-primary" class="content-primary"></p>
-									<p id="upload-secondary" class="content-secondary"></p>
+						</section>
+						<section>
+							<h2>Current contracts:</h2>
+							<div class="content">
+								<div class="content-item">
+									<p class="content-label">Total:</p>
+									<div class="content-subitem">
+										<p id="overview-contracts-total" class="content-primary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Active:</p>
+									<div class="content-subitem">
+										<p id="overview-contracts-active" class="content-primary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Passive:</p>
+									<div class="content-subitem">
+										<p id="overview-contracts-passive" class="content-primary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Refreshed:</p>
+									<div class="content-subitem">
+										<p id="overview-contracts-refreshed" class="content-primary"></p>
+									</div>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Disabled:</p>
+									<div class="content-subitem">
+										<p id="overview-contracts-disabled" class="content-primary"></p>
+									</div>
 								</div>
 							</div>
-							<div class="content-item">
-								<p class="content-label">
-									Average download price:<br>&nbsp;(per TiB)
-								</p>
-								<div class="content-subitem">
-									<p id="download-primary" class="content-primary"></p>
-									<p id="download-secondary" class="content-secondary"></p>
-								</div>
-							</div>
-							<div class="content-item">
-								<p class="content-label">Average contract duration:</p>
-								<div class="content-subitem">
-									<p id="duration-primary" class="content-primary"></p>
-									<p id="duration-secondary" class="content-secondary"></p>
-								</div>
-							</div>
-						</div>
-					</section>
-					<div id="payment-result" class="disabled"></div>
+						</section>
+					</div>
 				</div>
 				<div class="page disabled">
 					<h1>Contract Information</h1>
@@ -281,7 +317,7 @@
 									</div>
 								</div>
 								<div class="content-item">
-									<p class="content-label">Satellite overhead:</p>
+									<p class="content-label">Satellite fees:</p>
 									<div class="content-subitem">
 										<p id="spendings-current-overhead-primary" class="content-primary"></p>
 										<p id="spendings-current-overhead-secondary" class="content-secondary"></p>
@@ -337,7 +373,7 @@
 									</div>
 								</div>
 								<div class="content-item">
-									<p class="content-label">Satellite overhead:</p>
+									<p class="content-label">Satellite fees:</p>
 									<div class="content-subitem">
 										<p id="spendings-prev-overhead-primary" class="content-primary"></p>
 										<p id="spendings-prev-overhead-secondary" class="content-secondary"></p>
@@ -618,6 +654,7 @@
 							</section>
 						</div>
 					</section>
+					<div id="payment-result" class="disabled"></div>
 					<section id="sc">
 						<h2>Rather pay in Siacoin? No problem!</h2>
 						<div class="content">
