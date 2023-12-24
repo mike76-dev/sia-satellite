@@ -397,6 +397,10 @@ function retrieveBalance() {
 				}
 			}
 			else {
+				document.getElementById('overview-email').innerHTML = data.email;
+				document.getElementById('overview-status').innerHTML = data.isrenter ? 'complete' : 'incomplete';
+				document.getElementById('overview-plan').innerHTML =
+					(data.subscribed ? 'Invoicing' : 'Pre-payment');
 				let bp = document.getElementById('balance-primary');
 				let bs = document.getElementById('balance-secondary');
 				let lp = document.getElementById('locked-primary');

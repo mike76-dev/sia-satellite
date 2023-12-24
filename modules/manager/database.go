@@ -144,6 +144,7 @@ func (m *Manager) GetBalance(email string) (modules.UserBalance, error) {
 	}
 
 	ub := modules.UserBalance{
+		Email:      email,
 		IsUser:     !errors.Is(err, sql.ErrNoRows),
 		IsRenter:   found,
 		Subscribed: sub,
