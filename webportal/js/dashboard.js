@@ -441,6 +441,7 @@ function retrieveBalance() {
 				}
 				if (data.isrenter) {
 					document.getElementById('reveal').classList.remove('disabled');
+					document.getElementById('opt-in').classList.remove('disabled');
 				}
 				if ((data.subscribed || data.isrenter) && data.stripeid != '') {
 					sc.classList.remove('disabled');
