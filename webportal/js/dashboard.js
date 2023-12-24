@@ -96,10 +96,12 @@ retrieveBlockHeight();
 retrieveBalance();
 retrieveAverages();
 retrieveContracts();
+retrieveFiles();
 window.setInterval(retrieveBlockHeight, 30000);
 window.setInterval(retrieveBalance, 30000);
 window.setInterval(retrieveAverages, 600000);
 window.setInterval(retrieveContracts, 300000);
+window.setInterval(retrieveFiles, 30000);
 window.setInterval(refresh, 30000);
 retrieveKey();
 
@@ -537,6 +539,39 @@ function retrieveContracts() {
 				document.getElementById('overview-contracts-refreshed').innerHTML = refreshed;
 				document.getElementById('overview-contracts-disabled').innerHTML = disabled;
 				document.getElementById('overview-contracts-total').innerHTML = active + passive + refreshed + disabled;
+			}
+		})
+		.catch(error => console.log(error));
+}
+
+function retrieveFiles() {
+	let options = {
+		method: 'GET',
+		headers: {
+			'Content-Type': 'application/json;charset=utf-8'
+		}
+	}
+	fetch(apiBaseURL + '/dashboard/files', options)
+		.then(response => response.json())
+		.then(data => {
+			if (!data) return;
+			if (data.code) {
+				console.log(data.message);
+			} else {
+				let count = 0;
+				let slabs = 0;
+				let partial = 0;
+				let pending = 0;
+				data.forEach((item) => {
+					if (item.size > 0 && !item.buffered) count++;
+					slabs += item.slabs;
+					partial += item.partialdata;
+					if (item.buffered) pending++;
+				});
+				document.getElementById('overview-files-saved').innerHTML = count;
+				document.getElementById('overview-files-slabs').innerHTML = slabs;
+				document.getElementById('overview-files-partial').innerHTML = convertSize(partial);
+				document.getElementById('overview-files-pending').innerHTML = pending;
 			}
 		})
 		.catch(error => console.log(error));
