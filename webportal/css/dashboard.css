@@ -630,6 +630,14 @@ label[for='reveal-text'] {
 	animation-delay: -0.15s;
 }
 
+.faq {
+	margin-top: 0.5rem;
+}
+
+.faq:nth-child(odd) {
+	background-color: var(--tableRow);
+}
+
 .faq input {
 	display: none;
 }
@@ -642,7 +650,7 @@ label[for='reveal-text'] {
 .faq label::before {
 	content: '\025be';
 	font-size: 1.2rem;
-	margin-right: 0.5rem;
+	margin-right: 1rem;
 	display: inline-block;
 	transition: transform 0.5s linear;
 }
@@ -658,7 +666,8 @@ label[for='reveal-text'] {
 	max-height: 0;
 	overflow: hidden;
 	transition: max-height 0.5s linear;
-	padding: 0.5rem 0 0 1rem;
+	margin: 0;
+	padding: 0.5rem 0 0 0;
 	color: var(--textSecondary);
 	cursor: initial;
 }
