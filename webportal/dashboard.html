@@ -36,26 +36,13 @@
 					<li index="4">Payment</li>
 					<li index="5">History</li>
 					<li index="6">Account</li>
+					<li index="7">Help</li>
 				</ul>
 			</div>
 			<div id="pages" class="pages">
 				<div class="page disabled">
 					<h1>Overview</h1>
 					<div class="flex">
-						<section>
-							<h2>Your account:</h2>
-							<div class="content">
-								<div class="content-item">
-									<p id="overview-email" class="content-label"></p>
-								</div>
-								<div class="content-item">
-									<p class="content-label">Status:</p>
-									<div class="content-subitem">
-										<p id="overview-status" class="content-primary"></p>
-									</div>
-								</div>
-							</div>
-						</section>
 						<section>
 							<h2>Your balance:</h2>
 							<div class="content">
@@ -94,6 +81,20 @@
 									<p class="content-label">Number of hosts:</p>
 									<div class="content-subitem">
 										<p id="numhosts" class="content-primary"></p>
+									</div>
+								</div>
+							</div>
+						</section>
+						<section>
+							<h2>Your account:</h2>
+							<div class="content">
+								<div class="content-item">
+									<p id="overview-email" class="content-label"></p>
+								</div>
+								<div class="content-item">
+									<p class="content-label">Status:</p>
+									<div class="content-subitem">
+										<p id="overview-status" class="content-primary"></p>
 									</div>
 								</div>
 							</div>
@@ -210,7 +211,7 @@
 					<section>
 						<div class="contracts-checkbox-container">
 							<label class="checkbox">
-								<input id="contracts-current" type="checkbox"
+								<input id="contracts-current" type="checkbox" checked="true"
 									onchange="contractsChanged()">
 								<span class="checkmark"></span>
 							</label>
@@ -844,7 +845,7 @@
 								<button onclick="changeClick()">Submit</button>
 							</div>
 						</section>
-						<section>
+						<section id="opt-in" class="disabled">
 							<h2>Opt-In Settings*:</h2>
 							<div class="content">
 								<div class="content-item">
@@ -888,6 +889,282 @@
 						</section>
 					</div>
 					<button onclick="logout()">Sign Out</button>
+				</div>
+				<div class="page disabled">
+					<h1>Help</h1>
+					<div class="faq">
+						<label>How do I start using Sia Satellite?
+							<input type="checkbox">
+						</label>
+						<section>
+							<ol>
+								<li>After you have created an account, its status is automatically
+									set to <strong>incomplete</strong>.<br>
+									In order to push it to <strong>complete</strong>, you need to
+									make a <span onclick="setActiveMenuIndex(4)">payment</span>.
+									This can be done either in a fiat currency, or in Siacoin.
+								</li>
+								<li>When the payment arrives, some additional fields become
+									available on the <span onclick="setActiveMenuIndex(6)">Account</span> page.
+									These include the settings that you need to put in the Satellite
+									configuration screen of <code>renterd</code>.
+								</li>
+								<li>You need to download and install the forked version of <code>renterd</code> available
+									<a href="https://github.com/mike76-dev/renterd/releases" target="_blank">here</a>.
+									In the UI of <code>renterd</code>, go to the Satellite page and
+									fill in the required fields. Then, enable the Satellite and save
+									the config.
+								</li>
+							</ol>
+						</section>
+					</div>
+					<div class="faq">
+						<label>I cannot see my renter seed, what shall I do?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>Check your account <span onclick="setActiveMenuIndex(0)">status</span>. If
+								it shows as <strong>incomplete</strong>, it means that you need to
+								deposit some funds before you can rent decentralized cloud storage.
+								You can do so on the <span onclick="setActiveMenuIndex(4)">Payment</span> page.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>How can I trust the Satellite with my credit card details?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>Handling of the credit card details is done by <a href="https://stripe.com"
+								target="_blank">Stripe</a> directly. The Satellite never gets to
+								see them.
+							</p>
+							<p>The only thing the Satellite can see is the last four digits of
+								your credit card number.
+							</p>
+							<p>This is a part of <a href="https://stripe.com/docs/security"
+								target="_blank">PCI compliance</a> enforced by Stripe.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>How long shall I wait till my account is credited?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>Fiat payments are usually credited immediately. Your credit card
+								provider may require an additional approval from your side before
+								the payment is authorized.
+							</p>
+							<p>Siacoin payments are credited after six network confirmations. Each
+								confirmation takes one block (10 minutes on average). You can follow
+								the progress on the <span onclick="setActiveMenuIndex(5)">History</span> page.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>What are the different payment plans, and how do I change mine?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>The payment plans include "pre-payment" and "invoicing". The default is
+								pre-payment. With this payment plan, you need to fund your account
+								before you can make use of the services provided by the Satellite.
+							</p>
+							<p>If your account runs out of funds, the Satellite stops forming and
+								renewing storage contracts on your behalf as well as repairing your
+								data. If you had any file metadata backed up on the Satellite, this
+								data will be deleted.
+							</p>
+							<p>Unlike pre-payment, invoicing allows your account balance to become
+								negative. You may continue using the services like you normally would.
+								At the end of each month, the Satellite will try to settle the
+								outstanding amount using your default payment method. If it fails,
+								you will be notified by email that you need to take an action. If
+								no action is then taken by you within the next 24 hours, your account
+								will be suspended until the payment is made, and any saved file
+								metadata will be deleted.
+							</p>
+							<p>Invoicing only becomes available after you have made at least one
+								direct payment.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>I made a payment. Why is the Contracts page still empty?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>To start forming contracts, you need to configure the autopilot
+								in <code>renterd</code>. Then, depending on your chosen settings,
+								it will either instruct the Satellite to form the required number
+								of contracts during the next loop iteration, or the Satellite will
+								start forming contracts during the next contract maintenance, which
+								normally happens every block.
+							</p>
+							<p>To have the Satellite form contracts automatically, you need to
+								enable the "Auto-Repair Files" option in <code>renterd</code>.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>Why cannot I upload files in my dashboard?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>While you can <i>download</i> files from your dashboard, uploading
+								files is only possible from <code>renterd</code> or an S3 client
+								attached to it. This has to do with the upload-specific settings,
+								which you can only configure in <code>renterd</code>.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>Where do I get an encryption key?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>If you enabled this option, any file metadata uploaded
+								from <code>renterd</code> is encrypted. This is to prevent the
+								Satellite owner from viewing it.
+							</p>
+							<p>You can find the encryption key on the Satellite page
+								of <code>renterd</code>. Please copy it and paste on
+								the <span onclick="setActiveMenuIndex(2)">Files</span> page.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>I uploaded a file in <code>renterd</code>, but it doesn't show up.
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>You must have enabled Proxying Uploads via the Satellite
+								in <code>renterd</code>. With this option turned on, the files
+								are first transferred to the Satellite, which puts them in a
+								buffer. In the dashboard, such files show up as pending upload.
+							</p>
+							<p>After that, the Satellite tries to upload the files to the Sia
+								network one by one. If the upload succeeds, the file metadata
+								is generated and displayed in the dashboard. You have an option
+								to download the file.
+							</p>
+							<p>During the next autopilot loop iteration,
+								<code>renterd</code> imports any new file metadata from the
+								Satellite. Then the files show up in <code>renterd</code>.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>I deleted a file in <code>renterd</code>, but it keeps being recreated.
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>If you enabled Backup File Metadata in <code>renterd</code>,
+								the metadata of each file you upload in <code>renterd</code> is
+								automatically sent to the Satellite. If you delete the file
+								in <code>renterd</code>, the metadata saved on the Satellite
+								still persists. This is done to help recover your files if
+								something happens to your <code>renterd</code> database.
+							</p>
+							<p>To delete the file permanently, you also need to delete its
+								metadata from the Satellite. You can do it on
+								the <span onclick="setActiveMenuIndex(2)">Files</span> page.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>Why cannot I enable any opt-in settings on the Account page?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>Opt-in means that you need to provide your explicit consent for
+								certain actions of the Satellite. This implies transferring some
+								sensitive information to the Satellite, like your derived
+								(non-master) private key. Without this information, for instance,
+								the Satellite is unable to form contracts on your behalf
+								automatically, or repair your files.
+							</p>
+							<p>The dashboard does not keep your private keys, it's the job
+								of <code>renterd</code>. For this reason, you can only opt in for
+								these features in <code>renterd</code>.
+							</p>
+							<p>On the other hand, you don't have to be running <code>renterd</code> to
+								opt out of them, you can do it in the dashboard. If you opt out, any
+								sensitive information provided earlier is automatically deleted
+								from the Satellite.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>I cannot understand the math behind my spendings.
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>When a storage contract is formed, a certain amount is locked for
+								the whole duration of the contract. This is called <i>allowance</i>.
+								This allowance can be used, partially or entirely, on uploading or
+								downloading data to and from the Sia host. Whatever part of the
+								allowance is not used by the end of the contract, is returned to your
+								account.
+							</p>
+							<p>The satellite takes a fee for the contract formation as well as for
+								some other services. This fee is added to the "used" amount and is
+								also a part of the "locked" amount. When the contract ends, the
+								funds are unlocked, and the unused part is added back to the
+								account balance. The rest is added to "used".
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>The month is over but I still have locked funds in the previous month's spendings.
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>Very often, storage contracts last a few months. In such cases, the
+								funds are locked when the contract is formed, but only unlocked when
+								it ends.
+							</p>
+							<p>So, it is very well possible that you have funds locked in one month,
+								but unlocked in a different one.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>Why are the fees such weird-looking numbers?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>The fees are tied to the price of Siacoin. As the exchange rate of
+								Siacoin fluctuates, so do the fees.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>If I calculate the payment based on some projected data volume, do I have to use all of that volume?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>Absolutely not. This is just a guidance to help you estimate how much
+								you need to fund your account with. You are free to deposit any amount
+								you may wish.
+							</p>
+							<p>Of course, if you deposit too little, you may run out of funds too
+								soon. In this case, just refill your balance.
+							</p>
+						</section>
+					</div>
+					<div class="faq">
+						<label>Why cannot I delete my account?
+							<input type="checkbox">
+						</label>
+						<section>
+							<p>This is only possible if you have invoicing as your payment plan,
+								and your balance is negative. You need to pay down the outstanding
+								amount before you can delete your account.
+							</p>
+						</section>
+					</div>
 				</div>
 			</div>
 		</div>

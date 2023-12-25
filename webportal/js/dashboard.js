@@ -404,7 +404,7 @@ function retrieveBalance() {
 				}
 			}
 			else {
-				document.getElementById('overview-email').innerHTML = data.email;
+				document.getElementById('overview-email').innerHTML = '<strong>' + data.email + '</strong>';
 				document.getElementById('overview-status').innerHTML = data.isrenter ? 'complete' :
 					'<span style="cursor: pointer" onclick="setActiveMenuIndex(4)">incomplete</span>';
 				document.getElementById('overview-plan').innerHTML =
