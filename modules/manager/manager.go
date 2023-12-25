@@ -925,6 +925,7 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 		return err
 	}
 	us.Locked += amount
+	us.Used += amountWithFee - amount
 	us.Overhead += amountWithFee - amount
 
 	return m.UpdateSpendings(email, us, int(month), year)
@@ -943,19 +944,10 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 		return err
 	}
 
-	// Include the Satellite fee.
-	var fee float64
-	if ub.Subscribed {
-		fee = modules.StaticPricing.FormContract.Invoicing
-	} else {
-		fee = modules.StaticPricing.FormContract.PrePayment
-	}
-	totalWithFee := total * (1 + fee)
-
 	// Calculate the new balance.
 	unlocked := amount
-	burned := totalWithFee - amount
-	if totalWithFee > ub.Locked {
+	burned := total - amount
+	if total > ub.Locked {
 		m.log.Println("WARN: trying to unlock more than the locked balance")
 		if burned < ub.Locked {
 			unlocked = ub.Locked - burned
