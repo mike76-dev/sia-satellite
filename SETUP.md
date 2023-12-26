@@ -16,11 +16,11 @@ You will also need an email account, from which the users will be receiving emai
 
 ## To Start With
 
-Log into your server and download the Satellite files. This guide assumes that you will use the version `0.9.0` for an x86 CPU:
+Log into your server and download the Satellite files. This guide assumes that you will use the version `0.10.0` for an x86 CPU:
 ```
 mkdir ~/satellite
 cd ~/satellite
-wget -q https://github.com/mike76-dev/satellite/releases/download/v0.9.0/satellite_linux_amd64.zip
+wget -q https://github.com/mike76-dev/satellite/releases/download/v0.10.0/satellite_linux_amd64.zip
 unzip satellite_linux_amd64.zip
 rm satellite_linux_amd64.zip
 ```
@@ -389,6 +389,10 @@ Once you have an account with Stripe, go to the "Developers" section of the Dash
 2. Go to the "API keys" tab and request the Publishable key and the Secret key. Take a note of both.
 3. Go to the "Webhooks" tab and add a new endpoint with the URL `https://your_domain/api/stripe/webhook` listening for `payment_intent.succeeded` and `payment_intent.payment_failed` events. Reveal the signing secret and take a note of it.
 
+## Setting Up Google OAuth
+
+To let the users sign in using their Google accounts, you need to set up Google OAuth. There is a guide on how to do this (https://developers.google.com/identity/protocols/oauth2). You need to obtain a Client ID, which you will need later. You may need to submit your app for verification by the Google security team before you are granted an approval to use OAuth. However, the whole process is relatively straightforward.
+
 ## Configuring SATD
 
 Open the `satdconfig.json` file:
@@ -456,7 +460,8 @@ Enter the following lines. Replace:
 `<wallet_password>` with the wallet encryption password that you will create at a later step,
 `<mail_password>` with your SMTP server authentication password,
 `<stripe_key>` with your Stripe secret key,
-`<webhook_key>` with your Stripe webhook signing secret.
+`<webhook_key>` with your Stripe webhook signing secret,
+`<google_id>` with your Google client ID.
 ```
 [Unit]
 Description=satd
@@ -477,6 +482,7 @@ Environment="SATD_CONFIG_DIR=/usr/local/etc/satd"
 Environment="SATD_MAIL_PASSWORD=<mail_password>"
 Environment="SATD_STRIPE_KEY=<stripe_key>"
 Environment="SATD_STRIPE_WEBHOOK_KEY=<webhook_key>"
+Environment="SATD_GOOGLE_CLIENT_KEY=<google_id>"
 LimitNOFILE=900000
 
 [Install]
@@ -510,7 +516,7 @@ Nov 18 15:16:17 <host> systemd[1]: Started satd.
 Nov 18 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
 Nov 18 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
 Nov 18 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
-Nov 18 15:16:17 <host> satd[226480]: satd v0.9.0
+Nov 18 15:16:17 <host> satd[226480]: satd v0.10.0
 Nov 18 15:16:17 <host> satd[226480]: Git Revision 2f5a918
 Nov 18 15:16:17 <host> satd[226480]: Loading...
 Nov 18 15:16:17 <host> satd[226480]: Creating mail client...
@@ -607,7 +613,7 @@ You need to do some changes to certain pages of the portal.
 
 `~/satellite/webportal/tos.html` should include any legal provisions applicable to your and your server's jurisdiction. It is probably better to consult a lawyer on how to put it together.
 
-Now edit the config file. Put `/api` in `apiBaseURL` and your Stripe API publishable key in `stripePublicKey`:
+Now edit the config file. Put `/api` in `apiBaseURL`, your Stripe API publishable key in `stripePublicKey`, and your Google client ID in `googleClientID`:
 
 ```
 $ nano webportal/js/config.js
@@ -619,6 +625,10 @@ const apiBaseURL = '/api';
 
 // This is your publishable Stripe API key.
 const stripePublicKey = '<Stripe_PK>';
+
+// This is your Google client ID.
+const googleClientID = '<Google_ClientID>';
+
 ```
 
 Save and exit. Now copy the entire contents of `~/satellite/webportal` to where the root documents of your HTTP server need to be:
