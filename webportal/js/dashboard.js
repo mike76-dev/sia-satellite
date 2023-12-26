@@ -514,6 +514,20 @@ function blocksToTime(blocks) {
 }
 
 function retrieveContracts() {
+	let active = 0;
+	let passive = 0;
+	let refreshed = 0;
+	let disabled = 0;
+	let a = document.getElementById('overview-contracts-active');
+	let p = document.getElementById('overview-contracts-passive');
+	let r = document.getElementById('overview-contracts-refreshed');
+	let d = document.getElementById('overview-contracts-disabled');
+	let t = document.getElementById('overview-contracts-total');
+	a.innerHTML = active;
+	p.innerHTML = passive;
+	r.innerHTML = refreshed;
+	d.innerHTML = disabled;
+	t.innerHTML = active + passive + refreshed + disabled;
 	let options = {
 		method: 'GET',
 		headers: {
@@ -527,10 +541,6 @@ function retrieveContracts() {
 			if (data.code) {
 				console.log(data.message);
 			} else {
-				let active = 0;
-				let passive = 0;
-				let refreshed = 0;
-				let disabled = 0;
 				data.forEach((contract) => {
 					switch (contract.status) {
 					case 'active':
@@ -547,17 +557,29 @@ function retrieveContracts() {
 						break;
 					}
 				});
-				document.getElementById('overview-contracts-active').innerHTML = active;
-				document.getElementById('overview-contracts-passive').innerHTML = passive;
-				document.getElementById('overview-contracts-refreshed').innerHTML = refreshed;
-				document.getElementById('overview-contracts-disabled').innerHTML = disabled;
-				document.getElementById('overview-contracts-total').innerHTML = active + passive + refreshed + disabled;
+				a.innerHTML = active;
+				p.innerHTML = passive;
+				r.innerHTML = refreshed;
+				d.innerHTML = disabled;
+				t.innerHTML = active + passive + refreshed + disabled;
 			}
 		})
 		.catch(error => console.log(error));
 }
 
 function retrieveFiles() {
+	let count = 0;
+	let slabs = 0;
+	let partial = 0;
+	let pending = 0;
+	let c = document.getElementById('overview-files-saved');
+	let s = document.getElementById('overview-files-slabs');
+	let p = document.getElementById('overview-files-partial');
+	let b = document.getElementById('overview-files-pending');
+	c.innerHTML = count;
+	s.innerHTML = slabs;
+	p.innerHTML = convertSize(partial);
+	b.innerHTML = pending;
 	let options = {
 		method: 'GET',
 		headers: {
@@ -571,20 +593,16 @@ function retrieveFiles() {
 			if (data.code) {
 				console.log(data.message);
 			} else {
-				let count = 0;
-				let slabs = 0;
-				let partial = 0;
-				let pending = 0;
 				data.forEach((item) => {
 					if (item.size > 0 && !item.buffered) count++;
 					slabs += item.slabs;
 					partial += item.partialdata;
 					if (item.buffered) pending++;
 				});
-				document.getElementById('overview-files-saved').innerHTML = count;
-				document.getElementById('overview-files-slabs').innerHTML = slabs;
-				document.getElementById('overview-files-partial').innerHTML = convertSize(partial);
-				document.getElementById('overview-files-pending').innerHTML = pending;
+				c.innerHTML = count;
+				s.innerHTML = slabs;
+				p.innerHTML = convertSize(partial);
+				b.innerHTML = pending;
 			}
 		})
 		.catch(error => console.log(error));
