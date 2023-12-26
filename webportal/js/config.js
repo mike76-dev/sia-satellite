@@ -3,3 +3,6 @@ const apiBaseURL = '';
 
 // This is your publishable Stripe API key.
 const stripePublicKey = '';
+
+// This is your Google client ID.
+const googleClientID = '';
