@@ -630,72 +630,6 @@ label[for='reveal-text'] {
 	animation-delay: -0.15s;
 }
 
-.faq {
-	margin-top: 0.5rem;
-}
-
-.faq:nth-child(odd) {
-	background-color: var(--tableRow);
-}
-
-.faq input {
-	display: none;
-}
-
-.faq label {
-	color: var(--textPrimary);
-	cursor: pointer;
-}
-
-.faq label::before {
-	content: '\025be';
-	font-size: 1.2rem;
-	margin-right: 1rem;
-	display: inline-block;
-	transition: transform 0.5s linear;
-}
-
-.faq label:has(input[type='checkbox']:checked)::before {
-	-webkit-transform: rotate(-180deg);
-	-moz-transform: rotate(-180deg);
-	-o-transform: rotate(-180deg);
-	transform: rotate(-180deg);
-}
-
-.faq section {
-	max-height: 0;
-	overflow: hidden;
-	transition: max-height 0.5s linear;
-	margin: 0;
-	padding: 0.5rem 0 0 0;
-	color: var(--textSecondary);
-	cursor: initial;
-}
-
-.faq label:has(input[type='checkbox']:checked) ~ section {
-	max-height: 30vh;
-}
-
-.faq span, .faq a {
-	cursor: pointer;
-	font-weight: bold;
-	text-decoration: underline;
-	color: var(--textSecondary);
-}
-
-.faq ol {
-	padding: 0 0 0 1.2rem;
-	margin: 0;
-}
-
-.faq li {
-	margin-bottom: 0.25rem;
-}
-
-.faq p {
-	margin: 0 0 0.25rem 0;
-}
-
 @-webkit-keyframes loading {
 	0% {
 		-webkit-transform: rotate(0deg);
@@ -776,9 +710,5 @@ label[for='reveal-text'] {
 
 	#files-results {
 		padding-right: 0;
-	}
-
-	.faq input[type='checkbox']:checked ~ section {
-		max-height: 100vh;
 	}
 }
