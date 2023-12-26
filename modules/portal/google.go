@@ -27,6 +27,18 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	provider := ps.ByName("provider")
 
 	if provider == "google" {
+		// Retrieve the action type.
+		action := req.FormValue("action")
+		if action != "signup" && action != "login" {
+			api.portal.log.Println("ERROR: wrong action type")
+			writeError(w,
+				Error{
+					Code:    httpErrorBadRequest,
+					Message: "wrong action type",
+				}, http.StatusBadRequest)
+			return
+		}
+
 		// Decode the request body.
 		dec, err := prepareDecoder(w, req)
 		if err != nil {
@@ -154,6 +166,16 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 				return
 			}
 
+			// Check against the action type.
+			if action != "signup" {
+				writeError(w,
+					Error{
+						Code:    httpErrorEmailInvalid,
+						Message: "invalid email provided",
+					}, http.StatusBadRequest)
+				return
+			}
+
 			// Create a new account.
 			if err := api.portal.updateAccount(email, "", true); err != nil {
 				api.portal.log.Printf("ERROR: error querying database: %v\n", err)
@@ -162,6 +184,15 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 						Code:    httpErrorInternal,
 						Message: "internal error",
 					}, http.StatusInternalServerError)
+				return
+			}
+		} else {
+			if action == "signup" {
+				writeError(w,
+					Error{
+						Code:    httpErrorEmailUsed,
+						Message: "user already exists",
+					}, http.StatusBadRequest)
 				return
 			}
 		}
