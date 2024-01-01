@@ -348,15 +348,6 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				if err != nil {
 					m.log.Println("ERROR: couldn't update spendings:", err)
 				}
-				// Deduct from the account balance.
-				if !ub.Subscribed && ub.Balance < storageCost+partialCost {
-					// Insufficient balance, delete the file metadata.
-					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
-					m.DeleteBufferedFiles(renter.PublicKey)
-					m.DeleteMultipartUploads(renter.PublicKey)
-					m.DeleteMetadata(renter.PublicKey)
-					continue
-				}
 				if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
 					// Account on hold, delete the file metadata.
 					m.log.Println("WARN: account on hold, deleting stored metadata")
@@ -364,6 +355,15 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 					m.DeleteMultipartUploads(renter.PublicKey)
 					m.DeleteMetadata(renter.PublicKey)
 					continue
+				}
+				// Deduct from the account balance.
+				if !ub.Subscribed && ub.Balance < storageCost+partialCost {
+					// Insufficient balance, delete the file metadata.
+					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
+					m.DeleteBufferedFiles(renter.PublicKey)
+					m.DeleteMultipartUploads(renter.PublicKey)
+					m.DeleteMetadata(renter.PublicKey)
+					partialCost = ub.Balance - storageCost
 				}
 				ub.Balance -= (storageCost + partialCost)
 				if err := m.UpdateBalance(renter.Email, ub); err != nil {
