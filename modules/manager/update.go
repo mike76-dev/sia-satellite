@@ -339,7 +339,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				storedFee += storageCost
 				us.Used += storageCost
 				us.Overhead += storageCost
-				partialCost := dataFee * float64(data)
+				partialCost := dataFee * float64(data) / 1024 / 1024
 				partial += data
 				partialFee += partialCost
 				us.Used += partialCost
