@@ -26,7 +26,6 @@ var defaultConfig = persist.SatdConfig{
 }
 
 var config persist.SatdConfig
-var configDir string
 
 func getAPIPassword() string {
 	apiPassword := os.Getenv("SATD_API_PASSWORD")
