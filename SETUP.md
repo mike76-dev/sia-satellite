@@ -482,7 +482,7 @@ Environment="SATD_CONFIG_DIR=/usr/local/etc/satd"
 Environment="SATD_MAIL_PASSWORD=<mail_password>"
 Environment="SATD_STRIPE_KEY=<stripe_key>"
 Environment="SATD_STRIPE_WEBHOOK_KEY=<webhook_key>"
-Environment="SATD_GOOGLE_CLIENT_KEY=<google_id>"
+Environment="SATD_GOOGLE_CLIENT=<google_id>"
 LimitNOFILE=900000
 
 [Install]
