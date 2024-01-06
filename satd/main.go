@@ -70,7 +70,7 @@ func main() {
 	}
 	ok, err := config.Load(configDir)
 	if err != nil {
-		log.Fatalln("Could not load config file")
+		log.Fatalln("Could not load config file:", err)
 	}
 	if !ok {
 		config = defaultConfig
