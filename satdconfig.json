@@ -11,5 +11,5 @@
 	"bootstrap": true,
 	"dbUser": "",
 	"dbName": "",
-	"portal": ":8080",
+	"portal": ":8080"
 }
