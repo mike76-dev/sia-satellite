@@ -245,6 +245,10 @@ button:disabled {
 	animation-duration: 1s;
 }
 
+.announcement a {
+	color: var(--textPrimary);
+}
+
 .faq-container {
 	margin: 0 1rem;
 }
