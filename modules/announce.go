@@ -82,7 +82,7 @@ func DecodeAnnouncement(fullAnnouncement []byte) (na NetAddress, pk types.Public
 	ha.EncodeTo(h.E)
 	annHash := h.Sum()
 	if ok := pk.VerifyHash(annHash, sig); !ok {
-		return "", types.PublicKey{}, err
+		return "", types.PublicKey{}, errAnnUnrecognizedSignature
 	}
 
 	return ha.NetAddress, pk, nil
