@@ -281,6 +281,7 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	if setErr != nil {
 		if errors.Is(setErr, errExternalRevert) {
 			block := currentProcessedBlock(tx)
+			cs.log.Println("Reverting an invalid block:", block.Height, block.Block.ID())
 			if err := commitDiffSet(tx, block, modules.DiffRevert); err != nil {
 				return false, err
 			}
