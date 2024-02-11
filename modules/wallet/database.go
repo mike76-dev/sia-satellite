@@ -1,712 +1,581 @@
 package wallet
 
 import (
-	"bytes"
 	"database/sql"
 	"errors"
-	"fmt"
-	"io"
-	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
-
 	"go.sia.tech/core/types"
-
-	"lukechampine.com/frand"
 )
 
-// threadedDBUpdate commits the active database transaction and starts a new
-// transaction.
-func (w *Wallet) threadedDBUpdate() {
-	if err := w.tg.Add(); err != nil {
-		return
+// insertAddress inserts a new wallet address.
+func (w *Wallet) insertAddress(addr types.Address) error {
+	res, err := w.tx.Exec("INSERT INTO wt_addresses (addr) VALUES (?)", addr[:])
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't insert address")
 	}
-	defer w.tg.Done()
 
-	for {
-		select {
-		case <-time.After(2 * time.Minute):
-		case <-w.tg.StopChan():
-			return
-		}
-		w.mu.Lock()
-		err := w.syncDB()
-		w.mu.Unlock()
+	index, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	w.addrs[addr] = uint64(index)
+
+	return nil
+}
+
+// AddAddress adds the given address to the wallet.
+func (w *Wallet) AddAddress(addr types.Address) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	index, ok := w.addrs[addr]
+	if !ok {
+		return errors.New("address not found")
+	}
+
+	w.watchedAddrs[addr] = index
+	_, err := w.tx.Exec("INSERT INTO wt_watched (address_id) VALUES (?)", index)
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't insert watched address")
+	}
+
+	return nil
+}
+
+// RemoveAddress removes the given address from the wallet.
+func (w *Wallet) RemoveAddress(addr types.Address) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	delete(w.watchedAddrs, addr)
+	_, err := w.tx.Exec(`
+		DELETE FROM wt_watched
+		WHERE address_id IN (
+			SELECT id FROM wt_addresses
+			WHERE addr = ?
+		)
+	`, addr[:])
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't delete address")
+	}
+
+	return nil
+}
+
+// updateTip updates the current tip of the wallet.
+func (w *Wallet) updateTip(ci types.ChainIndex) error {
+	w.tip = ci
+	_, err := w.tx.Exec(`
+		REPLACE INTO wt_tip (id, height, bid)
+		VALUES (1, ?, ?)
+	`, ci.Height, ci.ID[:])
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't update tip")
+	}
+
+	return nil
+}
+
+// insertSiacoinElement inserts the given Siacoin element.
+func (w *Wallet) insertSiacoinElement(sce types.SiacoinElement) error {
+	w.sces[sce.SiacoinOutput.Address] = sce
+	_, err := w.tx.Exec(`
+		INSERT INTO wt_sces (
+			scoid,
+			sc_value,
+			merkle_proof,
+			leaf_index,
+			maturity_height,
+			address_id
+		)
+		VALUES (?, ?, ?, ?, ?, (
+			SELECT id FROM wt_addresses
+			WHERE addr = ?
+		))
+	`,
+		sce.ID[:],
+		encodeCurrency(sce.SiacoinOutput.Value),
+		encodeProof(sce.MerkleProof),
+		sce.LeafIndex,
+		sce.MaturityHeight,
+		sce.SiacoinOutput.Address[:],
+	)
+	if err != nil {
+		w.dbError = true
+	}
+
+	return err
+}
+
+// deleteSiacoinElement deletes the Siacoin element with the given ID.
+func (w *Wallet) deleteSiacoinElement(addr types.Address) error {
+	delete(w.sces, addr)
+	_, err := w.tx.Exec(`
+		DELETE FROM wt_sces
+		WHERE address_id IN (
+			SELECT id FROM wt_addresses
+			WHERE addr = ?
+		)
+	`, addr[:])
+	if err != nil {
+		w.dbError = true
+	}
+
+	return err
+}
+
+// insertSiafundElement inserts the given Siafund element.
+func (w *Wallet) insertSiafundElement(sfe types.SiafundElement) error {
+	w.sfes[sfe.SiafundOutput.Address] = sfe
+	_, err := w.tx.Exec(`
+		INSERT INTO wt_sfes (
+			sfoid,
+			claim_start,
+			merkle_proof,
+			leaf_index,
+			sf_value,
+			address_id
+		)
+		VALUES (?, ?, ?, ?, ?, (
+			SELECT id FROM wt_addresses
+			WHERE addr = ?
+		))
+	`,
+		sfe.ID[:],
+		encodeCurrency(sfe.ClaimStart),
+		encodeProof(sfe.MerkleProof),
+		sfe.LeafIndex,
+		sfe.SiafundOutput.Value,
+		sfe.SiafundOutput.Address[:],
+	)
+	if err != nil {
+		w.dbError = true
+	}
+
+	return err
+}
+
+// deleteSiafundElement deletes the Siafund element with the given ID.
+func (w *Wallet) deleteSiafundElement(addr types.Address) error {
+	delete(w.sfes, addr)
+	_, err := w.tx.Exec(`
+		DELETE FROM wt_sfes
+		WHERE address_id IN (
+			SELECT id FROM wt_addresses
+			WHERE addr = ?
+		)
+	`, addr[:])
+	if err != nil {
+		w.dbError = true
+	}
+
+	return err
+}
+
+// updateSiacoinElementProofs updates the Merkle proofs on each SC element.
+func (w *Wallet) updateSiacoinElementProofs(cu chainUpdate) error {
+	updateStmt, err := w.tx.Prepare(`
+		UPDATE wt_sces
+		SET merkle_proof = ?, leaf_index = ?
+		WHERE scoid = ?
+	`)
+	if err != nil {
+		return modules.AddContext(err, "failed to prepare update statement")
+	}
+	defer updateStmt.Close()
+
+	for _, sce := range w.sces {
+		cu.UpdateElementProof(&sce.StateElement)
+		w.sces[sce.SiacoinOutput.Address] = sce
+		_, err := updateStmt.Exec(encodeProof(sce.MerkleProof), sce.LeafIndex, sce.ID[:])
 		if err != nil {
-			w.log.Severe("ERROR: syncDB encountered an error:", err)
-			panic("wallet syncing error")
+			w.dbError = true
+			return modules.AddContext(err, "failed to update Siacoin element")
 		}
-	}
-}
-
-// syncDB commits the current global transaction and immediately begins a
-// new one. It must be called with a write-lock.
-func (w *Wallet) syncDB() error {
-	// Check if we are not syncing already.
-	if w.syncing {
-		return nil
-	}
-	w.syncing = true
-	defer func() {
-		w.syncing = false
-	}()
-
-	// If the rollback flag is set, it means that somewhere in the middle of an
-	// atomic update there  was a failure, and that failure needs to be rolled
-	// back. An error will be returned.
-	if w.dbRollback {
-		err := errors.New("database unable to sync - rollback requested")
-		return modules.ComposeErrors(err, w.dbTx.Rollback())
-	}
-
-	// Commit the current tx.
-	err := w.dbTx.Commit()
-	if err != nil {
-		w.log.Severe("ERROR: failed to apply database update:", err)
-		err = modules.ComposeErrors(err, w.dbTx.Rollback())
-		return modules.AddContext(err, "unable to commit dbTx in syncDB")
-	}
-	// Begin a new tx.
-	w.dbTx, err = w.db.Begin()
-	if err != nil {
-		w.log.Severe("ERROR: failed to start database update:", err)
-		return modules.AddContext(err, "unable to begin new dbTx in syncDB")
-	}
-	return nil
-}
-
-// dbReset wipes and reinitializes a wallet database.
-func dbReset(tx *sql.Tx) error {
-	_, err := tx.Exec("DELETE FROM wt_addr")
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM wt_txn")
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM wt_sco")
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM wt_sfo")
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM wt_spo")
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec("DELETE FROM wt_uc")
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(`
-		REPLACE INTO wt_info (id, cc, height, encrypted, sfpool, salt, progress, seed, pwd)
-		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, modules.ConsensusChangeBeginning[:], 0, []byte{}, []byte{}, frand.Bytes(len(walletSalt{})), 0, []byte{}, []byte{})
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec("DELETE FROM wt_aux")
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec("DELETE FROM wt_keys")
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec("DELETE FROM wt_watch")
-	return err
-}
-
-// dbPutSiacoinOutput inserts a Siacoin output into the database.
-func dbPutSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID, output types.SiacoinOutput) error {
-	var buf bytes.Buffer
-	e := types.NewEncoder(&buf)
-	output.EncodeTo(e)
-	e.Flush()
-	_, err := tx.Exec(`
-		INSERT INTO wt_sco (scoid, bytes)
-		VALUES (?, ?) AS new
-		ON DUPLICATE KEY UPDATE bytes = new.bytes
-	`, id[:], buf.Bytes())
-	return err
-}
-
-// dbDeleteSiacoinOutput removes a Siacoin output from the database.
-func dbDeleteSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID) error {
-	_, err := tx.Exec("DELETE FROM wt_sco WHERE scoid = ?", id[:])
-	return err
-}
-
-// dbForEachSiacoinOutput performs an action on each Siacoin output.
-func dbForEachSiacoinOutput(tx *sql.Tx, fn func(types.SiacoinOutputID, types.SiacoinOutput)) error {
-	rows, err := tx.Query("SELECT scoid, bytes FROM wt_sco")
-	if err != nil {
-		return err
-	}
-
-	outputs := make(map[types.SiacoinOutputID]types.SiacoinOutput)
-	for rows.Next() {
-		var scoid types.SiacoinOutputID
-		var sco types.SiacoinOutput
-		id := make([]byte, 32)
-		scoBytes := make([]byte, 0, 56)
-		if err := rows.Scan(&id, &scoBytes); err != nil {
-			rows.Close()
-			return err
-		}
-		copy(scoid[:], id)
-		buf := bytes.NewBuffer(scoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(scoBytes))})
-		sco.DecodeFrom(d)
-		if err := d.Err(); err != nil {
-			rows.Close()
-			return err
-		}
-		outputs[scoid] = sco
-	}
-	rows.Close()
-
-	for scoid, sco := range outputs {
-		fn(scoid, sco)
 	}
 
 	return nil
 }
 
-// dbPutSiafundOutput inserts a Siafund output into the database.
-func dbPutSiafundOutput(tx *sql.Tx, id types.SiafundOutputID, output types.SiafundOutput) error {
-	var buf bytes.Buffer
-	e := types.NewEncoder(&buf)
-	output.EncodeTo(e)
-	e.Flush()
-	_, err := tx.Exec(`
-		INSERT INTO wt_sfo (sfoid, bytes)
-		VALUES (?, ?) AS new
-		ON DUPLICATE KEY UPDATE bytes = new.bytes
-	`, id[:], buf.Bytes())
-	return err
-}
-
-// dbDeleteSiafundOutput removes a Siafund output from the database.
-func dbDeleteSiafundOutput(tx *sql.Tx, id types.SiafundOutputID) error {
-	_, err := tx.Exec("DELETE FROM wt_sfo WHERE sfoid = ?", id[:])
-	return err
-}
-
-// dbForEachSiafundOutput performs an action on each Siafund output.
-func dbForEachSiafundOutput(tx *sql.Tx, fn func(types.SiafundOutputID, types.SiafundOutput, types.Currency)) error {
-	rows, err := tx.Query("SELECT sfoid, bytes FROM wt_sfo")
+// updateSiafundElementProofs updates the Merkle proofs on each SF element.
+func (w *Wallet) updateSiafundElementProofs(cu chainUpdate) error {
+	updateStmt, err := w.tx.Prepare(`
+		UPDATE wt_sfes
+		SET merkle_proof = ?, leaf_index = ?
+		WHERE sfoid = ?
+	`)
 	if err != nil {
-		return err
+		return modules.AddContext(err, "failed to prepare update statement")
 	}
+	defer updateStmt.Close()
 
-	type extendedSiafundOutput struct {
-		output     types.SiafundOutput
-		claimStart types.Currency
-	}
-
-	outputs := make(map[types.SiafundOutputID]extendedSiafundOutput)
-	for rows.Next() {
-		var sfoid types.SiafundOutputID
-		var sfo types.SiafundOutput
-		var claimStart types.Currency
-		id := make([]byte, 32)
-		sfoBytes := make([]byte, 0, 80)
-		if err := rows.Scan(&id, &sfoBytes); err != nil {
-			rows.Close()
-			return err
+	for _, sfe := range w.sfes {
+		cu.UpdateElementProof(&sfe.StateElement)
+		w.sfes[sfe.SiafundOutput.Address] = sfe
+		_, err := updateStmt.Exec(encodeProof(sfe.MerkleProof), sfe.LeafIndex, sfe.ID[:])
+		if err != nil {
+			w.dbError = true
+			return modules.AddContext(err, "failed to update Siafund element")
 		}
-		copy(sfoid[:], id)
-		buf := bytes.NewBuffer(sfoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(sfoBytes))})
-		var val types.Currency
-		val.DecodeFrom(d)
-		sfo.Value = val.Lo
-		sfo.Address.DecodeFrom(d)
-		claimStart.DecodeFrom(d)
-		if err := d.Err(); err != nil {
-			rows.Close()
-			return err
-		}
-		outputs[sfoid] = extendedSiafundOutput{
-			output:     sfo,
-			claimStart: claimStart,
-		}
-	}
-	rows.Close()
-
-	for sfoid, esfo := range outputs {
-		fn(sfoid, esfo.output, esfo.claimStart)
 	}
 
 	return nil
 }
 
-// dbPutSpentOutput inserts a new spent output into the database.
-func dbPutSpentOutput(tx *sql.Tx, id types.Hash256, height uint64) error {
-	_, err := tx.Exec(`
-		INSERT INTO wt_spo (oid, height)
-		VALUES (?, ?) AS new
-		ON DUPLICATE KEY UPDATE height = new.height
-	`, id[:], height)
-	return err
-}
+// load loads the wallet data from the database.
+func (w *Wallet) load() (err error) {
+	s := make([]byte, 32)
+	var progress uint64
+	if err := w.db.QueryRow(`
+		SELECT seed, progress
+		FROM wt_info
+		WHERE id = 1
+	`).Scan(&s, &progress); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return modules.AddContext(err, "couldn't load seed")
+	}
+	copy(w.seed[:], s)
+	for _, key := range generateKeys(w.seed, 0, progress) {
+		w.keys[types.StandardUnlockHash(key.PublicKey())] = key
+	}
+	w.regenerateLookahead(progress)
 
-// dbGetSpentOutput retrieves a spent output from the database.
-func dbGetSpentOutput(tx *sql.Tx, id types.Hash256) (height uint64, err error) {
-	err = tx.QueryRow("SELECT height FROM wt_spo WHERE oid = ?", id[:]).Scan(&height)
-	return
-}
+	b := make([]byte, 32)
+	if err := w.db.QueryRow(`
+		SELECT height, bid
+		FROM wt_tip
+		WHERE id = 1
+	`).Scan(&w.tip.Height, &b); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return modules.AddContext(err, "couldn't load last chain index")
+	}
+	copy(w.tip.ID[:], b)
 
-// dbDeleteSpentOutput removes a spent output from the database.
-func dbDeleteSpentOutput(tx *sql.Tx, id types.Hash256) error {
-	_, err := tx.Exec("DELETE FROM wt_spo WHERE oid = ?", id[:])
-	return err
-}
-
-// dbGetAddrTransactions retrieves an address-txn mapping from the database.
-func dbGetAddrTransactions(tx *sql.Tx, addr types.Address) (txns []types.TransactionID, err error) {
-	rows, err := tx.Query("SELECT txid FROM wt_addr WHERE addr = ?", addr[:])
+	rows, err := w.db.Query(`
+		SELECT id, addr
+		FROM wt_addresses
+	`)
 	if err != nil {
-		return nil, err
+		return modules.AddContext(err, "couldn't query addresses")
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var txid types.TransactionID
-		id := make([]byte, 32)
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		copy(txid[:], id)
-		txns = append(txns, txid)
-	}
-	return txns, nil
-}
-
-// dbPutUnlockConditions adds new UnlockConditions to the database.
-func dbPutUnlockConditions(tx *sql.Tx, uc types.UnlockConditions) error {
-	var buf bytes.Buffer
-	e := types.NewEncoder(&buf)
-	uc.EncodeTo(e)
-	e.Flush()
-	uh := uc.UnlockHash()
-	_, err := tx.Exec(`
-		INSERT INTO wt_uc (addr, bytes)
-		VALUES (?, ?) AS new
-		ON DUPLICATE KEY UPDATE bytes = new.bytes
-	`, uh[:], buf.Bytes())
-	return err
-}
-
-// dbGetUnlockConditions retrieves UnlockConditions from the database.
-func dbGetUnlockConditions(tx *sql.Tx, addr types.Address) (uc types.UnlockConditions, err error) {
-	var ucBytes []byte
-	err = tx.QueryRow("SELECT bytes FROM wt_uc WHERE addr = ?", addr[:]).Scan(&ucBytes)
-	if err != nil {
-		return
-	}
-	buf := bytes.NewBuffer(ucBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(ucBytes))})
-	uc.DecodeFrom(d)
-	return uc, d.Err()
-}
-
-// dbAddAddrTransaction appends a single transaction ID to the set of
-// transactions associated with addr. If the ID is already in the set, it is
-// not added again.
-func dbAddAddrTransaction(tx *sql.Tx, addr types.Address, txid types.TransactionID) error {
-	var c int
-	err := tx.QueryRow("SELECT COUNT(*) FROM wt_addr WHERE addr = ? AND txid = ?", addr[:], txid[:]).Scan(&c)
-	if err != nil {
-		return err
-	}
-	if c > 0 {
-		return nil
-	}
-	_, err = tx.Exec("INSERT INTO wt_addr (addr, txid) VALUES (?, ?)", addr[:], txid[:])
-	return err
-}
-
-// dbAddProcessedTransactionAddrs updates the address-txn mappings to associate
-// every address in pt with txid.
-func dbAddProcessedTransactionAddrs(tx *sql.Tx, pt modules.ProcessedTransaction) error {
-	addrs := make(map[types.Address]struct{})
-	for _, input := range pt.Inputs {
-		addrs[input.RelatedAddress] = struct{}{}
-	}
-	for _, output := range pt.Outputs {
-		// Miner fees don't have an address, so skip them.
-		if output.FundType == specifierMinerFee {
-			continue
-		}
-		addrs[output.RelatedAddress] = struct{}{}
-	}
-	for addr := range addrs {
-		if err := dbAddAddrTransaction(tx, addr, pt.TransactionID); err != nil {
-			return modules.AddContext(err, fmt.Sprintf("failed to add txn %v to address %v",
-				pt.TransactionID, addr))
-		}
-	}
-	return nil
-}
-
-// decodeProcessedTransaction decodes a marshalled ProcessedTransaction.
-func decodeProcessedTransaction(ptBytes []byte, pt *modules.ProcessedTransaction) error {
-	buf := bytes.NewBuffer(ptBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(ptBytes))})
-	pt.DecodeFrom(d)
-	return d.Err()
-}
-
-// dbAppendProcessedTransaction adds a new ProcessedTransaction.
-func dbAppendProcessedTransaction(tx *sql.Tx, pt modules.ProcessedTransaction) error {
-	var buf bytes.Buffer
-	e := types.NewEncoder(&buf)
-	pt.EncodeTo(e)
-	e.Flush()
-	_, err := tx.Exec(`
-		INSERT INTO wt_txn (txid, bytes) VALUES (?, ?) AS new
-		ON DUPLICATE KEY UPDATE bytes = new.bytes
-	`, pt.TransactionID[:], buf.Bytes())
-	if err != nil {
-		return modules.AddContext(err, "failed to store processed txn in database")
-	}
-
-	// Also add this txid to wt_addr.
-	if err = dbAddProcessedTransactionAddrs(tx, pt); err != nil {
-		return modules.AddContext(err, "failed to add processed transaction to addresses in database")
-	}
-
-	return nil
-}
-
-// dbGetLastProcessedTransaction retrieves the last ProcessedTransaction.
-func dbGetLastProcessedTransaction(tx *sql.Tx) (pt modules.ProcessedTransaction, err error) {
-	var ptBytes []byte
-	err = tx.QueryRow("SELECT bytes FROM wt_txn ORDER BY id DESC LIMIT 1").Scan(&ptBytes)
-	if err != nil {
-		return
-	}
-	err = decodeProcessedTransaction(ptBytes, &pt)
-	return
-}
-
-// dbDeleteLastProcessedTransaction deletes the last ProcessedTransaction.
-func dbDeleteLastProcessedTransaction(tx *sql.Tx) error {
-	// Get the last processed txn.
-	var txid types.TransactionID
-	id := make([]byte, 32)
-	err := tx.QueryRow("SELECT txid FROM wt_txn ORDER BY id DESC LIMIT 1").Scan(&id)
-	if err != nil {
-		return err
-	}
-
-	// Delete the associated mappings.
-	copy(txid[:], id)
-	_, err = tx.Exec("DELETE FROM wt_addr WHERE txid = ?", txid[:])
-	if err != nil {
-		return err
-	}
-
-	// Delete the last processed txn.
-	_, err = tx.Exec("DELETE FROM wt_txn WHERE txid = ?", txid[:])
-	return err
-}
-
-// dbGetProcessedTransaction retrieves a txn from the database.
-func dbGetProcessedTransaction(tx *sql.Tx, txid types.TransactionID) (pt modules.ProcessedTransaction, err error) {
-	var ptBytes []byte
-	err = tx.QueryRow("SELECT bytes FROM wt_txn WHERE txid = ?", txid[:]).Scan(&ptBytes)
-	if err != nil {
-		return
-	}
-	err = decodeProcessedTransaction(ptBytes, &pt)
-	return
-}
-
-// dbGetWalletSalt returns the salt used by the wallet to derive encryption keys.
-func dbGetWalletSalt(tx *sql.Tx) (uid walletSalt) {
-	salt := make([]byte, 32)
-	err := tx.QueryRow("SELECT salt FROM wt_info WHERE id = 1").Scan(&salt)
-	if err != nil {
-		return
-	}
-	copy(uid[:], salt)
-	return
-}
-
-// dbPutWalletSalt saves the salt to disk.
-func dbPutWalletSalt(tx *sql.Tx, uid walletSalt) error {
-	_, err := tx.Exec("UPDATE wt_info SET salt = ? WHERE id = 1", uid[:])
-	return err
-}
-
-// dbGetPrimarySeedProgress returns the number of keys generated from the
-// primary seed.
-func dbGetPrimarySeedProgress(tx *sql.Tx) (progress uint64, err error) {
-	err = tx.QueryRow("SELECT progress FROM wt_info WHERE id = 1").Scan(&progress)
-	return
-}
-
-// dbPutPrimarySeedProgress sets the primary seed progress counter.
-func dbPutPrimarySeedProgress(tx *sql.Tx, progress uint64) error {
-	_, err := tx.Exec("UPDATE wt_info SET progress = ? WHERE id = 1", progress)
-	return err
-}
-
-// dbGetConsensusChangeID returns the ID of the last ConsensusChange processed by the wallet.
-func dbGetConsensusChangeID(tx *sql.Tx) (cc modules.ConsensusChangeID) {
-	ccBytes := make([]byte, 32)
-	err := tx.QueryRow("SELECT cc FROM wt_info WHERE id = 1").Scan(&ccBytes)
-	if err != nil {
-		return modules.ConsensusChangeID{}
-	}
-	copy(cc[:], ccBytes)
-	return
-}
-
-// dbPutConsensusChangeID stores the ID of the last ConsensusChange processed by the wallet.
-func dbPutConsensusChangeID(tx *sql.Tx, cc modules.ConsensusChangeID) error {
-	_, err := tx.Exec("UPDATE wt_info SET cc = ? WHERE id = 1", cc[:])
-	return err
-}
-
-// dbGetConsensusHeight returns the height that the wallet has scanned to.
-func dbGetConsensusHeight(tx *sql.Tx) (height uint64, err error) {
-	err = tx.QueryRow("SELECT height FROM wt_info WHERE id = 1").Scan(&height)
-	return
-}
-
-// dbPutConsensusHeight stores the height that the wallet has scanned to.
-func dbPutConsensusHeight(tx *sql.Tx, height uint64) error {
-	_, err := tx.Exec("UPDATE wt_info SET height = ? WHERE id = 1", height)
-	return err
-}
-
-// dbGetSiafundPool returns the value of the Siafund pool.
-func dbGetSiafundPool(tx *sql.Tx) (pool types.Currency, err error) {
-	poolBytes := make([]byte, 0, 24)
-	err = tx.QueryRow("SELECT sfpool FROM wt_info WHERE id = 1").Scan(&poolBytes)
-	if err != nil {
-		return types.ZeroCurrency, err
-	}
-	if len(poolBytes) == 0 {
-		return types.ZeroCurrency, nil
-	}
-	d := types.NewDecoder(io.LimitedReader{R: bytes.NewBuffer(poolBytes), N: int64(len(poolBytes))})
-	pool.DecodeFrom(d)
-	return pool, d.Err()
-}
-
-// dbPutSiafundPool stores the value of the Siafund pool.
-func dbPutSiafundPool(tx *sql.Tx, pool types.Currency) error {
-	var buf bytes.Buffer
-	e := types.NewEncoder(&buf)
-	pool.EncodeTo(e)
-	e.Flush()
-	_, err := tx.Exec("UPDATE wt_info SET sfpool = ? WHERE id = 1", buf.Bytes())
-	return err
-}
-
-// dbGetWatchedAddresses retrieves the set of watched addresses.
-func dbGetWatchedAddresses(tx *sql.Tx) (addrs []types.Address, err error) {
-	rows, err := tx.Query("SELECT addr FROM wt_watch")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 
 	for rows.Next() {
+		var index uint64
 		var addr types.Address
-		a := make([]byte, 32)
-		if err := rows.Scan(&a); err != nil {
-			return nil, err
+		if err := rows.Scan(&index, &b); err != nil {
+			return modules.AddContext(err, "couldn't scan address")
 		}
-		copy(addr[:], a)
-		addrs = append(addrs, addr)
+		copy(addr[:], b)
+		w.addrs[addr] = index
 	}
 
-	return
-}
+	rows.Close()
 
-// dbPutWatchedAddresses stores the set of watched addresses.
-func dbPutWatchedAddresses(tx *sql.Tx, addrs []types.Address) error {
-	for _, addr := range addrs {
-		_, err := tx.Exec("REPLACE INTO wt_watch (addr) VALUES (?)", addr[:])
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// dbGetEncryptedVerification returns the encrypted ciphertext.
-func dbGetEncryptedVerification(tx *sql.Tx) ([]byte, error) {
-	var encrypted []byte
-	err := tx.QueryRow("SELECT encrypted FROM wt_info WHERE id = 1").Scan(&encrypted)
+	rows, err = w.db.Query(`
+		SELECT id, addr
+		FROM wt_addresses
+		WHERE id IN (
+			SELECT address_id
+			FROM wt_watched
+		)
+	`)
 	if err != nil {
-		return nil, err
+		return modules.AddContext(err, "couldn't query watched addresses")
 	}
-	empty := make([]byte, len(encrypted))
-	if bytes.Equal(encrypted, empty) {
-		return nil, nil
-	}
-	return encrypted, nil
-}
-
-// dbPutEncryptedVerification sets a new encrypted ciphertext.
-func dbPutEncryptedVerification(tx *sql.Tx, encrypted []byte) error {
-	_, err := tx.Exec("UPDATE wt_info SET encrypted = ? WHERE id = 1", encrypted)
-	return err
-}
-
-// dbGetPrimarySeed returns the wallet primary seed.
-func dbGetPrimarySeed(tx *sql.Tx) (seed encryptedSeed, err error) {
-	u := make([]byte, 32)
-	var e, s []byte
-	err = tx.QueryRow("SELECT salt, encrypted, seed FROM wt_info WHERE id = 1").Scan(&u, &e, &s)
-	if err != nil {
-		return
-	}
-	copy(seed.UID[:], u)
-	seed.EncryptionVerification = make([]byte, len(e))
-	copy(seed.EncryptionVerification, e)
-	seed.Seed = make([]byte, len(s))
-	copy(seed.Seed, s)
-	return
-}
-
-// dbPutPrimarySeed saves the wallet primary seed.
-func dbPutPrimarySeed(tx *sql.Tx, seed encryptedSeed) error {
-	_, err := tx.Exec("UPDATE wt_info SET salt = ?, encrypted = ?, seed = ? WHERE id = 1", seed.UID[:], seed.EncryptionVerification, seed.Seed)
-	return err
-}
-
-// dbGetWalletPassword returns the wallet password.
-func dbGetWalletPassword(tx *sql.Tx) (pwd []byte, err error) {
-	err = tx.QueryRow("SELECT pwd FROM wt_info WHERE id = 1").Scan(&pwd)
-	return
-}
-
-// dbPutWalletPassword saves the wallet password.
-func dbPutWalletPassword(tx *sql.Tx, pwd []byte) error {
-	_, err := tx.Exec("UPDATE wt_info SET pwd = ? WHERE id = 1", pwd)
-	return err
-}
-
-// dbGetAuxiliarySeeds retrieves the auxiliary seeds.
-func dbGetAuxiliarySeeds(tx *sql.Tx) (seeds []encryptedSeed, err error) {
-	rows, err := tx.Query("SELECT salt, encrypted, seed FROM wt_aux")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 
 	for rows.Next() {
-		var seed encryptedSeed
-		u := make([]byte, 32)
-		var e, s []byte
-		if err := rows.Scan(&u, &e, &s); err != nil {
-			return nil, err
+		var index uint64
+		var addr types.Address
+		if err := rows.Scan(&index, &b); err != nil {
+			return modules.AddContext(err, "couldn't scan watched address")
 		}
-		copy(seed.UID[:], u)
-		seed.EncryptionVerification = make([]byte, len(e))
-		copy(seed.EncryptionVerification, e)
-		seed.Seed = make([]byte, len(s))
-		copy(seed.Seed, s)
-		seeds = append(seeds, seed)
+		copy(addr[:], b)
+		w.watchedAddrs[addr] = index
 	}
 
-	return
-}
+	rows.Close()
 
-// dbPutAuxiliarySeeds saves the auxiliary seeds.
-func dbPutAuxiliarySeeds(tx *sql.Tx, seeds []encryptedSeed) error {
-	_, err := tx.Exec("DELETE FROM wt_aux")
+	rows, err = w.db.Query(`
+		SELECT
+			wt_sces.scoid,
+			wt_sces.sc_value,
+			wt_sces.merkle_proof,
+			wt_sces.leaf_index,
+			wt_sces.maturity_height,
+			wt_addresses.addr
+		FROM wt_sces
+		INNER JOIN wt_addresses
+		ON wt_sces.address_id = wt_addresses.id
+	`)
 	if err != nil {
-		return err
+		return modules.AddContext(err, "couldn't query SC elements")
 	}
-	for _, seed := range seeds {
-		_, err := tx.Exec("INSERT INTO wt_aux (salt, encrypted, seed) VALUES (?, ?, ?)", seed.UID[:], seed.EncryptionVerification, seed.Seed)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// dbGetUnseededKeys retrieves the spendable keys.
-func dbGetUnseededKeys(tx *sql.Tx) (keys []encryptedSpendableKey, err error) {
-	rows, err := tx.Query("SELECT salt, encrypted, skey FROM wt_keys")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 
 	for rows.Next() {
-		var sk encryptedSpendableKey
-		s := make([]byte, 32)
-		var e, k []byte
-		if err := rows.Scan(&s, &e, &k); err != nil {
-			return nil, err
+		id := make([]byte, 32)
+		addr := make([]byte, 32)
+		var v, proof []byte
+		var li, mh uint64
+		if err = rows.Scan(&id, &v, &proof, &li, &mh, &addr); err != nil {
+			return modules.AddContext(err, "couldn't scan SC element")
 		}
-		copy(sk.Salt[:], s)
-		sk.EncryptionVerification = make([]byte, len(e))
-		copy(sk.EncryptionVerification, e)
-		sk.SpendableKey = make([]byte, len(k))
-		copy(sk.SpendableKey, k)
-		keys = append(keys, sk)
+		sce := types.SiacoinElement{
+			StateElement: types.StateElement{
+				MerkleProof: decodeProof(proof),
+				LeafIndex:   li,
+			},
+			MaturityHeight: mh,
+			SiacoinOutput: types.SiacoinOutput{
+				Value: decodeCurrency(v),
+			},
+		}
+		copy(sce.ID[:], id)
+		copy(sce.SiacoinOutput.Address[:], addr)
+		w.sces[sce.SiacoinOutput.Address] = sce
 	}
 
-	return
+	rows.Close()
+
+	rows, err = w.db.Query(`
+		SELECT
+			wt_sfes.sfoid,
+			wt_sfes.claim_start,
+			wt_sfes.merkle_proof,
+			wt_sfes.leaf_index,
+			wt_sfes.sf_value,
+			wt_addresses.addr
+		FROM wt_sfes
+		INNER JOIN wt_addresses
+		ON wt_sfes.address_id = wt_addresses.id
+	`)
+	if err != nil {
+		return modules.AddContext(err, "couldn't query SF elements")
+	}
+
+	for rows.Next() {
+		id := make([]byte, 32)
+		addr := make([]byte, 32)
+		var cs, proof []byte
+		var value, li uint64
+		if err = rows.Scan(&id, &cs, &proof, &li, &value, &addr); err != nil {
+			return modules.AddContext(err, "couldn't scan SF element")
+		}
+		sfe := types.SiafundElement{
+			StateElement: types.StateElement{
+				MerkleProof: decodeProof(proof),
+				LeafIndex:   li,
+			},
+			SiafundOutput: types.SiafundOutput{Value: value},
+			ClaimStart:    decodeCurrency(cs),
+		}
+		copy(sfe.ID[:], id)
+		copy(sfe.SiafundOutput.Address[:], addr)
+		w.sfes[sfe.SiafundOutput.Address] = sfe
+	}
+
+	rows.Close()
+
+	rows, err = w.db.Query("SELECT id FROM wt_spent")
+	if err != nil {
+		return modules.AddContext(err, "couldn't query spent outputs")
+	}
+
+	for rows.Next() {
+		var id types.Hash256
+		if err := rows.Scan(&b); err != nil {
+			return modules.AddContext(err, "couldn't scan spent output")
+		}
+		copy(id[:], b)
+		w.used[id] = true
+	}
+
+	rows.Close()
+
+	w.tx, err = w.db.Begin()
+	if err != nil {
+		return modules.AddContext(err, "couldn't start wallet transaction")
+	}
+
+	return nil
 }
 
-// dbPutUnseededKeys saves the spendable keys.
-func dbPutUnseededKeys(tx *sql.Tx, keys []encryptedSpendableKey) error {
-	_, err := tx.Exec("DELETE FROM wt_keys")
-	if err != nil {
-		return err
-	}
-	for _, key := range keys {
-		_, err := tx.Exec("INSERT INTO wt_keys (salt, encrypted, skey) VALUES (?, ?, ?)", key.Salt[:], key.EncryptionVerification, key.SpendableKey)
+// save saves the wallet state.
+// A lock must be acquired before calling this function.
+func (w *Wallet) save() (err error) {
+	if w.dbError {
+		err = w.tx.Rollback()
+		if err != nil {
+			return err
+		}
+		w.dbError = false
+	} else {
+		err = w.tx.Commit()
 		if err != nil {
 			return err
 		}
 	}
-	return nil
+	w.tx, err = w.db.Begin()
+	return err
 }
 
-// dbResetBeforeRescan deletes the wallet history before starting a new scan.
-func dbResetBeforeRescan(tx *sql.Tx) error {
-	_, err := tx.Exec("DELETE FROM wt_txn")
+// reset resets the database before rescanning.
+func (w *Wallet) reset() (err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	_, err = w.tx.Exec("DROP TABLE wt_sces")
 	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't drop SC elements")
+	}
+	_, err = w.tx.Exec("DROP TABLE wt_sfes")
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't drop SF elements")
+	}
+	_, err = w.tx.Exec("DROP TABLE wt_watched")
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't drop watched addresses")
+	}
+	_, err = w.tx.Exec("DROP TABLE wt_addresses")
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't drop addresses")
+	}
+	_, err = w.tx.Exec("DROP TABLE wt_spent")
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't drop spent outputs")
+	}
+
+	_, err = w.tx.Exec(`
+		CREATE TABLE wt_addresses (
+			id   BIGINT NOT NULL AUTO_INCREMENT,
+			addr BINARY(32) NOT NULL UNIQUE,
+			PRIMARY KEY (id)
+		)
+	`)
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't create addresses")
+	}
+
+	_, err = w.tx.Exec(`
+		CREATE TABLE wt_sces (
+			id              BIGINT NOT NULL AUTO_INCREMENT,
+			scoid           BINARY(32) NOT NULL UNIQUE,
+			sc_value        BLOB NOT NULL,
+			merkle_proof    BLOB NOT NULL,
+			leaf_index      BIGINT UNSIGNED NOT NULL,
+			maturity_height BIGINT UNSIGNED NOT NULL,
+			address_id      BIGINT NOT NULL,
+			PRIMARY KEY (id),
+			FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
+		)
+	`)
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't create SC elements")
+	}
+
+	_, err = w.tx.Exec(`
+		CREATE TABLE wt_sfes (
+			id              BIGINT NOT NULL AUTO_INCREMENT,
+			sfoid           BINARY(32) NOT NULL UNIQUE,
+			claim_start     BLOB NOT NULL,
+			merkle_proof    BLOB NOT NULL,
+			leaf_index      BIGINT UNSIGNED NOT NULL,
+			sf_value        BIGINT UNSIGNED NOT NULL,
+			address_id      BIGINT NOT NULL,
+			PRIMARY KEY (id),
+			FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
+		)
+	`)
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't create SF elements")
+	}
+
+	_, err = w.tx.Exec(`
+		CREATE TABLE wt_watched (
+			address_id BIGINT NOT NULL UNIQUE,
+			FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
+		)
+	`)
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't create watched addresses")
+	}
+
+	_, err = w.tx.Exec(`
+		CREATE TABLE wt_spent (
+			id BINARY(32) NOT NULL,
+			PRIMARY KEY (id)
+		)
+	`)
+	if err != nil {
+		w.dbError = true
+		return modules.AddContext(err, "couldn't create spent outputs")
+	}
+
+	if err := w.updateTip(w.tip); err != nil {
 		return err
 	}
-	_, err = tx.Exec("DELETE FROM wt_addr")
+
+	return w.save()
+}
+
+// saveSeed saves the new seed.
+func (w *Wallet) saveSeed(progress uint64) error {
+	_, err := w.tx.Exec(`
+		REPLACE INTO wt_info (id, seed, progress)
+		VALUES (1, ?, ?)
+	`, w.seed[:], progress)
 	if err != nil {
-		return err
+		w.dbError = true
+		return modules.AddContext(err, "couldn't save wallet seed")
 	}
-	_, err = tx.Exec("DELETE FROM wt_sco")
+	return w.save()
+}
+
+// getSeedProgress returns the current seed progress.
+func (w *Wallet) getSeedProgress() (progress uint64, err error) {
+	err = w.tx.QueryRow("SELECT progress FROM wt_info WHERE id = 1").Scan(&progress)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = nil
+	}
+	return
+}
+
+// putSeedProgress updates the current seed progress.
+func (w *Wallet) putSeedProgress(progress uint64) error {
+	_, err := w.tx.Exec("UPDATE wt_info SET progress = ? WHERE id = 1", progress)
 	if err != nil {
-		return err
+		w.dbError = true
 	}
-	_, err = tx.Exec("DELETE FROM wt_sfo")
+	return err
+}
+
+// insertSpentOutput adds a new spent output.
+func (w *Wallet) insertSpentOutput(id types.Hash256) error {
+	w.used[id] = true
+	_, err := w.tx.Exec("INSERT INTO wt_spent (id) VALUES (?)", id[:])
 	if err != nil {
-		return err
+		w.dbError = true
 	}
-	_, err = tx.Exec("DELETE FROM wt_spo")
+	return err
+}
+
+// removeSpentOutput removes a spent output.
+func (w *Wallet) removeSpentOutput(id types.Hash256) error {
+	delete(w.used, id)
+	_, err := w.tx.Exec("DELETE FROM wt_spent WHERE id = ?", id[:])
 	if err != nil {
-		return err
+		w.dbError = true
 	}
-	_, err = tx.Exec("DELETE FROM wt_uc")
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }

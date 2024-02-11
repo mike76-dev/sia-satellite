@@ -5,47 +5,46 @@ import (
 	"sort"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 )
 
 var (
 	errDefragNotNeeded = errors.New("defragging not needed, wallet is already sufficiently defragged")
+	errDustOutput      = errors.New("output is too small")
+	errSpentOutput     = errors.New("output is already spent")
+)
+
+const (
+	defragStartIndex = 10
+	defragBatchSize  = 35
 )
 
 // managedCreateDefragTransaction creates a transaction that spends multiple existing
 // wallet outputs into a single new address.
 func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err error) {
-	// dustThreshold and minFee have to be obtained separate from the lock.
-	dustThreshold, err := w.DustThreshold()
-	if err != nil {
-		return nil, err
-	}
-	minFee, _ := w.tpool.FeeEstimation()
+	dustThreshold := w.DustThreshold()
+	fee := w.cm.RecommendedFee()
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	consensusHeight, err := dbGetConsensusHeight(w.dbTx)
-	if err != nil {
-		return nil, err
-	}
-
 	// Collect a value-sorted set of Siacoin outputs.
 	var so sortedOutputs
-	err = dbForEachSiacoinOutput(w.dbTx, func(scoid types.SiacoinOutputID, sco types.SiacoinOutput) {
-		if w.checkOutput(w.dbTx, consensusHeight, scoid, sco, dustThreshold) == nil {
-			so.ids = append(so.ids, scoid)
-			so.outputs = append(so.outputs, sco)
+	for _, sce := range w.sces {
+		if w.checkOutput(sce, dustThreshold) == nil {
+			so.ids = append(so.ids, types.SiacoinOutputID(sce.ID))
+			so.outputs = append(so.outputs, sce.SiacoinOutput)
 		}
-	})
+	}
 	if err != nil {
 		return nil, err
 	}
 	sort.Sort(sort.Reverse(so))
 
 	// Only defrag if there are enough outputs to merit defragging.
-	if len(so.ids) <= defragThreshold {
+	if len(so.ids) <= 50 {
 		return nil, errDefragNotNeeded
 	}
 
@@ -59,7 +58,7 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 		sco := so.outputs[i]
 
 		// Add a Siacoin input for this output.
-		outputUnlockConditions := w.keys[sco.Address].UnlockConditions
+		outputUnlockConditions := types.StandardUnlockConditions(w.keys[sco.Address].PublicKey())
 		sci := types.SiacoinInput{
 			ParentID:         scoid,
 			UnlockConditions: outputUnlockConditions,
@@ -73,7 +72,7 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 
 	// Create and add the output that will be used to fund the defrag
 	// transaction.
-	parentUnlockConditions, err := w.nextPrimarySeedAddress(w.dbTx)
+	parentUnlockConditions, err := w.nextAddress()
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +88,17 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 	parentTxn.SiacoinOutputs = append(parentTxn.SiacoinOutputs, exactOutput)
 
 	// Sign all of the inputs to the parent transaction.
-	for _, sci := range parentTxn.SiacoinInputs {
-		addSignatures(&parentTxn, modules.FullCoveredFields(), sci.UnlockConditions, types.Hash256(sci.ParentID), w.keys[sci.UnlockConditions.UnlockHash()], consensusHeight)
+	for i, sci := range parentTxn.SiacoinInputs {
+		parentTxn.Signatures = append(parentTxn.Signatures, types.TransactionSignature{
+			ParentID:       types.Hash256(sci.ParentID),
+			CoveredFields:  types.CoveredFields{WholeTransaction: true},
+			PublicKeyIndex: uint64(i),
+		})
+		SignTransaction(w.cm.TipState(), &parentTxn, i, w.keys[sci.UnlockConditions.UnlockHash()])
 	}
 
 	// Create the defrag transaction.
-	refundAddr, err := w.nextPrimarySeedAddress(w.dbTx)
+	refundAddr, err := w.nextAddress()
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +110,7 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 
 	// Compute the transaction fee.
 	sizeAvgOutput := uint64(250)
-	fee := minFee.Mul64(sizeAvgOutput * defragBatchSize)
+	fee = fee.Mul64(sizeAvgOutput * defragBatchSize)
 
 	txn := types.Transaction{
 		SiacoinInputs: []types.SiacoinInput{{
@@ -119,17 +123,23 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 		}},
 		MinerFees: []types.Currency{fee},
 	}
-	addSignatures(&txn, modules.FullCoveredFields(), parentUnlockConditions, types.Hash256(parentTxn.SiacoinOutputID(0)), w.keys[parentUnlockConditions.UnlockHash()], consensusHeight)
+	txn.Signatures = append(txn.Signatures, types.TransactionSignature{
+		ParentID:      types.Hash256(parentTxn.SiacoinOutputID(0)),
+		CoveredFields: types.CoveredFields{WholeTransaction: true},
+	})
+	SignTransaction(w.cm.TipState(), &txn, 0, w.keys[parentUnlockConditions.UnlockHash()])
 
 	// Mark all outputs that were spent as spent.
 	for _, scoid := range spentScoids {
-		if err = dbPutSpentOutput(w.dbTx, types.Hash256(scoid), consensusHeight); err != nil {
+		if err := w.insertSpentOutput(types.Hash256(scoid)); err != nil {
 			return nil, err
 		}
+
 	}
+
 	// Mark the parent output as spent. Must be done after the transaction is
 	// finished because otherwise the txid and output id will change.
-	if err = dbPutSpentOutput(w.dbTx, types.Hash256(parentTxn.SiacoinOutputID(0)), consensusHeight); err != nil {
+	if err := w.insertSpentOutput(types.Hash256(parentTxn.SiacoinOutputID(0))); err != nil {
 		return nil, err
 	}
 
@@ -142,28 +152,11 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 // operation is only performed if the wallet has greater than defragThreshold
 // outputs.
 func (w *Wallet) threadedDefragWallet() {
-	// Don't defrag if it was disabled.
-	w.mu.RLock()
-	disabled := w.defragDisabled
-	w.mu.RUnlock()
-	if disabled {
-		return
-	}
-
 	err := w.tg.Add()
 	if err != nil {
 		return
 	}
 	defer w.tg.Done()
-
-	// Check if a defrag makes sense.
-	w.mu.RLock()
-	unlocked := w.unlocked
-	w.mu.RUnlock()
-	if !unlocked {
-		// Can't defrag if the wallet is locked.
-		return
-	}
 
 	// Create the defrag transaction.
 	txnSet, err := w.managedCreateDefragTransaction()
@@ -175,7 +168,9 @@ func (w *Wallet) threadedDefragWallet() {
 		defer w.mu.Unlock()
 		for _, txn := range txnSet {
 			for _, sci := range txn.SiacoinInputs {
-				dbDeleteSpentOutput(w.dbTx, types.Hash256(sci.ParentID))
+				if err := w.removeSpentOutput(types.Hash256(sci.ParentID)); err != nil {
+					w.log.Error("couldn't remove spent output", zap.Error(err))
+				}
 			}
 		}
 	}()
@@ -183,18 +178,17 @@ func (w *Wallet) threadedDefragWallet() {
 		// Begin.
 		return
 	} else if err != nil {
-		w.log.Println("WARN: couldn't create defrag transaction:", err)
+		w.log.Warn("couldn't create defrag transaction", zap.Error(err))
 		return
 	}
 
 	// Submit the defrag to the transaction pool.
-	err = w.tpool.AcceptTransactionSet(txnSet)
+	_, err = w.cm.AddPoolTransactions(txnSet)
 	if err != nil {
-		w.log.Println("WARN: defrag transaction was rejected:", err)
+		w.Release(txnSet)
+		w.log.Error("invalid transaction set", zap.Error(err))
 		return
 	}
-	w.log.Println("INFO: submitting a transaction set to defragment the wallet's outputs, IDs:")
-	for _, txn := range txnSet {
-		w.log.Println("Wallet defrag: \t", txn.ID())
-	}
+	w.s.BroadcastTransactionSet(txnSet)
+	w.log.Info("submitting a transaction set to defragment the wallet's outputs")
 }

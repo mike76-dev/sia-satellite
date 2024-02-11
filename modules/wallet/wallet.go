@@ -4,154 +4,78 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
-
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
+	"go.uber.org/zap"
 )
 
-const (
-	// RespendTimeout records the number of blocks that the wallet will wait
-	// before spending an output that has been spent in the past. If the
-	// transaction spending the output has not made it to the transaction pool
-	// after the limit, the assumption is that it never will.
-	RespendTimeout = 100
+type (
+	// Wallet manages funds and signs transactions.
+	Wallet struct {
+		cm  *chain.Manager
+		s   modules.Syncer
+		db  *sql.DB
+		tx  *sql.Tx
+		log *zap.Logger
+
+		mu      sync.Mutex
+		tg      siasync.ThreadGroup
+		updates []*chain.ApplyUpdate
+		closeFn func()
+
+		seed         modules.Seed
+		addrs        map[types.Address]uint64
+		keys         map[types.Address]types.PrivateKey
+		unusedKeys   map[types.Address]types.UnlockConditions
+		lookahead    map[types.Address]uint64
+		watchedAddrs map[types.Address]uint64
+		sces         map[types.Address]types.SiacoinElement
+		sfes         map[types.Address]types.SiafundElement
+		used         map[types.Hash256]bool
+		tip          types.ChainIndex
+		dbError      bool
+	}
 )
 
-var (
-	errNilDB           = errors.New("wallet cannot initialize with a nil database")
-	errNilConsensusSet = errors.New("wallet cannot initialize with a nil consensus set")
-	errNilTpool        = errors.New("wallet cannot initialize with a nil transaction pool")
-)
-
-// spendableKey is a set of secret keys plus the corresponding unlock
-// conditions.  The public key can be derived from the secret key and then
-// matched to the corresponding public keys in the unlock conditions. All
-// addresses that are to be used in 'FundTransaction' must conform to this
-// form of spendable key.
-type spendableKey struct {
-	UnlockConditions types.UnlockConditions
-	SecretKeys       []types.PrivateKey
-}
-
-// EncodeTo implements types.EncoderTo.
-func (sk *spendableKey) EncodeTo(e *types.Encoder) {
-	sk.UnlockConditions.EncodeTo(e)
-	e.WritePrefix(len(sk.SecretKeys))
-	for _, key := range sk.SecretKeys {
-		e.WriteBytes(key[:])
+// Close shuts down the wallet.
+func (w *Wallet) Close() error {
+	err := w.tg.Stop()
+	if err != nil {
+		w.log.Error("couldn't stop threads", zap.Error(err))
 	}
+	err = w.save()
+	w.closeFn()
+	return err
 }
 
-// DecodeFrom implements types.DecoderFrom.
-func (sk *spendableKey) DecodeFrom(d *types.Decoder) {
-	sk.UnlockConditions.DecodeFrom(d)
-	sk.SecretKeys = make([]types.PrivateKey, d.ReadPrefix())
-	for i := 0; i < len(sk.SecretKeys); i++ {
-		sk.SecretKeys[i] = types.PrivateKey(d.ReadBytes())
-	}
-}
-
-// Wallet is an object that tracks balances, creates keys and addresses,
-// manages building and sending transactions.
-type Wallet struct {
-	// encrypted indicates whether the wallet has been encrypted (i.e.
-	// initialized). unlocked indicates whether the wallet is currently
-	// storing secret keys in memory. subscribed indicates whether the wallet
-	// has subscribed to the consensus set yet - the wallet is unable to
-	// subscribe to the consensus set until it has been unlocked for the first
-	// time. The primary seed is used to generate new addresses for the
-	// wallet.
-	encrypted   bool
-	unlocked    bool
-	primarySeed modules.Seed
-
-	// Fields that handle the subscriptions to the cs and tpool. subscribedMu
-	// needs to be locked when subscribed is accessed and while calling the
-	// subscribing methods on the tpool and consensusset.
-	subscribedMu sync.Mutex
-	subscribed   bool
-
-	// The wallet's dependencies.
-	db    *sql.DB
-	cs    modules.ConsensusSet
-	tpool modules.TransactionPool
-
-	// The following set of fields are responsible for tracking the confirmed
-	// outputs, and for being able to spend them. The seeds are used to derive
-	// the keys that are tracked on the blockchain. All keys are pregenerated
-	// from the seeds, when checking new outputs or spending outputs, the seeds
-	// are not referenced at all. The seeds are only stored so that the user
-	// may access them.
-	seeds        []modules.Seed
-	unusedKeys   map[types.Address]types.UnlockConditions
-	keys         map[types.Address]spendableKey
-	lookahead    map[types.Address]uint64
-	watchedAddrs map[types.Address]struct{}
-
-	// unconfirmedProcessedTransactions tracks unconfirmed transactions.
-	unconfirmedSets                  map[modules.TransactionSetID][]types.TransactionID
-	unconfirmedProcessedTransactions processedTransactionList
-
-	// The wallet's database tracks its seeds, keys, outputs, and
-	// transactions. A global db transaction is maintained in memory to avoid
-	// excessive disk writes. Any operations involving dbTx must hold an
-	// exclusive lock.
-	//
-	// If dbRollback is set, then when the database syncs it will perform a
-	// rollback instead of a commit. For safety reasons, the db will close and
-	// the wallet will close if a rollback is performed.
-	// Syncing flag indicates if the database syncing is currently going on.
-	dbRollback bool
-	syncing    bool
-	dbTx       *sql.Tx
-
-	log *persist.Logger
-	mu  sync.RWMutex
-
-	// A separate TryMutex is used to protect against concurrent unlocking or
-	// initialization.
-	scanLock siasync.TryMutex
-
-	// The wallet's ThreadGroup tells tracked functions to shut down and
-	// blocks until they have all exited before returning from Close.
-	tg siasync.ThreadGroup
-
-	// defragDisabled determines if the wallet is set to defrag outputs once it
-	// reaches a certain threshold
-	defragDisabled bool
-}
-
-// Height return the internal processed consensus height of the wallet.
-func (w *Wallet) Height() (uint64, error) {
-	if err := w.tg.Add(); err != nil {
-		return 0, modules.ErrWalletShutdown
-	}
-	defer w.tg.Done()
-
+// Tip returns the current tip of the wallet.
+func (w *Wallet) Tip() types.ChainIndex {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	err := w.syncDB()
-	if err != nil {
-		return 0, err
-	}
+	return w.tip
+}
 
-	var height uint64
-	tx, err := w.db.Begin()
-	if err != nil {
-		return 0, err
+// Subscribe resubscribes the indexer starting at the given height.
+func (w *Wallet) Subscribe(startHeight uint64) error {
+	var index types.ChainIndex
+	if startHeight > 0 {
+		var ok bool
+		index, ok = w.cm.BestIndex(startHeight - 1)
+		if !ok {
+			return errors.New("invalid height")
+		}
 	}
-	err = tx.QueryRow("SELECT height FROM wt_info WHERE id = 1").Scan(&height)
-	tx.Commit()
-	if err != nil {
-		return 0, err
-	}
-
-	return height, nil
+	w.cm.RemoveSubscriber(w)
+	return w.cm.AddSubscriber(w, index)
 }
 
 // LastAddresses returns the last n addresses starting at the last seedProgress
@@ -160,7 +84,7 @@ func (w *Wallet) Height() (uint64, error) {
 // be retrieved in reverse order by simply supplying math.MaxUint64 for n.
 func (w *Wallet) LastAddresses(n uint64) ([]types.Address, error) {
 	if err := w.tg.Add(); err != nil {
-		return nil, modules.ErrWalletShutdown
+		return nil, err
 	}
 	defer w.tg.Done()
 
@@ -168,15 +92,14 @@ func (w *Wallet) LastAddresses(n uint64) ([]types.Address, error) {
 	defer w.mu.Unlock()
 
 	// Get the current seed progress from disk.
-	var seedProgress uint64
 	tx, err := w.db.Begin()
 	if err != nil {
-		return []types.Address{}, err
+		return nil, err
 	}
-	err = tx.QueryRow("SELECT progress FROM wt_info WHERE id = 1").Scan(&seedProgress)
+	seedProgress, err := w.getSeedProgress()
 	tx.Commit()
 	if err != nil {
-		return []types.Address{}, err
+		return nil, err
 	}
 
 	// At most seedProgess addresses can be requested.
@@ -186,75 +109,25 @@ func (w *Wallet) LastAddresses(n uint64) ([]types.Address, error) {
 	start := seedProgress - n
 
 	// Generate the keys.
-	keys := generateKeys(w.primarySeed, start, n)
-	uhs := make([]types.Address, 0, len(keys))
+	keys := generateKeys(w.seed, start, n)
+	addrs := make([]types.Address, 0, len(keys))
 	for i := len(keys) - 1; i >= 0; i-- {
-		uhs = append(uhs, keys[i].UnlockConditions.UnlockHash())
+		addrs = append(addrs, types.StandardUnlockHash(keys[i].PublicKey()))
 	}
 
-	return uhs, nil
+	return addrs, nil
 }
 
-// New creates a new wallet. Keys and addresses are not loaded into the
-// wallet during the call to 'New', but rather during the call to 'Unlock'.
-func New(db *sql.DB, cs modules.ConsensusSet, tpool modules.TransactionPool, dir string) (*Wallet, error) {
-	// Check for nil dependencies.
-	if db == nil {
-		return nil, errNilDB
-	}
-	if cs == nil {
-		return nil, errNilConsensusSet
-	}
-	if tpool == nil {
-		return nil, errNilTpool
-	}
-
-	// Initialize the data structure.
-	w := &Wallet{
-		db:    db,
-		cs:    cs,
-		tpool: tpool,
-
-		keys:         make(map[types.Address]spendableKey),
-		lookahead:    make(map[types.Address]uint64),
-		unusedKeys:   make(map[types.Address]types.UnlockConditions),
-		watchedAddrs: make(map[types.Address]struct{}),
-
-		unconfirmedSets: make(map[modules.TransactionSetID][]types.TransactionID),
-	}
-	err := w.initPersist(dir)
-	if err != nil {
-		return nil, err
-	}
-	return w, nil
-}
-
-// Close terminates all ongoing processes involving the wallet, enabling
-// garbage collection.
-func (w *Wallet) Close() error {
-	w.cs.Unsubscribe(w)
-	w.tpool.Unsubscribe(w)
-	var lockErr error
-	// Lock the wallet outside of mu.Lock because Lock uses its own mu.Lock.
-	// Once the wallet is locked it cannot be unlocked except using the
-	// unexported unlock method (w.Unlock returns an error if the wallet's
-	// ThreadGroup is stopped).
-	if w.managedUnlocked() {
-		lockErr = w.managedLock()
-	}
-	return modules.ComposeErrors(lockErr, w.tg.Stop())
-}
-
-// AllAddresses returns all addresses that the wallet is able to spend from,
-// including unseeded addresses. Addresses are returned sorted in byte-order.
+// AllAddresses returns all addresses that the wallet is able to spend from.
+// Addresses are returned sorted in byte-order.
 func (w *Wallet) AllAddresses() ([]types.Address, error) {
 	if err := w.tg.Add(); err != nil {
-		return []types.Address{}, modules.ErrWalletShutdown
+		return nil, err
 	}
 	defer w.tg.Done()
 
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	addrs := make([]types.Address, 0, len(w.keys))
 	for addr := range w.keys {
@@ -266,51 +139,185 @@ func (w *Wallet) AllAddresses() ([]types.Address, error) {
 	return addrs, nil
 }
 
-// Rescanning reports whether the wallet is currently rescanning the
-// blockchain.
-func (w *Wallet) Rescanning() (bool, error) {
-	if err := w.tg.Add(); err != nil {
-		return false, modules.ErrWalletShutdown
-	}
-	defer w.tg.Done()
-
-	rescanning := !w.scanLock.TryLock()
-	if !rescanning {
-		w.scanLock.Unlock()
-	}
-	return rescanning, nil
-}
-
-// Settings returns the wallet's current settings.
-func (w *Wallet) Settings() (modules.WalletSettings, error) {
-	if err := w.tg.Add(); err != nil {
-		return modules.WalletSettings{}, modules.ErrWalletShutdown
-	}
-	defer w.tg.Done()
-	return modules.WalletSettings{
-		NoDefrag: w.defragDisabled,
-	}, nil
-}
-
-// SetSettings will update the settings for the wallet.
-func (w *Wallet) SetSettings(s modules.WalletSettings) error {
-	if err := w.tg.Add(); err != nil {
-		return modules.ErrWalletShutdown
-	}
-	defer w.tg.Done()
-
+// Addresses returns the addresses of the wallet.
+func (w *Wallet) Addresses() (addrs []types.Address) {
 	w.mu.Lock()
-	w.defragDisabled = s.NoDefrag
-	w.mu.Unlock()
-	return nil
+	defer w.mu.Unlock()
+
+	for addr := range w.watchedAddrs {
+		addrs = append(addrs, addr)
+	}
+
+	return
 }
 
-// managedCanSpendUnlockHash returns true if and only if the the wallet
-// has keys to spend from outputs with the given address.
-func (w *Wallet) managedCanSpendUnlockHash(unlockHash types.Address) bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+// UnspentSiacoinOutputs returns the unspent SC outputs of the wallet.
+func (w *Wallet) UnspentSiacoinOutputs() (sces []types.SiacoinElement) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	_, isSpendable := w.keys[unlockHash]
-	return isSpendable
+	for _, sce := range w.sces {
+		sces = append(sces, sce)
+	}
+
+	return
+}
+
+// UnspentSiafundOutputs returns the unspent SF outputs of the wallet.
+func (w *Wallet) UnspentSiafundOutputs() (sfes []types.SiafundElement) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	for _, sfe := range w.sfes {
+		sfes = append(sfes, sfe)
+	}
+
+	return
+}
+
+// Annotate annotates the given transactions with the wallet.
+func (w *Wallet) Annotate(pool []types.Transaction) []modules.PoolTransaction {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var annotated []modules.PoolTransaction
+	for _, txn := range pool {
+		ptxn := Annotate(txn, func(a types.Address) bool {
+			_, ok := w.addrs[a]
+			return ok
+		})
+		if ptxn.Type != "unrelated" {
+			annotated = append(annotated, ptxn)
+		}
+	}
+
+	return annotated
+}
+
+// New creates a new wallet.
+func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, seed, dir string) (*Wallet, error) {
+	var entropy modules.Seed
+	if err := modules.SeedFromPhrase(&entropy, seed); err != nil {
+		return nil, modules.AddContext(err, "unable to decode seed phrase")
+	}
+
+	logger, closeFn, err := persist.NewFileLogger(filepath.Join(dir, "wallet.log"))
+	if err != nil {
+		return nil, modules.AddContext(err, "unable to create logger")
+	}
+
+	w := &Wallet{
+		cm:           cm,
+		s:            s,
+		db:           db,
+		log:          logger,
+		closeFn:      closeFn,
+		used:         make(map[types.Hash256]bool),
+		addrs:        make(map[types.Address]uint64),
+		keys:         make(map[types.Address]types.PrivateKey),
+		lookahead:    make(map[types.Address]uint64),
+		unusedKeys:   make(map[types.Address]types.UnlockConditions),
+		watchedAddrs: make(map[types.Address]uint64),
+		sces:         make(map[types.Address]types.SiacoinElement),
+		sfes:         make(map[types.Address]types.SiafundElement),
+	}
+
+	if err := w.load(); err != nil {
+		return nil, modules.AddContext(err, "unable to load wallet")
+	}
+
+	go w.threadedSaveWallet()
+
+	if entropy != w.seed {
+		w.log.Info("new seed detected, rescanning")
+		w.tip = types.ChainIndex{}
+		w.addrs = make(map[types.Address]uint64)
+		w.keys = make(map[types.Address]types.PrivateKey)
+		w.lookahead = make(map[types.Address]uint64)
+		w.sces = make(map[types.Address]types.SiacoinElement)
+		w.sfes = make(map[types.Address]types.SiafundElement)
+		if err := w.reset(); err != nil {
+			return nil, modules.AddContext(err, "couldn't reset database before rescanning")
+		}
+
+		go func() {
+			if err := w.tg.Add(); err != nil {
+				w.log.Error("couldn't start thread", zap.Error(err))
+				return
+			}
+			defer w.tg.Done()
+
+			fmt.Println("Wallet: waiting for the consensus to sync before scanning...")
+			for {
+				if w.synced() {
+					break
+				}
+				select {
+				case <-w.tg.StopChan():
+					return
+				case <-time.After(5 * time.Second):
+				}
+			}
+
+			copy(w.seed[:], entropy[:])
+			dustThreshold := w.DustThreshold()
+			scanner := newSeedScanner(w.seed, dustThreshold)
+			if err := scanner.scan(cm); err != nil {
+				w.log.Error("blockchain scan failed", zap.Error(err))
+				return
+			}
+
+			progress := scanner.largestIndexSeen + 1
+			progress += progress / 10
+			w.log.Info("blockchain scan finished", zap.Uint64("index", scanner.largestIndexSeen), zap.Uint64("progress", progress))
+			w.generate(progress)
+			if err := w.saveSeed(progress); err != nil {
+				w.log.Error("couldn't save new seed", zap.Error(err))
+				return
+			}
+
+			if err := cm.AddSubscriber(w, w.tip); err != nil {
+				w.log.Error("failed to subscribe to chain manager", zap.Error(err))
+				return
+			}
+		}()
+
+		return w, nil
+	}
+
+	go func() {
+		if err := cm.AddSubscriber(w, w.tip); err != nil {
+			w.log.Error("failed to subscribe to chain manager", zap.Error(err))
+		}
+	}()
+
+	return w, nil
+}
+
+// synced returns true if we are synced with the blockchain.
+func (w *Wallet) synced() bool {
+	lastBlockTimestamp := w.cm.TipState().PrevTimestamps[0]
+	return time.Since(lastBlockTimestamp) < 24*time.Hour && w.s.Synced()
+}
+
+// threadedSaveWallet periodically saves the wallet state.
+func (w *Wallet) threadedSaveWallet() {
+	err := w.tg.Add()
+	if err != nil {
+		return
+	}
+	defer w.tg.Done()
+
+	for {
+		select {
+		case <-w.tg.StopChan():
+			return
+		case <-time.After(2 * time.Minute):
+		}
+		w.mu.Lock()
+		if err := w.save(); err != nil {
+			w.log.Error("couldn't save wallet", zap.Error(err))
+		}
+		w.mu.Unlock()
+	}
 }

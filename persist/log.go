@@ -1,56 +1,49 @@
 package persist
 
 import (
-	"io"
-
 	"github.com/mike76-dev/sia-satellite/internal/build"
 
-	"gitlab.com/NebulousLabs/log"
-)
-
-// Logger is a wrapper for log.Logger.
-type Logger struct {
-	*log.Logger
-}
-
-var (
-	// options contains log options with build-specific information.
-	options = log.Options{
-		BinaryName:   build.BinaryName,
-		BugReportURL: build.IssuesURL,
-		Debug:        false,
-		Release:      log.Release,
-		Version:      build.NodeVersion,
-	}
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // printCommitHash logs build.GitRevision at startup.
-func printCommitHash(logger *log.Logger) {
+func printCommitHash(logger *zap.Logger) {
 	if build.GitRevision != "" {
-		logger.Printf("STARTUP: Commit hash %v", build.GitRevision)
+		logger.Sugar().Infof("STARTUP: commit hash %v", build.GitRevision)
 	} else {
-		logger.Println("STARTUP: Unknown commit hash")
+		logger.Sugar().Info("STARTUP: unknown commit hash")
 	}
 }
 
 // NewFileLogger returns a logger that logs to logFilename. The file is opened
 // in append mode, and created if it does not exist.
-func NewFileLogger(logFilename string) (*Logger, error) {
-	logger, err := log.NewFileLogger(logFilename, options)
+func NewFileLogger(logFilename string) (*zap.Logger, func(), error) {
+	writer, closeFn, err := zap.Open(logFilename)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	printCommitHash(logger)
-	return &Logger{logger}, nil
-}
 
-// NewLogger returns a logger that can be closed. Calls should not be made to
-// the logger after 'Close' has been called.
-func NewLogger(w io.Writer) (*Logger, error) {
-	logger, err := log.NewLogger(w, options)
-	if err != nil {
-		return nil, err
-	}
+	config := zap.NewProductionEncoderConfig()
+	config.EncodeTime = zapcore.RFC3339TimeEncoder
+	config.StacktraceKey = ""
+	fileEncoder := zapcore.NewJSONEncoder(config)
+
+	core := zapcore.NewTee(
+		zapcore.NewCore(fileEncoder, writer, zapcore.DebugLevel),
+	)
+
+	logger := zap.New(
+		core,
+		zap.AddCaller(),
+		zap.AddStacktrace(zapcore.ErrorLevel),
+	)
+
 	printCommitHash(logger)
-	return &Logger{logger}, nil
+
+	return logger, func() {
+		logger.Sugar().Info("logging terminated")
+		logger.Sync()
+		closeFn()
+	}, nil
 }

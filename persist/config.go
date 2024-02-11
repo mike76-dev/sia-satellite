@@ -8,8 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/mike76-dev/sia-satellite/modules"
 )
 
 // configFilename is the name of the configuration file.
@@ -18,13 +16,11 @@ const configFilename = "satdconfig.json"
 // SatdConfig contains the fields that are passed on to the new node.
 type SatdConfig struct {
 	Name          string `json:"name"`
-	UserAgent     string `json:"agent"`
 	GatewayAddr   string `json:"gateway"`
 	APIAddr       string `json:"api"`
 	SatelliteAddr string `json:"satellite"`
 	MuxAddr       string `json:"mux"`
 	Dir           string `json:"dir"`
-	Bootstrap     bool   `json:"bootstrap"`
 	DBUser        string `json:"dbUser"`
 	DBName        string `json:"dbName"`
 	PortalPort    string `json:"portal"`
@@ -40,7 +36,17 @@ type satdMetadata = struct {
 // metadata contains the actual values.
 var metadata = satdMetadata{
 	Header:  "Satd Configuration",
-	Version: "0.3.0",
+	Version: "0.4.0",
+}
+
+func compose(err1, err2 error) error {
+	if err1 == nil {
+		return err2
+	}
+	if err2 == nil {
+		return nil
+	}
+	return fmt.Errorf("%v: %v", err1, err2)
 }
 
 // Load loads the configuration from disk.
@@ -76,7 +82,7 @@ func loadJSON(meta satdMetadata, object interface{}, filename string) error {
 		return fmt.Errorf("unable to open persisted json object file: %s", err)
 	}
 	defer func() {
-		err = modules.ComposeErrors(err, file.Close())
+		err = compose(err, file.Close())
 	}()
 
 	// Read the metadata from the file.
@@ -86,13 +92,13 @@ func loadJSON(meta satdMetadata, object interface{}, filename string) error {
 		return fmt.Errorf("unable to read header from persisted json object file: %s", err)
 	}
 	if header != meta.Header {
-		return errors.New("Wrong config file header")
+		return errors.New("wrong config file header")
 	}
 	if err := dec.Decode(&version); err != nil {
 		return fmt.Errorf("unable to read version from persisted json object file: %s", err)
 	}
 	if version != meta.Version {
-		return errors.New("Wrong config file version")
+		return errors.New("wrong config file version")
 	}
 
 	// Read everything else.
@@ -139,7 +145,7 @@ func saveJSON(meta satdMetadata, object interface{}, filename string) error {
 			return fmt.Errorf("unable to open file: %s", err)
 		}
 		defer func() {
-			err = modules.ComposeErrors(err, file.Close())
+			err = compose(err, file.Close())
 		}()
 		_, err = file.Write(data)
 		if err != nil {

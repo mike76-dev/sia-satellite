@@ -1,270 +1,65 @@
-/* gateway */
-
-DROP TABLE IF EXISTS gw_nodes;
-DROP TABLE IF EXISTS gw_url;
-DROP TABLE IF EXISTS gw_blocklist;
-
-CREATE TABLE gw_nodes (
-	address  VARCHAR(255) NOT NULL,
-	outbound BOOL,
-	PRIMARY KEY (address)
-);
-
-CREATE TABLE gw_url (
-	router_url VARCHAR(255) NOT NULL
-);
-
-INSERT INTO gw_url (router_url) VALUES ('');
-
-CREATE TABLE gw_blocklist (
-	ip VARCHAR(255) NOT NULL,
-	PRIMARY KEY (ip)
-);
-
-/* consensus */
-
-DROP TABLE IF EXISTS cs_height;
-DROP TABLE IF EXISTS cs_consistency;
-DROP TABLE IF EXISTS cs_sfpool;
-DROP TABLE IF EXISTS cs_changelog;
-DROP TABLE IF EXISTS cs_dsco;
-DROP TABLE IF EXISTS cs_fcex;
-DROP TABLE IF EXISTS cs_oak;
-DROP TABLE IF EXISTS cs_oak_init;
-DROP TABLE IF EXISTS cs_sco;
-DROP TABLE IF EXISTS cs_fc;
-DROP TABLE IF EXISTS cs_sfo;
-DROP TABLE IF EXISTS cs_fuh;
-DROP TABLE IF EXISTS cs_fuh_current;
-DROP TABLE IF EXISTS cs_map;
-DROP TABLE IF EXISTS cs_path;
-DROP TABLE IF EXISTS cs_cl;
-DROP TABLE IF EXISTS cs_dos;
-
-CREATE TABLE cs_height (
-	id     INT NOT NULL AUTO_INCREMENT,
-	height BIGINT UNSIGNED NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE cs_consistency (
-	id            INT NOT NULL AUTO_INCREMENT,
-	inconsistency BOOL NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE cs_sfpool (
-	id    INT NOT NULL AUTO_INCREMENT,
-	bytes VARBINARY(24) NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE cs_changelog (
-	id    INT NOT NULL AUTO_INCREMENT,
-	bytes BINARY(32) NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE cs_dsco (
-	height BIGINT UNSIGNED NOT NULL,
-	scoid  BINARY(32) NOT NULL,
-	bytes  VARBINARY(56) NOT NULL,
-	PRIMARY KEY (scoid ASC)
-);
-
-CREATE TABLE cs_fcex (
-	height BIGINT UNSIGNED NOT NULL,
-	fcid   BINARY(32) NOT NULL,
-	bytes  BLOB NOT NULL,
-	PRIMARY KEY (fcid ASC)
-);
-
-CREATE TABLE cs_oak (
-	bid   BINARY(32) NOT NULL UNIQUE,
-	bytes BINARY(40) NOT NULL,
-	PRIMARY KEY (bid ASC)
-);
-
-CREATE TABLE cs_oak_init (
-	id   INT NOT NULL AUTO_INCREMENT,
-	init BOOL NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE cs_sco (
-	scoid BINARY(32) NOT NULL,
-	bytes VARBINARY(56) NOT NULL,
-	PRIMARY KEY (scoid ASC)
-);
-
-CREATE TABLE cs_fc (
-	fcid  BINARY(32) NOT NULL,
-	bytes BLOB NOT NULL,
-	PRIMARY KEY (fcid ASC)
-);
-
-CREATE TABLE cs_sfo (
-	sfoid BINARY(32) NOT NULL,
-	bytes VARBINARY(80) NOT NULL,
-	PRIMARY KEY (sfoid ASC)
-);
-
-CREATE TABLE cs_fuh (
-	height BIGINT UNSIGNED NOT NULL,
-	bytes  BINARY(64) NOT NULL,
-	PRIMARY KEY (height ASC)
-);
-
-CREATE TABLE cs_fuh_current (
-	id     INT NOT NULL AUTO_INCREMENT,
-	bytes  BINARY(64) NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE cs_path (
-	height BIGINT UNSIGNED NOT NULL,
-	bid    BINARY(32) NOT NULL,
-	PRIMARY KEY (height ASC)
-);
-
-CREATE TABLE cs_map (
-	id    INT NOT NULL AUTO_INCREMENT,
-	bid   BINARY(32) NOT NULL UNIQUE,
-	bytes LONGBLOB NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE cs_cl (
-	ceid  BINARY(32) NOT NULL,
-	bytes VARBINARY(1024) NOT NULL,
-	PRIMARY KEY (ceid ASC)
-);
-
-CREATE TABLE cs_dos (
-	bid BINARY(32) NOT NULL,
-	PRIMARY KEY (bid ASC)
-);
-
-/* transactionpool */
-
-DROP TABLE IF EXISTS tp_height;
-DROP TABLE IF EXISTS tp_ctx;
-DROP TABLE IF EXISTS tp_median;
-DROP TABLE IF EXISTS tp_cc;
-DROP TABLE IF EXISTS tp_recent;
-
-CREATE TABLE tp_height (
-	id     INT NOT NULL AUTO_INCREMENT,
-	height BIGINT UNSIGNED NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE tp_ctx (
-	txid BINARY(32) NOT NULL,
-	PRIMARY KEY (txid),
-	INDEX txid (txid ASC)
-);
-
-CREATE TABLE tp_median (
-	id    INT NOT NULL AUTO_INCREMENT,
-	bytes BLOB NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE tp_cc (
-	id   INT NOT NULL AUTO_INCREMENT,
-	ceid BINARY(32) NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE tp_recent (
-	id  INT NOT NULL AUTO_INCREMENT,
-	bid BINARY(32) NOT NULL,
-	PRIMARY KEY (id)
-);
-
 /* wallet */
 
-DROP TABLE IF EXISTS wt_addr;
-DROP TABLE IF EXISTS wt_txn;
-DROP TABLE IF EXISTS wt_sco;
-DROP TABLE IF EXISTS wt_sfo;
-DROP TABLE IF EXISTS wt_spo;
-DROP TABLE IF EXISTS wt_uc;
+DROP TABLE IF EXISTS wt_sces;
+DROP TABLE IF EXISTS wt_sfes;
+DROP TABLE IF EXISTS wt_watched;
+DROP TABLE IF EXISTS wt_addresses;
+DROP TABLE IF EXISTS wt_tip;
 DROP TABLE IF EXISTS wt_info;
-DROP TABLE IF EXISTS wt_watch;
-DROP TABLE IF EXISTS wt_aux;
-DROP TABLE IF EXISTS wt_keys;
+DROP TABLE IF EXISTS wt_spent;
 
-CREATE TABLE wt_txn (
-	id    INT NOT NULL AUTO_INCREMENT,
-	txid  BINARY(32) NOT NULL UNIQUE,
-	bytes BLOB NOT NULL,
+CREATE TABLE wt_addresses (
+	id   BIGINT NOT NULL AUTO_INCREMENT,
+	addr BINARY(32) NOT NULL UNIQUE,
 	PRIMARY KEY (id)
 );
 
-CREATE TABLE wt_addr (
-	id   INT NOT NULL AUTO_INCREMENT,
-	addr BINARY(32) NOT NULL,
-	txid BINARY(32) NOT NULL,
+CREATE TABLE wt_sces (
+	id              BIGINT NOT NULL AUTO_INCREMENT,
+	scoid           BINARY(32) NOT NULL UNIQUE,
+	sc_value        BLOB NOT NULL,
+	merkle_proof    BLOB NOT NULL,
+	leaf_index      BIGINT UNSIGNED NOT NULL,
+	maturity_height BIGINT UNSIGNED NOT NULL,
+	address_id      BIGINT NOT NULL,
 	PRIMARY KEY (id),
-	FOREIGN KEY (txid) REFERENCES wt_txn(txid)
+	FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
 );
 
-CREATE TABLE wt_sco (
-	scoid BINARY(32) NOT NULL,
-	bytes VARBINARY(56) NOT NULL,
-	PRIMARY KEY (scoid ASC)
+CREATE TABLE wt_sfes (
+	id              BIGINT NOT NULL AUTO_INCREMENT,
+	sfoid           BINARY(32) NOT NULL UNIQUE,
+	claim_start     BLOB NOT NULL,
+	merkle_proof    BLOB NOT NULL,
+	leaf_index      BIGINT UNSIGNED NOT NULL,
+	sf_value        BIGINT UNSIGNED NOT NULL,
+	address_id      BIGINT NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
 );
 
-CREATE TABLE wt_sfo (
-	sfoid BINARY(32) NOT NULL,
-	bytes VARBINARY(80) NOT NULL,
-	PRIMARY KEY (sfoid ASC)
+CREATE TABLE wt_watched (
+	address_id BIGINT NOT NULL UNIQUE,
+	FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
 );
 
-CREATE TABLE wt_spo (
-	oid    BINARY(32) NOT NULL,
-	height BIGINT UNSIGNED NOT NULL,
-	PRIMARY KEY (oid ASC)
-);
-
-CREATE TABLE wt_uc (
-	addr  BINARY(32) NOT NULL,
-	bytes BLOB NOT NULL,
-	PRIMARY KEY (addr ASC)
+CREATE TABLE wt_tip (
+	id        INT NOT NULL AUTO_INCREMENT,
+	height    BIGINT UNSIGNED NOT NULL,
+	bid       BINARY(32) NOT NULL,
+	PRIMARY KEY (id)
 );
 
 CREATE TABLE wt_info (
-	id        INT NOT NULL AUTO_INCREMENT,
-	cc        BINARY(32) NOT NULL,
-	height    BIGINT UNSIGNED NOT NULL,
-	encrypted BLOB NOT NULL,
-	sfpool    VARBINARY(24) NOT NULL,
-	salt      BINARY(32) NOT NULL,
-	progress  BIGINT UNSIGNED NOT NULL,
-	seed      BLOB NOT NULL,
-	pwd       BLOB NOT NULL,
+	id       INT NOT NULL AUTO_INCREMENT,
+	seed     BINARY(16) NOT NULL,
+	progress BIGINT UNSIGNED NOT NULL,
 	PRIMARY KEY (id)
 );
 
-CREATE TABLE wt_aux (
-	salt      BINARY(32) NOT NULL,
-	encrypted BLOB NOT NULL,
-	seed      BLOB NOT NULL,
-	PRIMARY KEY (seed(32))
-);
-
-CREATE TABLE wt_keys (
-	salt      BINARY(32) NOT NULL,
-	encrypted BLOB NOT NULL,
-	skey      BLOB NOT NULL,
-	PRIMARY KEY (skey(32))
-);
-
-CREATE TABLE wt_watch (
-	addr BINARY(32) NOT NULL,
-	PRIMARY KEY (addr ASC)
+CREATE TABLE wt_spent (
+	id BINARY(32) NOT NULL,
+	PRIMARY KEY (id)
 );
 
 /* provider */
@@ -470,9 +265,9 @@ CREATE TABLE hdb_contracts (
 CREATE TABLE hdb_info (
 	id               INT NOT NULL AUTO_INCREMENT,
 	height           BIGINT UNSIGNED NOT NULL,
+	bid              BINARY(32) NO NULL,
 	scan_complete    BOOL NOT NULL,
 	disable_ip_check BOOL NOT NULL,
-	last_change      BINARY(32) NOT NULL,
 	filter_mode      INT NOT NULL,
 	PRIMARY KEY (id)
 );
@@ -522,7 +317,7 @@ CREATE TABLE ctr_contracts (
 CREATE TABLE ctr_info (
 	id          INT NOT NULL AUTO_INCREMENT,
 	height      BIGINT UNSIGNED NOT NULL,
-	last_change BINARY(32) NOT NULL,
+	bid         BINARY(32) NOT NULL,
 	synced      BOOL NOT NULL,
 	PRIMARY KEY (id)
 );
