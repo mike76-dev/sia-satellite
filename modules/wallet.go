@@ -15,11 +15,14 @@ var (
 
 // Wallet stores and manages Siacoins.
 type Wallet interface {
-	// AddAddress adds the given address to the wallet.
-	AddAddress(addr types.Address) error
+	// AddressBalance returns the balance of the given address.
+	AddressBalance(addr types.Address) (siacoins types.Currency, siafunds uint64)
 
 	// Addresses returns the addresses of the wallet.
 	Addresses() (addrs []types.Address)
+
+	// AddWatch adds the given watched address to the wallet.
+	AddWatch(addr types.Address) error
 
 	// Annotate annotates a transaction set.
 	Annotate(txns []types.Transaction) (ptxns []PoolTransaction)
@@ -36,11 +39,15 @@ type Wallet interface {
 	// Key returns the wallet key.
 	//Key() types.PrivateKey
 
+	// NextAddress returns an unlock hash that is ready to receive Siacoins or
+	// Siafunds.
+	NextAddress() (types.UnlockConditions, error)
+
 	// Release marks the outputs as unused.
 	Release(txnSet []types.Transaction)
 
-	// RemoveAddress removes the given address from the wallet.
-	RemoveAddress(addr types.Address) error
+	// RemoveWatch removes the given watched address from the wallet.
+	RemoveWatch(addr types.Address) error
 
 	// Reserve reserves the given ids for the given duration.
 	Reserve(ids []types.Hash256, duration time.Duration) error
@@ -54,11 +61,18 @@ type Wallet interface {
 	// Tip returns the wallet's internal processed chain index.
 	Tip() types.ChainIndex
 
+	// UnconfirmedBalance returns the balance of the wallet contained in
+	// the unconfirmed transactions.
+	UnconfirmedBalance() (outgoing, incoming types.Currency)
+
 	// UnspentSiacoinOutputs returns the unspent SC outputs of the wallet.
 	UnspentSiacoinOutputs() (sces []types.SiacoinElement)
 
 	// UnspentSiafundOutputs returns the unspent SF outputs of the wallet.
 	UnspentSiafundOutputs() (sfes []types.SiafundElement)
+
+	// WatchedAddresses returns a list of the addresses watched by the wallet.
+	WatchedAddresses() (addrs []types.Address)
 }
 
 // A PoolTransaction summarizes the wallet-relevant data in a txpool

@@ -96,10 +96,16 @@ func (w *Wallet) nextAddresses(n uint64) ([]types.UnlockConditions, error) {
 		ucs = make([]types.UnlockConditions, 0, len(keys))
 		for _, key := range keys {
 			w.keys[types.StandardUnlockHash(key.PublicKey())] = key
+			if err := w.insertAddress(types.StandardUnlockHash(key.PublicKey())); err != nil {
+				return nil, err
+			}
 			delete(w.lookahead, types.StandardUnlockHash(key.PublicKey()))
 			ucs = append(ucs, types.StandardUnlockConditions(key.PublicKey()))
 		}
 		w.regenerateLookahead(progress + n)
+		if err := w.save(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Add as many unused UCs as necessary.
@@ -197,4 +203,16 @@ func (w *Wallet) NextAddress() (types.UnlockConditions, error) {
 func (w *Wallet) ownsAddress(addr types.Address) bool {
 	_, exists := w.keys[addr]
 	return exists
+}
+
+// Addresses returns the addresses of the wallet.
+func (w *Wallet) Addresses() (addrs []types.Address) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	for addr := range w.addrs {
+		addrs = append(addrs, addr)
+	}
+
+	return
 }

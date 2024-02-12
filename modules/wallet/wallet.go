@@ -139,18 +139,6 @@ func (w *Wallet) AllAddresses() ([]types.Address, error) {
 	return addrs, nil
 }
 
-// Addresses returns the addresses of the wallet.
-func (w *Wallet) Addresses() (addrs []types.Address) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	for addr := range w.watchedAddrs {
-		addrs = append(addrs, addr)
-	}
-
-	return
-}
-
 // UnspentSiacoinOutputs returns the unspent SC outputs of the wallet.
 func (w *Wallet) UnspentSiacoinOutputs() (sces []types.SiacoinElement) {
 	w.mu.Lock()

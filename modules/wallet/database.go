@@ -25,8 +25,8 @@ func (w *Wallet) insertAddress(addr types.Address) error {
 	return nil
 }
 
-// AddAddress adds the given address to the wallet.
-func (w *Wallet) AddAddress(addr types.Address) error {
+// AddWatch adds the given watched address.
+func (w *Wallet) AddWatch(addr types.Address) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -45,8 +45,8 @@ func (w *Wallet) AddAddress(addr types.Address) error {
 	return nil
 }
 
-// RemoveAddress removes the given address from the wallet.
-func (w *Wallet) RemoveAddress(addr types.Address) error {
+// RemoveWatch removes the given watched address.
+func (w *Wallet) RemoveWatch(addr types.Address) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -64,6 +64,18 @@ func (w *Wallet) RemoveAddress(addr types.Address) error {
 	}
 
 	return nil
+}
+
+// WatchedAddresses returns a list of the addresses watched by the wallet.
+func (w *Wallet) WatchedAddresses() (addrs []types.Address) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	for addr := range w.watchedAddrs {
+		addrs = append(addrs, addr)
+	}
+
+	return addrs
 }
 
 // updateTip updates the current tip of the wallet.

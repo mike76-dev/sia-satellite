@@ -2,38 +2,22 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"reflect"
 
 	"github.com/mike76-dev/sia-satellite/internal/build"
-	"github.com/mike76-dev/sia-satellite/modules"
-	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/node/api/client"
 	"github.com/spf13/cobra"
 )
 
 var (
-	// General Flags.
-	alertSuppress bool
-	verbose       bool // Display additional information.
-
-	// Module Specific Flags.
-	//
-	// Wallet Flags.
-	initForce            bool   // Destroy and re-encrypt the wallet on init if it already exists.
-	initPassword         bool   // Supply a custom password when creating a wallet.
-	walletRawTxn         bool   // Encode/decode transactions in base64-encoded binary.
-	walletStartHeight    uint64 // Start height for transaction search.
-	walletEndHeight      uint64 // End height for transaction search.
-	walletTxnFeeIncluded bool   // Include the fee in the balance being sent.
-	insecureInput        bool   // Insecure password/seed input. Disables the shoulder-surfing and Mac secure input feature.
+	verbose bool // Display additional information.
 )
 
 var (
 	// Globals.
 	rootCmd    *cobra.Command // Root command cobra object, used by bash completion cmd.
-	httpClient client.Client
+	httpClient *client.Client
 )
 
 // Exit codes.
@@ -84,51 +68,48 @@ func statuscmd() {
 	defer fmt.Println()
 
 	// Consensus Info.
-	cg, err := httpClient.ConsensusGet()
-	if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
-		// Assume module is not loaded if status command is not recognized.
-		fmt.Printf("Consensus:\n  Status: %s\n\n", moduleNotReadyStatus)
-	} else if err != nil {
+	cg, err := httpClient.ConsensusTip()
+	if err != nil {
 		die("Could not get consensus status:", err)
-	} else {
-		fmt.Printf(`Consensus:
+	}
+	fmt.Printf(`Consensus:
   Synced: %v
   Height: %v
 `, yesNo(cg.Synced), cg.Height)
+
+	// TxPool Info.
+	fee, err := httpClient.TxpoolFee()
+	if err != nil {
+		die("Could not get mining fee:", err)
 	}
+	fmt.Printf(`Recommended fee:
+  %v / KB
+`, fee.Mul64(1e3))
 
 	// Wallet Info.
-	walletStatus, err := httpClient.WalletGet()
-	if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
-		// Assume module is not loaded if status command is not recognized.
-		fmt.Printf("Wallet:\n  Status: %s\n\n", moduleNotReadyStatus)
-	} else if err != nil {
+	walletStatus, err := httpClient.WalletBalance()
+	if err != nil {
 		die("Could not get wallet status:", err)
-	} else if walletStatus.Unlocked {
-		fmt.Printf(`Wallet:
-  Status:          unlocked
-  Siacoin Balance: %v
-`, walletStatus.ConfirmedSiacoinBalance)
-	} else {
-		fmt.Printf(`Wallet:
-  Status: Locked
-`)
 	}
+	fmt.Printf(`Wallet:
+  Siacoin Balance: %v
+  Siafund Balance: %v
+	`, walletStatus.Siacoins, walletStatus.Siafunds)
 
 	// Manager Info.
-	renters, err := httpClient.ManagerRentersGet()
-	if err != nil {
-		die(err)
-	}
-	contracts, err := httpClient.ManagerContractsGet("")
-	if err != nil {
-		die(err)
-	}
+	/*renters, err := httpClient.ManagerRentersGet()
+		if err != nil {
+			die(err)
+		}
+		contracts, err := httpClient.ManagerContractsGet("")
+		if err != nil {
+			die(err)
+		}
 
-	fmt.Printf(`Manager:
-  Renters:          %v
-  Active Contracts: %v
-`, len(renters.Renters), len(contracts.ActiveContracts))
+		fmt.Printf(`Manager:
+	  Renters:          %v
+	  Active Contracts: %v
+	`, len(renters.Renters), len(contracts.ActiveContracts))*/
 }
 
 func main() {
@@ -136,21 +117,8 @@ func main() {
 	rootCmd = initCmds()
 
 	// Initialize client.
-	initClient(rootCmd, &verbose, &httpClient, &alertSuppress)
-
-	// Perform some basic actions after cobra has initialized.
-	cobra.OnInitialize(func() {
-		// Set API password if it was not set.
-		setAPIPasswordIfNotSet()
-
-		// Check for Critical Alerts.
-		alerts, err := httpClient.DaemonAlertsGet()
-		if err == nil && len(alerts.CriticalAlerts) > 0 && !alertSuppress {
-			printAlerts(alerts.CriticalAlerts, modules.SeverityCritical)
-			fmt.Println("------------------")
-			fmt.Printf("\n  The above %v critical alerts should be resolved ASAP\n\n", len(alerts.CriticalAlerts))
-		}
-	})
+	httpClient = client.NewClient()
+	initClient(rootCmd)
 
 	// Run.
 	if err := rootCmd.Execute(); err != nil {
@@ -172,20 +140,16 @@ func initCmds() *cobra.Command {
 	}
 
 	// Daemon Commands.
-	root.AddCommand(alertsCmd, stopCmd, versionCmd)
+	root.AddCommand(versionCmd)
 
 	// Create command tree (alphabetized by root command).
 	root.AddCommand(consensusCmd)
 
-	root.AddCommand(gatewayCmd)
-	gatewayCmd.AddCommand(gatewayAddressCmd, gatewayBlocklistCmd, gatewayConnectCmd, gatewayDisconnectCmd, gatewayListCmd)
-	gatewayBlocklistCmd.AddCommand(gatewayBlocklistAppendCmd, gatewayBlocklistClearCmd, gatewayBlocklistRemoveCmd, gatewayBlocklistSetCmd)
-
-	root.AddCommand(hostdbCmd)
+	/*root.AddCommand(hostdbCmd)
 	hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
-	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
+	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")*/
 
-	root.AddCommand(managerCmd)
+	/*root.AddCommand(managerCmd)
 	managerCmd.AddCommand(managerAveragesCmd)
 	managerCmd.AddCommand(managerRentersCmd, managerRenterCmd, managerBalanceCmd, managerContractsCmd)
 	managerCmd.AddCommand(managerPreferencesCmd)
@@ -194,55 +158,27 @@ func initCmds() *cobra.Command {
 	managerCmd.AddCommand(managerSetPricesCmd)
 	managerCmd.AddCommand(managerMaintenanceCmd)
 	managerMaintenanceCmd.AddCommand(managerMaintenanceStartCmd)
-	managerMaintenanceCmd.AddCommand(managerMaintenanceStopCmd)
+	managerMaintenanceCmd.AddCommand(managerMaintenanceStopCmd)*/
 
-	root.AddCommand(portalCmd)
+	/*root.AddCommand(portalCmd)
 	portalCmd.AddCommand(portalCreditsCmd)
 	portalCmd.AddCommand(portalAnnouncementCmd)
 	portalCreditsCmd.AddCommand(portalCreditsSetCmd)
 	portalAnnouncementCmd.AddCommand(portalAnnouncementSetCmd)
-	portalAnnouncementCmd.AddCommand(portalAnnouncementRemoveCmd)
+	portalAnnouncementCmd.AddCommand(portalAnnouncementRemoveCmd)*/
+
+	root.AddCommand(syncerCmd)
+	syncerCmd.AddCommand(syncerConnectCmd, syncerPeersCmd)
 
 	root.AddCommand(walletCmd)
-	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletBroadcastCmd, walletChangePasswordCmd, walletInitCmd, walletInitSeedCmd, walletLoadCmd, walletLockCmd, walletSeedsCmd, walletSendCmd, walletSignCmd, walletSweepCmd, walletTransactionsCmd, walletUnlockCmd)
-	walletInitCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Prompt for a custom password")
-	walletInitCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet and re-encrypt")
-	walletInitCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
-	walletInitSeedCmd.Flags().BoolVarP(&initForce, "force", "", false, "destroy the existing wallet")
-	walletInitSeedCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
-	walletLoadCmd.AddCommand(walletLoadSeedCmd)
-	walletSendCmd.AddCommand(walletSendSiacoinsCmd)
-	walletSendSiacoinsCmd.Flags().BoolVarP(&walletTxnFeeIncluded, "fee-included", "", false, "Take the transaction fee out of the balance being submitted instead of the fee being additional")
-	walletChangePasswordCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
-	walletUnlockCmd.Flags().BoolVarP(&insecureInput, "insecure-input", "", false, "Disable shoulder-surf protection (echoing passwords and seeds)")
-	walletUnlockCmd.Flags().BoolVarP(&initPassword, "password", "p", false, "Display interactive password prompt even if SATD_WALLET_PASSWORD is set")
-	walletBroadcastCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Decode transaction as base64 instead of JSON")
-	walletSignCmd.Flags().BoolVarP(&walletRawTxn, "raw", "", false, "Encode signed transaction as base64 instead of JSON")
-	walletTransactionsCmd.Flags().Uint64Var(&walletStartHeight, "startheight", 0, " Height of the block where transaction history should begin.")
-	walletTransactionsCmd.Flags().Uint64Var(&walletEndHeight, "endheight", math.MaxUint64, " Height of the block where transaction history should end.")
+	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd)
 
 	return root
 }
 
 // initClient initializes client cmd flags and default values.
-func initClient(root *cobra.Command, verbose *bool, client *client.Client, alertSuppress *bool) {
-	root.PersistentFlags().BoolVarP(verbose, "verbose", "v", false, "Display additional information")
-	root.PersistentFlags().StringVarP(&client.Address, "addr", "a", "localhost:9990", "which host/port to communicate with (i.e. the host/port satd is listening on)")
-	root.PersistentFlags().StringVarP(&client.Password, "apipassword", "", "", "the password for the API's http authentication")
-	root.PersistentFlags().StringVarP(&client.UserAgent, "useragent", "", "Sat-Agent", "the useragent used by satc to connect to the daemon's API")
-	root.PersistentFlags().BoolVarP(alertSuppress, "alert-suppress", "s", false, "suppress satc alerts")
-}
-
-// setAPIPasswordIfNotSet sets API password if it was not set.
-func setAPIPasswordIfNotSet() {
-	// Check if the API Password is set.
-	if httpClient.Password == "" {
-		// No password passed in, fetch the API Password.
-		pwd := os.Getenv("SATD_API_PASSWORD")
-		if pwd == "" {
-			fmt.Println("Exiting: Error getting API Password")
-			os.Exit(exitCodeGeneral)
-		}
-		httpClient.Password = pwd
-	}
+func initClient(root *cobra.Command) {
+	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Display additional information")
+	root.PersistentFlags().StringVarP(&httpClient.Client().BaseURL, "addr", "a", "http://localhost:9990/api", "which host/port to communicate with (i.e. the host/port satd is listening on)")
+	root.PersistentFlags().StringVarP(&httpClient.Client().Password, "apipassword", "", "", "the password for the API's http authentication")
 }

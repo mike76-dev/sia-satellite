@@ -65,6 +65,53 @@ func (w *Wallet) ConfirmedBalance() (siacoins, immatureSiacoins types.Currency, 
 	return
 }
 
+// UnconfirmedBalance returns the balance of the wallet contained in
+// the unconfirmed transactions.
+func (w *Wallet) UnconfirmedBalance() (outgoing, incoming types.Currency) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	dustThreshold := w.DustThreshold()
+	ids := make(map[types.SiacoinOutputID]types.Currency)
+	for _, sce := range w.sces {
+		ids[types.SiacoinOutputID(sce.ID)] = sce.SiacoinOutput.Value
+	}
+
+	txns := w.cm.PoolTransactions()
+	for _, txn := range txns {
+		for _, sci := range txn.SiacoinInputs {
+			if value, exists := ids[sci.ParentID]; exists {
+				outgoing = outgoing.Add(value)
+			}
+		}
+		for _, sco := range txn.SiacoinOutputs {
+			if _, exists := w.addrs[sco.Address]; exists && sco.Value.Cmp(dustThreshold) > 0 {
+				incoming = incoming.Add(sco.Value)
+			}
+		}
+	}
+
+	return
+}
+
+// AddressBalance returns the balance of the given address.
+func (w *Wallet) AddressBalance(addr types.Address) (siacoins types.Currency, siafunds uint64) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	sce, exists := w.sces[addr]
+	if exists {
+		siacoins = sce.SiacoinOutput.Value
+	}
+
+	sfe, exists := w.sfes[addr]
+	if exists {
+		siafunds = sfe.SiafundOutput.Value
+	}
+
+	return
+}
+
 // Fund adds Siacoin inputs with the required amount to the transaction.
 func (w *Wallet) Fund(txn *types.Transaction, amount types.Currency) (parents []types.Transaction, toSign []types.Hash256, err error) {
 	w.mu.Lock()
