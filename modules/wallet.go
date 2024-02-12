@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"go.sia.tech/core/consensus"
 	"go.sia.tech/core/types"
 )
 
@@ -34,10 +35,7 @@ type Wallet interface {
 	ConfirmedBalance() (siacoins, immatureSiacoins types.Currency, siafunds uint64)
 
 	// Fund adds Siacoin inputs with the required amount to the transaction.
-	//Fund(txn *types.Transaction, amount types.Currency) (parents []types.Transaction, toSign []types.Hash256, err error)
-
-	// Key returns the wallet key.
-	//Key() types.PrivateKey
+	Fund(txn *types.Transaction, amount types.Currency) (parents []types.Transaction, toSign []types.Hash256, err error)
 
 	// NextAddress returns an unlock hash that is ready to receive Siacoins or
 	// Siafunds.
@@ -55,8 +53,13 @@ type Wallet interface {
 	// RenterSeed derives a renter seed.
 	//RenterSeed(email string) [16]byte
 
-	// Sign adds signatures corresponding to toSign elements to the transaction.
-	//Sign(txn *types.Transaction, toSign []types.Hash256, cf types.CoveredFields) error
+	// SendSiacoins creates a transaction sending 'amount' to 'dest'. The
+	// transaction is submitted to the transaction pool and is also returned. Fees
+	// are added to the amount sent.
+	SendSiacoins(amount types.Currency, dest types.Address) ([]types.Transaction, error)
+
+	// Sign signs the specified transaction using keys derived from the wallet seed.
+	Sign(cs consensus.State, txn *types.Transaction, toSign []types.Hash256) error
 
 	// Tip returns the wallet's internal processed chain index.
 	Tip() types.ChainIndex

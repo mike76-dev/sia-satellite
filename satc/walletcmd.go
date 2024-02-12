@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"go.sia.tech/core/types"
 )
 
 var (
@@ -46,23 +47,23 @@ The smallest unit of Siacoins is the Hasting. One Siacoin is 10^24 Hastings. Oth
 		Run: wrap(walletbalancecmd),
 	}
 
-	/*walletSendCmd = &cobra.Command{
-			Use:   "send",
-			Short: "Send Siacoins to an address",
-			Long:  "Send Siacoins to an address",
-			// Run field is not set, as the send command itself is not a valid command.
-			// A subcommand must be provided.
-		}
+	walletSendCmd = &cobra.Command{
+		Use:   "send",
+		Short: "Send Siacoins to an address",
+		Long:  "Send Siacoins to an address",
+		// Run field is not set, as the send command itself is not a valid command.
+		// A subcommand must be provided.
+	}
 
-		walletSendSiacoinsCmd = &cobra.Command{
-			Use:   "siacoins [amount] [dest]",
-			Short: "Send Siacoins to an address",
-			Long: `Send Siacoins to an address. 'dest' must be a 76-byte hexadecimal address.
-	'amount' can be specified in units, e.g. 1.23KS. Run 'wallet --help' for a list of units.
-	If no unit is supplied, Hastings will be assumed.
-	A dynamic transaction fee is applied depending on the size of the transaction and how busy the network is.`,
-			Run: wrap(walletsendsiacoinscmd),
-		}*/
+	walletSendSiacoinsCmd = &cobra.Command{
+		Use:   "siacoins [amount] [dest]",
+		Short: "Send Siacoins to an address",
+		Long: `Send Siacoins to an address. 'dest' must be a 76-byte hexadecimal address.
+'amount' can be specified in units, e.g. 1.23KS. Run 'wallet --help' for a list of units.
+If no unit is supplied, Hastings will be assumed.
+A dynamic transaction fee is applied depending on the size of the transaction and how busy the network is.`,
+		Run: wrap(walletsendsiacoinscmd),
+	}
 )
 
 // walletaddresscmd fetches a new address from the wallet that will be able to
@@ -87,21 +88,21 @@ func walletaddressescmd() {
 }
 
 // walletsendsiacoinscmd sends Siacoins to a destination address.
-/*func walletsendsiacoinscmd(amount, dest string) {
+func walletsendsiacoinscmd(amount, dest string) {
 	value, err := types.ParseCurrency(amount)
 	if err != nil {
 		die("Could not parse amount:", err)
 	}
-	var hash types.Address
-	if err := hash.UnmarshalText([]byte(dest)); err != nil {
+	var addr types.Address
+	if err := addr.UnmarshalText([]byte(dest)); err != nil {
 		die("Failed to parse destination address", err)
 	}
-	_, err = httpClient.WalletSiacoinsPost(value, hash, walletTxnFeeIncluded)
+	err = httpClient.WalletSendSiacoins(value, addr)
 	if err != nil {
 		die("Could not send Siacoins:", err)
 	}
 	fmt.Printf("Sent %s Hastings to %s\n", value.ExactString(), dest)
-}*/
+}
 
 // walletbalancecmd retrieves and displays information about the wallet.
 func walletbalancecmd() {

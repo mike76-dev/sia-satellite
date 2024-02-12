@@ -49,6 +49,7 @@ func newServer(cm *chain.Manager, s modules.Syncer, w modules.Wallet) http.Handl
 		"GET    /wallet/watch":       srv.walletWatchHandler,
 		"PUT    /wallet/watch/:addr": srv.walletAddWatchHandler,
 		"DELETE /wallet/watch/:addr": srv.walletRemoveWatchHandler,
+		"POST   /wallet/send":        srv.walletSendHandler,
 
 		/*"GET /hostdb/hosts": srv.hostDBHostsHandler,*/
 	})

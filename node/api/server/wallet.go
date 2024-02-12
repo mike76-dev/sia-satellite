@@ -72,3 +72,15 @@ func (s *server) walletWatchHandler(jc jape.Context) {
 	addrs := s.w.WatchedAddresses()
 	jc.Encode(addrs)
 }
+
+func (s *server) walletSendHandler(jc jape.Context) {
+	var wsr api.WalletSendRequest
+	if jc.Decode(&wsr) != nil {
+		return
+	}
+
+	_, err := s.w.SendSiacoins(wsr.Amount, wsr.Destination)
+	if jc.Check("couldn't send Siacoins", err) != nil {
+		return
+	}
+}

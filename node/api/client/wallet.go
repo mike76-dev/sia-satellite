@@ -56,3 +56,12 @@ func (c *Client) WalletWatchedAddresses() (addrs []types.Address, err error) {
 	err = c.c.GET("/wallet/watch", &addrs)
 	return
 }
+
+// WalletSendSiacoins sends a specified amount of SC to the specified address.
+func (c *Client) WalletSendSiacoins(amount types.Currency, dest types.Address) (err error) {
+	err = c.c.POST("/wallet/send", api.WalletSendRequest{
+		Amount:      amount,
+		Destination: dest,
+	}, nil)
+	return
+}

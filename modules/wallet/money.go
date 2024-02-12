@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -120,7 +121,10 @@ func (w *Wallet) Fund(txn *types.Transaction, amount types.Currency) (parents []
 		return nil, nil, nil
 	}
 
-	utxos := w.UnspentSiacoinOutputs()
+	var utxos []types.SiacoinElement
+	for _, sce := range w.sces {
+		utxos = append(utxos, sce)
+	}
 	sort.Slice(utxos, func(i, j int) bool {
 		return utxos[i].SiacoinOutput.Value.Cmp(utxos[j].SiacoinOutput.Value) > 0
 	})
@@ -148,7 +152,7 @@ func (w *Wallet) Fund(txn *types.Transaction, amount types.Currency) (parents []
 	if outputSum.Cmp(amount) < 0 {
 		return nil, nil, modules.ErrInsufficientBalance
 	} else if outputSum.Cmp(amount) > 0 {
-		refundUC, err := w.NextAddress()
+		refundUC, err := w.nextAddress()
 		defer func() {
 			if err != nil {
 				w.markAddressUnused(refundUC)
@@ -226,7 +230,7 @@ func (w *Wallet) Reserve(ids []types.Hash256, duration time.Duration) error {
 
 // Sign signs the specified transaction using keys derived from the wallet seed.
 // If toSign is nil, SignTransaction will automatically add Signatures for each
-// input owned by the seed. If toSign is not nil, it a list of IDs of Signatures
+// input owned by the seed. If toSign is not nil, it is a list of IDs of Signatures
 // already present in txn; SignTransaction will fill in the Signature field of each.
 func (w *Wallet) Sign(cs consensus.State, txn *types.Transaction, toSign []types.Hash256) error {
 	w.mu.Lock()
@@ -285,4 +289,61 @@ outer:
 		return fmt.Errorf("signature %v not present in transaction", parent)
 	}
 	return nil
+}
+
+// SendSiacoins creates a transaction sending 'amount' to 'dest'. The
+// transaction is submitted to the transaction pool and is also returned. Fees
+// are added to the amount sent.
+func (w *Wallet) SendSiacoins(amount types.Currency, dest types.Address) ([]types.Transaction, error) {
+	if err := w.tg.Add(); err != nil {
+		return nil, err
+	}
+	defer w.tg.Done()
+
+	if !w.synced() {
+		return nil, errors.New("cannot send Siacoins until fully synced")
+	}
+
+	fee := w.cm.RecommendedFee().Mul64(750)
+	output := types.SiacoinOutput{
+		Value:   amount,
+		Address: dest,
+	}
+	txn := types.Transaction{
+		SiacoinOutputs: []types.SiacoinOutput{output},
+		MinerFees:      []types.Currency{fee},
+	}
+
+	parents, toSign, err := w.Fund(&txn, amount.Add(fee))
+	if err != nil {
+		w.log.Error("failed to fund transaction", zap.Error(err))
+		return nil, modules.AddContext(err, "unable to fund transaction")
+	}
+
+	for _, id := range toSign {
+		txn.Signatures = append(txn.Signatures, types.TransactionSignature{
+			ParentID:      id,
+			CoveredFields: types.CoveredFields{WholeTransaction: true},
+		})
+	}
+
+	err = w.Sign(w.cm.TipState(), &txn, toSign)
+	if err != nil {
+		w.log.Error("failed to sign transaction", zap.Error(err))
+		w.Release(append(parents, txn))
+		return nil, modules.AddContext(err, "unable to sign transaction")
+	}
+
+	txnSet := append(parents, txn)
+	_, err = w.cm.AddPoolTransactions(txnSet)
+	if err != nil {
+		w.Release(txnSet)
+		w.log.Error("transaction set rejected", zap.Error(err))
+		return nil, modules.AddContext(err, "invalid transaction set")
+	}
+
+	w.s.BroadcastTransactionSet(txnSet)
+	w.log.Info("successfully sent amount", zap.Stringer("amount", amount), zap.Stringer("fee", fee), zap.Stringer("destination", dest))
+
+	return txnSet, nil
 }

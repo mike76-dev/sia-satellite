@@ -136,6 +136,10 @@ func (w *Wallet) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, mayCommit bool)
 		return nil
 	}
 
+	if w.synced() {
+		go w.threadedDefragWallet()
+	}
+
 	return nil
 }
 

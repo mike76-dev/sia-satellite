@@ -171,7 +171,8 @@ func initCmds() *cobra.Command {
 	syncerCmd.AddCommand(syncerConnectCmd, syncerPeersCmd)
 
 	root.AddCommand(walletCmd)
-	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd)
+	walletCmd.AddCommand(walletAddressCmd, walletAddressesCmd, walletBalanceCmd, walletSendCmd)
+	walletSendCmd.AddCommand(walletSendSiacoinsCmd)
 
 	return root
 }

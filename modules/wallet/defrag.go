@@ -175,7 +175,6 @@ func (w *Wallet) threadedDefragWallet() {
 		}
 	}()
 	if modules.ContainsError(err, errDefragNotNeeded) {
-		// Begin.
 		return
 	} else if err != nil {
 		w.log.Warn("couldn't create defrag transaction", zap.Error(err))
