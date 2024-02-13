@@ -1,105 +1,81 @@
 package client
 
 import (
-	"encoding/json"
-
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 )
 
-// ManagerAveragesGet requests the /manager/averages resource.
-func (c *Client) ManagerAveragesGet(currency string) (ha api.HostAverages, err error) {
-	url := "/manager/averages/" + currency
-	err = c.get(url, &ha)
+// ManagerAverages requests the /manager/averages resource.
+func (c *Client) ManagerAverages(currency string) (ha api.HostAverages, err error) {
+	err = c.c.GET("/manager/averages/"+currency, &ha)
 	return
 }
 
-// ManagerContractsGet requests the /manager/contracts resource.
-func (c *Client) ManagerContractsGet(key string) (rc api.RenterContracts, err error) {
-	url := "/manager/contracts"
-	if key != "" {
-		url = url + "/" + key
-	}
-	err = c.get(url, &rc)
+// ManagerContracts requests the /manager/contracts resource.
+func (c *Client) ManagerContracts(key string) (rc api.RenterContracts, err error) {
+	err = c.c.GET("/manager/contracts/"+key, &rc)
 	return
 }
 
-// ManagerRenterGet requests the /manager/renter resource.
-func (c *Client) ManagerRenterGet(key string) (r modules.Renter, err error) {
-	url := "/manager/renter/" + key
-	err = c.get(url, &r)
+// ManagerRenter requests the /manager/renter resource.
+func (c *Client) ManagerRenter(key string) (r modules.Renter, err error) {
+	err = c.c.GET("/manager/renter/"+key, &r)
 	return
 }
 
-// ManagerBalanceGet requests the /manager/balance resource.
-func (c *Client) ManagerBalanceGet(key string) (ub modules.UserBalance, err error) {
-	url := "/manager/balance/" + key
-	err = c.get(url, &ub)
+// ManagerBalance requests the /manager/balance resource.
+func (c *Client) ManagerBalance(key string) (ub modules.UserBalance, err error) {
+	err = c.c.GET("/manager/balance/"+key, &ub)
 	return
 }
 
-// ManagerRentersGet requests the /manager/renters resource.
-func (c *Client) ManagerRentersGet() (rg api.RentersGET, err error) {
-	err = c.get("/manager/renters", &rg)
+// ManagerRenters requests the /manager/renters resource.
+func (c *Client) ManagerRenters() (rg api.RentersGET, err error) {
+	err = c.c.GET("/manager/renters", &rg)
 	return
 }
 
-// ManagerPreferencesGet requests the /manager/preferences resource.
-func (c *Client) ManagerPreferencesGet() (ep api.EmailPreferences, err error) {
-	err = c.get("/manager/preferences", &ep)
+// ManagerPreferences requests the /manager/preferences resource.
+func (c *Client) ManagerPreferences() (ep api.EmailPreferences, err error) {
+	err = c.c.GET("/manager/preferences", &ep)
 	return
 }
 
-// ManagerPreferencesPost uses the /manager/preferences resource to change
+// ManagerUpdatePreferences uses the /manager/preferences resource to change
 // the email preferences.
-func (c *Client) ManagerPreferencesPost(ep api.EmailPreferences) error {
-	json, err := json.Marshal(ep)
-	if err != nil {
-		return err
-	}
-	err = c.post("/manager/preferences", string(json), nil)
-	return err
+func (c *Client) ManagerUpdatePreferences(ep api.EmailPreferences) error {
+	return c.c.POST("/manager/preferences", &ep, nil)
 }
 
-// ManagerPricesGet requests the /manager/prices resource.
-func (c *Client) ManagerPricesGet() (prices modules.Pricing, err error) {
-	err = c.get("/manager/prices", &prices)
+// ManagerPrices requests the /manager/prices resource.
+func (c *Client) ManagerPrices() (prices modules.Pricing, err error) {
+	err = c.c.GET("/manager/prices", &prices)
 	return
 }
 
-// ManagerPricesPost uses the /manager/prices resource to change
+// ManagerUpdatePrices uses the /manager/prices resource to change
 // the current prices.
-func (c *Client) ManagerPricesPost(prices modules.Pricing) error {
-	json, err := json.Marshal(prices)
-	if err != nil {
-		return err
-	}
-	err = c.post("/manager/prices", string(json), nil)
-	return err
+func (c *Client) ManagerUpdatePrices(prices modules.Pricing) error {
+	return c.c.POST("/manager/prices", &prices, nil)
 }
 
-// ManagerMaintenanceGet requests the /manager/maintenance resource.
-func (c *Client) ManagerMaintenanceGet() (maintenance bool, err error) {
+// ManagerMaintenance requests the /manager/maintenance resource.
+func (c *Client) ManagerMaintenance() (maintenance bool, err error) {
 	var req struct {
 		Maintenance bool `json:"maintenance"`
 	}
-	err = c.get("/manager/maintenance", &req)
+	err = c.c.GET("/manager/maintenance", &req)
 	if err != nil {
 		return false, err
 	}
 	return req.Maintenance, nil
 }
 
-// ManagerMaintenancePost uses the /manager/maintenance resource to set
+// ManagerSetMaintenance uses the /manager/maintenance resource to set
 // or clear the maintenance flag.
-func (c *Client) ManagerMaintenancePost(start bool) error {
+func (c *Client) ManagerSetMaintenance(start bool) error {
 	req := struct {
 		Start bool `json:"start"`
 	}{Start: start}
-	json, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	err = c.post("/manager/maintenance", string(json), nil)
-	return err
+	return c.c.POST("/manager/maintenance", &req, nil)
 }

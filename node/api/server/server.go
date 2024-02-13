@@ -16,14 +16,16 @@ import (
 type server struct {
 	cm *chain.Manager
 	s  modules.Syncer
+	m  modules.Manager
 	w  modules.Wallet
 }
 
 // newServer returns an HTTP handler that serves the hsd API.
-func newServer(cm *chain.Manager, s modules.Syncer, w modules.Wallet) http.Handler {
+func newServer(cm *chain.Manager, s modules.Syncer, m modules.Manager, w modules.Wallet) http.Handler {
 	srv := server{
 		cm: cm,
 		s:  s,
+		m:  m,
 		w:  w,
 	}
 	return jape.Mux(map[string]jape.Handler{
@@ -51,12 +53,24 @@ func newServer(cm *chain.Manager, s modules.Syncer, w modules.Wallet) http.Handl
 		"DELETE /wallet/watch/:addr": srv.walletRemoveWatchHandler,
 		"POST   /wallet/send":        srv.walletSendHandler,
 
+		"GET  /manager/averages/:currency":   srv.managerAveragesHandler,
+		"GET  /manager/renters":              srv.managerRentersHandler,
+		"GET  /manager/renter/:publickey":    srv.managerRenterHandler,
+		"GET  /manager/balance/:publickey":   srv.managerBalanceHandler,
+		"GET  /manager/contracts/:publickey": srv.managerContractsHandler,
+		"GET  /manager/preferences":          srv.managerPreferencesHandler,
+		"POST /manager/preferences":          srv.managerUpdatePreferencesHandler,
+		"GET  /manager/prices":               srv.managerPricesHandler,
+		"POST /manager/prices":               srv.managerUpdatePricesHandler,
+		"GET  /manager/maintenance":          srv.managerMaintenanceHandler,
+		"POST /manager/maintenance":          srv.managerSetMaintenanceHandler,
+
 		/*"GET /hostdb/hosts": srv.hostDBHostsHandler,*/
 	})
 }
 
 func StartWeb(l net.Listener, node *node.Node, password string) error {
-	server := newServer(node.ChainManager, node.Syncer, node.Wallet)
+	server := newServer(node.ChainManager, node.Syncer, node.Manager, node.Wallet)
 	api := jape.BasicAuth(password)(server)
 	return http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api") {

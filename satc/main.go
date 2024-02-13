@@ -149,7 +149,7 @@ func initCmds() *cobra.Command {
 	hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
 	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")*/
 
-	/*root.AddCommand(managerCmd)
+	root.AddCommand(managerCmd)
 	managerCmd.AddCommand(managerAveragesCmd)
 	managerCmd.AddCommand(managerRentersCmd, managerRenterCmd, managerBalanceCmd, managerContractsCmd)
 	managerCmd.AddCommand(managerPreferencesCmd)
@@ -158,7 +158,7 @@ func initCmds() *cobra.Command {
 	managerCmd.AddCommand(managerSetPricesCmd)
 	managerCmd.AddCommand(managerMaintenanceCmd)
 	managerMaintenanceCmd.AddCommand(managerMaintenanceStartCmd)
-	managerMaintenanceCmd.AddCommand(managerMaintenanceStopCmd)*/
+	managerMaintenanceCmd.AddCommand(managerMaintenanceStopCmd)
 
 	/*root.AddCommand(portalCmd)
 	portalCmd.AddCommand(portalCreditsCmd)

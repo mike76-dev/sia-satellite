@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/modules/manager"
 	"github.com/mike76-dev/sia-satellite/modules/syncer"
 	"github.com/mike76-dev/sia-satellite/modules/wallet"
 	"github.com/mike76-dev/sia-satellite/persist"
@@ -25,7 +27,7 @@ type Node struct {
 	// The modules of the node.
 	ChainManager *chain.Manager
 	Syncer       modules.Syncer
-	//Manager      modules.Manager
+	Manager      modules.Manager
 	//Portal       modules.Portal
 	//Provider     modules.Provider
 	Wallet modules.Wallet
@@ -44,11 +46,11 @@ func (n *Node) Close() (err error) {
 	if n.Provider != nil {
 		fmt.Println("Closing provider...")
 		err = modules.ComposeErrors(err, n.Provider.Close())
-	}
+	}*/
 	if n.Manager != nil {
 		fmt.Println("Closing manager...")
 		err = modules.ComposeErrors(err, n.Manager.Close())
-	}*/
+	}
 	if n.Wallet != nil {
 		fmt.Println("Closing wallet...")
 		err = modules.ComposeErrors(err, n.Wallet.Close())
@@ -73,11 +75,11 @@ func New(config *persist.SatdConfig, dbPassword, seed string, loadStartTime time
 	}
 
 	// Create a mail client.
-	/*fmt.Println("Creating mail client...")
+	fmt.Println("Creating mail client...")
 	ms, err := mail.New(d)
 	if err != nil {
 		log.Fatalf("ERROR: could not create mail client: %v\n", err)
-	}*/
+	}
 
 	// Connect to the MySQL database.
 	fmt.Println("Connecting to the SQL database...")
@@ -132,11 +134,11 @@ func New(config *persist.SatdConfig, dbPassword, seed string, loadStartTime time
 	}
 
 	// Load manager.
-	/*fmt.Println("Loading manager...")
+	fmt.Println("Loading manager...")
 	m, errChanM := manager.New(db, ms, cm, s, w, d, config.Name)
 	if err := modules.PeekErr(errChanM); err != nil {
 		return nil, modules.AddContext(err, "unable to create manager")
-	}*/
+	}
 
 	// Load provider.
 	/*fmt.Println("Loading provider...")
@@ -161,8 +163,8 @@ func New(config *persist.SatdConfig, dbPassword, seed string, loadStartTime time
 
 		ChainManager: cm,
 		Syncer:       s,
-		/*Manager:      m,
-		Portal:       pt,
+		Manager:      m,
+		/*Portal:       pt,
 		Provider:     p,*/
 		Wallet: w,
 	}
