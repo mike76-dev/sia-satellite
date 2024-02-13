@@ -11,6 +11,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager"
+	"github.com/mike76-dev/sia-satellite/modules/portal"
 	"github.com/mike76-dev/sia-satellite/modules/provider"
 	"github.com/mike76-dev/sia-satellite/modules/syncer"
 	"github.com/mike76-dev/sia-satellite/modules/wallet"
@@ -29,9 +30,9 @@ type Node struct {
 	ChainManager *chain.Manager
 	Syncer       modules.Syncer
 	Manager      modules.Manager
-	//Portal       modules.Portal
-	Provider modules.Provider
-	Wallet   modules.Wallet
+	Portal       modules.Portal
+	Provider     modules.Provider
+	Wallet       modules.Wallet
 
 	// The start function.
 	Start func() (stop func())
@@ -40,10 +41,10 @@ type Node struct {
 // Close will call close on every module within the node, combining and
 // returning the errors.
 func (n *Node) Close() (err error) {
-	/*if n.Portal != nil {
+	if n.Portal != nil {
 		fmt.Println("Closing portal...")
 		err = modules.ComposeErrors(err, n.Portal.Close())
-	}*/
+	}
 	if n.Provider != nil {
 		fmt.Println("Closing provider...")
 		err = modules.ComposeErrors(err, n.Provider.Close())
@@ -149,11 +150,11 @@ func New(config *persist.SatdConfig, dbPassword, seed string, loadStartTime time
 	}
 
 	// Load portal.
-	/*fmt.Println("Loading portal...")
+	fmt.Println("Loading portal...")
 	pt, err := portal.New(config, db, ms, cm, w, m, p, d)
 	if err != nil {
 		return nil, modules.AddContext(err, "unable to create portal")
-	}*/
+	}
 
 	// Setup complete.
 	fmt.Printf("API is now available, synchronous startup completed in %.3f seconds\n", time.Since(loadStartTime).Seconds())
@@ -165,9 +166,9 @@ func New(config *persist.SatdConfig, dbPassword, seed string, loadStartTime time
 		ChainManager: cm,
 		Syncer:       s,
 		Manager:      m,
-		//Portal:       pt,
-		Provider: p,
-		Wallet:   w,
+		Portal:       pt,
+		Provider:     p,
+		Wallet:       w,
 	}
 
 	n.Start = func() func() {

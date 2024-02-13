@@ -160,12 +160,12 @@ func initCmds() *cobra.Command {
 	managerMaintenanceCmd.AddCommand(managerMaintenanceStartCmd)
 	managerMaintenanceCmd.AddCommand(managerMaintenanceStopCmd)
 
-	/*root.AddCommand(portalCmd)
+	root.AddCommand(portalCmd)
 	portalCmd.AddCommand(portalCreditsCmd)
 	portalCmd.AddCommand(portalAnnouncementCmd)
 	portalCreditsCmd.AddCommand(portalCreditsSetCmd)
 	portalAnnouncementCmd.AddCommand(portalAnnouncementSetCmd)
-	portalAnnouncementCmd.AddCommand(portalAnnouncementRemoveCmd)*/
+	portalAnnouncementCmd.AddCommand(portalAnnouncementRemoveCmd)
 
 	root.AddCommand(syncerCmd)
 	syncerCmd.AddCommand(syncerConnectCmd, syncerPeersCmd)

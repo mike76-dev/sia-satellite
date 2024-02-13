@@ -1,8 +1,6 @@
 package modules
 
 import (
-	"crypto/ed25519"
-
 	"go.sia.tech/core/types"
 
 	"lukechampine.com/frand"
@@ -18,16 +16,15 @@ var (
 	MaxSectorAccessPrice = types.HastingsPerSiacoin.Div64(1e5)
 )
 
-// DeriveRenterSeed derives a seed to be used by the renter for accessing the
+// DeriveRenterKey derives a key to be used by the renter for accessing the
 // file contracts.
-// NOTE: The seed returned by this function should be wiped once it's no longer
+// NOTE: The key returned by this function should be wiped once it's no longer
 // in use.
-func DeriveRenterSeed(walletSeed Seed, email string) []byte {
-	renterSeed := make([]byte, ed25519.SeedSize)
-	rs := types.HashBytes(append(walletSeed[:], []byte(email)...))
+func DeriveRenterKey(masterKey types.PrivateKey, email string) []byte {
+	rs := types.HashBytes(append(masterKey, []byte(email)...))
 	defer frand.Read(rs[:])
-	copy(renterSeed, rs[:])
-	return renterSeed
+	pk := types.NewPrivateKeyFromSeed(rs[:])
+	return pk
 }
 
 // DeriveEphemeralKey derives a secret key to be used by the renter for the

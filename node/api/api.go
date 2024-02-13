@@ -181,3 +181,9 @@ type HostdbFilterModePOST struct {
 	Hosts        []types.PublicKey `json:"hosts"`
 	NetAddresses []string          `json:"netaddresses"`
 }
+
+// Announcement contains the information about a portal announcement.
+type Announcement struct {
+	Text    string `json:"text"`
+	Expires uint64 `json:"expires"`
+}

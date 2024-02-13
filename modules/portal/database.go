@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 
@@ -123,7 +124,7 @@ func (p *Portal) threadedPruneUnverifiedAccounts() {
 			now := time.Now().Unix()
 			_, err = p.db.Exec("DELETE FROM pt_accounts WHERE verified = FALSE AND time < ?", now-pruneUnverifiedAccountsThreshold.Milliseconds()/1000)
 			if err != nil {
-				p.log.Printf("ERROR: error querying database: %v\n", err)
+				p.log.Error("error querying database", zap.Error(err))
 			}
 		}()
 	}
@@ -296,12 +297,7 @@ func (p *Portal) addPayment(id string, amount float64, currency string, def bool
 	}
 	if c == 0 {
 		// New renter, need to create a new record.
-		seed, err := p.manager.GetWalletSeed()
-		defer frand.Read(seed[:])
-		if err != nil {
-			return err
-		}
-		renterSeed := modules.DeriveRenterSeed(seed, email)
+		renterSeed := p.w.RenterSeed(email)
 		defer frand.Read(renterSeed)
 		pk := types.NewPrivateKeyFromSeed(renterSeed).PublicKey()
 		if err = p.createNewRenter(email, pk); err != nil {
@@ -425,13 +421,7 @@ func (p *Portal) confirmSiacoinPayment(txid types.TransactionID) error {
 		}
 		if count == 0 {
 			// New renter, need to create a new record.
-			seed, err := p.manager.GetWalletSeed()
-			defer frand.Read(seed[:])
-			if err != nil {
-				tx.Rollback()
-				return err
-			}
-			renterSeed := modules.DeriveRenterSeed(seed, email)
+			renterSeed := p.w.RenterSeed(email)
 			defer frand.Read(renterSeed)
 			pk := types.NewPrivateKeyFromSeed(renterSeed).PublicKey()
 			if err = p.createNewRenter(email, pk); err != nil {
@@ -520,13 +510,13 @@ func (p *Portal) verifyNonce(email string, nonce []byte) (bool, error) {
 func (p *Portal) saveStats() error {
 	tx, err := p.db.Begin()
 	if err != nil {
-		p.log.Println("ERROR: couldn't save auth stats:", err)
+		p.log.Error("couldn't save auth stats", zap.Error(err))
 		return err
 	}
 
 	_, err = tx.Exec("DELETE FROM pt_stats")
 	if err != nil {
-		p.log.Println("ERROR: couldn't clear auth stats:", err)
+		p.log.Error("couldn't clear auth stats", zap.Error(err))
 		tx.Rollback()
 		return err
 	}
@@ -539,7 +529,7 @@ func (p *Portal) saveStats() error {
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, ip, entry.FailedLogins.LastAttempt, entry.FailedLogins.Count, entry.Verifications.LastAttempt, entry.Verifications.Count, entry.PasswordResets.LastAttempt, entry.PasswordResets.Count)
 		if err != nil {
-			p.log.Println("ERROR: couldn't save auth stats:", err)
+			p.log.Error("couldn't save auth stats", zap.Error(err))
 			tx.Rollback()
 			return err
 		}
@@ -556,7 +546,7 @@ func (p *Portal) loadStats() error {
 		FROM pt_stats
 	`)
 	if err != nil {
-		p.log.Println("ERROR: couldn't load auth stats:", err)
+		p.log.Error("couldn't load auth stats", zap.Error(err))
 		return err
 	}
 	defer rows.Close()
@@ -565,7 +555,7 @@ func (p *Portal) loadStats() error {
 		var ip string
 		var ll, lc, vl, vc, rl, rc int64
 		if err := rows.Scan(&ip, &ll, &lc, &vl, &vc, &rl, &rc); err != nil {
-			p.log.Println("ERROR: couldn't load auth stats:", err)
+			p.log.Error("couldn't load auth stats", zap.Error(err))
 			return err
 		}
 		p.authStats[ip] = authenticationStats{
@@ -595,7 +585,7 @@ func (p *Portal) saveCredits() error {
 		VALUES (1, ?, ?)
 	`, p.credits.Amount, p.credits.Remaining)
 	if err != nil {
-		p.log.Println("ERROR: couldn't save credit data:", err)
+		p.log.Error("couldn't save credit data", zap.Error(err))
 		return err
 	}
 
@@ -615,7 +605,7 @@ func (p *Portal) loadCredits() error {
 		return nil
 	}
 	if err != nil {
-		p.log.Println("ERROR: couldn't load credit data:", err)
+		p.log.Error("couldn't load credit data", zap.Error(err))
 		return err
 	}
 
@@ -952,7 +942,7 @@ func (p *Portal) managedCheckOnHoldAccounts() {
 		WHERE on_hold > 0 AND on_hold < ?
 	`, uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())))
 	if err != nil {
-		p.log.Println("ERROR: couldn't update account:", err)
+		p.log.Error("couldn't update account", zap.Error(err))
 	}
 }
 
@@ -987,6 +977,6 @@ func (p *Portal) managedCheckAnnouncement() {
 		WHERE expires > 0 AND expires <= ?
 	`, timestamp)
 	if err != nil {
-		p.log.Println("ERROR: unable to expire announcement:", err)
+		p.log.Error("unable to expire announcement", zap.Error(err))
 	}
 }

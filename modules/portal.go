@@ -14,8 +14,6 @@ type CreditData struct {
 
 // Portal implements the portal server.
 type Portal interface {
-	Alerter
-
 	// Close safely shuts down the portal.
 	Close() error
 

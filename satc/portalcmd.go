@@ -59,11 +59,11 @@ Examples of [validity] include '0.5h', '1d', '2w', or 'noexpire' for a non-expir
 // portalcmd is the handler for the command `satc portal`.
 // Prints the portal information.
 func portalcmd() {
-	credits, err := httpClient.PortalCreditsGet()
+	credits, err := httpClient.PortalCredits()
 	if err != nil {
 		die(err)
 	}
-	a, _, err := httpClient.PortalAnnouncementGet()
+	a, _, err := httpClient.PortalAnnouncement()
 	if err != nil {
 		die(err)
 	}
@@ -82,7 +82,7 @@ Remaining: %v credits
 // portalcreditscmd is the handler for the command `satc portal credits`.
 // Prints the credit information.
 func portalcreditscmd() {
-	credits, err := httpClient.PortalCreditsGet()
+	credits, err := httpClient.PortalCredits()
 	if err != nil {
 		die(err)
 	}
@@ -115,7 +115,7 @@ func portalcreditssetcmd(num, amt string) {
 		Remaining: number,
 	}
 
-	err = httpClient.PortalCreditsPost(credits)
+	err = httpClient.PortalSetCredits(credits)
 	if err != nil {
 		fmt.Println("Could not set credit information: ", err)
 		die()
@@ -126,7 +126,7 @@ func portalcreditssetcmd(num, amt string) {
 // portalannouncementcmd is the handler for the command `satc portal announcement`.
 // Prints the current portal announcement.
 func portalannouncementcmd() {
-	text, expires, err := httpClient.PortalAnnouncementGet()
+	text, expires, err := httpClient.PortalAnnouncement()
 	if err != nil {
 		die(err)
 	}
@@ -164,7 +164,7 @@ func portalannouncementsetcmd(path, validity string) {
 		die(err)
 	}
 
-	err = httpClient.PortalAnnouncementPost(string(b), expires)
+	err = httpClient.PortalSetAnnouncement(string(b), expires)
 	if err != nil {
 		die(err)
 	}
@@ -174,7 +174,7 @@ func portalannouncementsetcmd(path, validity string) {
 // portalannouncementremovecmd is the handler for the command `satc portal announcement
 // remove`. Clears the portal announcement.
 func portalannouncementremovecmd() {
-	err := httpClient.PortalAnnouncementPost("", 0)
+	err := httpClient.PortalSetAnnouncement("", 0)
 	if err != nil {
 		die(err)
 	}

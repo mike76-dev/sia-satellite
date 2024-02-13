@@ -12,6 +12,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/internal/build"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 
@@ -135,7 +136,7 @@ func (api *portalAPI) balanceHandlerGET(w http.ResponseWriter, req *http.Request
 	// Retrieve the balance information from the database.
 	var ub modules.UserBalance
 	if ub, err = api.portal.manager.GetBalance(email); err != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+		api.portal.log.Error("error querying database", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -232,7 +233,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Sanity check.
 	if scRate == 0 {
-		api.portal.log.Println("ERROR: zero exchange rate")
+		api.portal.log.Error("zero exchange rate")
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -261,7 +262,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	// Pick random hosts.
 	hosts, err := api.portal.manager.RandomHosts(a.Hosts, a)
 	if err != nil {
-		api.portal.log.Println("ERROR: could not get random hosts", err)
+		api.portal.log.Error("could not get random hosts", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -316,8 +317,8 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Add the cost of paying the transaction fees and then double the contract
 	// costs to account for renewing a full set of contracts.
-	_, feePerByte := api.portal.manager.FeeEstimation()
-	txnsFees := feePerByte.Mul64(modules.EstimatedFileContractTransactionSetSize).Mul64(uint64(a.Hosts))
+	feePerByte := api.portal.manager.FeeEstimation()
+	txnsFees := feePerByte.Mul64(2048).Mul64(uint64(a.Hosts))
 	totalContractCost = totalContractCost.Add(txnsFees)
 	totalContractCost = totalContractCost.Mul64(2)
 
@@ -364,7 +365,7 @@ func (api *portalAPI) paymentsHandlerGET(w http.ResponseWriter, req *http.Reques
 	// Retrieve the payment history.
 	var ups []userPayment
 	if ups, err = api.portal.getPayments(email); err != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+		api.portal.log.Error("error querying database", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -388,7 +389,7 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	// Retrieve the account balance.
 	var ub modules.UserBalance
 	if ub, err = api.portal.manager.GetBalance(email); err != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+		api.portal.log.Error("error querying database", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -408,17 +409,7 @@ func (api *portalAPI) seedHandlerGET(w http.ResponseWriter, req *http.Request, _
 	}
 
 	// Generate the seed and wipe it after use.
-	walletSeed, err := api.portal.manager.GetWalletSeed()
-	if err != nil {
-		api.portal.log.Printf("ERROR: error retrieving wallet seed: %v\n", err)
-		writeError(w,
-			Error{
-				Code:    httpErrorInternal,
-				Message: "internal error",
-			}, http.StatusInternalServerError)
-		return
-	}
-	renterSeed := modules.DeriveRenterSeed(walletSeed, email)
+	renterSeed := api.portal.w.RenterSeed(email)
 	defer frand.Read(renterSeed)
 
 	w.Header().Set("Renter-Seed", hex.EncodeToString(renterSeed))
@@ -430,7 +421,7 @@ func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, _ *http.Request, _ ht
 	key := api.portal.provider.PublicKey()
 	satPort, err := strconv.ParseInt(strings.TrimPrefix(api.portal.satAddr, ":"), 10, 32)
 	if err != nil {
-		api.portal.log.Println("ERROR: couldn't fetch satellite port:", err)
+		api.portal.log.Error("couldn't fetch satellite port", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -440,7 +431,7 @@ func (api *portalAPI) keyHandlerGET(w http.ResponseWriter, _ *http.Request, _ ht
 	}
 	muxPort, err := strconv.ParseInt(strings.TrimPrefix(api.portal.muxAddr, ":"), 10, 32)
 	if err != nil {
-		api.portal.log.Println("ERROR: couldn't fetch mux port:", err)
+		api.portal.log.Error("couldn't fetch mux port", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -550,7 +541,7 @@ func (api *portalAPI) getContracts(renter modules.Renter, current, old bool) []r
 			// A contract can either be active, passive, refreshed, or disabled.
 			statusErr := active && passive && refreshed || active && refreshed || active && passive || passive && refreshed
 			if statusErr {
-				api.portal.log.Println("CRITICAL: Contract has multiple status types, this should never happen")
+				api.portal.log.Error("contract has multiple status types, this should never happen")
 			} else if active {
 				contract.Status = "active"
 				rc = append(rc, contract)
@@ -663,7 +654,7 @@ func (api *portalAPI) spendingsHandlerGET(w http.ResponseWriter, req *http.Reque
 	}
 	var us []modules.UserSpendings
 	if us, err = api.portal.manager.RetrieveSpendings(email, currency); err != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+		api.portal.log.Error("error querying database", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -719,7 +710,7 @@ func (api *portalAPI) filesHandlerGET(w http.ResponseWriter, req *http.Request, 
 	// Retrieve the file information.
 	sf, err := api.portal.getFiles(renter.PublicKey)
 	if err != nil {
-		api.portal.log.Printf("ERROR: couldn't retrieve files: %v\n", err)
+		api.portal.log.Error("couldn't retrieve files", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -731,7 +722,7 @@ func (api *portalAPI) filesHandlerGET(w http.ResponseWriter, req *http.Request, 
 	// Retrieve the file information.
 	bf, err := api.portal.getBufferedFiles(renter.PublicKey)
 	if err != nil {
-		api.portal.log.Printf("ERROR: couldn't retrieve buffered files: %v\n", err)
+		api.portal.log.Error("couldn't retrieve buffered files", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -778,7 +769,7 @@ func (api *portalAPI) filesHandlerPOST(w http.ResponseWriter, req *http.Request,
 	// Delete the files.
 	err = api.portal.deleteFiles(renter.PublicKey, data.Files)
 	if err != nil {
-		api.portal.log.Printf("ERROR: couldn't delete files: %v\n", err)
+		api.portal.log.Error("couldn't delete files", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -841,7 +832,7 @@ func (api *portalAPI) settingsHandlerPOST(w http.ResponseWriter, req *http.Reque
 
 	err = api.portal.manager.UpdateRenterSettings(renter.PublicKey, settings, sk, ak)
 	if err != nil {
-		api.portal.log.Printf("ERROR: couldn't update settings: %v\n", err)
+		api.portal.log.Error("couldn't update settings", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -907,7 +898,7 @@ func (api *portalAPI) fileHandlerGET(w http.ResponseWriter, req *http.Request, _
 
 	err = api.portal.manager.DownloadObject(w, renter.PublicKey, bucket, path)
 	if err != nil {
-		api.portal.log.Printf("ERROR: couldn't download file: %v\n", err)
+		api.portal.log.Error("couldn't download file", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -929,7 +920,7 @@ func (api *portalAPI) addressHandlerGET(w http.ResponseWriter, req *http.Request
 	// Get the wallet address.
 	address, err := api.portal.getSiacoinAddress(email)
 	if err != nil {
-		api.portal.log.Printf("ERROR: error getting payment address: %v\n", err)
+		api.portal.log.Error("error getting payment address", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -955,7 +946,7 @@ func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	// Check if the change is allowed.
 	ub, err := api.portal.manager.GetBalance(email)
 	if err != nil {
-		api.portal.log.Printf("ERROR: error getting account balance: %v\n", err)
+		api.portal.log.Error("error getting account balance", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -976,7 +967,7 @@ func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	if !ub.Subscribed {
 		dpm, err := isDefaultPaymentMethodSet(ub.StripeID)
 		if err != nil {
-			api.portal.log.Println("ERROR: wrong Stripe ID:", email, ub.StripeID)
+			api.portal.log.Error("wrong Stripe ID", zap.String("email", email), zap.String("stripeID", ub.StripeID), zap.Error(err))
 			writeError(w,
 				Error{
 					Code:    httpErrorBadRequest,
@@ -995,7 +986,7 @@ func (api *portalAPI) planHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	// Change the payment plan.
 	err = api.portal.changePaymentPlan(email)
 	if err != nil {
-		api.portal.log.Printf("ERROR: error changing payment plan: %v\n", err)
+		api.portal.log.Error("error changing payment plan", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -1017,7 +1008,7 @@ func (api *portalAPI) announcementHandlerGET(w http.ResponseWriter, req *http.Re
 	// Get the current announcement.
 	text, _, err := api.portal.GetAnnouncement()
 	if err != nil {
-		api.portal.log.Printf("ERROR: error getting announcement: %v\n", err)
+		api.portal.log.Error("error getting announcement", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,

@@ -59,7 +59,7 @@ type Wallet interface {
 	Reserve(ids []types.Hash256, duration time.Duration) error
 
 	// RenterSeed derives a renter seed.
-	//RenterSeed(email string) [16]byte
+	RenterSeed(email string) []byte
 
 	// SendSiacoins creates a transaction sending 'amount' to 'dest'. The
 	// transaction is submitted to the transaction pool and is also returned. Fees

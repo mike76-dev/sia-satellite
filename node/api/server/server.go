@@ -17,15 +17,17 @@ type server struct {
 	cm *chain.Manager
 	s  modules.Syncer
 	m  modules.Manager
+	p  modules.Portal
 	w  modules.Wallet
 }
 
 // newServer returns an HTTP handler that serves the hsd API.
-func newServer(cm *chain.Manager, s modules.Syncer, m modules.Manager, w modules.Wallet) http.Handler {
+func newServer(cm *chain.Manager, s modules.Syncer, m modules.Manager, p modules.Portal, w modules.Wallet) http.Handler {
 	srv := server{
 		cm: cm,
 		s:  s,
 		m:  m,
+		p:  p,
 		w:  w,
 	}
 	return jape.Mux(map[string]jape.Handler{
@@ -71,11 +73,16 @@ func newServer(cm *chain.Manager, s modules.Syncer, m modules.Manager, w modules
 		"GET  /hostdb/host/:publickey": srv.hostdbHostHandler,
 		"GET  /hostdb/filtermode":      srv.hostdbFilterModeHandler,
 		"POST /hostdb/filtermode":      srv.hostdbSetFilterModeHandler,
+
+		"GET  /portal/credits":      srv.portalCreditsHandler,
+		"POST /portal/credits":      srv.portalSetCreditsHandler,
+		"GET  /portal/announcement": srv.portalAnnouncementHandler,
+		"POST /portal/announcement": srv.portalSetAnnouncementHandler,
 	})
 }
 
 func StartWeb(l net.Listener, node *node.Node, password string) error {
-	server := newServer(node.ChainManager, node.Syncer, node.Manager, node.Wallet)
+	server := newServer(node.ChainManager, node.Syncer, node.Manager, node.Portal, node.Wallet)
 	api := jape.BasicAuth(password)(server)
 	return http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api") {

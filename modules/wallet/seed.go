@@ -1,12 +1,14 @@
 package wallet
 
 import (
+	"crypto/ed25519"
 	"runtime"
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"go.sia.tech/core/types"
 	"go.uber.org/zap"
+	"lukechampine.com/frand"
 )
 
 const (
@@ -215,4 +217,16 @@ func (w *Wallet) Addresses() (addrs []types.Address) {
 	}
 
 	return
+}
+
+// RenterSeed derives a seed to be used by the renter for accessing the
+// file contracts.
+func (w *Wallet) RenterSeed(email string) []byte {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	renterSeed := make([]byte, ed25519.SeedSize)
+	rs := types.HashBytes(append(w.seed[:], []byte(email)...))
+	defer frand.Read(rs[:])
+	copy(renterSeed, rs[:])
+	return renterSeed
 }
