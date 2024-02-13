@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -10,6 +11,7 @@ import (
 	"github.com/stripe/stripe-go/v75/invoiceitem"
 	"github.com/stripe/stripe-go/v75/price"
 	"github.com/stripe/stripe-go/v75/product"
+	"go.uber.org/zap"
 )
 
 // threadedSettleAccounts tries to settle the outstanding balances.
@@ -24,7 +26,7 @@ func (m *Manager) threadedSettleAccounts() {
 		// Get the account balance.
 		ub, err := m.GetBalance(renter.Email)
 		if err != nil {
-			m.log.Printf("ERROR: couldn't retrieve account balance of %v: %v\n", renter.Email, err)
+			m.log.Error(fmt.Sprintf("couldn't retrieve account balance of %v", renter.Email), zap.Error(err))
 			continue
 		}
 
@@ -41,14 +43,14 @@ func (m *Manager) threadedSettleAccounts() {
 
 		// Sanity check: ub.StripeID shouldn't be empty.
 		if ub.StripeID == "" {
-			m.log.Println("ERROR: Stripe ID not found at", renter.Email)
+			m.log.Error(fmt.Sprintf("Stripe ID not found at %s", renter.Email))
 			continue
 		}
 
 		// Issue an invoice.
 		err = m.managedCreateInvoice(ub.StripeID, ub.Currency, -ub.Balance*ub.SCRate)
 		if err != nil {
-			m.log.Printf("ERROR: couldn't create invoice for %v: %v\n", renter.Email, err)
+			m.log.Error(fmt.Sprintf("couldn't create invoice for %v", renter.Email), zap.Error(err))
 		}
 	}
 }

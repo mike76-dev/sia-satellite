@@ -71,5 +71,5 @@ const (
 
 	// minScanSleep is the minimum amount of time that the hostdb will sleep
 	// between performing scans of the hosts.
-	minScanSleep = time.Hour + 20 * time.Minute
+	minScanSleep = time.Hour + 20*time.Minute
 )

@@ -14,19 +14,10 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/contractor"
 	"github.com/mike76-dev/sia-satellite/modules/manager/hostdb"
-	"github.com/mike76-dev/sia-satellite/persist"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
-)
-
-var (
-	// Nil dependency errors.
-	errNilDB      = errors.New("manager cannot use a nil database")
-	errNilMail    = errors.New("manager cannot use a nil mail client")
-	errNilCS      = errors.New("manager cannot use a nil state")
-	errNilTpool   = errors.New("manager cannot use a nil transaction pool")
-	errNilWallet  = errors.New("manager cannot use a nil wallet")
-	errNilGateway = errors.New("manager cannot use nil gateway")
+	"go.sia.tech/coreutils/chain"
 )
 
 // A directory for storing temporary files.
@@ -35,8 +26,6 @@ const bufferedFilesDir = "temp"
 // A hostContractor negotiates, revises, renews, and provides access to file
 // contracts.
 type hostContractor interface {
-	modules.Alerter
-
 	// SetAllowance sets the amount of money the contractor is allowed to
 	// spend on contracts over a given time period, divided among the number
 	// of hosts specified. Note that contractor can start forming contracts as
@@ -175,10 +164,10 @@ type Manager struct {
 	// Dependencies.
 	db             *sql.DB
 	ms             mail.MailSender
-	cs             modules.ConsensusSet
+	cm             *chain.Manager
+	s              modules.Syncer
 	hostContractor hostContractor
 	hostDB         modules.HostDB
-	tpool          modules.TransactionPool
 	wallet         modules.Wallet
 
 	// Atomic properties.
@@ -206,45 +195,18 @@ type Manager struct {
 	syncing bool
 
 	// Utilities.
-	log           *persist.Logger
-	mu            sync.RWMutex
-	tg            siasync.ThreadGroup
-	staticAlerter *modules.GenericAlerter
-	dir           string
+	log *zap.Logger
+	mu  sync.RWMutex
+	tg  siasync.ThreadGroup
+	dir string
 }
 
 // New returns an initialized Manager.
-func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gateway, tpool modules.TransactionPool, wallet modules.Wallet, dir string, name string) (*Manager, <-chan error) {
+func New(db *sql.DB, ms mail.MailSender, cm *chain.Manager, s modules.Syncer, wallet modules.Wallet, dir string, name string) (*Manager, <-chan error) {
 	errChan := make(chan error, 1)
 
-	// Check that all the dependencies were provided.
-	if db == nil {
-		errChan <- errNilDB
-		return nil, errChan
-	}
-	if ms == nil {
-		errChan <- errNilMail
-		return nil, errChan
-	}
-	if cs == nil {
-		errChan <- errNilCS
-		return nil, errChan
-	}
-	if g == nil {
-		errChan <- errNilGateway
-		return nil, errChan
-	}
-	if tpool == nil {
-		errChan <- errNilTpool
-		return nil, errChan
-	}
-	if wallet == nil {
-		errChan <- errNilWallet
-		return nil, errChan
-	}
-
 	// Create the HostDB object.
-	hdb, errChanHDB := hostdb.New(db, g, cs, dir)
+	hdb, errChanHDB := hostdb.New(db, cm, s, dir)
 	if err := modules.PeekErr(errChanHDB); err != nil {
 		errChan <- err
 		return nil, errChan
@@ -253,22 +215,21 @@ func New(db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, g modules.Gate
 	// Create the Manager object.
 	m := &Manager{
 		name:   name,
-		cs:     cs,
+		cm:     cm,
 		db:     db,
 		ms:     ms,
 		hostDB: hdb,
-		tpool:  tpool,
+		s:      s,
 		wallet: wallet,
 
 		exchRates:        make(map[string]float64),
 		multipartUploads: make(map[types.Hash256]struct{}),
 
-		staticAlerter: modules.NewAlerter("manager"),
-		dir:           dir,
+		dir: dir,
 	}
 
 	// Create the Contractor.
-	hc, errChanContractor := contractor.New(db, cs, m, tpool, wallet, hdb, dir)
+	hc, errChanContractor := contractor.New(db, cm, s, m, wallet, hdb, dir)
 	if err := modules.PeekErr(errChanContractor); err != nil {
 		errChan <- err
 		return nil, errChan
@@ -520,8 +481,8 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance, invoicing bool) (
 
 	// Add the cost of paying the transaction fees and then double the contract
 	// costs to account for renewing a full set of contracts.
-	_, feePerByte := m.tpool.FeeEstimation()
-	txnsFees := feePerByte.Mul64(modules.EstimatedFileContractTransactionSetSize).Mul64(allowance.Hosts).Mul64(3)
+	feePerByte := m.cm.RecommendedFee()
+	txnsFees := feePerByte.Mul64(2048).Mul64(allowance.Hosts).Mul64(3)
 	totalContractCost = totalContractCost.Add(txnsFees)
 	totalContractCost = totalContractCost.Mul64(2)
 
@@ -568,7 +529,7 @@ func (m *Manager) PriceEstimation(allowance modules.Allowance, invoicing bool) (
 	// estimate the renter to spend all of its allowance so the Siafund fee
 	// will be calculated on the sum of the allowance and the hosts collateral.
 	totalPayout := totalCost.Add(hostCollateral)
-	siafundFee := modules.Tax(m.cs.Height(), totalPayout)
+	siafundFee := modules.Tax(m.cm.Tip().Height, totalPayout)
 	totalContractCost = totalContractCost.Add(siafundFee)
 
 	// Increase estimates by a factor of safety to account for host churn and
@@ -618,7 +579,7 @@ func (m *Manager) ContractPriceEstimation(hpk types.PublicKey, endHeight uint64,
 		return types.ZeroCurrency, 0, errors.New("host filtered")
 	}
 
-	height := m.cs.Height()
+	height := m.cm.Tip().Height
 	period := endHeight - height
 	contractCost := host.Settings.ContractPrice
 	downloadCost := host.Settings.DownloadBandwidthPrice
@@ -636,8 +597,8 @@ func (m *Manager) ContractPriceEstimation(hpk types.PublicKey, endHeight uint64,
 
 	// Add the cost of paying the transaction fees and then double the contract
 	// cost to account for renewing.
-	_, feePerByte := m.tpool.FeeEstimation()
-	txnsFees := feePerByte.Mul64(modules.EstimatedFileContractTransactionSetSize).Mul64(3)
+	feePerByte := m.cm.RecommendedFee()
+	txnsFees := feePerByte.Mul64(2048).Mul64(3)
 	contractCost = contractCost.Add(txnsFees)
 	contractCost = contractCost.Mul64(2)
 
@@ -904,7 +865,7 @@ func (m *Manager) LockSiacoins(email string, amount float64) error {
 	}
 	amountWithFee := amount * (1 + fee)
 	if !ub.Subscribed && amountWithFee > ub.Balance {
-		m.log.Println("WARN: trying to lock more than the available balance")
+		m.log.Warn("trying to lock more than the available balance")
 		amountWithFee = ub.Balance
 	}
 
@@ -948,7 +909,7 @@ func (m *Manager) UnlockSiacoins(email string, amount, total float64, height uin
 	unlocked := amount
 	burned := total - amount
 	if total > ub.Locked {
-		m.log.Println("WARN: trying to unlock more than the locked balance")
+		m.log.Warn("trying to unlock more than the locked balance")
 		if burned < ub.Locked {
 			unlocked = ub.Locked - burned
 		} else {
@@ -1037,18 +998,12 @@ func (m *Manager) RetrieveSpendings(email string, currency string) ([]modules.Us
 
 // BlockHeight returns the current block height.
 func (m *Manager) BlockHeight() uint64 {
-	return m.cs.Height()
+	return m.cm.Tip().Height
 }
 
 // FeeEstimation returns the minimum and the maximum estimated fees for
 // a transaction.
-func (m *Manager) FeeEstimation() (min, max types.Currency) { return m.tpool.FeeEstimation() }
-
-// GetWalletSeed returns the wallet seed.
-func (m *Manager) GetWalletSeed() (seed modules.Seed, err error) {
-	seed, _, err = m.wallet.PrimarySeed()
-	return
-}
+func (m *Manager) FeeEstimation() types.Currency { return m.cm.RecommendedFee() }
 
 // DeleteMetadata deletes the renter's saved file metadata.
 func (m *Manager) DeleteMetadata(pk types.PublicKey) error {
@@ -1247,7 +1202,7 @@ func (m *Manager) GetEmailPreferences() (string, types.Currency) {
 func (m *Manager) SetEmailPreferences(email string, threshold types.Currency) error {
 	err := m.setEmailPreferences(email, threshold)
 	if err != nil {
-		m.log.Println("ERROR: couldn't save email preferences:", err)
+		m.log.Error("couldn't save email preferences", zap.Error(err))
 	}
 	return err
 }

@@ -6,8 +6,10 @@ import (
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
 )
 
 // Key Assumptions:
@@ -50,7 +52,6 @@ type watchdog struct {
 	renewWindows map[types.PublicKey]uint64
 	blockHeight  uint64
 
-	tpool      modules.TransactionPool
 	contractor *Contractor
 
 	mu sync.Mutex
@@ -111,9 +112,8 @@ func newWatchdog(contractor *Contractor) *watchdog {
 		outputDependencies: make(map[types.SiacoinOutputID]map[types.FileContractID]struct{}),
 
 		renewWindows: make(map[types.PublicKey]uint64),
-		blockHeight:  contractor.blockHeight,
+		blockHeight:  contractor.tip.Height,
 
-		tpool:      contractor.tpool,
 		contractor: contractor,
 	}
 }
@@ -143,12 +143,12 @@ func (w *watchdog) callMonitorContract(args monitorContractArgs) error {
 	defer w.mu.Unlock()
 
 	if _, ok := w.contracts[args.fcID]; ok {
-		w.contractor.log.Println("WARN: watchdog asked to watch contract it already knowns: ", args.fcID)
+		w.contractor.log.Warn("watchdog asked to watch contract it already knowns", zap.Stringer("id", args.fcID))
 		return errAlreadyWatchingContract
 	}
 
 	if len(args.revisionTxn.FileContractRevisions) == 0 {
-		w.contractor.log.Println("ERROR: no revisions in revisiontxn", args)
+		w.contractor.log.Error("no revisions in revisiontxn")
 		return errors.New("no revision in monitor contract args")
 	}
 
@@ -157,7 +157,7 @@ func (w *watchdog) callMonitorContract(args monitorContractArgs) error {
 	saneInputs = saneInputs && len(args.sweepTxn.SiacoinInputs) != 0
 	saneInputs = saneInputs && args.blockHeight != 0
 	if !saneInputs {
-		w.contractor.log.Critical("bad args given for contract: ", args)
+		w.contractor.log.Error("bad args given for contract")
 		return errors.New("bad args for non recovered contract")
 	}
 
@@ -178,35 +178,39 @@ func (w *watchdog) callMonitorContract(args monitorContractArgs) error {
 		w.addOutputDependency(oid, args.fcID)
 	}
 
-	w.contractor.log.Println("INFO: monitoring contract: ", args.fcID)
+	w.contractor.log.Info("monitoring contract", zap.Stringer("id", args.fcID))
 	return nil
 }
 
-// callScanConsensusChange scans applied and reverted blocks, updating the
-// watchdog's state with all information relevant to monitored contracts.
-func (w *watchdog) callScanConsensusChange(cc modules.ConsensusChange) {
+// callScanApplyUpdate scans applied blocks, updating the watchdog's state
+// with all information relevant to monitored contracts.
+func (w *watchdog) callScanApplyUpdate(cau *chain.ApplyUpdate) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	for _, block := range cc.RevertedBlocks {
-		if block.ID() != modules.GenesisID {
-			w.blockHeight--
-		}
-		w.scanRevertedBlock(block)
-	}
 
-	for _, block := range cc.AppliedBlocks {
-		if block.ID() != modules.GenesisID {
-			w.blockHeight++
-		}
-		w.scanAppliedBlock(block)
+	if cau.Block.ID() != cau.State.Network.GenesisState().Index.ID {
+		w.blockHeight++
 	}
+	w.scanAppliedBlock(cau.Block)
+}
+
+// callScanRevertUpdate scans reverted blocks, updating the watchdog's state
+// with all information relevant to monitored contracts.
+func (w *watchdog) callScanRevertUpdate(cru *chain.RevertUpdate) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if cru.Block.ID() != cru.State.Network.GenesisState().Index.ID {
+		w.blockHeight--
+	}
+	w.scanRevertedBlock(cru.Block)
 }
 
 // sendTxnSet broadcasts a transaction set and logs errors that are not
 // duplicate transaction errors. (This is because the watchdog may be
 // overzealous in sending out transactions).
 func (w *watchdog) sendTxnSet(txnSet []types.Transaction, reason string) {
-	w.contractor.log.Println("INFO: sending txn set to tpool:", reason)
+	w.contractor.log.Info("sending txn set to txpool", zap.String("reason", reason))
 
 	// Send the transaction set in a go-routine to avoid deadlock when this
 	// sendTxnSet is called within ProcessConsensusChange.
@@ -217,9 +221,11 @@ func (w *watchdog) sendTxnSet(txnSet []types.Transaction, reason string) {
 		}
 		defer w.contractor.tg.Done()
 
-		err = w.tpool.AcceptTransactionSet(txnSet)
-		if err != nil && !modules.ContainsError(err, modules.ErrDuplicateTransactionSet) {
-			w.contractor.log.Println("ERROR: watchdog send transaction error: " + reason, err)
+		_, err = w.contractor.cm.AddPoolTransactions(txnSet)
+		if err != nil {
+			w.contractor.log.Error("watchdog send transaction error", zap.String("reason", reason), zap.Error(err))
+		} else {
+			w.contractor.s.BroadcastTransactionSet(txnSet)
 		}
 	}()
 }
@@ -227,7 +233,7 @@ func (w *watchdog) sendTxnSet(txnSet []types.Transaction, reason string) {
 // archiveContract archives the file contract. Include a non-zero double spend
 // height if the reason for archival is that the contract was double-spent.
 func (w *watchdog) archiveContract(fcID types.FileContractID, doubleSpendHeight uint64) {
-	w.contractor.log.Println("INFO: archiving contract: ", fcID)
+	w.contractor.log.Info("archiving contract", zap.Stringer("id", fcID))
 	contractData, ok := w.contracts[fcID]
 	if !ok {
 		return
@@ -258,13 +264,13 @@ func (w *watchdog) addOutputDependency(outputID types.SiacoinOutputID, fcID type
 func (w *watchdog) removeOutputDependency(outputID types.SiacoinOutputID, fcID types.FileContractID) {
 	dependentFCs, ok := w.outputDependencies[outputID]
 	if !ok {
-		w.contractor.log.Printf("ERROR: unable to remove output dependency: outputID not found in outputDependencies: outputID: %v\n", outputID)
+		w.contractor.log.Error("unable to remove output dependency: outputID not found in outputDependencies", zap.Stringer("outputID", outputID))
 		return
 	}
 
 	_, foundContract := dependentFCs[fcID]
 	if !foundContract {
-		w.contractor.log.Printf("ERROR: unable to remove output dependency: FileContract not marked in outputDependencies: fcID: %v, outputID: %v\n", fcID, outputID)
+		w.contractor.log.Error("unable to remove output dependency: FileContract not marked in outputDependencies", zap.Stringer("fcid", fcID), zap.Stringer("outputID", outputID))
 		return
 	}
 
@@ -321,7 +327,7 @@ func removeTxnFromSet(txn types.Transaction, txnSet []types.Transaction) ([]type
 	for i, txnFromSet := range txnSet {
 		if txnFromSet.ID() == txnID {
 			// Create the new set without the txn.
-			newSet := append(txnSet[:i], txnSet[i + 1:]...)
+			newSet := append(txnSet[:i], txnSet[i+1:]...)
 			return newSet, nil
 		}
 	}
@@ -342,14 +348,14 @@ func (w *watchdog) scanAppliedBlock(block types.Block) {
 			fcID := txn.FileContractID(i)
 			if contractData, ok := w.contracts[fcID]; ok {
 				contractData.contractFound = true
-				w.contractor.log.Println("INFO: found contract: ", fcID)
+				w.contractor.log.Info("found contract", zap.Stringer("id", fcID))
 			}
 		}
 
 		for num, rev := range txn.FileContractRevisions {
 			if contractData, ok := w.contracts[rev.ParentID]; ok {
 				contractData.revisionFound = rev.RevisionNumber
-				w.contractor.log.Println("INFO: found revision for: ", rev.ParentID, rev.RevisionNumber)
+				w.contractor.log.Info("found revision", zap.Stringer("fcid", rev.ParentID), zap.Uint64("number", rev.RevisionNumber))
 				// Look for the revision signatures.
 				sigs := make([]types.TransactionSignature, 2)
 				for _, sig := range txn.Signatures {
@@ -367,7 +373,7 @@ func (w *watchdog) scanAppliedBlock(block types.Block) {
 		for _, storageProof := range txn.StorageProofs {
 			if contractData, ok := w.contracts[storageProof.ParentID]; ok {
 				contractData.storageProofFound = w.blockHeight
-				w.contractor.log.Println("INFO: found storage proof: ", storageProof.ParentID)
+				w.contractor.log.Info("found storage proof", zap.Stringer("fcid", storageProof.ParentID))
 			}
 		}
 
@@ -400,7 +406,7 @@ func (w *watchdog) findDependencySpends(txn types.Transaction) {
 			// double-spends any inputs for the formation transaction set.
 			_, ok := w.contracts[fcID]
 			if !ok {
-				w.contractor.log.Critical("found dependency on un-monitored formation")
+				w.contractor.log.Error("found dependency on un-monitored formation")
 				continue
 			}
 			spendsMonitoredOutput = true
@@ -423,7 +429,7 @@ func (w *watchdog) findDependencySpends(txn types.Transaction) {
 		// Try removing this transaction from the set.
 		prunedFormationTxnSet, err := removeTxnFromSet(txn, txnSet)
 		if err != nil {
-			w.contractor.log.Println("ERROR: Error removing txn from set, inputs were double-spent:", err, fcID, len(txnSet), txn.ID())
+			w.contractor.log.Error("error removing txn from set, inputs were double-spent", zap.Error(err), zap.Stringer("fcid", fcID), zap.Int("transactions", len(txnSet)), zap.Stringer("txid", txn.ID()))
 
 			// Signal to the contractor that this contract's inputs were
 			// double-spent and that it should be removed.
@@ -432,7 +438,7 @@ func (w *watchdog) findDependencySpends(txn types.Transaction) {
 			continue
 		}
 
-		w.contractor.log.Println("INFO: removed transaction from set for: ", fcID, len(prunedFormationTxnSet), txn.ID())
+		w.contractor.log.Info("removed transaction from set", zap.Stringer("fcid", fcID), zap.Int("transactions", len(prunedFormationTxnSet)), zap.Stringer("txid", txn.ID()))
 		contractData.formationTxnSet = prunedFormationTxnSet
 
 		// Get the new set of parent output IDs.
@@ -466,7 +472,7 @@ func (w *watchdog) findDependencySpends(txn types.Transaction) {
 // of monitored contracts and also for the creation of any new dependencies for
 // monitored formation transaction sets.
 func (w *watchdog) scanRevertedBlock(block types.Block) {
-	w.contractor.log.Println("INFO: watchdog scanning reverted block at height: ", w.blockHeight)
+	w.contractor.log.Info("watchdog scanning reverted block", zap.Uint64("height", w.blockHeight))
 
 	outputsCreatedInBlock := make(map[types.SiacoinOutputID]*types.Transaction)
 	for i := 0; i < len(block.Transactions); i++ {
@@ -488,18 +494,18 @@ func (w *watchdog) scanRevertedBlock(block types.Block) {
 				continue
 			}
 
-			w.contractor.log.Println("INFO: contract formation txn reverted: ", fcID)
+			w.contractor.log.Info("contract formation txn reverted", zap.Stringer("fcid", fcID))
 			contractData.contractFound = false
 
 			// Set watchheight to max(current watch height, current height + leeway).
-			if contractData.formationSweepHeight < w.blockHeight + reorgLeeway {
+			if contractData.formationSweepHeight < w.blockHeight+reorgLeeway {
 				contractData.formationSweepHeight = w.blockHeight + reorgLeeway
 			}
 
 			// Sanity check: if the contract was previously confirmed, it should have
 			// been removed from the formationTxnSet.
 			if len(contractData.formationTxnSet) != 0 {
-				w.contractor.log.Critical("found reverted contract with non-empty formationTxnSet in watchdog", fcID)
+				w.contractor.log.Error("found reverted contract with non-empty formationTxnSet in watchdog", zap.Stringer("fcid", fcID))
 			}
 
 			// Re-add the file contract transaction to the formationTxnSet.
@@ -512,14 +518,14 @@ func (w *watchdog) scanRevertedBlock(block types.Block) {
 
 		for _, rev := range txn.FileContractRevisions {
 			if contractData, ok := w.contracts[rev.ParentID]; ok {
-				w.contractor.log.Println("INFO: revision for monitored contract reverted: ", rev.ParentID, rev.RevisionNumber)
+				w.contractor.log.Info("revision for monitored contract reverted", zap.Stringer("fcid", rev.ParentID), zap.Uint64("number", rev.RevisionNumber))
 				contractData.revisionFound = 0 // There are no zero revisions.
 			}
 		}
 
 		for _, storageProof := range txn.StorageProofs {
 			if contractData, ok := w.contracts[storageProof.ParentID]; ok {
-				w.contractor.log.Println("INFO: storage proof for monitored contract reverted: ", storageProof.ParentID)
+				w.contractor.log.Info("storage proof for monitored contract reverted", zap.Stringer("fcid", storageProof.ParentID))
 				contractData.storageProofFound = 0
 			}
 		}
@@ -559,7 +565,7 @@ func (w *watchdog) updateDependenciesFromRevertedBlock(createdOutputs map[types.
 		}
 		// Add the new dependencies to file contracts dependent on this output.
 		for fcID := range dependentFCs {
-			w.contractor.log.Println("INFO: adding dependency to file contract:", fcID, txn.ID())
+			w.contractor.log.Info("adding dependency to file contract", zap.Stringer("fcid", fcID), zap.Stringer("txid", txn.ID()))
 			w.addDependencyToContractFormationSet(fcID, *txn)
 		}
 		// Queue up the parent outputs so that we can check if they are adding new
@@ -582,7 +588,7 @@ func (w *watchdog) updateDependenciesFromRevertedBlock(createdOutputs map[types.
 		}
 		// Add the new dependencies to file contracts dependent on this output.
 		for fcID := range dependentFCs {
-			w.contractor.log.Println("INFO: adding dependency to file contract:", fcID, txn.ID())
+			w.contractor.log.Info("adding dependency to file contract", zap.Stringer("fcid", fcID), zap.Stringer("txid", txn.ID()))
 			w.addDependencyToContractFormationSet(fcID, *txn)
 		}
 		// Queue up the parent outputs so that we can check if they are adding new
@@ -648,28 +654,28 @@ func (w *watchdog) callCheckContracts() {
 			// Check if the contract was moved to oldContracts.
 			_, exists = w.contractor.staticContracts.OldContract(fcID)
 			if !exists {
-				w.contractor.log.Printf("ERROR: contract %v not found by the watchdog\n", fcID)
+				w.contractor.log.Error("contract not found by the watchdog", zap.Stringer("fcid", fcID))
 			}
 			w.archiveContract(fcID, 0)
 			continue
 		}
 		renter, err := w.contractor.managedFindRenter(fcID)
 		if err != nil {
-			w.contractor.log.Println("ERROR: renter not found by the watchdog")
+			w.contractor.log.Error("renter not found by the watchdog")
 			continue
 		}
 		rw, exists := w.renewWindows[renter.PublicKey]
 		if !exists {
-			w.contractor.log.Println("ERROR: renew window not found by the watchdog")
+			w.contractor.log.Error("renew window not found by the watchdog")
 			continue
 		}
-		
-		if (w.blockHeight >= contractData.windowStart - rw) && (contractData.revisionFound != 0) {
+
+		if (w.blockHeight >= contractData.windowStart-rw) && (contractData.revisionFound != 0) {
 			// Check if the most recent revision has appeared on-chain. If not send it
 			// ourselves. Called in a go-routine because the contractor may be in
 			// maintenance which can cause a deadlock because this function Acquires a
 			// lock using the contractset.
-			w.contractor.log.Println("INFO: checking revision for monitored contract: ", fcID)
+			w.contractor.log.Info("checking revision for monitored contract", zap.Stringer("fcid", fcID))
 			go func(fcid types.FileContractID, bh uint64) {
 				err := w.contractor.tg.Add()
 				if err != nil {
@@ -683,10 +689,10 @@ func (w *watchdog) callCheckContracts() {
 		if w.blockHeight >= contractData.windowEnd {
 			if contractData.storageProofFound == 0 {
 				// TODO: penalize host / send signal back to watchee.
-				w.contractor.log.Println("INFO: didn't find proof", fcID)
+				w.contractor.log.Warn("didn't find proof", zap.Stringer("fcid", fcID))
 			} else {
 				// TODO: ++ host / send signal back to watchee.
-				w.contractor.log.Println("INFO: did find proof", fcID)
+				w.contractor.log.Info("did find proof", zap.Stringer("fcid", fcID))
 			}
 			w.archiveContract(fcID, 0)
 		}
@@ -703,21 +709,21 @@ func (w *watchdog) checkUnconfirmedContract(fcID types.FileContractID, contractD
 	// anymore.
 	var setSize int
 	for _, txn := range contractData.formationTxnSet {
-		setSize += types.EncodedLen(txn)
+		setSize += modules.EncodedLen(txn)
 	}
-	if setSize > modules.TransactionSetSizeLimit {
-		w.contractor.log.Println("UpdatedFormationTxnSet beyond set size limit", fcID)
+	if setSize > 250e3 {
+		w.contractor.log.Warn("updated FormationTxnSet beyond set size limit", zap.Stringer("fcid", fcID))
 	}
 
-	if (w.blockHeight >= contractData.formationSweepHeight) || (setSize > modules.TransactionSetSizeLimit) {
-		w.contractor.log.Println("Sweeping inputs: ", w.blockHeight, contractData.formationSweepHeight)
+	if (w.blockHeight >= contractData.formationSweepHeight) || (setSize > 250e3) {
+		w.contractor.log.Info("sweeping inputs", zap.Uint64("height", w.blockHeight), zap.Uint64("formation height", contractData.formationSweepHeight))
 		// TODO: Add parent transactions if the renter's own dependencies are
 		// causing this to be triggered.
 		w.sweepContractInputs(fcID, contractData)
 	} else {
 		// Try to broadcast the transaction set again.
-		debugStr := fmt.Sprintf("INFO: sending formation txn for contract with id: %v at h=%d wh=%d", fcID, w.blockHeight, contractData.formationSweepHeight)
-		w.contractor.log.Println(debugStr)
+		debugStr := fmt.Sprintf("sending formation txn for contract with id: %v at h=%d wh=%d", fcID, w.blockHeight, contractData.formationSweepHeight)
+		w.contractor.log.Info(debugStr)
 		w.sendTxnSet(contractData.formationTxnSet, debugStr)
 	}
 }
@@ -741,13 +747,13 @@ func (w *watchdog) managedCheckMonitoredRevision(fcID types.FileContractID, heig
 		lastRevisionTxn = contract.Metadata().Transaction
 		w.contractor.staticContracts.Return(contract)
 	} else {
-		w.contractor.log.Println("WARN: unable to acquire monitored contract from contractset", fcID)
+		w.contractor.log.Warn("unable to acquire monitored contract from contractset", zap.Stringer("fcid", fcID))
 		// Try old contracts. If the contract was renewed already it won't be in the
 		// contractset.
 		w.contractor.mu.RLock()
 		contract, ok := w.contractor.staticContracts.OldContract(fcID)
 		if !ok {
-			w.contractor.log.Println("ERROR: unable to acquire monitored contract from oldContracts", fcID)
+			w.contractor.log.Error("unable to acquire monitored contract from oldContracts", zap.Stringer("fcid", fcID))
 			w.contractor.mu.RUnlock()
 			return
 		}
@@ -759,8 +765,8 @@ func (w *watchdog) managedCheckMonitoredRevision(fcID types.FileContractID, heig
 	if lastRevNum > revNumFound {
 		// NOTE: fee-bumping via CPFP (the watchdog will do this every block
 		// until it sees the revision or the window has closed.)
-		debugStr := fmt.Sprintf("INFO: sending revision txn for contract with id: %v revNum: %d", fcID, lastRevNum)
-		w.contractor.log.Println(debugStr)
+		debugStr := fmt.Sprintf("sending revision txn for contract with id: %v revNum: %d", fcID, lastRevNum)
+		w.contractor.log.Info(debugStr)
 		w.sendTxnSet([]types.Transaction{lastRevisionTxn}, debugStr)
 	}
 }
@@ -776,36 +782,44 @@ func (w *watchdog) sweepContractInputs(fcID types.FileContractID, contractData *
 	txn, parents := contractData.sweepTxn, contractData.sweepParents
 	toSign := w.contractor.wallet.MarkWalletInputs(txn)
 	if len(toSign) == 0 {
-		w.contractor.log.Println("INFO: couldn't mark any owned inputs")
+		w.contractor.log.Info("couldn't mark any owned inputs")
 	}
 
 	// Get the size of the transaction set so far for fee calculation.
-	setSize := types.EncodedLen(txn)
+	setSize := modules.EncodedLen(txn)
 	for _, parent := range parents {
-		setSize += types.EncodedLen(parent)
+		setSize += modules.EncodedLen(parent)
 	}
 
 	// Estimate a transaction fee and add it to the txn.
-	_, maxFee := w.tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(uint64(setSize)) // Estimated transaction size in bytes.
+	fee := w.contractor.cm.RecommendedFee()
+	txnFee := fee.Mul64(uint64(setSize)) // Estimated transaction size in bytes.
 	txn.MinerFees = append(txn.MinerFees, txnFee)
 
 	// There can be refund outputs, but the last output is the one that is used to
 	// sweep.
 	numOuts := len(txn.SiacoinOutputs)
 	if numOuts == 0 {
-		w.contractor.log.Println("ERROR: expected at least 1 output in sweepTxn", len(txn.SiacoinOutputs))
+		w.contractor.log.Error("expected at least 1 output in sweepTxn", zap.Int("outputs", len(txn.SiacoinOutputs)))
 		return
 	}
 	replacementOutput := types.SiacoinOutput{
-		Value:   txn.SiacoinOutputs[numOuts - 1].Value.Sub(txnFee),
-		Address: txn.SiacoinOutputs[numOuts - 1].Address,
+		Value:   txn.SiacoinOutputs[numOuts-1].Value.Sub(txnFee),
+		Address: txn.SiacoinOutputs[numOuts-1].Address,
 	}
-	txn.SiacoinOutputs[numOuts - 1] = replacementOutput
+	txn.SiacoinOutputs[numOuts-1] = replacementOutput
 
-	err := w.contractor.wallet.SignTransaction(&txn, toSign, modules.FullCoveredFields())
+	for i, id := range toSign {
+		txn.Signatures = append(txn.Signatures, types.TransactionSignature{
+			ParentID: id,
+			CoveredFields: types.CoveredFields{
+				SiacoinInputs: []uint64{uint64(i)},
+			},
+		})
+	}
+	err := w.contractor.wallet.Sign(w.contractor.cm.TipState(), &txn, toSign)
 	if err != nil {
-		w.contractor.log.Println("ERROR: unable to sign sweep txn", fcID)
+		w.contractor.log.Error("unable to sign sweep txn", zap.Stringer("fcid", fcID), zap.Error(err))
 		return
 	}
 

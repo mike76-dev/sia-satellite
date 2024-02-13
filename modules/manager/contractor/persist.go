@@ -2,6 +2,8 @@ package contractor
 
 import (
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // saveFrequency determines how often the Contractor will be saved.
@@ -11,31 +13,31 @@ const saveFrequency = 2 * time.Minute
 func (c *Contractor) load() error {
 	err := c.initDB()
 	if err != nil {
-		c.log.Println("ERROR: couldn't initialize database:", err)
+		c.log.Error("couldn't initialize database", zap.Error(err))
 		return err
 	}
 
 	err = c.loadState()
 	if err != nil {
-		c.log.Println("ERROR: couldn't load sync state:", err)
+		c.log.Error("couldn't load sync state", zap.Error(err))
 		return err
 	}
 
 	err = c.loadDoubleSpent()
 	if err != nil {
-		c.log.Println("ERROR: couldn't load double-spent contracts:", err)
+		c.log.Error("couldn't load double-spent contracts", zap.Error(err))
 		return err
 	}
 
 	err = c.loadRenewHistory()
 	if err != nil {
-		c.log.Println("ERROR: couldn't load renewal history:", err)
+		c.log.Error("couldn't load renewal history", zap.Error(err))
 		return err
 	}
 
 	err = c.loadRenters()
 	if err != nil {
-		c.log.Println("ERROR: couldn't load renters:", err)
+		c.log.Error("couldn't load renters", zap.Error(err))
 		return err
 	}
 
@@ -43,7 +45,7 @@ func (c *Contractor) load() error {
 	if err != nil {
 		return err
 	}
-	c.staticWatchdog.blockHeight = c.blockHeight
+	c.staticWatchdog.blockHeight = c.tip.Height
 
 	return nil
 }
@@ -52,13 +54,13 @@ func (c *Contractor) load() error {
 func (c *Contractor) save() error {
 	err := c.updateState()
 	if err != nil {
-		c.log.Println("ERROR: couldn't save sync state:", err)
+		c.log.Error("couldn't save sync state", zap.Error(err))
 		return err
 	}
 
 	err = c.updateDoubleSpent()
 	if err != nil {
-		c.log.Println("ERROR: couldn't save double-spent contracts:", err)
+		c.log.Error("couldn't save double-spent contracts", zap.Error(err))
 		return err
 	}
 
@@ -87,7 +89,7 @@ func (c *Contractor) threadedSaveLoop() {
 			err = c.save()
 			c.mu.Unlock()
 			if err != nil {
-				c.log.Println("ERROR: difficulties saving the Contractor:", err)
+				c.log.Error("difficulties saving the Contractor", zap.Error(err))
 			}
 		}
 	}

@@ -10,8 +10,10 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/external"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
 )
 
 const (
@@ -72,7 +74,7 @@ func (m *Manager) calculateAverages() {
 
 	hosts, err := m.ActiveHosts()
 	if err != nil {
-		m.log.Println("ERROR: could not fetch active hosts", err)
+		m.log.Error("could not fetch active hosts", zap.Error(err))
 		return
 	}
 
@@ -117,7 +119,7 @@ func (m *Manager) calculateAverages() {
 
 	// Save to disk.
 	if err := dbPutAverages(m.dbTx, m.hostAverages); err != nil {
-		m.log.Println("ERROR: couldn't save network averages:", err)
+		m.log.Error("couldn't save network averages", zap.Error(err))
 	}
 }
 
@@ -144,7 +146,7 @@ func (m *Manager) threadedCalculateAverages() {
 func (m *Manager) fetchExchangeRates() {
 	data, err := external.FetchSCRates()
 	if err != nil {
-		m.log.Println("ERROR:", err)
+		m.log.Error("couldn't fetch exchange rates", zap.Error(err))
 		return
 	}
 
@@ -233,9 +235,8 @@ const reportTemplate = `
 	</html>
 `
 
-// ProcessConsensusChange gets called to inform Manager about the
-// changes in the consensus set.
-func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
+// ProcessChainApplyUpdate implements chain.Subscriber.
+func (m *Manager) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, _ bool) (err error) {
 	// Define a helper.
 	convertSize := func(size uint64) string {
 		if size < 1024 {
@@ -255,199 +256,203 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 		return fmt.Sprintf("%.2f %s", s, sizes[i])
 	}
 
-	// Process the applied blocks till the first found in the following month.
-	for _, block := range cc.AppliedBlocks {
+	block := cau.Block
+	m.mu.Lock()
+	m.lastBlockTimestamp = block.Timestamp
+	currentMonth := m.currentMonth.Timestamp.Month()
+	currentYear := m.currentMonth.Timestamp.Year()
+	m.mu.Unlock()
+	newMonth := block.Timestamp.Month()
+	if newMonth != currentMonth {
 		m.mu.Lock()
-		m.lastBlockTimestamp = block.Timestamp
-		currentMonth := m.currentMonth.Timestamp.Month()
-		currentYear := m.currentMonth.Timestamp.Year()
-		m.mu.Unlock()
-		newMonth := block.Timestamp.Month()
-		if newMonth != currentMonth {
-			m.mu.Lock()
-			m.prevMonth = m.currentMonth
-			m.currentMonth = blockTimestamp{
-				BlockHeight: cc.BlockHeight,
-				Timestamp:   block.Timestamp,
-			}
-			err := dbPutBlockTimestamps(m.dbTx, m.currentMonth, m.prevMonth)
-			m.mu.Unlock()
-			if err != nil {
-				m.log.Println("ERROR: couldn't save block timestamps", err)
-			}
-
-			// Calculate the monthly spendings of each renter.
-			renters := m.Renters()
-			var formed, renewed, stored, saved, retrieved, migrated, partial uint64
-			var formedFee, renewedFee, storedFee, savedFee, retrievedFee, migratedFee, partialFee float64
-			for _, renter := range renters {
-				ub, err := m.GetBalance(renter.Email)
-				if err != nil {
-					m.log.Println("ERROR: couldn't retrieve balance:", err)
-					continue
-				}
-				us, err := m.GetSpendings(renter.Email, int(currentMonth), currentYear)
-				if err != nil {
-					m.log.Println("ERROR: couldn't retrieve renter spendings:", err)
-					continue
-				}
-				formed += us.Formed
-				if ub.Subscribed {
-					formedFee += float64(us.Formed) * modules.StaticPricing.FormContract.Invoicing
-				} else {
-					formedFee += float64(us.Formed) * modules.StaticPricing.FormContract.PrePayment
-				}
-				renewed += us.Renewed
-				if ub.Subscribed {
-					renewedFee += float64(us.Renewed) * modules.StaticPricing.FormContract.Invoicing
-				} else {
-					renewedFee += float64(us.Renewed) * modules.StaticPricing.FormContract.PrePayment
-				}
-				saved += us.SlabsSaved
-				if ub.Subscribed {
-					savedFee += float64(us.SlabsSaved) * modules.StaticPricing.SaveMetadata.Invoicing
-				} else {
-					savedFee += float64(us.SlabsSaved) * modules.StaticPricing.SaveMetadata.PrePayment
-				}
-				retrieved += us.SlabsRetrieved
-				if ub.Subscribed {
-					retrievedFee += float64(us.SlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.Invoicing
-				} else {
-					retrievedFee += float64(us.SlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.PrePayment
-				}
-				migrated += us.SlabsMigrated
-				if ub.Subscribed {
-					migratedFee += float64(us.SlabsMigrated) * modules.StaticPricing.MigrateSlab.Invoicing
-				} else {
-					migratedFee += float64(us.SlabsMigrated) * modules.StaticPricing.MigrateSlab.PrePayment
-				}
-				count, data, err := m.numSlabs(renter.PublicKey)
-				if err != nil {
-					m.log.Println("ERROR: couldn't retrieve slab count:", err)
-					continue
-				}
-				var storageFee, dataFee float64
-				if ub.Subscribed {
-					storageFee = modules.StaticPricing.StoreMetadata.Invoicing
-					dataFee = modules.StaticPricing.StorePartialData.Invoicing
-				} else {
-					storageFee = modules.StaticPricing.StoreMetadata.PrePayment
-					dataFee = modules.StaticPricing.StorePartialData.PrePayment
-				}
-				storageCost := storageFee * float64(count)
-				stored += uint64(count)
-				storedFee += storageCost
-				us.Used += storageCost
-				us.Overhead += storageCost
-				partialCost := dataFee * float64(data) / 1024 / 1024
-				partial += data
-				partialFee += partialCost
-				us.Used += partialCost
-				us.Overhead += partialCost
-				err = m.UpdateSpendings(renter.Email, us, int(currentMonth), currentYear)
-				if err != nil {
-					m.log.Println("ERROR: couldn't update spendings:", err)
-				}
-				if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
-					// Account on hold, delete the file metadata.
-					m.log.Println("WARN: account on hold, deleting stored metadata")
-					m.DeleteBufferedFiles(renter.PublicKey)
-					m.DeleteMultipartUploads(renter.PublicKey)
-					m.DeleteMetadata(renter.PublicKey)
-					continue
-				}
-				// Deduct from the account balance.
-				if !ub.Subscribed && ub.Balance < storageCost+partialCost {
-					// Insufficient balance, delete the file metadata.
-					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
-					m.DeleteBufferedFiles(renter.PublicKey)
-					m.DeleteMultipartUploads(renter.PublicKey)
-					m.DeleteMetadata(renter.PublicKey)
-					partialCost = ub.Balance - storageCost
-				}
-				ub.Balance -= (storageCost + partialCost)
-				if err := m.UpdateBalance(renter.Email, ub); err != nil {
-					m.log.Println("ERROR: couldn't update balance", err)
-				}
-			}
-
-			// Send a monthly report by email.
-			func() {
-				if m.email == "" {
-					return
-				}
-				type report struct {
-					Name         string
-					Month        string
-					Year         int
-					NumRenters   int
-					NumFormed    uint64
-					FeeFormed    string
-					NumRenewed   uint64
-					FeeRenewed   string
-					NumStored    uint64
-					FeeStored    string
-					NumSaved     uint64
-					FeeSaved     string
-					NumRetrieved uint64
-					FeeRetrieved string
-					NumMigrated  uint64
-					FeeMigrated  string
-					Partial      string
-					FeePartial   string
-					Revenue      string
-				}
-				revenue := formedFee + renewedFee + storedFee + savedFee + retrievedFee + migratedFee + partialFee
-				t := template.New("report")
-				t, err := t.Parse(reportTemplate)
-				if err != nil {
-					m.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
-					return
-				}
-				var b bytes.Buffer
-				t.Execute(&b, report{
-					Name:         m.name,
-					Month:        currentMonth.String(),
-					Year:         currentYear,
-					NumRenters:   len(renters),
-					NumFormed:    formed,
-					FeeFormed:    fmt.Sprintf("%.2f SC", formedFee),
-					NumRenewed:   renewed,
-					FeeRenewed:   fmt.Sprintf("%.2f SC", renewedFee),
-					NumStored:    stored,
-					FeeStored:    fmt.Sprintf("%.2f SC", storedFee),
-					NumSaved:     saved,
-					FeeSaved:     fmt.Sprintf("%.2f SC", savedFee),
-					NumRetrieved: retrieved,
-					FeeRetrieved: fmt.Sprintf("%.2f SC", retrievedFee),
-					NumMigrated:  migrated,
-					FeeMigrated:  fmt.Sprintf("%.2f SC", migratedFee),
-					Partial:      convertSize(partial),
-					FeePartial:   fmt.Sprintf("%.2f SC", partialFee),
-					Revenue:      fmt.Sprintf("%.2f SC", revenue),
-				})
-				err = m.ms.SendMail("Sia Satellite", m.email, "Your Monthly Report", &b)
-				if err != nil {
-					m.log.Println("ERROR: unable to send a monthly report:", err)
-				}
-			}()
-
-			// Delete old spendings records from the database.
-			err = m.deleteOldSpendings()
-			if err != nil {
-				m.log.Println("ERROR: couldn't delete old spendings:", err)
-			}
-
-			// Spin a thread to invoice the subscribed accounts.
-			go m.threadedSettleAccounts()
-
-			m.syncDB()
-			break
+		m.prevMonth = m.currentMonth
+		m.currentMonth = blockTimestamp{
+			BlockHeight: cau.State.Index.Height,
+			Timestamp:   block.Timestamp,
 		}
+		err := dbPutBlockTimestamps(m.dbTx, m.currentMonth, m.prevMonth)
+		m.mu.Unlock()
+		if err != nil {
+			m.log.Error("couldn't save block timestamps", zap.Error(err))
+		}
+
+		// Calculate the monthly spendings of each renter.
+		renters := m.Renters()
+		var formed, renewed, stored, saved, retrieved, migrated, partial uint64
+		var formedFee, renewedFee, storedFee, savedFee, retrievedFee, migratedFee, partialFee float64
+		for _, renter := range renters {
+			ub, err := m.GetBalance(renter.Email)
+			if err != nil {
+				m.log.Error("couldn't retrieve balance", zap.Error(err))
+				continue
+			}
+			us, err := m.GetSpendings(renter.Email, int(currentMonth), currentYear)
+			if err != nil {
+				m.log.Error("couldn't retrieve renter spendings", zap.Error(err))
+				continue
+			}
+			formed += us.Formed
+			if ub.Subscribed {
+				formedFee += float64(us.Formed) * modules.StaticPricing.FormContract.Invoicing
+			} else {
+				formedFee += float64(us.Formed) * modules.StaticPricing.FormContract.PrePayment
+			}
+			renewed += us.Renewed
+			if ub.Subscribed {
+				renewedFee += float64(us.Renewed) * modules.StaticPricing.FormContract.Invoicing
+			} else {
+				renewedFee += float64(us.Renewed) * modules.StaticPricing.FormContract.PrePayment
+			}
+			saved += us.SlabsSaved
+			if ub.Subscribed {
+				savedFee += float64(us.SlabsSaved) * modules.StaticPricing.SaveMetadata.Invoicing
+			} else {
+				savedFee += float64(us.SlabsSaved) * modules.StaticPricing.SaveMetadata.PrePayment
+			}
+			retrieved += us.SlabsRetrieved
+			if ub.Subscribed {
+				retrievedFee += float64(us.SlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.Invoicing
+			} else {
+				retrievedFee += float64(us.SlabsRetrieved) * modules.StaticPricing.RetrieveMetadata.PrePayment
+			}
+			migrated += us.SlabsMigrated
+			if ub.Subscribed {
+				migratedFee += float64(us.SlabsMigrated) * modules.StaticPricing.MigrateSlab.Invoicing
+			} else {
+				migratedFee += float64(us.SlabsMigrated) * modules.StaticPricing.MigrateSlab.PrePayment
+			}
+			count, data, err := m.numSlabs(renter.PublicKey)
+			if err != nil {
+				m.log.Error("couldn't retrieve slab count", zap.Error(err))
+				continue
+			}
+			var storageFee, dataFee float64
+			if ub.Subscribed {
+				storageFee = modules.StaticPricing.StoreMetadata.Invoicing
+				dataFee = modules.StaticPricing.StorePartialData.Invoicing
+			} else {
+				storageFee = modules.StaticPricing.StoreMetadata.PrePayment
+				dataFee = modules.StaticPricing.StorePartialData.PrePayment
+			}
+			storageCost := storageFee * float64(count)
+			stored += uint64(count)
+			storedFee += storageCost
+			us.Used += storageCost
+			us.Overhead += storageCost
+			partialCost := dataFee * float64(data) / 1024 / 1024
+			partial += data
+			partialFee += partialCost
+			us.Used += partialCost
+			us.Overhead += partialCost
+			err = m.UpdateSpendings(renter.Email, us, int(currentMonth), currentYear)
+			if err != nil {
+				m.log.Error("couldn't update spendings", zap.Error(err))
+			}
+			if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
+				// Account on hold, delete the file metadata.
+				m.log.Warn("account on hold, deleting stored metadata")
+				m.DeleteBufferedFiles(renter.PublicKey)
+				m.DeleteMultipartUploads(renter.PublicKey)
+				m.DeleteMetadata(renter.PublicKey)
+				continue
+			}
+			// Deduct from the account balance.
+			if !ub.Subscribed && ub.Balance < storageCost+partialCost {
+				// Insufficient balance, delete the file metadata.
+				m.log.Warn("insufficient account balance, deleting stored metadata")
+				m.DeleteBufferedFiles(renter.PublicKey)
+				m.DeleteMultipartUploads(renter.PublicKey)
+				m.DeleteMetadata(renter.PublicKey)
+				partialCost = ub.Balance - storageCost
+			}
+			ub.Balance -= (storageCost + partialCost)
+			if err := m.UpdateBalance(renter.Email, ub); err != nil {
+				m.log.Error("couldn't update balance", zap.Error(err))
+			}
+		}
+
+		// Send a monthly report by email.
+		func() {
+			if m.email == "" {
+				return
+			}
+			type report struct {
+				Name         string
+				Month        string
+				Year         int
+				NumRenters   int
+				NumFormed    uint64
+				FeeFormed    string
+				NumRenewed   uint64
+				FeeRenewed   string
+				NumStored    uint64
+				FeeStored    string
+				NumSaved     uint64
+				FeeSaved     string
+				NumRetrieved uint64
+				FeeRetrieved string
+				NumMigrated  uint64
+				FeeMigrated  string
+				Partial      string
+				FeePartial   string
+				Revenue      string
+			}
+			revenue := formedFee + renewedFee + storedFee + savedFee + retrievedFee + migratedFee + partialFee
+			t := template.New("report")
+			t, err := t.Parse(reportTemplate)
+			if err != nil {
+				m.log.Error("unable to parse HTML template", zap.Error(err))
+				return
+			}
+			var b bytes.Buffer
+			t.Execute(&b, report{
+				Name:         m.name,
+				Month:        currentMonth.String(),
+				Year:         currentYear,
+				NumRenters:   len(renters),
+				NumFormed:    formed,
+				FeeFormed:    fmt.Sprintf("%.2f SC", formedFee),
+				NumRenewed:   renewed,
+				FeeRenewed:   fmt.Sprintf("%.2f SC", renewedFee),
+				NumStored:    stored,
+				FeeStored:    fmt.Sprintf("%.2f SC", storedFee),
+				NumSaved:     saved,
+				FeeSaved:     fmt.Sprintf("%.2f SC", savedFee),
+				NumRetrieved: retrieved,
+				FeeRetrieved: fmt.Sprintf("%.2f SC", retrievedFee),
+				NumMigrated:  migrated,
+				FeeMigrated:  fmt.Sprintf("%.2f SC", migratedFee),
+				Partial:      convertSize(partial),
+				FeePartial:   fmt.Sprintf("%.2f SC", partialFee),
+				Revenue:      fmt.Sprintf("%.2f SC", revenue),
+			})
+			err = m.ms.SendMail("Sia Satellite", m.email, "Your Monthly Report", &b)
+			if err != nil {
+				m.log.Error("unable to send monthly report", zap.Error(err))
+			}
+		}()
+
+		// Delete old spendings records from the database.
+		err = m.deleteOldSpendings()
+		if err != nil {
+			m.log.Error("couldn't delete old spendings", zap.Error(err))
+		}
+
+		// Spin a thread to invoice the subscribed accounts.
+		go m.threadedSettleAccounts()
+
+		m.syncDB()
 	}
 
 	// Send a warning email if the wallet balance becomes low.
 	m.sendWarning()
+
+	return nil
+}
+
+// ProcessChainRevertUpdate implements chain.Subscriber.
+func (m *Manager) ProcessChainRevertUpdate(_ *chain.RevertUpdate) error {
+	return nil
 }
 
 // outOfSyncTemplate contains the text send by email when the last
@@ -486,6 +491,8 @@ func (m *Manager) sendOutOfSyncWarning() {
 	if since < outOfSyncThreshold {
 		return
 	}
+	hours := int(since.Hours())
+	minutes := int(since.Minutes()) - hours*60
 
 	// Send a warning.
 	type warning struct {
@@ -496,18 +503,18 @@ func (m *Manager) sendOutOfSyncWarning() {
 	t := template.New("warning")
 	t, err := t.Parse(outOfSyncTemplate)
 	if err != nil {
-		m.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		m.log.Error("unable to parse HTML template", zap.Error(err))
 		return
 	}
 	var b bytes.Buffer
 	t.Execute(&b, warning{
 		Name:   m.name,
-		Height: m.cs.Height(),
-		Since:  fmt.Sprintf("%.0fh%.0fm", since.Hours(), since.Minutes()),
+		Height: m.cm.Tip().Height,
+		Since:  fmt.Sprintf("%dh%dm", hours, minutes),
 	})
 	err = m.ms.SendMail("Sia Satellite", m.email, "Out Of Sync Warning", &b)
 	if err != nil {
-		m.log.Println("ERROR: unable to send a warning:", err)
+		m.log.Error("unable to send warning", zap.Error(err))
 		return
 	}
 

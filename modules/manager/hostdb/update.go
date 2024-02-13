@@ -1,11 +1,14 @@
 package hostdb
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
 )
 
 // findHostAnnouncements returns a list of the host announcements found within
@@ -28,6 +31,20 @@ func findHostAnnouncements(b types.Block) (announcements []modules.HostDBEntry) 
 			announcements = append(announcements, host)
 		}
 	}
+	for _, t := range b.V2Transactions() {
+		for _, at := range t.Attestations {
+			addr, pubKey, err := modules.DecodeV2Announcement(at)
+			if err != nil {
+				continue
+			}
+
+			// Add the announcement to the slice being returned.
+			var host modules.HostDBEntry
+			host.Settings.NetAddress = string(addr)
+			host.PublicKey = pubKey
+			announcements = append(announcements, host)
+		}
+	}
 	return
 }
 
@@ -37,7 +54,7 @@ func findHostAnnouncements(b types.Block) (announcements []modules.HostDBEntry) 
 func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 	// Remove garbage hosts and local hosts.
 	if err := modules.NetAddress(host.Settings.NetAddress).IsValid(); err != nil {
-		hdb.staticLog.Printf("WARN: host '%v' has an invalid NetAddress: %v\n", host.Settings.NetAddress, err)
+		hdb.log.Warn(fmt.Sprintf("host '%v' has an invalid NetAddress", host.Settings.NetAddress), zap.Error(err))
 		return
 	}
 	// Ignore all local hosts announced through the blockchain.
@@ -56,9 +73,9 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 		// a zero-value FirstSeen field.
 		oldEntry.Settings.NetAddress = host.Settings.NetAddress
 		if oldEntry.FirstSeen == 0 {
-			oldEntry.FirstSeen = hdb.blockHeight
+			oldEntry.FirstSeen = hdb.tip.Height
 		}
-		oldEntry.LastAnnouncement = hdb.blockHeight
+		oldEntry.LastAnnouncement = hdb.tip.Height
 
 		// Resolve the host's used subnets and update the timestamp if they
 		// changed. We only update the timestamp if resolving the ipNets was
@@ -72,27 +89,27 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 		// Modify hosttree.
 		err = hdb.modify(oldEntry)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: unable to modify host entry of host tree after a blockchain scan:", err)
+			hdb.log.Error("unable to modify host entry of host tree after a blockchain scan", zap.Error(err))
 		}
 
 		// Update the database.
 		err = hdb.updateHost(oldEntry)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: unable to update host entry in the database:", err)
+			hdb.log.Error("unable to update host entry in the database", zap.Error(err))
 		}
 	} else {
-		host.FirstSeen = hdb.blockHeight
+		host.FirstSeen = hdb.tip.Height
 
 		// Insert into hosttree.
 		err := hdb.insert(host)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: unable to insert host entry into host tree after a blockchain scan:", err)
+			hdb.log.Error("unable to insert host entry into host tree after a blockchain scan", zap.Error(err))
 		}
 
 		// Update the database.
 		err = hdb.updateHost(host)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: unable to insert host entry into database:", err)
+			hdb.log.Error("unable to insert host entry into database", zap.Error(err))
 		}
 	}
 
@@ -100,27 +117,32 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 	hdb.queueScan(host)
 }
 
-// ProcessConsensusChange will be called by the consensus set every time there
-// is a change in the blockchain. Updates will always be called in order.
-func (hdb *HostDB) ProcessConsensusChange(cc modules.ConsensusChange) {
+// ProcessChainApplyUpdate implements chain.Subscriber.
+func (hdb *HostDB) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, mayCommit bool) (err error) {
 	hdb.mu.Lock()
 	defer hdb.mu.Unlock()
 
 	// Set the block height before applying blocks to preserve previous
 	// behavior.
-	hdb.blockHeight = cc.BlockHeight
+	hdb.tip = cau.State.Index
 
-	// Add hosts announced in blocks that were applied.
-	for _, block := range cc.AppliedBlocks {
-		for _, host := range findHostAnnouncements(block) {
-			hdb.insertBlockchainHost(host)
+	// Add hosts announced in the block.
+	for _, host := range findHostAnnouncements(cau.Block) {
+		hdb.insertBlockchainHost(host)
+	}
+
+	hdb.synced = hdb.s.Synced() && hdb.tip.Height == hdb.cm.Tip().Height
+	if mayCommit {
+		err := hdb.updateState()
+		if err != nil {
+			hdb.log.Error("unable to save hostdb state", zap.Error(err))
 		}
 	}
 
-	hdb.synced = cc.Synced
-	hdb.lastChange = cc.ID
-	err := hdb.updateState()
-	if err != nil {
-		hdb.staticLog.Println("ERROR: unable to save hostdb state:", err)
-	}
+	return nil
+}
+
+// ProcessChainRevertUpdate implements chain.Subscriber.
+func (hdb *HostDB) ProcessChainRevertUpdate(_ *chain.RevertUpdate) error {
+	return nil
 }

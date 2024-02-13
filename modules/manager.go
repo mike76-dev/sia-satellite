@@ -27,26 +27,26 @@ type HostAverages struct {
 func (ha *HostAverages) EncodeTo(e *types.Encoder) {
 	e.WriteUint64(ha.NumHosts)
 	e.WriteUint64(ha.Duration)
-	ha.StoragePrice.EncodeTo(e)
-	ha.Collateral.EncodeTo(e)
-	ha.DownloadBandwidthPrice.EncodeTo(e)
-	ha.UploadBandwidthPrice.EncodeTo(e)
-	ha.ContractPrice.EncodeTo(e)
-	ha.BaseRPCPrice.EncodeTo(e)
-	ha.SectorAccessPrice.EncodeTo(e)
+	types.V1Currency(ha.StoragePrice).EncodeTo(e)
+	types.V1Currency(ha.Collateral).EncodeTo(e)
+	types.V1Currency(ha.DownloadBandwidthPrice).EncodeTo(e)
+	types.V1Currency(ha.UploadBandwidthPrice).EncodeTo(e)
+	types.V1Currency(ha.ContractPrice).EncodeTo(e)
+	types.V1Currency(ha.BaseRPCPrice).EncodeTo(e)
+	types.V1Currency(ha.SectorAccessPrice).EncodeTo(e)
 }
 
 // DecodeFrom implements types.DecoderFrom.
 func (ha *HostAverages) DecodeFrom(d *types.Decoder) {
 	ha.NumHosts = d.ReadUint64()
 	ha.Duration = d.ReadUint64()
-	ha.StoragePrice.DecodeFrom(d)
-	ha.Collateral.DecodeFrom(d)
-	ha.DownloadBandwidthPrice.DecodeFrom(d)
-	ha.UploadBandwidthPrice.DecodeFrom(d)
-	ha.ContractPrice.DecodeFrom(d)
-	ha.BaseRPCPrice.DecodeFrom(d)
-	ha.SectorAccessPrice.DecodeFrom(d)
+	(*types.V1Currency)(&ha.StoragePrice).DecodeFrom(d)
+	(*types.V1Currency)(&ha.Collateral).DecodeFrom(d)
+	(*types.V1Currency)(&ha.DownloadBandwidthPrice).DecodeFrom(d)
+	(*types.V1Currency)(&ha.UploadBandwidthPrice).DecodeFrom(d)
+	(*types.V1Currency)(&ha.ContractPrice).DecodeFrom(d)
+	(*types.V1Currency)(&ha.BaseRPCPrice).DecodeFrom(d)
+	(*types.V1Currency)(&ha.SectorAccessPrice).DecodeFrom(d)
 }
 
 // UserBalance holds the current balance as well as
@@ -195,8 +195,6 @@ func (fm *FilterMode) FromString(s string) error {
 // A HostDB is a database of hosts that the manager can use for figuring out
 // who to upload to, and download from.
 type HostDB interface {
-	Alerter
-
 	// ActiveHosts returns the list of hosts that are actively being selected
 	// from.
 	ActiveHosts() ([]HostDBEntry, error)
@@ -276,8 +274,6 @@ type HostDB interface {
 // Manager implements the methods necessary to communicate with the
 // hosts.
 type Manager interface {
-	Alerter
-
 	// AcceptContracts accepts a set of contracts from the renter
 	// and adds them to the contract set.
 	AcceptContracts(types.PublicKey, []ContractMetadata)
@@ -338,9 +334,8 @@ type Manager interface {
 	// DownloadObject downloads an object and returns it.
 	DownloadObject(io.Writer, types.PublicKey, []byte, []byte) error
 
-	// FeeEstimation returns the minimum and the maximum estimated fees for
-	// a transaction.
-	FeeEstimation() (types.Currency, types.Currency)
+	// FeeEstimation returns the recommended fee for a transaction.
+	FeeEstimation() types.Currency
 
 	// Filter returns the HostDB's filterMode and filteredHosts.
 	Filter() (FilterMode, map[string]types.PublicKey, []string, error)
@@ -374,9 +369,6 @@ type Manager interface {
 
 	// GetSpendings retrieves the user's spendings.
 	GetSpendings(string, int, int) (UserSpendings, error)
-
-	// GetWalletSeed returns the wallet seed.
-	GetWalletSeed() (Seed, error)
 
 	// Host returns the host associated with the given public key.
 	Host(types.PublicKey) (HostDBEntry, bool, error)
@@ -661,7 +653,7 @@ func (a Allowance) Active() bool {
 
 // EncodeTo implements types.EncoderTo.
 func (a *Allowance) EncodeTo(e *types.Encoder) {
-	a.Funds.EncodeTo(e)
+	types.V1Currency(a.Funds).EncodeTo(e)
 	e.WriteUint64(a.Hosts)
 	e.WriteUint64(a.Period)
 	e.WriteUint64(a.RenewWindow)
@@ -670,20 +662,20 @@ func (a *Allowance) EncodeTo(e *types.Encoder) {
 	e.WriteUint64(a.ExpectedDownload)
 	e.WriteUint64(a.MinShards)
 	e.WriteUint64(a.TotalShards)
-	a.MaxRPCPrice.EncodeTo(e)
-	a.MaxContractPrice.EncodeTo(e)
-	a.MaxDownloadBandwidthPrice.EncodeTo(e)
-	a.MaxSectorAccessPrice.EncodeTo(e)
-	a.MaxStoragePrice.EncodeTo(e)
-	a.MaxUploadBandwidthPrice.EncodeTo(e)
-	a.MinMaxCollateral.EncodeTo(e)
+	types.V1Currency(a.MaxRPCPrice).EncodeTo(e)
+	types.V1Currency(a.MaxContractPrice).EncodeTo(e)
+	types.V1Currency(a.MaxDownloadBandwidthPrice).EncodeTo(e)
+	types.V1Currency(a.MaxSectorAccessPrice).EncodeTo(e)
+	types.V1Currency(a.MaxStoragePrice).EncodeTo(e)
+	types.V1Currency(a.MaxUploadBandwidthPrice).EncodeTo(e)
+	types.V1Currency(a.MinMaxCollateral).EncodeTo(e)
 	e.WriteUint64(a.BlockHeightLeeway)
 	e.WriteBool(a.UploadPacking)
 }
 
 // DecodeFrom implements types.DecoderFrom.
 func (a *Allowance) DecodeFrom(d *types.Decoder) {
-	a.Funds.DecodeFrom(d)
+	(*types.V1Currency)(&a.Funds).DecodeFrom(d)
 	a.Hosts = d.ReadUint64()
 	a.Period = d.ReadUint64()
 	a.RenewWindow = d.ReadUint64()
@@ -692,13 +684,13 @@ func (a *Allowance) DecodeFrom(d *types.Decoder) {
 	a.ExpectedDownload = d.ReadUint64()
 	a.MinShards = d.ReadUint64()
 	a.TotalShards = d.ReadUint64()
-	a.MaxRPCPrice.DecodeFrom(d)
-	a.MaxContractPrice.DecodeFrom(d)
-	a.MaxDownloadBandwidthPrice.DecodeFrom(d)
-	a.MaxSectorAccessPrice.DecodeFrom(d)
-	a.MaxStoragePrice.DecodeFrom(d)
-	a.MaxUploadBandwidthPrice.DecodeFrom(d)
-	a.MinMaxCollateral.DecodeFrom(d)
+	(*types.V1Currency)(&a.MaxRPCPrice).DecodeFrom(d)
+	(*types.V1Currency)(&a.MaxContractPrice).DecodeFrom(d)
+	(*types.V1Currency)(&a.MaxDownloadBandwidthPrice).DecodeFrom(d)
+	(*types.V1Currency)(&a.MaxSectorAccessPrice).DecodeFrom(d)
+	(*types.V1Currency)(&a.MaxStoragePrice).DecodeFrom(d)
+	(*types.V1Currency)(&a.MaxUploadBandwidthPrice).DecodeFrom(d)
+	(*types.V1Currency)(&a.MinMaxCollateral).DecodeFrom(d)
 	a.BlockHeightLeeway = d.ReadUint64()
 	a.UploadPacking = d.ReadBool()
 }

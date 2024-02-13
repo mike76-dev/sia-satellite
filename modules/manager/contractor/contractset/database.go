@@ -8,6 +8,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"go.sia.tech/core/types"
+	"go.uber.org/zap"
 )
 
 // saveContract saves the FileContract in the database. A lock must be acquired
@@ -72,7 +73,7 @@ func (cs *ContractSet) loadContracts(height uint64) error {
 	var fcBytes []byte
 	for rows.Next() {
 		if err := rows.Scan(&id, &renewed, &unlocked, &imported, &fcBytes); err != nil {
-			cs.log.Println("ERROR: unable to load file contract:", err)
+			cs.log.Error("unable to load file contract", zap.Error(err))
 			continue
 		}
 
@@ -81,7 +82,7 @@ func (cs *ContractSet) loadContracts(height uint64) error {
 		fc := &FileContract{db: cs.db}
 		fc.DecodeFrom(d)
 		if err := d.Err(); err != nil {
-			cs.log.Println("ERROR: unable to decode file contract:", err)
+			cs.log.Error("unable to decode file contract", zap.Error(err))
 			continue
 		}
 		copy(fcid[:], id)
@@ -112,7 +113,7 @@ func (cs *ContractSet) managedFindIDs(rpk types.PublicKey) []types.FileContractI
 		WHERE renter_pk = ?
 	`, rpk[:])
 	if err != nil {
-		cs.log.Println("ERROR: couldn't query database:", err)
+		cs.log.Error("couldn't query database", zap.Error(err))
 		return nil
 	}
 	defer rows.Close()
@@ -121,7 +122,7 @@ func (cs *ContractSet) managedFindIDs(rpk types.PublicKey) []types.FileContractI
 	for rows.Next() {
 		id := make([]byte, 32)
 		if err := rows.Scan(&id); err != nil {
-			cs.log.Println("ERROR: unable to get contract ID:", err)
+			cs.log.Error("unable to get contract ID", zap.Error(err))
 			continue
 		}
 		var fcid types.FileContractID

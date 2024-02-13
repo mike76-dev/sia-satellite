@@ -2,6 +2,7 @@ package contractor
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"slices"
 	"time"
@@ -9,7 +10,9 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/contractor/contractset"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
+	"go.uber.org/zap"
 
+	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/core/types"
 )
 
@@ -36,7 +39,7 @@ var (
 // marks down the host score, and marks the contract as !GoodForRenew and
 // !GoodForUpload.
 func (c *Contractor) callNotifyDoubleSpend(fcID types.FileContractID, blockHeight uint64) {
-	c.log.Println("WARN: watchdog found a double-spend: ", fcID, blockHeight)
+	c.log.Warn("watchdog found a double-spend", zap.Stringer("fcid", fcID), zap.Uint64("height", blockHeight))
 
 	// Mark the contract as double-spent. This will cause the contract to be
 	// excluded in period spending.
@@ -46,7 +49,7 @@ func (c *Contractor) callNotifyDoubleSpend(fcID types.FileContractID, blockHeigh
 
 	err := c.MarkContractBad(fcID)
 	if err != nil {
-		c.log.Println("callNotifyDoubleSpend error in MarkContractBad", err)
+		c.log.Error("callNotifyDoubleSpend error in MarkContractBad", zap.Error(err))
 	}
 }
 
@@ -71,7 +74,7 @@ func (c *Contractor) managedCheckForDuplicates() {
 			} else {
 				newContract, oldContract = contract, rc
 			}
-			c.log.Printf("WARN: duplicate contract found. New contract is %x and old contract is %v\n", newContract.ID, oldContract.ID)
+			c.log.Warn(fmt.Sprintf("duplicate contract found. New contract is %x and old contract is %v", newContract.ID, oldContract.ID))
 
 			// Get FileContract.
 			oldSC, ok := c.staticContracts.Acquire(oldContract.ID)
@@ -100,7 +103,7 @@ func (c *Contractor) managedCheckForDuplicates() {
 			c.staticContracts.Erase(oldSC.Metadata().ID)
 			err := c.updateRenewedContract(oldContract.ID, newContract.ID)
 			if err != nil {
-				c.log.Println("ERROR: failed to update renewal history.")
+				c.log.Error("failed to update renewal history", zap.Error(err))
 			}
 
 			// Update the pubkeys map to contain the newest contract id.
@@ -162,7 +165,7 @@ func (c *Contractor) managedEstimateRenewFundingRequirements(contract modules.Re
 		// nothing to do otherwise.
 		currentContract, exists := c.staticContracts.OldContract(currentID)
 		if !exists {
-			c.log.Println("WARN: a known previous contract is not found in old contracts")
+			c.log.Warn("a known previous contract is not found in old contracts")
 			break
 		}
 
@@ -224,8 +227,8 @@ func (c *Contractor) managedEstimateRenewFundingRequirements(contract modules.Re
 
 	// Get an estimate for how much money we will be charged before going into
 	// the transaction pool.
-	_, maxTxnFee := c.tpool.FeeEstimation()
-	txnFees := maxTxnFee.Mul64(2 * modules.EstimatedFileContractTransactionSetSize)
+	fee := c.cm.RecommendedFee()
+	txnFees := fee.Mul64(2 * 2048)
 
 	// Add them all up and then return the estimate plus 33% for error margin
 	// and just general volatility of usage pattern.
@@ -279,7 +282,7 @@ func (c *Contractor) managedPruneRedundantAddressRange() {
 	// hosts.
 	badHosts, err := c.hdb.CheckForIPViolations(pks)
 	if err != nil {
-		c.log.Println("WARN: error checking for IP violations:", err)
+		c.log.Warn("error checking for IP violations", zap.Error(err))
 		return
 	}
 	for _, host := range badHosts {
@@ -287,7 +290,7 @@ func (c *Contractor) managedPruneRedundantAddressRange() {
 		// to iterate through those, too.
 		for _, fcid := range cids[host] {
 			if err := c.managedCancelContract(fcid); err != nil {
-				c.log.Println("WARN: unable to cancel contract in managedPruneRedundantAddressRange", err)
+				c.log.Warn("unable to cancel contract in managedPruneRedundantAddressRange", zap.Error(err))
 			}
 		}
 	}
@@ -314,7 +317,7 @@ func (c *Contractor) managedUpdateContractUtility(fileContract *contractset.File
 	_, exists := c.renewedTo[fileContract.Metadata().ID]
 	c.mu.Unlock()
 	if exists && (utility.GoodForRenew || utility.GoodForUpload) {
-		c.log.Println("CRITICAL: attempting to update contract utility on a contract that has been renewed")
+		c.log.Error("attempting to update contract utility on a contract that has been renewed")
 	}
 
 	return fileContract.UpdateUtility(utility)
@@ -335,20 +338,20 @@ func (c *Contractor) threadedContractMaintenance() {
 
 	// Skip if a satellite maintenance is running.
 	if c.m.Maintenance() {
-		c.log.Println("INFO: skipping contract maintenance because satellite maintenance is running")
+		c.log.Info("skipping contract maintenance because satellite maintenance is running")
 		return
 	}
 
 	// No contract maintenance unless contractor is synced.
 	if !c.managedSynced() {
-		c.log.Println("INFO: skipping contract maintenance since consensus isn't synced yet")
+		c.log.Info("skipping contract maintenance since consensus isn't synced yet")
 		return
 	}
 
 	// No contract maintenance unless the wallet is synced.
-	height, err := c.wallet.Height()
-	if err != nil || height != c.blockHeight {
-		c.log.Println("INFO: skipping contract maintenance since wallet isn't synced yet")
+	height := c.wallet.Tip().Height
+	if height != c.tip.Height {
+		c.log.Info("skipping contract maintenance since wallet isn't synced yet")
 		return
 	}
 
@@ -356,15 +359,15 @@ func (c *Contractor) threadedContractMaintenance() {
 	// fine to return early if another thread is already doing maintenance.
 	// The next block will trigger another round.
 	if !c.maintenanceLock.TryLock() {
-		c.log.Println("ERROR: maintenance lock could not be obtained")
+		c.log.Error("maintenance lock could not be obtained")
 		return
 	}
 	defer c.maintenanceLock.Unlock()
-	c.log.Println("INFO: performing contract maintenance")
+	c.log.Info("performing contract maintenance")
 
 	// Get the current block height.
 	c.mu.Lock()
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 	renters := c.renters
 	c.mu.Unlock()
 
@@ -383,7 +386,7 @@ func (c *Contractor) threadedContractMaintenance() {
 	}
 	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
-		c.log.Println("ERROR: unable to update hostdb contracts:", err)
+		c.log.Error("unable to update hostdb contracts", zap.Error(err))
 		return
 	}
 
@@ -396,11 +399,11 @@ func (c *Contractor) threadedContractMaintenance() {
 	// list.
 	var renewSet []fileContractRenewal
 	var refreshSet []fileContractRenewal
-	_, maxFee := c.tpool.FeeEstimation()
+	fee := c.cm.RecommendedFee()
 	for _, contract := range c.staticContracts.ViewAll() {
 		renter, err := c.managedFindRenter(contract.ID)
 		if err != nil {
-			c.log.Println("WARN: unable to find renter for contract", contract.ID)
+			c.log.Warn("unable to find renter for contract", zap.Stringer("id", contract.ID))
 			continue
 		}
 
@@ -413,7 +416,7 @@ func (c *Contractor) threadedContractMaintenance() {
 		// settings.
 		host, _, err := c.hdb.Host(contract.HostPublicKey)
 		if err != nil {
-			c.log.Println("WARN: error getting host", err)
+			c.log.Warn("error getting host", zap.Error(err))
 			continue
 		}
 		if host.Filtered {
@@ -433,26 +436,26 @@ func (c *Contractor) threadedContractMaintenance() {
 			// Fetch the price table.
 			pt, err := proto.FetchPriceTable(host)
 			if err != nil {
-				c.log.Printf("WARN: unable to fetch price table from %s: %v\n", host.Settings.NetAddress, err)
+				c.log.Warn(fmt.Sprintf("unable to fetch price table from %s", host.Settings.NetAddress), zap.Error(err))
 				continue
 			}
 
 			// Check if the host is gouging.
-			if err := modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, maxFee); err != nil {
-				c.log.Printf("WARN: gouging detected at host %s: %v\n", host.Settings.NetAddress, err)
+			if err := modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, fee); err != nil {
+				c.log.Warn(fmt.Sprintf("gouging detected at host %s", host.Settings.NetAddress), zap.Error(err))
 				continue
 			}
 
 			// Calculate the host's score.
 			sb, err := c.hdb.EstimateHostScore(renter.Allowance, host)
 			if err != nil {
-				c.log.Printf("ERROR: unable to calculate host score of %s: %v\n", host.Settings.NetAddress, err)
+				c.log.Error(fmt.Sprintf("unable to calculate host score of %s", host.Settings.NetAddress), zap.Error(err))
 				continue
 			}
 
 			renewAmount, err := c.managedEstimateRenewFundingRequirements(contract, blockHeight, renter.Allowance)
 			if err != nil {
-				c.log.Println("WARN: contract skipped because there was an error estimating renew funding requirements", renewAmount, err)
+				c.log.Warn("contract skipped because there was an error estimating renew funding requirements", zap.Stringer("amount", renewAmount), zap.Error(err))
 				continue
 			}
 			renewSet = append(renewSet, fileContractRenewal{
@@ -475,10 +478,10 @@ func (c *Contractor) threadedContractMaintenance() {
 		// if less than 'minContractFundRenewalThreshold' funds are remaining
 		// (3% at time of writing), or if there is less than 3 sectors worth of
 		// storage+upload+download remaining.
-		blockBytes := types.NewCurrency64(modules.SectorSize * uint64(renter.Allowance.Period))
+		blockBytes := types.NewCurrency64(rhpv2.SectorSize * uint64(renter.Allowance.Period))
 		sectorStoragePrice := host.Settings.StoragePrice.Mul(blockBytes)
-		sectorUploadBandwidthPrice := host.Settings.UploadBandwidthPrice.Mul64(modules.SectorSize)
-		sectorDownloadBandwidthPrice := host.Settings.DownloadBandwidthPrice.Mul64(modules.SectorSize)
+		sectorUploadBandwidthPrice := host.Settings.UploadBandwidthPrice.Mul64(rhpv2.SectorSize)
+		sectorDownloadBandwidthPrice := host.Settings.DownloadBandwidthPrice.Mul64(rhpv2.SectorSize)
 		sectorBandwidthPrice := sectorUploadBandwidthPrice.Add(sectorDownloadBandwidthPrice)
 		sectorPrice := sectorStoragePrice.Add(sectorBandwidthPrice)
 		percentRemaining, _ := big.NewRat(0, 1).SetFrac(contract.RenterFunds.Big(), contract.TotalCost.Big()).Float64()
@@ -486,13 +489,13 @@ func (c *Contractor) threadedContractMaintenance() {
 			// Fetch the price table.
 			pt, err := proto.FetchPriceTable(host)
 			if err != nil {
-				c.log.Printf("WARN: unable to fetch price table from %s: %v\n", host.Settings.NetAddress, err)
+				c.log.Warn(fmt.Sprintf("unable to fetch price table from %s", host.Settings.NetAddress), zap.Error(err))
 				continue
 			}
 
 			// Check if the host is gouging.
-			if err := modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, maxFee); err != nil {
-				c.log.Printf("WARN: gouging detected at host %s: %v\n", host.Settings.NetAddress, err)
+			if err := modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, fee); err != nil {
+				c.log.Warn(fmt.Sprintf("gouging detected at host %s", host.Settings.NetAddress), zap.Error(err))
 				continue
 			}
 
@@ -523,7 +526,7 @@ func (c *Contractor) threadedContractMaintenance() {
 	}
 
 	if len(renewSet) != 0 || len(refreshSet) != 0 {
-		c.log.Printf("INFO: renewing %v contracts and refreshing %v contracts", len(renewSet), len(refreshSet))
+		c.log.Info(fmt.Sprintf("renewing %v contracts and refreshing %v contracts", len(renewSet), len(refreshSet)))
 	}
 
 	// Update the failed renew map so that it only contains contracts which we
@@ -551,14 +554,8 @@ func (c *Contractor) threadedContractMaintenance() {
 		// Return here if an interrupt or kill signal has been sent.
 		select {
 		case <-c.tg.StopChan():
-			c.log.Println("INFO: returning because the contractor was stopped")
+			c.log.Info("returning because the contractor was stopped")
 		default:
-		}
-
-		unlocked, err := c.wallet.Unlocked()
-		if !unlocked || err != nil {
-			c.log.Println("WARN: contractor is attempting to renew contracts that are about to expire, however the wallet is locked")
-			return
 		}
 
 		// Get the renter. The error is ignored since we know already that
@@ -568,16 +565,16 @@ func (c *Contractor) threadedContractMaintenance() {
 		// Check if the renter has a sufficient balance.
 		ub, err := c.m.GetBalance(renter.Email)
 		if err != nil {
-			c.log.Println("ERROR: couldn't get renter balance:", err)
+			c.log.Error("couldn't get renter balance", zap.Error(err))
 			continue
 		}
 		cost := modules.Float64(renewal.amount)
 		if !ub.Subscribed && ub.Balance < cost/hastings {
-			c.log.Println("INFO: renewal skipped, because renter balance is insufficient")
+			c.log.Info("renewal skipped, because renter balance is insufficient", zap.String("renter", renter.Email))
 			continue
 		}
 		if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
-			c.log.Println("INFO: renewal skipped, because renter account is on hold")
+			c.log.Info("renewal skipped, because renter account is on hold", zap.String("renter", renter.Email))
 			continue
 		}
 
@@ -592,7 +589,7 @@ func (c *Contractor) threadedContractMaintenance() {
 			}
 		}
 		if goodContracts > int(renter.Allowance.Hosts)+hostBufferForRenewals {
-			c.log.Printf("INFO: renewal skipped, because renter has already enough contracts: %v > %v", goodContracts, renter.Allowance.Hosts)
+			c.log.Info(fmt.Sprintf("renewal skipped, because renter has already enough contracts: %v > %v", goodContracts, renter.Allowance.Hosts))
 			continue
 		}
 
@@ -602,9 +599,9 @@ func (c *Contractor) threadedContractMaintenance() {
 		fundsSpent, newContract, err := c.managedRenewContract(renewal.contract, renewal.renterPubKey, renewal.secretKey, renewal.amount, renter.ContractEndHeight())
 		if modules.ContainsError(err, errContractNotGFR) {
 			// Do not add a renewal error.
-			c.log.Println("INFO: contract skipped because it is not good for renew", renewal.contract.ID)
+			c.log.Info("contract skipped because it is not good for renew", zap.Stringer("id", renewal.contract.ID))
 		} else if err != nil {
-			c.log.Println("ERROR: error renewing a contract", renewal.contract.ID, err)
+			c.log.Error("error renewing a contract", zap.Stringer("id", renewal.contract.ID), zap.Error(err))
 			renewErr = modules.ComposeErrors(renewErr, err)
 			numRenewFails++
 		}
@@ -615,12 +612,12 @@ func (c *Contractor) threadedContractMaintenance() {
 			amount := funds / hastings
 			err = c.m.LockSiacoins(renter.Email, amount)
 			if err != nil {
-				c.log.Println("ERROR: couldn't lock funds:", err)
+				c.log.Error("couldn't lock funds", zap.Error(err))
 			}
 			// Increment the number of renewals in the database.
 			err = c.m.IncrementStats(renter.Email, true)
 			if err != nil {
-				c.log.Println("ERROR: couldn't update stats:", err)
+				c.log.Error("couldn't update stats", zap.Error(err))
 			}
 
 			// Add this contract to the contractor and save.
@@ -629,14 +626,14 @@ func (c *Contractor) threadedContractMaintenance() {
 				GoodForRenew:  true,
 			})
 			if err != nil {
-				c.log.Println("ERROR: failed to update the contract utilities", err)
+				c.log.Error("failed to update the contract utilities", zap.Error(err))
 				continue
 			}
 			c.mu.Lock()
 			err = c.save()
 			c.mu.Unlock()
 			if err != nil {
-				c.log.Println("ERROR: unable to save the contractor:", err)
+				c.log.Error("unable to save the contractor", zap.Error(err))
 			}
 		}
 	}
@@ -645,14 +642,8 @@ func (c *Contractor) threadedContractMaintenance() {
 		// Return here if an interrupt or kill signal has been sent.
 		select {
 		case <-c.tg.StopChan():
-			c.log.Println("INFO: returning because the contractor was stopped")
+			c.log.Info("returning because the contractor was stopped")
 		default:
-		}
-
-		unlocked, err := c.wallet.Unlocked()
-		if !unlocked || err != nil {
-			c.log.Println("WARN: contractor is attempting to renew contracts that are about to expire, however the wallet is locked")
-			return
 		}
 
 		// Get the renter. The error is ignored since we know already that
@@ -662,16 +653,16 @@ func (c *Contractor) threadedContractMaintenance() {
 		// Check if the renter has a sufficient balance.
 		ub, err := c.m.GetBalance(renter.Email)
 		if err != nil {
-			c.log.Println("ERROR: couldn't get renter balance:", err)
+			c.log.Error("couldn't get renter balance", zap.Error(err))
 			continue
 		}
 		cost := modules.Float64(renewal.amount)
 		if !ub.Subscribed && ub.Balance < cost/hastings {
-			c.log.Println("INFO: renewal skipped, because renter balance is insufficient")
+			c.log.Info("renewal skipped, because renter balance is insufficient", zap.String("renter", renter.Email))
 			continue
 		}
 		if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
-			c.log.Println("INFO: renewal skipped, because renter account is on hold")
+			c.log.Info("renewal skipped, because renter account is on hold", zap.String("renter", renter.Email))
 			continue
 		}
 
@@ -680,7 +671,7 @@ func (c *Contractor) threadedContractMaintenance() {
 		// 'fundsSpent' will return '0'.
 		fundsSpent, newContract, err := c.managedRenewContract(renewal.contract, renewal.renterPubKey, renewal.secretKey, renewal.amount, renter.ContractEndHeight())
 		if err != nil {
-			c.log.Println("ERROR: error refreshing a contract", renewal.contract.ID, err)
+			c.log.Error("error refreshing a contract", zap.Stringer("id", renewal.contract.ID), zap.Error(err))
 			renewErr = modules.ComposeErrors(renewErr, err)
 			numRenewFails++
 		}
@@ -691,12 +682,12 @@ func (c *Contractor) threadedContractMaintenance() {
 			amount := funds / hastings
 			err = c.m.LockSiacoins(renter.Email, amount)
 			if err != nil {
-				c.log.Println("ERROR: couldn't lock funds:", err)
+				c.log.Error("couldn't lock funds", zap.Error(err))
 			}
 			// Increment the number of renewals in the database.
 			err = c.m.IncrementStats(renter.Email, true)
 			if err != nil {
-				c.log.Println("ERROR: couldn't update stats:", err)
+				c.log.Error("couldn't update stats", zap.Error(err))
 			}
 
 			// Add this contract to the contractor and save.
@@ -705,14 +696,14 @@ func (c *Contractor) threadedContractMaintenance() {
 				GoodForRenew:  true,
 			})
 			if err != nil {
-				c.log.Println("ERROR: failed to update the contract utilities", err)
+				c.log.Error("failed to update the contract utilities", zap.Error(err))
 				continue
 			}
 			c.mu.Lock()
 			err = c.save()
 			c.mu.Unlock()
 			if err != nil {
-				c.log.Println("ERROR: unable to save the contractor:", err)
+				c.log.Error("unable to save the contractor", zap.Error(err))
 			}
 		}
 	}
@@ -735,7 +726,7 @@ func (c *Contractor) threadedContractMaintenance() {
 		}
 		neededContracts := int(renter.Allowance.Hosts) - uploadContracts
 		if neededContracts > 0 {
-			c.log.Printf("INFO: %v need more contracts: %v\n", renter.PublicKey, neededContracts)
+			c.log.Info(fmt.Sprintf("%v need more contracts: %v", renter.PublicKey, neededContracts))
 		}
 
 		// Assemble two exclusion lists. The first one includes all hosts that the
@@ -760,12 +751,12 @@ func (c *Contractor) threadedContractMaintenance() {
 		// Get Hosts.
 		hosts, err := c.hdb.RandomHostsWithAllowance(neededContracts*4+randomHostsBufferForScore, blacklist, addressBlacklist, renter.Allowance)
 		if err != nil {
-			c.log.Println("WARN: not forming new contracts:", err)
+			c.log.Warn("not forming new contracts", zap.Error(err))
 			continue
 		}
 
 		// Calculate the anticipated transaction fee.
-		txnFee := maxFee.Mul64(modules.EstimatedFileContractTransactionSetSize)
+		txnFee := fee.Mul64(2048)
 
 		// Form contracts with the hosts one at a time, until we have enough
 		// contracts.
@@ -773,7 +764,7 @@ func (c *Contractor) threadedContractMaintenance() {
 			// Return here if an interrupt or kill signal has been sent.
 			select {
 			case <-c.tg.StopChan():
-				c.log.Println("INFO: returning because the manager was stopped")
+				c.log.Info("returning because the manager was stopped")
 				return
 			default:
 			}
@@ -786,14 +777,14 @@ func (c *Contractor) threadedContractMaintenance() {
 			// Fetch the price table.
 			pt, err := proto.FetchPriceTable(host)
 			if err != nil {
-				c.log.Printf("WARN: unable to fetch price table from %s: %v", host.Settings.NetAddress, err)
+				c.log.Warn(fmt.Sprintf("unable to fetch price table from %s", host.Settings.NetAddress), zap.Error(err))
 				continue
 			}
 
 			// Check if the host is gouging.
-			err = modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, maxFee)
+			err = modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, fee)
 			if err != nil {
-				c.log.Printf("WARN: gouging detected at %s: %v\n", host.Settings.NetAddress, err)
+				c.log.Warn(fmt.Sprintf("gouging detected at %s", host.Settings.NetAddress), zap.Error(err))
 				continue
 			}
 
@@ -815,47 +806,40 @@ func (c *Contractor) threadedContractMaintenance() {
 			// Check if the renter has a sufficient balance.
 			ub, err := c.m.GetBalance(renter.Email)
 			if err != nil {
-				c.log.Println("ERROR: couldn't get renter balance:", err)
+				c.log.Error("couldn't get renter balance", zap.Error(err))
 				continue
 			}
 			cost := modules.Float64(contractFunds)
 			if !ub.Subscribed && ub.Balance < cost/hastings {
-				c.log.Println("INFO: contract formation skipped, because renter balance is insufficient")
+				c.log.Info("contract formation skipped, because renter balance is insufficient", zap.String("renter", renter.Email))
 				continue
 			}
 			if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
-				c.log.Println("INFO: contract formation skipped, because renter account is on hold")
+				c.log.Info("contract formation skipped, because renter account is on hold", zap.String("renter", renter.Email))
 				continue
-			}
-
-			// Confirm the wallet is still unlocked.
-			unlocked, err := c.wallet.Unlocked()
-			if !unlocked || err != nil {
-				c.log.Println("WARN: contractor is attempting to establish new contracts with hosts, however the wallet is locked")
-				return
 			}
 
 			// Attempt forming a contract with this host.
 			fundsSpent, newContract, err := c.managedNewContract(renter.PublicKey, renter.PrivateKey, host, contractFunds, renter.ContractEndHeight())
 			if err != nil {
-				c.log.Printf("WARN: attempted to form a contract with %v, but negotiation failed: %v\n", host.Settings.NetAddress, err)
+				c.log.Warn(fmt.Sprintf("attempted to form a contract with %v, but negotiation failed", host.Settings.NetAddress), zap.Error(err))
 				continue
 			}
 			neededContracts--
-			c.log.Println("INFO: a new contract has been formed with a host:", newContract.ID)
+			c.log.Info("a new contract has been formed with a host", zap.Stringer("id", newContract.ID))
 
 			// Lock the funds in the database.
 			funds := modules.Float64(fundsSpent)
 			amount := funds / hastings
 			err = c.m.LockSiacoins(renter.Email, amount)
 			if err != nil {
-				c.log.Println("ERROR: couldn't lock funds:", err)
+				c.log.Error("couldn't lock funds", zap.Error(err))
 			}
 
 			// Increment the number of formations in the database.
 			err = c.m.IncrementStats(renter.Email, false)
 			if err != nil {
-				c.log.Println("ERROR: couldn't update stats:", err)
+				c.log.Error("couldn't update stats", zap.Error(err))
 			}
 
 			// Add this contract to the contractor and save.
@@ -864,14 +848,14 @@ func (c *Contractor) threadedContractMaintenance() {
 				GoodForRenew:  true,
 			})
 			if err != nil {
-				c.log.Println("ERROR: failed to update the contract utilities", err)
+				c.log.Error("failed to update the contract utilities", zap.Error(err))
 				continue
 			}
 			c.mu.Lock()
 			err = c.save()
 			c.mu.Unlock()
 			if err != nil {
-				c.log.Println("Unable to save the contractor:", err)
+				c.log.Error("unable to save the contractor", zap.Error(err))
 			}
 		}
 	}

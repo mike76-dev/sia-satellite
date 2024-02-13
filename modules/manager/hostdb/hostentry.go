@@ -40,14 +40,14 @@ func updateHostHistoricInteractions(host *modules.HostDBEntry, bh uint64) {
 	// more than recentInteractionWeightLimit of the decay limit.
 	rsi := float64(host.RecentSuccessfulInteractions)
 	rfi := float64(host.RecentFailedInteractions)
-	if hsi + hfi > historicInteractionDecayLimit {
-		if rsi + rfi > recentInteractionWeightLimit * (hsi + hfi) {
+	if hsi+hfi > historicInteractionDecayLimit {
+		if rsi+rfi > recentInteractionWeightLimit*(hsi+hfi) {
 			adjustment := recentInteractionWeightLimit * (hsi + hfi) / (rsi + rfi)
 			rsi *= adjustment
 			rfi *= adjustment
 		}
 	} else {
-		if rsi + rfi > recentInteractionWeightLimit * historicInteractionDecayLimit {
+		if rsi+rfi > recentInteractionWeightLimit*historicInteractionDecayLimit {
 			adjustment := recentInteractionWeightLimit * historicInteractionDecayLimit / (rsi + rfi)
 			rsi *= adjustment
 			rfi *= adjustment
@@ -57,8 +57,8 @@ func updateHostHistoricInteractions(host *modules.HostDBEntry, bh uint64) {
 	hfi += rfi
 
 	// Apply the decay of the rest of the blocks.
-	if passedTime > 1 && hsi + hfi > historicInteractionDecayLimit {
-		decay := math.Pow(historicInteractionDecay, float64(passedTime - 1))
+	if passedTime > 1 && hsi+hfi > historicInteractionDecayLimit {
+		decay := math.Pow(historicInteractionDecay, float64(passedTime-1))
 		hsi *= decay
 		hfi *= decay
 	}
@@ -91,7 +91,7 @@ func (hdb *HostDB) IncrementSuccessfulInteractions(key types.PublicKey) error {
 	}
 
 	// Update historic values if necessary.
-	updateHostHistoricInteractions(&host, hdb.blockHeight)
+	updateHostHistoricInteractions(&host, hdb.tip.Height)
 
 	// Increment the successful interactions.
 	host.RecentSuccessfulInteractions++
@@ -112,7 +112,7 @@ func (hdb *HostDB) IncrementFailedInteractions(key types.PublicKey) error {
 	defer hdb.mu.Unlock()
 
 	// If we are offline it probably wasn't the host's fault.
-	if !hdb.gateway.Online() {
+	if len(hdb.s.Peers()) == 0 {
 		return nil
 	}
 
@@ -123,7 +123,7 @@ func (hdb *HostDB) IncrementFailedInteractions(key types.PublicKey) error {
 	}
 
 	// Update historic values if necessary.
-	updateHostHistoricInteractions(&host, hdb.blockHeight)
+	updateHostHistoricInteractions(&host, hdb.tip.Height)
 
 	// Increment the failed interactions.
 	host.RecentFailedInteractions++

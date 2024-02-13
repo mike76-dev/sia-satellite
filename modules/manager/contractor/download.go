@@ -16,6 +16,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/internal/object"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
+	"go.uber.org/zap"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
@@ -345,7 +346,7 @@ outer:
 			atomic.AddUint64(&concurrentSlabs, ^uint64(0))
 
 			if resp.err != nil {
-				mgr.contractor.log.Printf("ERROR: download slab %v failed: %v\n", resp.index, resp.err)
+				mgr.contractor.log.Error(fmt.Sprintf("download slab %v failed", resp.index), zap.Error(resp.err))
 				return resp.err
 			}
 
@@ -357,7 +358,7 @@ outer:
 						// Partial slab.
 						_, err = cw.Write(s.Data)
 						if err != nil {
-							mgr.contractor.log.Printf("failed to send partial slab %v: %v\n", respIndex, err)
+							mgr.contractor.log.Error(fmt.Sprintf("failed to send partial slab %v", respIndex), zap.Error(err))
 							return err
 						}
 					} else {
@@ -365,7 +366,7 @@ outer:
 						slabs[respIndex].Decrypt(next.shards)
 						err := slabs[respIndex].Recover(cw, next.shards)
 						if err != nil {
-							mgr.contractor.log.Printf("failed to recover slab %v: %v\n", respIndex, err)
+							mgr.contractor.log.Error(fmt.Sprintf("failed to recover slab %v", respIndex), zap.Error(err))
 							return err
 						}
 					}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
+	"go.uber.org/zap"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/core/types"
@@ -38,7 +39,7 @@ func fundsToExpectedStorage(funds types.Currency, duration uint64, hostSettings 
 // transaction set.
 func (c *Contractor) prepareContractFormation(rpk types.PublicKey, host modules.HostDBEntry, contractFunding, hostCollateral types.Currency, endHeight uint64, address types.Address) ([]types.Transaction, types.Transaction, []types.Transaction, types.Currency, types.Currency, types.Currency, error) {
 	c.mu.RLock()
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 	c.mu.RUnlock()
 
 	// Prepare contract and transaction.
@@ -48,20 +49,22 @@ func (c *Contractor) prepareContractFormation(rpk types.PublicKey, host modules.
 	txn := types.Transaction{
 		FileContracts: []types.FileContract{fc},
 	}
-	_, txnFee := c.tpool.FeeEstimation()
-	minerFee := txnFee.Mul64(modules.EstimatedFileContractTransactionSetSize)
+	txnFee := c.cm.RecommendedFee()
+	minerFee := txnFee.Mul64(2048)
 	txn.MinerFees = []types.Currency{minerFee}
 	totalCost := cost.Add(minerFee).Add(tax)
-	parentTxn, toSign, err := c.wallet.FundTransaction(&txn, totalCost)
+	parents, toSign, err := c.wallet.Fund(&txn, totalCost)
 	if err != nil {
-		c.wallet.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, modules.AddContext(err, "unable to fund transaction")
 	}
 
 	// Make a copy of the transactions to be used to by the watchdog
 	// to double spend these inputs in case the contract never appears on chain.
 	sweepTxn := modules.CopyTransaction(txn)
-	sweepParents := []types.Transaction{modules.CopyTransaction(parentTxn)}
+	var sweepParents []types.Transaction
+	for _, parent := range parents {
+		sweepParents = append(sweepParents, modules.CopyTransaction(parent))
+	}
 
 	// Add an output that sends all funds back to the Satellite address.
 	output := types.SiacoinOutput{
@@ -71,14 +74,21 @@ func (c *Contractor) prepareContractFormation(rpk types.PublicKey, host modules.
 	sweepTxn.SiacoinOutputs = append(sweepTxn.SiacoinOutputs, output)
 
 	// Sign the transaction.
-	cf := modules.ExplicitCoveredFields(txn)
-	err = c.wallet.Sign(&txn, toSign, cf)
+	for i, id := range toSign {
+		txn.Signatures = append(txn.Signatures, types.TransactionSignature{
+			ParentID: id,
+			CoveredFields: types.CoveredFields{
+				SiacoinInputs: []uint64{uint64(i)},
+			},
+		})
+	}
+	err = c.wallet.Sign(c.cm.TipState(), &txn, toSign)
 	if err != nil {
-		c.wallet.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
+		c.wallet.Release(append(parents, txn))
 		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, modules.AddContext(err, "unable to sign transaction")
 	}
 
-	return append([]types.Transaction{parentTxn}, txn), sweepTxn, sweepParents, totalCost, minerFee, tax, nil
+	return append(parents, txn), sweepTxn, sweepParents, totalCost, minerFee, tax, nil
 }
 
 // managedNewContract negotiates an initial file contract with the specified
@@ -87,7 +97,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	// Check if we know this renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk]
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 	c.mu.RUnlock()
 	if !exists {
 		return types.ZeroCurrency, modules.RenterContract{}, ErrRenterNotFound
@@ -140,7 +150,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		hostSettings.NetAddress = host.Settings.NetAddress
 
 		// Check if the host is gouging.
-		_, txnFee := c.tpool.FeeEstimation()
+		txnFee := c.cm.RecommendedFee()
 		if err := modules.CheckGouging(renter.Allowance, blockHeight, &hostSettings, nil, txnFee); err != nil {
 			hostFault = true
 			return modules.AddContext(err, "host is gouging")
@@ -175,7 +185,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		rev, txnSet, err = proto.RPCFormContract(ctx, t, esk, renterTxnSet)
 		if err != nil {
 			hostFault = true
-			c.wallet.ReleaseInputs(renterTxnSet)
+			c.wallet.Release(renterTxnSet)
 			return modules.AddContext(err, "couldn't form contract")
 		}
 
@@ -186,15 +196,13 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	}
 
 	// Submit to blockchain.
-	err = c.tpool.AcceptTransactionSet(txnSet)
-	if modules.ContainsError(err, errDuplicateTransactionSet) {
-		// As long as it made it into the transaction pool, we're good.
-		err = nil
-	}
+	_, err = c.cm.AddPoolTransactions(txnSet)
 	if err != nil {
-		c.wallet.ReleaseInputs(txnSet)
+		c.wallet.Release(txnSet)
+		c.log.Error("couldn't submit transaction set to the pool", zap.Error(err))
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
+	c.s.BroadcastTransactionSet(txnSet)
 
 	// Add contract to the set.
 	revisionTxn := types.Transaction{
@@ -203,7 +211,7 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 	}
 	contract, err := c.staticContracts.InsertContract(revisionTxn, blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk, false)
 	if err != nil {
-		c.log.Println("ERROR: couldn't add the new contract to the contract set:", err)
+		c.log.Error("couldn't add the new contract to the contract set", zap.Error(err))
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
 
@@ -229,18 +237,18 @@ func (c *Contractor) managedNewContract(rpk types.PublicKey, rsk types.PrivateKe
 		c.mu.Unlock()
 		// We need to return a funding value because money was spent on this
 		// host, even though the full process could not be completed.
-		c.log.Println("WARN: attempted to form a new contract with a host that this renter already has a contract with.")
+		c.log.Warn("attempted to form a new contract with a host that this renter already has a contract with")
 		return contractFunding, modules.RenterContract{}, fmt.Errorf("%v already has a contract with host %v", contract.RenterPublicKey, contract.HostPublicKey)
 	}
 	c.pubKeysToContractID[contract.RenterPublicKey.String()+contract.HostPublicKey.String()] = contract.ID
 	c.mu.Unlock()
 
-	c.log.Printf("INFO: formed contract %v with %v for %v\n", contract.ID, host.Settings.NetAddress, contract.RenterFunds)
+	c.log.Info("formed new contract", zap.Stringer("id", contract.ID), zap.String("host", host.Settings.NetAddress), zap.Stringer("amount", contract.RenterFunds))
 
 	// Update the hostdb to include the new contract.
 	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
-		c.log.Println("ERROR: unable to update hostdb contracts:", err)
+		c.log.Error("unable to update hostdb contracts", zap.Error(err))
 	}
 	return contractFunding, contract, nil
 }
@@ -256,21 +264,11 @@ func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([
 	// Check if we know this renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk]
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 	c.mu.RUnlock()
 	if !exists {
 		return nil, ErrRenterNotFound
 	}
-
-	// Register or unregister and alerts related to contract formation.
-	var registerLowFundsAlert bool
-	defer func() {
-		if registerLowFundsAlert {
-			c.staticAlerter.RegisterAlert(modules.AlertIDRenterAllowanceLowFunds, AlertMSGAllowanceLowFunds, AlertCauseInsufficientAllowanceFunds, modules.SeverityWarning)
-		} else {
-			c.staticAlerter.UnregisterAlert(modules.AlertIDRenterAllowanceLowFunds)
-		}
-	}()
 
 	// Check if the renter has enough contracts according to their allowance.
 	fundsRemaining := renter.Allowance.Funds
@@ -310,8 +308,8 @@ func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([
 	}
 
 	// Calculate the anticipated transaction fee.
-	_, maxFee := c.tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(modules.EstimatedFileContractTransactionSetSize)
+	fee := c.cm.RecommendedFee()
+	txnFee := fee.Mul64(2048)
 
 	// Form contracts with the hosts one at a time, until we have enough contracts.
 	for _, host := range hosts {
@@ -330,14 +328,14 @@ func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([
 		// Fetch the price table.
 		pt, err := proto.FetchPriceTable(host)
 		if err != nil {
-			c.log.Printf("WARN: unable to fetch price table from %s: %v", host.Settings.NetAddress, err)
+			c.log.Warn(fmt.Sprintf("unable to fetch price table from %s", host.Settings.NetAddress), zap.Error(err))
 			continue
 		}
 
 		// Check if the host is gouging.
 		err = modules.CheckGouging(renter.Allowance, blockHeight, nil, &pt, txnFee)
 		if err != nil {
-			c.log.Printf("WARN: gouging detected at %s: %v\n", host.Settings.NetAddress, err)
+			c.log.Warn(fmt.Sprintf("gouging detected at %s", host.Settings.NetAddress), zap.Error(err))
 			continue
 		}
 
@@ -356,23 +354,16 @@ func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([
 			contractFunds = minInitialContractFunds
 		}
 
-		// Confirm that the wallet is unlocked.
-		unlocked, err := c.wallet.Unlocked()
-		if !unlocked || err != nil {
-			return nil, errors.New("the wallet is locked")
-		}
-
 		// Determine if we have enough money to form a new contract.
 		if fundsRemaining.Cmp(contractFunds) < 0 {
-			registerLowFundsAlert = true
-			c.log.Println("WARN: need to form new contracts, but unable to because of a low allowance")
+			c.log.Warn("need to form new contracts, but unable to because of a low allowance", zap.String("renter", renter.Email))
 			break
 		}
 
 		// Attempt forming a contract with this host.
 		fundsSpent, newContract, err := c.managedNewContract(rpk, rsk, host, contractFunds, endHeight)
 		if err != nil {
-			c.log.Printf("WARN: attempted to form a contract with %v, but negotiation failed: %v\n", host.Settings.NetAddress, err)
+			c.log.Warn(fmt.Sprintf("attempted to form a contract with %v, but negotiation failed", host.Settings.NetAddress), zap.Error(err))
 			continue
 		}
 		fundsRemaining = fundsRemaining.Sub(fundsSpent)
@@ -384,13 +375,13 @@ func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([
 		amount := funds / hastings
 		err = c.m.LockSiacoins(renter.Email, amount)
 		if err != nil {
-			c.log.Println("ERROR: couldn't lock funds:", err)
+			c.log.Error("couldn't lock funds", zap.Error(err))
 		}
 
 		// Increment the number of formations in the database.
 		err = c.m.IncrementStats(renter.Email, false)
 		if err != nil {
-			c.log.Println("ERROR: couldn't update stats")
+			c.log.Error("couldn't update stats", zap.Error(err))
 		}
 
 		// Add this contract to the contractor and save.
@@ -400,14 +391,14 @@ func (c *Contractor) FormContracts(rpk types.PublicKey, rsk types.PrivateKey) ([
 			GoodForRenew:  true,
 		})
 		if err != nil {
-			c.log.Println("ERROR: failed to update the contract utilities", err)
+			c.log.Error("failed to update the contract utilities", zap.Error(err))
 			continue
 		}
 		c.mu.Lock()
 		err = c.save()
 		c.mu.Unlock()
 		if err != nil {
-			c.log.Println("ERROR: unable to save the contractor:", err)
+			c.log.Error("unable to save the contractor", zap.Error(err))
 		}
 	}
 
@@ -420,7 +411,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 	// Check if we know this renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk]
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 	c.mu.RUnlock()
 	if !exists {
 		return types.ZeroCurrency, modules.RenterContract{}, ErrRenterNotFound
@@ -473,7 +464,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 		hostSettings.NetAddress = host.Settings.NetAddress
 
 		// Check if the host is gouging.
-		_, txnFee := c.tpool.FeeEstimation()
+		txnFee := c.cm.RecommendedFee()
 		if err := modules.CheckGouging(renter.Allowance, blockHeight, &hostSettings, nil, txnFee); err != nil {
 			hostFault = true
 			return modules.AddContext(err, "host is gouging")
@@ -504,7 +495,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 		rev, txnSet, err = proto.RPCTrustlessFormContract(ctx, t, s, epk, renterTxnSet)
 		if err != nil {
 			hostFault = true
-			c.wallet.ReleaseInputs(renterTxnSet)
+			c.wallet.Release(renterTxnSet)
 			return modules.AddContext(err, "couldn't form contract")
 		}
 
@@ -515,15 +506,13 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 	}
 
 	// Submit to blockchain.
-	err = c.tpool.AcceptTransactionSet(txnSet)
-	if modules.ContainsError(err, errDuplicateTransactionSet) {
-		// As long as it made it into the transaction pool, we're good.
-		err = nil
-	}
+	_, err = c.cm.AddPoolTransactions(txnSet)
 	if err != nil {
-		c.wallet.ReleaseInputs(txnSet)
+		c.wallet.Release(txnSet)
+		c.log.Error("couldn't submit transaction set to the pool", zap.Error(err))
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
+	c.s.BroadcastTransactionSet(txnSet)
 
 	// Add contract to the set.
 	revisionTxn := types.Transaction{
@@ -532,7 +521,7 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 	}
 	contract, err := c.staticContracts.InsertContract(revisionTxn, blockHeight, totalCost, contractPrice, minerFee, siafundFee, rpk, false)
 	if err != nil {
-		c.log.Println("ERROR: couldn't add the new contract to the contract set:", err)
+		c.log.Error("couldn't add the new contract to the contract set", zap.Error(err))
 		return types.ZeroCurrency, modules.RenterContract{}, err
 	}
 
@@ -558,18 +547,18 @@ func (c *Contractor) managedTrustlessNewContract(s *modules.RPCSession, rpk, epk
 		c.mu.Unlock()
 		// We need to return a funding value because money was spent on this
 		// host, even though the full process could not be completed.
-		c.log.Println("WARN: attempted to form a new contract with a host that this renter already has a contract with.")
+		c.log.Warn("attempted to form a new contract with a host that this renter already has a contract with")
 		return contractFunding, modules.RenterContract{}, fmt.Errorf("%v already has a contract with host %v", contract.RenterPublicKey, contract.HostPublicKey)
 	}
 	c.pubKeysToContractID[contract.RenterPublicKey.String()+contract.HostPublicKey.String()] = contract.ID
 	c.mu.Unlock()
 
-	c.log.Printf("INFO: formed contract %v with %v for %v\n", contract.ID, host.Settings.NetAddress, contract.RenterFunds)
+	c.log.Info("formed new contract", zap.Stringer("id", contract.ID), zap.String("host", host.Settings.NetAddress), zap.Stringer("amount", contract.RenterFunds))
 
 	// Update the hostdb to include the new contract.
 	err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 	if err != nil {
-		c.log.Println("ERROR: unable to update hostdb contracts:", err)
+		c.log.Error("unable to update hostdb contracts", zap.Error(err))
 	}
 	return contractFunding, contract, nil
 }
@@ -601,8 +590,8 @@ func (c *Contractor) FormContract(s *modules.RPCSession, rpk, epk, hpk types.Pub
 	}
 
 	// Calculate the anticipated transaction fee.
-	_, maxFee := c.tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(modules.EstimatedFileContractTransactionSetSize)
+	fee := c.cm.RecommendedFee()
+	txnFee := fee.Mul64(2048)
 
 	// Calculate the contract funding with the host.
 	contractFunds := host.Settings.ContractPrice.Add(txnFee).Mul64(ContractFeeFundingMulFactor)
@@ -616,16 +605,10 @@ func (c *Contractor) FormContract(s *modules.RPCSession, rpk, epk, hpk types.Pub
 		contractFunds = minInitialContractFunds
 	}
 
-	// Confirm that the wallet is unlocked.
-	unlocked, err := c.wallet.Unlocked()
-	if !unlocked || err != nil {
-		return modules.RenterContract{}, errors.New("the wallet is locked")
-	}
-
 	// Attempt forming a contract with this host.
 	fundsSpent, newContract, err := c.managedTrustlessNewContract(s, rpk, epk, host, contractFunds, endHeight)
 	if err != nil {
-		c.log.Printf("WARN: attempted to form a contract with %v, but negotiation failed: %v\n", host.Settings.NetAddress, err)
+		c.log.Warn(fmt.Sprintf("attempted to form a contract with %v, but negotiation failed", host.Settings.NetAddress), zap.Error(err))
 		return modules.RenterContract{}, err
 	}
 
@@ -635,13 +618,13 @@ func (c *Contractor) FormContract(s *modules.RPCSession, rpk, epk, hpk types.Pub
 	amount := funds / hastings
 	err = c.m.LockSiacoins(renter.Email, amount)
 	if err != nil {
-		c.log.Println("ERROR: couldn't lock funds:", err)
+		c.log.Error("couldn't lock funds", zap.Error(err))
 	}
 
 	// Increment the number of formations in the database.
 	err = c.m.IncrementStats(renter.Email, false)
 	if err != nil {
-		c.log.Println("ERROR: couldn't update stats")
+		c.log.Error("couldn't update stats", zap.Error(err))
 	}
 
 	// Add this contract to the contractor and save.
@@ -650,14 +633,14 @@ func (c *Contractor) FormContract(s *modules.RPCSession, rpk, epk, hpk types.Pub
 		GoodForRenew:  true,
 	})
 	if err != nil {
-		c.log.Println("ERROR: failed to update the contract utilities", err)
+		c.log.Error("failed to update the contract utilities", zap.Error(err))
 		return modules.RenterContract{}, err
 	}
 	c.mu.Lock()
 	err = c.save()
 	c.mu.Unlock()
 	if err != nil {
-		c.log.Println("ERROR: unable to save the contractor:", err)
+		c.log.Error("unable to save the contractor", zap.Error(err))
 	}
 
 	return newContract, nil

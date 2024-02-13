@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 )
@@ -72,7 +73,7 @@ func (c *Contractor) SetAllowance(rpk types.PublicKey, a modules.Allowance) erro
 		return ErrAllowanceZeroExpectedDownload
 	} else if a.MinShards == 0 || a.TotalShards == 0 {
 		return ErrAllowanceWrongRedundancy
-	} else if !c.cs.Synced() {
+	} else if !c.s.Synced() {
 		return errAllowanceNotSynced
 	}
 
@@ -87,7 +88,7 @@ func (c *Contractor) SetAllowance(rpk types.PublicKey, a modules.Allowance) erro
 	if reflect.DeepEqual(a, renter.Allowance) {
 		return nil
 	}
-	c.log.Printf("INFO: setting allowance for %v\n", rpk)
+	c.log.Info("setting allowance for", zap.Stringer("renter", rpk))
 
 	// Set the current period if the existing allowance is empty.
 	//
@@ -110,7 +111,7 @@ func (c *Contractor) SetAllowance(rpk types.PublicKey, a modules.Allowance) erro
 	c.mu.Lock()
 	unlockContracts := false
 	if reflect.DeepEqual(renter.Allowance, modules.Allowance{}) {
-		renter.CurrentPeriod = c.blockHeight
+		renter.CurrentPeriod = c.tip.Height
 		if a.Period > a.RenewWindow {
 			renter.CurrentPeriod -= a.RenewWindow
 		}
@@ -121,7 +122,7 @@ func (c *Contractor) SetAllowance(rpk types.PublicKey, a modules.Allowance) erro
 	c.mu.Unlock()
 	err := c.UpdateRenter(renter)
 	if err != nil {
-		c.log.Println("ERROR: unable to update renter after setting allowance:", err)
+		c.log.Error("unable to update renter after setting allowance", zap.Error(err))
 	}
 
 	// Cycle through all contracts and unlock them again since they might have
@@ -165,7 +166,7 @@ func (c *Contractor) managedCancelAllowance(rpk types.PublicKey) error {
 		return ErrRenterNotFound
 	}
 
-	c.log.Printf("INFO: canceling allowance of %v\n", rpk)
+	c.log.Info("canceling allowance", zap.Stringer("renter", rpk))
 
 	// First need to mark all active contracts.
 	ids := c.staticContracts.IDs(rpk)

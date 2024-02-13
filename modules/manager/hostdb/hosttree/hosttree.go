@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
-	"github.com/mike76-dev/sia-satellite/persist"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 
@@ -41,7 +41,7 @@ type (
 		// scoreFn calculates the score of a hostEntry.
 		scoreFn ScoreFunc
 
-		log *persist.Logger
+		log *zap.Logger
 		mu  sync.Mutex
 	}
 
@@ -63,12 +63,12 @@ type (
 		score types.Currency
 		entry *hostEntry
 
-		log *persist.Logger
+		log *zap.Logger
 	}
 )
 
 // createNode creates a new node using the provided `parent` and `entry`.
-func createNode(parent *node, entry *hostEntry, log *persist.Logger) *node {
+func createNode(parent *node, entry *hostEntry, log *zap.Logger) *node {
 	return &node{
 		parent: parent,
 		score:  entry.score,
@@ -82,7 +82,7 @@ func createNode(parent *node, entry *hostEntry, log *persist.Logger) *node {
 }
 
 // New creates a new HostTree given a score function.
-func New(sf ScoreFunc, log *persist.Logger) *HostTree {
+func New(sf ScoreFunc, log *zap.Logger) *HostTree {
 	return &HostTree{
 		hosts: make(map[string]*node),
 		root: &node{
@@ -143,7 +143,7 @@ func (n *node) recursiveInsert(entry *hostEntry) (nodesAdded int, newnode *node)
 func (n *node) nodeAtScore(score types.Currency) *node {
 	// Sanity check - score must be less than the total score of the tree.
 	if score.Cmp(n.score) > 0 {
-		n.log.Println("CRITICAL: node score corruption")
+		n.log.Error("node score corruption")
 		return nil
 	}
 
@@ -159,7 +159,7 @@ func (n *node) nodeAtScore(score types.Currency) *node {
 	}
 
 	if !n.taken {
-		n.log.Println("CRITICAL: node tree structure corruption")
+		n.log.Error("node tree structure corruption")
 		return nil
 	}
 
@@ -347,14 +347,14 @@ func (ht *HostTree) SelectRandom(n int, blacklist, addressBlacklist []types.Publ
 		randScoreBig := frand.BigIntn(ht.root.score.Big())
 		b := randScoreBig.Bytes()
 		buf := make([]byte, 16)
-		copy(buf[16 - len(b):], b[:])
+		copy(buf[16-len(b):], b[:])
 		randScore := types.NewCurrency(binary.BigEndian.Uint64(buf[8:]), binary.BigEndian.Uint64(buf[:8]))
 		node := ht.root.nodeAtScore(randScore)
 		scoreOne := types.NewCurrency64(1)
 
 		if node.entry.Settings.AcceptingContracts &&
 			len(node.entry.ScanHistory) > 0 &&
-			node.entry.ScanHistory[len(node.entry.ScanHistory) - 1].Success &&
+			node.entry.ScanHistory[len(node.entry.ScanHistory)-1].Success &&
 			!filter.Filtered(modules.NetAddress(node.entry.Settings.NetAddress)) &&
 			node.entry.score.Cmp(scoreOne) > 0 {
 			// The host must be online and accepting contracts to be returned

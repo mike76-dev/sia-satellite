@@ -1,13 +1,16 @@
 package contractor
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/contractor/contractset"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
+	"go.uber.org/zap"
 
+	rhpv2 "go.sia.tech/core/rhp/v2"
 	"go.sia.tech/core/types"
 )
 
@@ -70,16 +73,16 @@ func (c *Contractor) managedCheckHostScore(contract modules.RenterContract, sb m
 	if deadScore || badScore {
 		// Log if the utility has changed.
 		if u.GoodForUpload || u.GoodForRenew {
-			c.log.Printf("INFO: marking contract as having no utility because of host score: %v\n", contract.ID)
-			c.log.Println("Min Score:", minScoreGFR)
-			c.log.Println("Score:    ", sb.Score)
-			c.log.Println("Age Adjustment:        ", sb.Age)
-			c.log.Println("Collateral Adjustment: ", sb.Collateral)
-			c.log.Println("Interaction Adjustment:", sb.Interactions)
-			c.log.Println("Price Adjustment:      ", sb.Prices)
-			c.log.Println("Storage Adjustment:    ", sb.StorageRemaining)
-			c.log.Println("Uptime Adjustment:     ", sb.Uptime)
-			c.log.Println("Version Adjustment:    ", sb.Version)
+			c.log.Info("marking contract as having no utility because of host score", zap.Stringer("id", contract.ID))
+			c.log.Info("Min Score", zap.Stringer("minScoreGFR", minScoreGFR))
+			c.log.Info("Score", zap.Stringer("score", sb.Score))
+			c.log.Info("Age Adjustment", zap.Float64("age", sb.Age))
+			c.log.Info("Collateral Adjustment", zap.Float64("collateral", sb.Collateral))
+			c.log.Info("Interaction Adjustment", zap.Float64("interactions", sb.Interactions))
+			c.log.Info("Price Adjustment", zap.Float64("prices", sb.Prices))
+			c.log.Info("Storage Adjustment", zap.Float64("storageRemaining", sb.StorageRemaining))
+			c.log.Info("Uptime Adjustment", zap.Float64("uptime", sb.Uptime))
+			c.log.Info("Version Adjustment", zap.Float64("version", sb.Version))
 		}
 		u.GoodForUpload = false
 		u.GoodForRenew = false
@@ -95,19 +98,19 @@ func (c *Contractor) managedCheckHostScore(contract modules.RenterContract, sb m
 	// Contract should not be used for uplodaing if the score is poor.
 	if !minScoreGFU.IsZero() && sb.Score.Cmp(minScoreGFU) < 0 {
 		if u.GoodForUpload {
-			c.log.Printf("Marking contract as not good for upload because of a poor score: %v\n", contract.ID)
-			c.log.Println("Min Score:", minScoreGFU)
-			c.log.Println("Score:    ", sb.Score)
-			c.log.Println("Age Adjustment:        ", sb.Age)
-			c.log.Println("Collateral Adjustment: ", sb.Collateral)
-			c.log.Println("Interaction Adjustment:", sb.Interactions)
-			c.log.Println("Price Adjustment:      ", sb.Prices)
-			c.log.Println("Storage Adjustment:    ", sb.StorageRemaining)
-			c.log.Println("Uptime Adjustment:     ", sb.Uptime)
-			c.log.Println("Version Adjustment:    ", sb.Version)
+			c.log.Info("marking contract as not good for upload because of a poor score", zap.Stringer("id", contract.ID))
+			c.log.Info("Min Score", zap.Stringer("minScoreGFU", minScoreGFU))
+			c.log.Info("Score", zap.Stringer("score", sb.Score))
+			c.log.Info("Age Adjustment", zap.Float64("age", sb.Age))
+			c.log.Info("Collateral Adjustment", zap.Float64("collateral", sb.Collateral))
+			c.log.Info("Interaction Adjustment", zap.Float64("interactions", sb.Interactions))
+			c.log.Info("Price Adjustment", zap.Float64("prices", sb.Prices))
+			c.log.Info("Storage Adjustment", zap.Float64("storageRemaining", sb.StorageRemaining))
+			c.log.Info("Uptime Adjustment", zap.Float64("uptime", sb.Uptime))
+			c.log.Info("Version Adjustment", zap.Float64("version", sb.Version))
 		}
 		if !u.GoodForRenew {
-			c.log.Println("Marking contract as being good for renew", contract.ID)
+			c.log.Info("marking contract as being good for renew", zap.Stringer("id", contract.ID))
 		}
 		u.GoodForUpload = false
 		u.GoodForRenew = true
@@ -133,12 +136,12 @@ func (c *Contractor) managedCriticalUtilityChecks(fc *contractset.FileContract, 
 	renter, err := c.managedFindRenter(contract.ID)
 	c.mu.RUnlock()
 	if err != nil {
-		c.log.Println("ERROR: renter not found")
+		c.log.Error("renter not found", zap.Stringer("fcid", contract.ID))
 		return modules.ContractUtility{}, false
 	}
 
 	c.mu.RLock()
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 	_, renewed := c.renewedTo[contract.ID]
 	c.mu.RUnlock()
 
@@ -200,7 +203,7 @@ func (c *Contractor) managedHostInHostDBCheck(contract modules.RenterContract) (
 	if !exists || host.Filtered || err != nil {
 		// Log if the utility has changed.
 		if u.GoodForUpload || u.GoodForRenew {
-			c.log.Printf("INFO: marking contract as having no utility because found in hostDB: %v, or host is Filtered: %v - %v\n", exists, host.Filtered, contract.ID)
+			c.log.Info("marking contract as having no utility because found in hostDB", zap.Stringer("fcid", contract.ID))
 		}
 		u.GoodForUpload = false
 		u.GoodForRenew = false
@@ -224,7 +227,7 @@ func (c *Contractor) offlineCheck(contract modules.RenterContract, host modules.
 	if isOffline(host) {
 		// Log if the utility has changed.
 		if u.GoodForUpload || u.GoodForRenew {
-			c.log.Println("INFO: marking contract as having no utility because of host being offline:", contract.ID)
+			c.log.Info("marking contract as having no utility because of host being offline", zap.Stringer("fcid", contract.ID))
 		}
 		u.GoodForUpload = false
 		u.GoodForRenew = false
@@ -242,10 +245,10 @@ func (c *Contractor) upForRenewalCheck(contract modules.RenterContract, renewWin
 	// renew the contract.
 	if blockHeight+renewWindow >= contract.EndHeight {
 		if u.GoodForUpload {
-			c.log.Println("INFO: marking contract as not good for upload because it is time to renew the contract:", contract.ID)
+			c.log.Info("marking contract as not good for upload because it is time to renew the contract", zap.Stringer("fcid", contract.ID))
 		}
 		if !u.GoodForRenew {
-			c.log.Println("INFO: marking contract as being good for renew:", contract.ID)
+			c.log.Info("marking contract as being good for renew", zap.Stringer("fcid", contract.ID))
 		}
 		u.GoodForUpload = false
 		u.GoodForRenew = true
@@ -263,19 +266,19 @@ func (c *Contractor) sufficientFundsCheck(contract modules.RenterContract, host 
 
 	// Contract should not be used for uploading if the contract does
 	// not have enough money remaining to perform the upload.
-	blockBytes := types.NewCurrency64(modules.SectorSize * period)
+	blockBytes := types.NewCurrency64(rhpv2.SectorSize * period)
 	sectorStoragePrice := host.Settings.StoragePrice.Mul(blockBytes)
-	sectorUploadBandwidthPrice := host.Settings.UploadBandwidthPrice.Mul64(modules.SectorSize)
-	sectorDownloadBandwidthPrice := host.Settings.DownloadBandwidthPrice.Mul64(modules.SectorSize)
+	sectorUploadBandwidthPrice := host.Settings.UploadBandwidthPrice.Mul64(rhpv2.SectorSize)
+	sectorDownloadBandwidthPrice := host.Settings.DownloadBandwidthPrice.Mul64(rhpv2.SectorSize)
 	sectorBandwidthPrice := sectorUploadBandwidthPrice.Add(sectorDownloadBandwidthPrice)
 	sectorPrice := sectorStoragePrice.Add(sectorBandwidthPrice)
 	percentRemaining, _ := big.NewRat(0, 1).SetFrac(contract.RenterFunds.Big(), contract.TotalCost.Big()).Float64()
 	if contract.RenterFunds.Cmp(sectorPrice.Mul64(3)) < 0 || percentRemaining < minContractFundUploadThreshold {
 		if u.GoodForUpload {
-			c.log.Printf("INFO: marking contract as not good for upload because of insufficient funds: %v vs. %v - %v\n", contract.RenterFunds.Cmp(sectorPrice.Mul64(3)) < 0, percentRemaining, contract.ID)
+			c.log.Info(fmt.Sprintf("marking contract as not good for upload because of insufficient funds: %v vs. %v", contract.RenterFunds.Cmp(sectorPrice.Mul64(3)) < 0, percentRemaining), zap.Stringer("fcid", contract.ID))
 		}
 		if !u.GoodForRenew {
-			c.log.Println("INFO: marking contract as being good for renew:", contract.ID)
+			c.log.Info("marking contract as being good for renew", zap.Stringer("fcid", contract.ID))
 		}
 		u.GoodForUpload = false
 		u.GoodForRenew = true
@@ -296,10 +299,10 @@ func (c *Contractor) outOfStorageCheck(contract modules.RenterContract, blockHei
 	// Contract should not be used for uploading if the host is out of storage.
 	if blockHeight-u.LastOOSErr <= oosRetryInterval {
 		if u.GoodForUpload {
-			c.log.Println("INFO: marking contract as not being good for upload due to the host running out of storage:", contract.ID)
+			c.log.Info("marking contract as not being good for upload due to the host running out of storage", zap.Stringer("fcid", contract.ID))
 		}
 		if !u.GoodForRenew {
-			c.log.Println("INFO: marking contract as being good for renew:", contract.ID)
+			c.log.Info("marking contract as being good for renew", zap.Stringer("fcid", contract.ID))
 		}
 		u.GoodForUpload = false
 		u.GoodForRenew = true
@@ -315,31 +318,31 @@ func (c *Contractor) gougingCheck(contract modules.RenterContract, host modules.
 	// Get the renter.
 	rpk, err := c.staticContracts.RenterByContractID(contract.ID)
 	if err != nil {
-		c.log.Println("ERROR: no renter found that has this contract:", err)
+		c.log.Error("no renter found that has this contract", zap.Error(err))
 		return u, false
 	}
 	c.mu.Lock()
 	renter, exists := c.renters[rpk]
 	c.mu.Unlock()
 	if !exists {
-		c.log.Println("ERROR: renter not found in the database:", rpk)
+		c.log.Error("renter not found in the database", zap.Stringer("renter", rpk))
 		return u, false
 	}
 
 	// Fetch the price table.
 	pt, err := proto.FetchPriceTable(host)
 	if err != nil {
-		c.log.Printf("WARN: unable to fetch price table from %s: %v", host.Settings.NetAddress, err)
+		c.log.Warn(fmt.Sprintf("unable to fetch price table from %s", host.Settings.NetAddress), zap.Error(err))
 		return u, false
 	}
 
 	// Contract has no utility if the host is gouging.
-	_, maxFee := c.tpool.FeeEstimation()
-	err = modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, maxFee)
+	fee := c.cm.RecommendedFee()
+	err = modules.CheckGouging(renter.Allowance, blockHeight, &host.Settings, &pt, fee)
 	if err != nil {
 		// Log if the utility has changed.
 		if u.GoodForUpload || u.GoodForRenew {
-			c.log.Println("INFO: marking contract as having no utility because the host is gouging:", contract.ID)
+			c.log.Info("marking contract as having no utility because the host is gouging", zap.Stringer("fcid", contract.ID))
 		}
 		u.GoodForUpload = false
 		u.GoodForRenew = false

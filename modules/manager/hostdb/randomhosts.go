@@ -39,7 +39,7 @@ func (hdb *HostDB) RandomHostsWithAllowance(n int, blacklist, addressBlacklist [
 		return []modules.HostDBEntry{}, ErrInitialScanIncomplete
 	}
 	// Create a temporary hosttree from the given allowance.
-	ht := hosttree.New(hdb.managedCalculateHostScoreFn(allowance), hdb.staticLog)
+	ht := hosttree.New(hdb.managedCalculateHostScoreFn(allowance), hdb.log)
 
 	// Insert all known hosts.
 	hdb.mu.RLock()

@@ -1,13 +1,12 @@
 package manager
 
 import (
-	"fmt"
 	"path/filepath"
 	"time"
 
-	"github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
+	"go.uber.org/zap"
 )
 
 const (
@@ -52,29 +51,26 @@ func (m *Manager) syncDB() {
 	// Commit the existing tx.
 	err := m.dbTx.Commit()
 	if err != nil {
-		m.log.Severe("ERROR: failed to apply database update:", err)
+		m.log.Error("failed to apply database update", zap.Error(err))
 		m.dbTx.Rollback()
 	}
 	// Begin a new tx.
 	m.dbTx, err = m.db.Begin()
 	if err != nil {
-		m.log.Severe("ERROR: failed to initialize a db transaction:", err)
+		m.log.Error("failed to initialize a db transaction", zap.Error(err))
 	}
 }
 
 // initPersist initializes the database.
 func (m *Manager) initPersist(dir string) error {
 	// Create the logger.
-	var err error
-	m.log, err = persist.NewFileLogger(filepath.Join(dir, logFile))
+	logger, closeFn, err := persist.NewFileLogger(filepath.Join(dir, logFile))
 	if err != nil {
 		return modules.AddContext(err, "unable to initialize the Manager's logger")
 	}
+	m.log = logger
 	m.tg.AfterStop(func() {
-		err := m.log.Close()
-		if err != nil {
-			fmt.Println("Unable to close the Manager's logger:", err)
-		}
+		closeFn()
 	})
 
 	// Load email preferences.
@@ -112,7 +108,7 @@ func (m *Manager) initPersist(dir string) error {
 		err := m.dbTx.Commit()
 		m.mu.Unlock()
 		if err != nil {
-			m.log.Println("ERROR: unable to close transaction properly during shutdown:", err)
+			m.log.Error("unable to close transaction properly during shutdown", zap.Error(err))
 		}
 	})
 
@@ -143,17 +139,14 @@ func (m *Manager) initPersist(dir string) error {
 
 	// Subscribe to the consensus set using the most recent consensus change.
 	go func() {
-		err := m.cs.ConsensusSetSubscribe(m, modules.ConsensusChangeRecent, m.tg.StopChan())
-		if modules.ContainsError(err, sync.ErrStopped) {
-			return
-		}
+		err := m.cm.AddSubscriber(m, m.cm.Tip())
 		if err != nil {
-			m.log.Critical(err)
+			m.log.Error("failed to subscribe", zap.Error(err))
 			return
 		}
 	}()
 	m.tg.OnStop(func() {
-		m.cs.Unsubscribe(m)
+		m.cm.RemoveSubscriber(m)
 	})
 
 	return nil

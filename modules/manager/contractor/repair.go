@@ -10,6 +10,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/internal/object"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 )
@@ -67,7 +68,7 @@ func (m *migrator) tryPerformMigrations() {
 
 	err := m.contractor.tg.Add()
 	if err != nil {
-		m.contractor.log.Println("ERROR: couldn't add thread:", err)
+		m.contractor.log.Error("couldn't add thread", zap.Error(err))
 		m.migrating = false
 		m.mu.Unlock()
 		return
@@ -86,7 +87,7 @@ func (m *migrator) tryPerformMigrations() {
 
 // performMigrations performs the slab migrations.
 func (m *migrator) performMigrations(ctx context.Context) {
-	m.contractor.log.Println("INFO: performing migrations")
+	m.contractor.log.Info("performing migrations")
 
 	// Prepare a channel to push work.
 	type job struct {
@@ -143,12 +144,12 @@ func (m *migrator) performMigrations(ctx context.Context) {
 			// Deduct from the account balance.
 			renter, err := m.contractor.m.GetRenter(rpk)
 			if err != nil {
-				m.contractor.log.Println("ERROR: couldn't get the renter:", err)
+				m.contractor.log.Error("couldn't get the renter", zap.Error(err))
 				continue
 			}
 			ub, err := m.contractor.m.GetBalance(renter.Email)
 			if err != nil {
-				m.contractor.log.Println("ERROR: couldn't get renter balance:", err)
+				m.contractor.log.Error("couldn't get renter balance", zap.Error(err))
 				continue
 			}
 			var fee float64
@@ -161,7 +162,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 			ub.Balance -= cost
 			err = m.contractor.m.UpdateBalance(renter.Email, ub)
 			if err != nil {
-				m.contractor.log.Println("ERROR: couldn't update renter balance:", err)
+				m.contractor.log.Error("couldn't update renter balance", zap.Error(err))
 				continue
 			}
 
@@ -169,7 +170,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 			year, month, _ := time.Now().Date()
 			us, err := m.contractor.m.GetSpendings(renter.Email, int(month), year)
 			if err != nil {
-				m.contractor.log.Println("ERROR: couldn't retrieve renter spendings:", err)
+				m.contractor.log.Error("couldn't retrieve renter spendings", zap.Error(err))
 				continue
 			}
 			us.Overhead += cost
@@ -177,7 +178,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 
 			err = m.contractor.m.UpdateSpendings(renter.Email, us, int(month), year)
 			if err != nil {
-				m.contractor.log.Println("ERROR: couldn't update renter spendings:", err)
+				m.contractor.log.Error("couldn't update renter spendings", zap.Error(err))
 			}
 		}
 	}()
@@ -191,16 +192,16 @@ func (m *migrator) performMigrations(ctx context.Context) {
 			for j := range jobs {
 				slab, offset, length, err := m.contractor.getSlab(j.Key)
 				if err != nil {
-					m.contractor.log.Printf("ERROR: failed to fetch slab for migration %d/%d, health: %v, err: %v\n", j.slabIdx+1, j.batchSize, j.health, err)
+					m.contractor.log.Error(fmt.Sprintf("failed to fetch slab for migration %d/%d", j.slabIdx+1, j.batchSize), zap.Float64("health", j.health), zap.Error(err))
 					continue
 				}
 
 				// Migrate the slab.
 				err = m.contractor.migrateSlab(ctx, j.renterKey, &slab)
 				if err != nil {
-					m.contractor.log.Printf("ERROR: failed to migrate slab %d/%d, health: %v, err: %v\n", j.slabIdx+1, j.batchSize, j.health, err)
+					m.contractor.log.Error(fmt.Sprintf("failed to migrate slab %d/%d", j.slabIdx+1, j.batchSize), zap.Float64("health", j.health), zap.Error(err))
 				} else {
-					m.contractor.log.Printf("INFO: successfully migrated slab %d/%d\n", j.slabIdx+1, j.batchSize)
+					m.contractor.log.Info(fmt.Sprintf("successfully migrated slab %d/%d", j.slabIdx+1, j.batchSize))
 
 					// Update the slab in the database.
 					key, _ := convertEncryptionKey(slab.Key)
@@ -218,7 +219,7 @@ func (m *migrator) performMigrations(ctx context.Context) {
 					}
 					err = m.contractor.updateSlab(j.renterKey, s, false)
 					if err != nil {
-						m.contractor.log.Printf("ERROR: failed to update slab %d/%d, err: %v\n", j.slabIdx+1, j.batchSize, err)
+						m.contractor.log.Error(fmt.Sprintf("failed to update slab %d/%d", j.slabIdx+1, j.batchSize), zap.Error(err))
 					}
 				}
 
@@ -253,13 +254,13 @@ OUTER:
 		for rpk, num := range numSlabs {
 			renter, err := m.contractor.m.GetRenter(rpk)
 			if err != nil {
-				m.contractor.log.Println("ERROR: couldn't get the renter:", err)
+				m.contractor.log.Error("couldn't get the renter", zap.Error(err))
 				numSlabs[rpk] = 0
 				continue
 			}
 			ub, err := m.contractor.m.GetBalance(renter.Email)
 			if err != nil {
-				m.contractor.log.Println("ERROR: couldn't get renter balance:", err)
+				m.contractor.log.Error("couldn't get renter balance", zap.Error(err))
 				numSlabs[rpk] = 0
 				continue
 			}
@@ -271,12 +272,12 @@ OUTER:
 			}
 			cost := float64(num) * fee
 			if !ub.Subscribed && ub.Balance < cost {
-				m.contractor.log.Println("WARN: skipping slab migrations due to an insufficient account balance:", renter.Email)
+				m.contractor.log.Warn("skipping slab migrations due to an insufficient account balance", zap.String("renter", renter.Email))
 				numSlabs[rpk] = 0
 				continue
 			}
 			if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
-				m.contractor.log.Println("WARN: skipping slab migrations due to the account being on hold:", renter.Email)
+				m.contractor.log.Warn("skipping slab migrations due to the account being on hold", zap.String("renter", renter.Email))
 				numSlabs[rpk] = 0
 			}
 		}
@@ -328,7 +329,7 @@ OUTER:
 			case <-m.contractor.tg.StopChan():
 				return
 			case <-m.maintenanceFinished:
-				m.contractor.log.Println("INFO: migrations interrupted - updating slabs for migration")
+				m.contractor.log.Info("migrations interrupted - updating slabs for migration")
 				continue OUTER
 			case jobs <- job{slab, i, len(toMigrate)}:
 			}
@@ -342,7 +343,7 @@ func (c *Contractor) managedCheckFileHealth() (toRepair []slabInfo, err error) {
 	// Load slabs.
 	slabs, err := c.getSlabs()
 	if err != nil {
-		c.log.Println("ERROR: couldn't load slabs:", err)
+		c.log.Error("couldn't load slabs", zap.Error(err))
 		return
 	}
 
@@ -355,14 +356,14 @@ func (c *Contractor) managedCheckFileHealth() (toRepair []slabInfo, err error) {
 
 		// Sanity check.
 		if slab.MinShards > uint8(len(slab.Shards)) {
-			c.log.Printf("ERROR: retrieved less shards than MinShards (%v/%v)\n", len(slab.Shards), slab.MinShards)
+			c.log.Error(fmt.Sprintf("retrieved less shards than MinShards (%v/%v)", len(slab.Shards), slab.MinShards))
 			continue
 		}
 
 		// Check if the renter has opted in for repairs.
 		renter, err := c.GetRenter(slab.renterKey)
 		if err != nil {
-			c.log.Println("ERROR: couldn't fetch the renter:", err)
+			c.log.Error("couldn't fetch the renter", zap.Error(err))
 			continue
 		}
 		if !renter.Settings.AutoRepairFiles {
@@ -375,11 +376,11 @@ func (c *Contractor) managedCheckFileHealth() (toRepair []slabInfo, err error) {
 			// Fetch the host.
 			host, exists, err := c.hdb.Host(shard.Host)
 			if err != nil {
-				c.log.Println("ERROR: couldn't fetch host:", err)
+				c.log.Error("couldn't fetch host", zap.Error(err))
 				continue
 			}
 			if !exists {
-				c.log.Printf("WARN: host %v not found in the database\n", shard.Host)
+				c.log.Warn("host not found in the database", zap.Stringer("host", shard.Host))
 				continue
 			}
 			if !host.ScanHistory[len(host.ScanHistory)-1].Success {
@@ -421,7 +422,7 @@ func (c *Contractor) managedCheckFileHealth() (toRepair []slabInfo, err error) {
 func (c *Contractor) migrateSlab(ctx context.Context, rpk types.PublicKey, s *object.Slab) error {
 	// Get the current height.
 	c.mu.RLock()
-	bh := c.blockHeight
+	bh := c.tip.Height
 	c.mu.RUnlock()
 
 	// Make two slices. One shall contain all renter contracts,

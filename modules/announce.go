@@ -87,3 +87,20 @@ func DecodeAnnouncement(fullAnnouncement []byte) (na NetAddress, pk types.Public
 
 	return ha.NetAddress, pk, nil
 }
+
+// DecodeV2Announcement verifies a V2 host announcement against the signature.
+func DecodeV2Announcement(at types.Attestation) (na string, pk types.PublicKey, err error) {
+	if at.Key != "HostAnnouncement" {
+		return "", types.PublicKey{}, errAnnNotAnnouncement
+	}
+
+	pk = at.PublicKey
+	h := types.NewHasher()
+	at.EncodeTo(h.E)
+	annHash := h.Sum()
+	if ok := pk.VerifyHash(annHash, at.Signature); !ok {
+		return "", types.PublicKey{}, errAnnUnrecognizedSignature
+	}
+
+	return string(at.Value), pk, nil
+}

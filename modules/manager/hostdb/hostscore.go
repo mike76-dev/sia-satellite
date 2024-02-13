@@ -197,7 +197,7 @@ func (hdb *HostDB) ageScore(entry modules.HostDBEntry) float64 {
 		{1, 3},
 	}
 
-	height := hdb.blockHeight
+	height := hdb.tip.Height
 	age := (height - entry.FirstSeen) / modules.BlocksPerDay
 	weight := 1.0
 	for _, w := range weights {

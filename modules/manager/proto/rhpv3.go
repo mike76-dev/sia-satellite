@@ -12,6 +12,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
+	"go.sia.tech/core/consensus"
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
@@ -90,7 +91,7 @@ func processPayment(s *rhpv3.Stream, payment rhpv3.PaymentMethod) error {
 }
 
 // RPCRenewContract negotiates a contract renewal with the host.
-func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.PrivateKey, rev types.FileContractRevision, txnSet []types.Transaction, toSign []types.Hash256, ts transactionSigner) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
+func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.PrivateKey, rev types.FileContractRevision, txnSet []types.Transaction, toSign []types.Hash256, ts transactionSigner, cs consensus.State) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
 	s := t.DialStream()
 	defer s.Close()
 	s.SetDeadline(time.Now().Add(5 * time.Minute))
@@ -159,13 +160,8 @@ func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.P
 	}
 	txn.Signatures = []types.TransactionSignature{finalRevRenterSig, finalRevHostSig}
 
-	// Sign the inputs we funded the txn with and cover the whole txn including
-	// the existing signatures.
-	cf := types.CoveredFields{
-		WholeTransaction: true,
-		Signatures:       []uint64{0, 1},
-	}
-	if err := ts.Sign(&txn, toSign, cf); err != nil {
+	// Sign the inputs we funded the txn with.
+	if err := ts.Sign(cs, &txn, toSign); err != nil {
 		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to sign transaction")
 	}
 
@@ -231,7 +227,7 @@ func RPCRenewContract(ctx context.Context, t *rhpv3.Transport, renterKey types.P
 
 // RPCTrustlessRenewContract negotiates a contract renewal with the host
 // using the new Renter-Satellite protocol.
-func RPCTrustlessRenewContract(ctx context.Context, ss *modules.RPCSession, t *rhpv3.Transport, txnSet []types.Transaction, toSign []types.Hash256, ts transactionSigner) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
+func RPCTrustlessRenewContract(ctx context.Context, ss *modules.RPCSession, t *rhpv3.Transport, txnSet []types.Transaction, toSign []types.Hash256, ts transactionSigner, cs consensus.State) (_ rhpv2.ContractRevision, _ []types.Transaction, err error) {
 	s := t.DialStream()
 	defer s.Close()
 	s.SetDeadline(time.Now().Add(5 * time.Minute))
@@ -313,11 +309,7 @@ func RPCTrustlessRenewContract(ctx context.Context, ss *modules.RPCSession, t *r
 
 	// Add the revision signatures to the transaction set and sign it.
 	txn.Signatures = []types.TransactionSignature{finalRevRenterSig, finalRevHostSig}
-	cf := types.CoveredFields{
-		WholeTransaction: true,
-		Signatures:       []uint64{0, 1},
-	}
-	if err := ts.Sign(&txn, toSign, cf); err != nil {
+	if err := ts.Sign(cs, &txn, toSign); err != nil {
 		return rhpv2.ContractRevision{}, nil, modules.AddContext(err, "failed to sign transaction")
 	}
 

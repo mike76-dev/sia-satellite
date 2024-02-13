@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
-	"github.com/mike76-dev/sia-satellite/persist"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 )
@@ -23,7 +23,7 @@ type ContractSet struct {
 	pubKeys      map[string]types.FileContractID
 	mu           sync.Mutex
 	db           *sql.DB
-	log          *persist.Logger
+	log          *zap.Logger
 }
 
 // Acquire looks up the contract for the specified host key and locks it before
@@ -58,7 +58,7 @@ func (cs *ContractSet) Delete(c *FileContract) {
 	_, ok := cs.contracts[c.header.ID()]
 	if !ok {
 		cs.mu.Unlock()
-		cs.log.Println("CRITICAL: delete called on already deleted contract")
+		cs.log.Error("delete called on already deleted contract", zap.Stringer("id", c.header.ID()))
 		return
 	}
 	id := c.header.ID()
@@ -72,7 +72,7 @@ func (cs *ContractSet) Delete(c *FileContract) {
 func (cs *ContractSet) Erase(fcid types.FileContractID) {
 	err := deleteContract(fcid, cs.db)
 	if err != nil {
-		cs.log.Println("ERROR: unable to delete the contract:", fcid)
+		cs.log.Error("unable to delete the contract", zap.Stringer("fcid", fcid))
 	}
 }
 
@@ -123,7 +123,7 @@ func (cs *ContractSet) Return(c *FileContract) {
 	_, ok := cs.contracts[c.header.ID()]
 	if !ok {
 		cs.mu.Unlock()
-		cs.log.Println("CRITICAL: no contract with that key")
+		cs.log.Error("no contract with that key", zap.Stringer("id", c.header.ID()))
 		return
 	}
 	cs.mu.Unlock()
@@ -213,7 +213,7 @@ func (cs *ContractSet) RetireContract(id types.FileContractID) {
 	defer cs.mu.Unlock()
 	c, exists := cs.contracts[id]
 	if !exists {
-		cs.log.Println("ERROR: trying to retire a non-existing contract")
+		cs.log.Error("trying to retire a non-existing contract", zap.Stringer("id", id))
 		return
 	}
 	cs.oldContracts[id] = c
@@ -226,19 +226,19 @@ func (cs *ContractSet) UnlockPayout(id types.FileContractID) {
 	if !exists {
 		c, exists = cs.oldContracts[id]
 		if !exists {
-			cs.log.Println("ERROR: contract not found:", id)
+			cs.log.Error("contract not found", zap.Stringer("id", id))
 			return
 		}
 	}
 	err := c.unlockPayout()
 	if err != nil {
-		cs.log.Println("ERROR: couldn't unlock contract payout:", err)
+		cs.log.Error("couldn't unlock contract payout", zap.Error(err))
 	}
 }
 
 // NewContractSet returns a ContractSet storing its contracts in the specified
 // database.
-func NewContractSet(db *sql.DB, log *persist.Logger, height uint64) (*ContractSet, error) {
+func NewContractSet(db *sql.DB, log *zap.Logger, height uint64) (*ContractSet, error) {
 	cs := &ContractSet{
 		contracts:    make(map[types.FileContractID]*FileContract),
 		oldContracts: make(map[types.FileContractID]*FileContract),

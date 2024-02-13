@@ -37,6 +37,14 @@ type Wallet interface {
 	// Fund adds Siacoin inputs with the required amount to the transaction.
 	Fund(txn *types.Transaction, amount types.Currency) (parents []types.Transaction, toSign []types.Hash256, err error)
 
+	// MarkAddressUnused marks the provided address as unused which causes it to be
+	// handed out by a subsequent call to `NextAddresses` again.
+	MarkAddressUnused(addrs ...types.UnlockConditions) error
+
+	// MarkWalletInputs scans a transaction and infers which inputs belong to this
+	// wallet. This allows those inputs to be signed.
+	MarkWalletInputs(txn types.Transaction) (toSign []types.Hash256)
+
 	// NextAddress returns an unlock hash that is ready to receive Siacoins or
 	// Siafunds.
 	NextAddress() (types.UnlockConditions, error)

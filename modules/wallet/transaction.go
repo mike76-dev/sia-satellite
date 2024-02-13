@@ -43,3 +43,26 @@ func SignTransaction(cs consensus.State, txn *types.Transaction, sigIndex int, k
 	sig := key.SignHash(sigHash)
 	tsig.Signature = sig[:]
 }
+
+// MarkWalletInputs scans a transaction and infers which inputs belong to this
+// wallet. This allows those inputs to be signed.
+func (w *Wallet) MarkWalletInputs(txn types.Transaction) (toSign []types.Hash256) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	for _, sci := range txn.SiacoinInputs {
+		unlockHash := sci.UnlockConditions.UnlockHash()
+		if _, exists := w.keys[unlockHash]; exists {
+			toSign = append(toSign, types.Hash256(sci.ParentID))
+		}
+	}
+
+	for _, sfi := range txn.SiafundInputs {
+		unlockHash := sfi.UnlockConditions.UnlockHash()
+		if _, exists := w.keys[unlockHash]; exists {
+			toSign = append(toSign, types.Hash256(sfi.ParentID))
+		}
+	}
+
+	return
+}

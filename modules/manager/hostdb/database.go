@@ -2,10 +2,12 @@ package hostdb
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 )
@@ -23,13 +25,13 @@ func (hdb *HostDB) initDB() error {
 	_, err = hdb.db.Exec(`INSERT INTO hdb_info
 		(height, scan_complete, disable_ip_check, last_change, filter_mode)
 		VALUES (?, ?, ?, ?, ?)
-	`, 0, false, false, modules.ConsensusChangeBeginning[:], modules.HostDBDisableFilter)
+	`, 0, false, false, []byte{}, modules.HostDBDisableFilter)
 	return err
 }
 
 // reset zeroes out the sync status of the database.
 func (hdb *HostDB) reset() error {
-	_, err := hdb.db.Exec("UPDATE hdb_info SET height = ?, last_change = ?", 0, modules.ConsensusChangeBeginning[:])
+	_, err := hdb.db.Exec("UPDATE hdb_info SET height = ?, last_change = ?", 0, []byte{})
 	return err
 }
 
@@ -40,11 +42,11 @@ func (hdb *HostDB) loadDB() error {
 		SELECT height, scan_complete, disable_ip_check, last_change, filter_mode
 		FROM hdb_info
 		WHERE id = 1
-	`).Scan(&hdb.blockHeight, &hdb.initialScanComplete, &hdb.disableIPViolationCheck, &cc, &hdb.filterMode)
+	`).Scan(&hdb.tip.Height, &hdb.initialScanComplete, &hdb.disableIPViolationCheck, &cc, &hdb.filterMode)
 	if err != nil {
 		return modules.AddContext(err, "couldn't load HostDB data")
 	}
-	copy(hdb.lastChange[:], cc)
+	copy(hdb.tip.ID[:], cc)
 
 	// Load filtered hosts.
 	rows, err := hdb.db.Query("SELECT public_key FROM hdb_fhosts")
@@ -112,7 +114,7 @@ func (hdb *HostDB) updateState() error {
 		UPDATE hdb_info
 		SET height = ?, scan_complete = ?, disable_ip_check = ?, last_change = ?
 		WHERE id = 1
-	`, hdb.blockHeight, hdb.initialScanComplete, hdb.disableIPViolationCheck, hdb.lastChange[:])
+	`, hdb.tip.Height, hdb.initialScanComplete, hdb.disableIPViolationCheck, hdb.tip.ID[:])
 	return err
 }
 
@@ -310,7 +312,7 @@ func (hdb *HostDB) saveKnownContracts() error {
 func (hdb *HostDB) threadedLoadHosts() {
 	err := hdb.tg.Add()
 	if err != nil {
-		hdb.staticLog.Println("ERROR: couldn't start hostdb threadgroup:", err)
+		hdb.log.Error("couldn't start hostdb threadgroup", zap.Error(err))
 		return
 	}
 	defer hdb.tg.Done()
@@ -321,7 +323,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 	// Load the scan history.
 	scanRows, err := hdb.db.Query("SELECT public_key, time, success FROM hdb_scanhistory")
 	if err != nil {
-		hdb.staticLog.Println("ERROR: could not load the scan history:", err)
+		hdb.log.Error("could not load the scan history", zap.Error(err))
 		return
 	}
 
@@ -337,7 +339,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 		var success bool
 		pkBytes := make([]byte, 32)
 		if err := scanRows.Scan(&pkBytes, &timestamp, &success); err != nil {
-			hdb.staticLog.Println("ERROR: could not load the scan history:", err)
+			hdb.log.Error("could not load the scan history", zap.Error(err))
 			continue
 		}
 		var pk types.PublicKey
@@ -353,7 +355,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 	// Load the IP subnets.
 	ipRows, err := hdb.db.Query("SELECT public_key, ip_net FROM hdb_ipnets")
 	if err != nil {
-		hdb.staticLog.Println("ERROR: could not load the IP subnets:", err)
+		hdb.log.Error("could not load the IP subnets", zap.Error(err))
 		return
 	}
 
@@ -368,7 +370,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 		var ip string
 		pkBytes := make([]byte, 32)
 		if err := ipRows.Scan(&pkBytes, &ip); err != nil {
-			hdb.staticLog.Println("ERROR: could not load the IP subnets:", err)
+			hdb.log.Error("could not load the IP subnets", zap.Error(err))
 			continue
 		}
 		var pk types.PublicKey
@@ -381,7 +383,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 	// Load the hosts.
 	rows, err := hdb.db.Query("SELECT public_key, filtered, bytes FROM hdb_hosts")
 	if err != nil {
-		hdb.staticLog.Println("ERROR: could not load the hosts:", err)
+		hdb.log.Error("could not load the hosts", zap.Error(err))
 		return
 	}
 
@@ -398,7 +400,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 		var hostBytes []byte
 		pkBytes := make([]byte, 32)
 		if err := rows.Scan(&pkBytes, &filtered, &hostBytes); err != nil {
-			hdb.staticLog.Println("ERROR: could not load the host:", err)
+			hdb.log.Error("could not load the host", zap.Error(err))
 			continue
 		}
 
@@ -406,7 +408,7 @@ func (hdb *HostDB) threadedLoadHosts() {
 		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(hostBytes))})
 		decodeHostEntry(&host, d)
 		if err := d.Err(); err != nil {
-			hdb.staticLog.Println("ERROR: could not load the host:", err)
+			hdb.log.Error("could not load the host", zap.Error(err))
 			continue
 		}
 		copy(host.PublicKey[:], pkBytes)
@@ -420,13 +422,13 @@ func (hdb *HostDB) threadedLoadHosts() {
 		// that previously the FirstSeen values and the blockHeight values
 		// could get out of sync.
 		hdb.mu.Lock()
-		if hdb.blockHeight < host.FirstSeen {
-			host.FirstSeen = hdb.blockHeight
+		if hdb.tip.Height < host.FirstSeen {
+			host.FirstSeen = hdb.tip.Height
 		}
 
 		err := hdb.insert(host)
 		if err != nil {
-			hdb.staticLog.Printf("ERROR: could not insert host %v into hosttree while loading: %v\n", host.Settings.NetAddress, err)
+			hdb.log.Error(fmt.Sprintf("could not insert host %v into hosttree while loading", host.Settings.NetAddress), zap.Error(err))
 			hdb.mu.Unlock()
 			continue
 		}
