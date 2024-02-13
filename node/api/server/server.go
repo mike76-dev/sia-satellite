@@ -65,7 +65,12 @@ func newServer(cm *chain.Manager, s modules.Syncer, m modules.Manager, w modules
 		"GET  /manager/maintenance":          srv.managerMaintenanceHandler,
 		"POST /manager/maintenance":          srv.managerSetMaintenanceHandler,
 
-		/*"GET /hostdb/hosts": srv.hostDBHostsHandler,*/
+		"GET  /hostdb":                 srv.hostdbHandler,
+		"GET  /hostdb/active":          srv.hostdbActiveHandler,
+		"GET  /hostdb/all":             srv.hostdbAllHandler,
+		"GET  /hostdb/host/:publickey": srv.hostdbHostHandler,
+		"GET  /hostdb/filtermode":      srv.hostdbFilterModeHandler,
+		"POST /hostdb/filtermode":      srv.hostdbSetFilterModeHandler,
 	})
 }
 

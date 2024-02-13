@@ -140,3 +140,44 @@ type EmailPreferences struct {
 	Email         string         `json:"email"`
 	WarnThreshold types.Currency `json:"threshold"`
 }
+
+// ExtendedHostDBEntry is an extension to modules.HostDBEntry that includes
+// the string representation of the public key.
+type ExtendedHostDBEntry struct {
+	modules.HostDBEntry
+	PublicKeyString string `json:"publickeystring"`
+}
+
+// HostdbHostsGET lists active hosts on the network.
+type HostdbHostsGET struct {
+	Hosts []ExtendedHostDBEntry `json:"hosts"`
+}
+
+// HostdbHostGET lists detailed statistics for a particular host, selected
+// by pubkey.
+type HostdbHostGET struct {
+	Entry          ExtendedHostDBEntry        `json:"entry"`
+	ScoreBreakdown modules.HostScoreBreakdown `json:"scorebreakdown"`
+}
+
+// HostdbGET holds information about the hostdb.
+type HostdbGET struct {
+	BlockHeight         uint64 `json:"blockheight"`
+	InitialScanComplete bool   `json:"initialscancomplete"`
+}
+
+// HostdbFilterModeGET contains the information about the HostDB's
+// filtermode.
+type HostdbFilterModeGET struct {
+	FilterMode   string   `json:"filtermode"`
+	Hosts        []string `json:"hosts"`
+	NetAddresses []string `json:"netaddresses"`
+}
+
+// HostdbFilterModePOST contains the information needed to set the the
+// FilterMode of the hostDB.
+type HostdbFilterModePOST struct {
+	FilterMode   string            `json:"filtermode"`
+	Hosts        []types.PublicKey `json:"hosts"`
+	NetAddresses []string          `json:"netaddresses"`
+}

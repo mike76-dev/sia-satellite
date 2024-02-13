@@ -145,9 +145,9 @@ func initCmds() *cobra.Command {
 	// Create command tree (alphabetized by root command).
 	root.AddCommand(consensusCmd)
 
-	/*root.AddCommand(hostdbCmd)
+	root.AddCommand(hostdbCmd)
 	hostdbCmd.AddCommand(hostdbFiltermodeCmd, hostdbSetFiltermodeCmd, hostdbViewCmd)
-	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")*/
+	hostdbCmd.Flags().IntVarP(&hostdbNumHosts, "numhosts", "n", 0, "Number of hosts to display from the hostdb")
 
 	root.AddCommand(managerCmd)
 	managerCmd.AddCommand(managerAveragesCmd)
