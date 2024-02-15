@@ -131,8 +131,7 @@ func (hdb *HostDB) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, mayCommit boo
 		hdb.insertBlockchainHost(host)
 	}
 
-	hdb.synced = hdb.s.Synced() && hdb.tip.Height == hdb.cm.Tip().Height
-	if mayCommit {
+	if mayCommit || time.Since(hdb.lastSaved) > 3*time.Second {
 		err := hdb.updateState()
 		if err != nil {
 			hdb.log.Error("unable to save hostdb state", zap.Error(err))
