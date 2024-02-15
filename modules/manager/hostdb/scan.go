@@ -257,7 +257,7 @@ func (hdb *HostDB) updateEntry(entry modules.HostDBEntry, netErr error) {
 	}
 
 	// Compress any old scans into the historic values.
-	for len(newEntry.ScanHistory) > minScans && time.Now().Sub(newEntry.ScanHistory[0].Timestamp) > maxHostDowntime {
+	for len(newEntry.ScanHistory) > minScans && time.Since(newEntry.ScanHistory[0].Timestamp) > maxHostDowntime {
 		timePassed := newEntry.ScanHistory[1].Timestamp.Sub(newEntry.ScanHistory[0].Timestamp)
 		if newEntry.ScanHistory[0].Success {
 			newEntry.HistoricUptime += timePassed
@@ -492,7 +492,7 @@ func (hdb *HostDB) threadedScan() {
 	// Wait until the consensus set is synced. Only then we can be sure that
 	// the initial scan covers the whole network.
 	for {
-		if hdb.managedSynced() {
+		if hdb.tip == hdb.cm.Tip() {
 			break
 		}
 		select {
@@ -529,9 +529,7 @@ func (hdb *HostDB) threadedScan() {
 	// Copy the known contracts to avoid having to lock the hdb later.
 	knownContracts := make(map[string][]contractInfo)
 	for k, cis := range hdb.knownContracts {
-		for _, ci := range cis {
-			knownContracts[k] = append(knownContracts[k], ci)
-		}
+		knownContracts[k] = append(knownContracts[k], cis...)
 	}
 	hdb.mu.Unlock()
 
