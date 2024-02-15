@@ -4,7 +4,6 @@ import (
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"go.sia.tech/core/consensus"
 	"go.sia.tech/core/types"
-	"go.sia.tech/coreutils/syncer"
 	"go.sia.tech/jape"
 )
 
@@ -20,7 +19,7 @@ func (c *Client) DaemonVersion() (resp api.DaemonVersion, err error) {
 }
 
 // SyncerPeers returns the current peers of the syncer.
-func (c *Client) SyncerPeers() (resp []syncer.Peer, err error) {
+func (c *Client) SyncerPeers() (resp []api.SyncerPeer, err error) {
 	err = c.c.GET("/syncer/peers", &resp)
 	return
 }

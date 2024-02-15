@@ -28,7 +28,15 @@ func (s *server) consensusTipStateHandler(jc jape.Context) {
 }
 
 func (s *server) syncerPeersHandler(jc jape.Context) {
-	jc.Encode(s.s.Peers())
+	var sp []api.SyncerPeer
+	for _, p := range s.s.Peers() {
+		sp = append(sp, api.SyncerPeer{
+			Address: p.Addr(),
+			Version: p.Version(),
+			Inbound: p.Inbound,
+		})
+	}
+	jc.Encode(sp)
 }
 
 func (s *server) syncerConnectHandler(jc jape.Context) {

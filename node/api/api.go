@@ -12,6 +12,13 @@ type DaemonVersion struct {
 	BuildTime   string `json:"buildTime"`
 }
 
+// SyncerPeer contains the information about a peer.
+type SyncerPeer struct {
+	Address string `json:"address"`
+	Version string `json:"version"`
+	Inbound bool   `json:"inbound"`
+}
+
 // ConsensusTipResponse is the response type for /consensus/tip.
 type ConsensusTipResponse struct {
 	Height  uint64        `json:"height"`

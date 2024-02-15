@@ -66,7 +66,7 @@ func syncerpeerscmd() {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "Version\tOutbound\tAddress")
 	for _, peer := range peers {
-		fmt.Fprintf(w, "%v\t%v\t%v\n", peer.Version(), yesNo(!peer.Inbound), peer.Addr())
+		fmt.Fprintf(w, "%v\t%v\t%v\n", peer.Version, yesNo(!peer.Inbound), peer.Address)
 	}
 	if err := w.Flush(); err != nil {
 		die("failed to flush writer")
