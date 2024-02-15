@@ -1,6 +1,8 @@
 package server
 
 import (
+	"time"
+
 	"github.com/mike76-dev/sia-satellite/node/api"
 	"go.sia.tech/core/gateway"
 	"go.sia.tech/core/types"
@@ -12,11 +14,11 @@ func (s *server) consensusNetworkHandler(jc jape.Context) {
 }
 
 func (s *server) consensusTipHandler(jc jape.Context) {
-	tip := s.cm.Tip()
+	state := s.cm.TipState()
 	resp := api.ConsensusTipResponse{
-		Height:  tip.Height,
-		BlockID: tip.ID,
-		Synced:  s.s.Synced(),
+		Height:  state.Index.Height,
+		BlockID: state.Index.ID,
+		Synced:  s.s.Synced() && time.Since(state.PrevTimestamps[0]) < 24*time.Hour,
 	}
 	jc.Encode(resp)
 }
