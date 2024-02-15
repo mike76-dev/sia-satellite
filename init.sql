@@ -265,7 +265,7 @@ CREATE TABLE hdb_contracts (
 CREATE TABLE hdb_info (
 	id               INT NOT NULL AUTO_INCREMENT,
 	height           BIGINT UNSIGNED NOT NULL,
-	bid              BINARY(32) NO NULL,
+	bid              BINARY(32) NOT NULL,
 	scan_complete    BOOL NOT NULL,
 	disable_ip_check BOOL NOT NULL,
 	filter_mode      INT NOT NULL,
