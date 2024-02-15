@@ -23,7 +23,7 @@ func (hdb *HostDB) initDB() error {
 		return nil
 	}
 	_, err = hdb.db.Exec(`INSERT INTO hdb_info
-		(height, scan_complete, disable_ip_check, last_change, filter_mode)
+		(height, scan_complete, disable_ip_check, bid, filter_mode)
 		VALUES (?, ?, ?, ?, ?)
 	`, 0, false, false, []byte{}, modules.HostDBDisableFilter)
 	return err
@@ -31,7 +31,7 @@ func (hdb *HostDB) initDB() error {
 
 // reset zeroes out the sync status of the database.
 func (hdb *HostDB) reset() error {
-	_, err := hdb.db.Exec("UPDATE hdb_info SET height = ?, last_change = ?", 0, []byte{})
+	_, err := hdb.db.Exec("UPDATE hdb_info SET height = ?, bid = ?", 0, []byte{})
 	return err
 }
 
@@ -39,7 +39,7 @@ func (hdb *HostDB) reset() error {
 func (hdb *HostDB) loadDB() error {
 	cc := make([]byte, 32)
 	err := hdb.db.QueryRow(`
-		SELECT height, scan_complete, disable_ip_check, last_change, filter_mode
+		SELECT height, scan_complete, disable_ip_check, bid, filter_mode
 		FROM hdb_info
 		WHERE id = 1
 	`).Scan(&hdb.tip.Height, &hdb.initialScanComplete, &hdb.disableIPViolationCheck, &cc, &hdb.filterMode)
@@ -99,7 +99,7 @@ func (hdb *HostDB) loadDB() error {
 		copy(ci.RenterPublicKey[:], rpk)
 		copy(ci.HostPublicKey[:], hpk)
 		ci.StoredData = stored
-		contracts, _ := hdb.knownContracts[ci.HostPublicKey.String()]
+		contracts := hdb.knownContracts[ci.HostPublicKey.String()]
 		contracts = append(contracts, ci)
 		hdb.knownContracts[ci.HostPublicKey.String()] = contracts
 	}
@@ -112,9 +112,10 @@ func (hdb *HostDB) loadDB() error {
 func (hdb *HostDB) updateState() error {
 	_, err := hdb.db.Exec(`
 		UPDATE hdb_info
-		SET height = ?, scan_complete = ?, disable_ip_check = ?, last_change = ?
+		SET height = ?, scan_complete = ?, disable_ip_check = ?, bid = ?
 		WHERE id = 1
 	`, hdb.tip.Height, hdb.initialScanComplete, hdb.disableIPViolationCheck, hdb.tip.ID[:])
+	hdb.lastSaved = time.Now()
 	return err
 }
 

@@ -42,7 +42,7 @@ func (c *Contractor) initDB() error {
 		return nil
 	}
 	_, err = c.db.Exec(`
-		INSERT INTO ctr_info (height, last_change, synced)
+		INSERT INTO ctr_info (height, bid, synced)
 		VALUES (?, ?, ?)
 	`, 0, []byte{}, false)
 	return err
@@ -54,7 +54,7 @@ func (c *Contractor) loadState() error {
 	var height uint64
 	var synced bool
 	err := c.db.QueryRow(`
-		SELECT height, last_change, synced
+		SELECT height, bid, synced
 		FROM ctr_info
 		WHERE id = 1
 	`).Scan(&height, &cc, &synced)
@@ -82,7 +82,7 @@ func (c *Contractor) updateState() error {
 	}
 	_, err := c.db.Exec(`
 		UPDATE ctr_info
-		SET height = ?, last_change = ?, synced = ?
+		SET height = ?, bid = ?, synced = ?
 		WHERE id = 1
 	`, c.tip.Height, c.tip.ID[:], synced)
 	return err
