@@ -12,9 +12,10 @@ func (s *server) consensusNetworkHandler(jc jape.Context) {
 }
 
 func (s *server) consensusTipHandler(jc jape.Context) {
+	tip := s.cm.Tip()
 	resp := api.ConsensusTipResponse{
-		Height:  s.cm.TipState().Index.Height,
-		BlockID: s.cm.TipState().Index.ID,
+		Height:  tip.Height,
+		BlockID: tip.ID,
 		Synced:  s.s.Synced(),
 	}
 	jc.Encode(resp)
