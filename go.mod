@@ -1,6 +1,8 @@
 module github.com/mike76-dev/sia-satellite
 
-go 1.21
+go 1.21.6
+
+toolchain go1.21.7
 
 require (
 	github.com/dchest/threefish v0.0.0-20120919164726-3ecf4c494abf
@@ -16,7 +18,7 @@ require (
 	gitlab.com/NebulousLabs/log v0.0.0-20210609172545-77f6775350e2
 	gitlab.com/NebulousLabs/merkletree v0.0.0-20200118113624-07fbf710afc4
 	go.sia.tech/core v0.2.1-0.20240130145801-8067f34b2ecc
-	go.sia.tech/coreutils v0.0.2-0.20240205141346-cd2a42e99f6e
+	go.sia.tech/coreutils v0.0.2
 	go.sia.tech/jape v0.11.1
 	go.sia.tech/mux v1.2.0
 	go.uber.org/zap v1.26.0
