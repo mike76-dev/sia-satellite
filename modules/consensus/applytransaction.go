@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
-	"io"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
@@ -275,9 +274,7 @@ func applyArbitraryData(tx *sql.Tx, pb *processedBlock, t types.Transaction) err
 	for _, arb := range t.ArbitraryData {
 		if bytes.HasPrefix(arb, types.SpecifierFoundation[:]) {
 			var update types.FoundationAddressUpdate
-			var buf bytes.Buffer
-			buf.Write(arb[16:])
-			d := types.NewDecoder(io.LimitedReader{R: &buf, N: int64(len(arb)) - 16})
+			d := types.NewBufDecoder(arb[16:])
 			update.DecodeFrom(d)
 			if err := d.Err(); err != nil {
 				return err

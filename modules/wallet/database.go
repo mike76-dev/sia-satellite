@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -155,14 +154,13 @@ func dbForEachSiacoinOutput(tx *sql.Tx, fn func(types.SiacoinOutputID, types.Sia
 		var scoid types.SiacoinOutputID
 		var sco types.SiacoinOutput
 		id := make([]byte, 32)
-		scoBytes := make([]byte, 0, 56)
+		var scoBytes []byte
 		if err := rows.Scan(&id, &scoBytes); err != nil {
 			rows.Close()
 			return err
 		}
 		copy(scoid[:], id)
-		buf := bytes.NewBuffer(scoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(scoBytes))})
+		d := types.NewBufDecoder(scoBytes)
 		sco.DecodeFrom(d)
 		if err := d.Err(); err != nil {
 			rows.Close()
@@ -217,14 +215,13 @@ func dbForEachSiafundOutput(tx *sql.Tx, fn func(types.SiafundOutputID, types.Sia
 		var sfo types.SiafundOutput
 		var claimStart types.Currency
 		id := make([]byte, 32)
-		sfoBytes := make([]byte, 0, 80)
+		var sfoBytes []byte
 		if err := rows.Scan(&id, &sfoBytes); err != nil {
 			rows.Close()
 			return err
 		}
 		copy(sfoid[:], id)
-		buf := bytes.NewBuffer(sfoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(sfoBytes))})
+		d := types.NewBufDecoder(sfoBytes)
 		var val types.Currency
 		val.DecodeFrom(d)
 		sfo.Value = val.Lo
@@ -311,8 +308,7 @@ func dbGetUnlockConditions(tx *sql.Tx, addr types.Address) (uc types.UnlockCondi
 	if err != nil {
 		return
 	}
-	buf := bytes.NewBuffer(ucBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(ucBytes))})
+	d := types.NewBufDecoder(ucBytes)
 	uc.DecodeFrom(d)
 	return uc, d.Err()
 }
@@ -358,8 +354,7 @@ func dbAddProcessedTransactionAddrs(tx *sql.Tx, pt modules.ProcessedTransaction)
 
 // decodeProcessedTransaction decodes a marshalled ProcessedTransaction.
 func decodeProcessedTransaction(ptBytes []byte, pt *modules.ProcessedTransaction) error {
-	buf := bytes.NewBuffer(ptBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(ptBytes))})
+	d := types.NewBufDecoder(ptBytes)
 	pt.DecodeFrom(d)
 	return d.Err()
 }
@@ -491,7 +486,7 @@ func dbPutConsensusHeight(tx *sql.Tx, height uint64) error {
 
 // dbGetSiafundPool returns the value of the Siafund pool.
 func dbGetSiafundPool(tx *sql.Tx) (pool types.Currency, err error) {
-	poolBytes := make([]byte, 0, 24)
+	var poolBytes []byte
 	err = tx.QueryRow("SELECT sfpool FROM wt_info WHERE id = 1").Scan(&poolBytes)
 	if err != nil {
 		return types.ZeroCurrency, err
@@ -499,7 +494,7 @@ func dbGetSiafundPool(tx *sql.Tx) (pool types.Currency, err error) {
 	if len(poolBytes) == 0 {
 		return types.ZeroCurrency, nil
 	}
-	d := types.NewDecoder(io.LimitedReader{R: bytes.NewBuffer(poolBytes), N: int64(len(poolBytes))})
+	d := types.NewBufDecoder(poolBytes)
 	pool.DecodeFrom(d)
 	return pool, d.Err()
 }

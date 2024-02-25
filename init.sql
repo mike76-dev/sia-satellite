@@ -55,7 +55,7 @@ CREATE TABLE cs_consistency (
 
 CREATE TABLE cs_sfpool (
 	id    INT NOT NULL AUTO_INCREMENT,
-	bytes VARBINARY(24) NOT NULL,
+	bytes BLOB NOT NULL,
 	PRIMARY KEY (id)
 );
 
@@ -68,7 +68,7 @@ CREATE TABLE cs_changelog (
 CREATE TABLE cs_dsco (
 	height BIGINT UNSIGNED NOT NULL,
 	scoid  BINARY(32) NOT NULL,
-	bytes  VARBINARY(56) NOT NULL,
+	bytes  BLOB NOT NULL,
 	PRIMARY KEY (scoid ASC)
 );
 
@@ -93,7 +93,7 @@ CREATE TABLE cs_oak_init (
 
 CREATE TABLE cs_sco (
 	scoid BINARY(32) NOT NULL,
-	bytes VARBINARY(56) NOT NULL,
+	bytes BLOB NOT NULL,
 	PRIMARY KEY (scoid ASC)
 );
 
@@ -105,7 +105,7 @@ CREATE TABLE cs_fc (
 
 CREATE TABLE cs_sfo (
 	sfoid BINARY(32) NOT NULL,
-	bytes VARBINARY(80) NOT NULL,
+	bytes BLOB NOT NULL,
 	PRIMARY KEY (sfoid ASC)
 );
 
@@ -136,7 +136,7 @@ CREATE TABLE cs_map (
 
 CREATE TABLE cs_cl (
 	ceid  BINARY(32) NOT NULL,
-	bytes VARBINARY(1024) NOT NULL,
+	bytes BLOB NOT NULL,
 	PRIMARY KEY (ceid ASC)
 );
 
@@ -213,13 +213,13 @@ CREATE TABLE wt_addr (
 
 CREATE TABLE wt_sco (
 	scoid BINARY(32) NOT NULL,
-	bytes VARBINARY(56) NOT NULL,
+	bytes BLOB NOT NULL,
 	PRIMARY KEY (scoid ASC)
 );
 
 CREATE TABLE wt_sfo (
 	sfoid BINARY(32) NOT NULL,
-	bytes VARBINARY(80) NOT NULL,
+	bytes BLOB NOT NULL,
 	PRIMARY KEY (sfoid ASC)
 );
 
@@ -240,7 +240,7 @@ CREATE TABLE wt_info (
 	cc        BINARY(32) NOT NULL,
 	height    BIGINT UNSIGNED NOT NULL,
 	encrypted BLOB NOT NULL,
-	sfpool    VARBINARY(24) NOT NULL,
+	sfpool    BLOB NOT NULL,
 	salt      BINARY(32) NOT NULL,
 	progress  BIGINT UNSIGNED NOT NULL,
 	seed      BLOB NOT NULL,

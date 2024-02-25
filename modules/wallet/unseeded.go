@@ -3,7 +3,6 @@ package wallet
 import (
 	"bytes"
 	"errors"
-	"io"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
@@ -37,8 +36,7 @@ func decryptSpendableKey(masterKey modules.WalletKey, uk encryptedSpendableKey) 
 	if err != nil {
 		return
 	}
-	buf := bytes.NewBuffer(encodedKey)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(encodedKey))})
+	d := types.NewBufDecoder(encodedKey)
 	sk.DecodeFrom(d)
 	err = d.Err()
 

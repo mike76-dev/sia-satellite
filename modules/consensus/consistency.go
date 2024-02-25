@@ -1,11 +1,9 @@
 package consensus
 
 import (
-	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
@@ -94,7 +92,7 @@ func checkDSCOs(tx *sql.Tx) {
 		var height uint64
 		var scoid types.SiacoinOutputID
 		id := make([]byte, 32)
-		scoBytes := make([]byte, 0, 56)
+		var scoBytes []byte
 		if err := rows.Scan(&height, &id, &scoBytes); err != nil {
 			rows.Close()
 			manageErr(tx, err)
@@ -115,9 +113,7 @@ func checkDSCOs(tx *sql.Tx) {
 
 		// Sum the funds.
 		var sco types.SiacoinOutput
-		var buf bytes.Buffer
-		buf.Write(scoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: &buf, N: int64(len(scoBytes))})
+		d := types.NewBufDecoder(scoBytes)
 		sco.DecodeFrom(d)
 		if err := d.Err(); err != nil {
 			rows.Close()
@@ -145,7 +141,7 @@ func checkDSCOs(tx *sql.Tx) {
 	// Check that all of the correct heights are represented.
 	currentHeight := blockHeight(tx)
 	expectedBuckets := 0
-	for i := currentHeight + 1; i <= currentHeight + modules.MaturityDelay; i++ {
+	for i := currentHeight + 1; i <= currentHeight+modules.MaturityDelay; i++ {
 		if i < modules.MaturityDelay {
 			continue
 		}

@@ -1,10 +1,8 @@
 package consensus
 
 import (
-	"bytes"
 	"database/sql"
 	"errors"
-	"io"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
@@ -90,7 +88,7 @@ func applyMaturedSiacoinOutputs(tx *sql.Tx, pb *processedBlock) error {
 	for rows.Next() {
 		var scoid types.SiacoinOutputID
 		id := make([]byte, 32)
-		scoBytes := make([]byte, 0, 56)
+		var scoBytes []byte
 		var sco types.SiacoinOutput
 		if err := rows.Scan(&id, &scoBytes); err != nil {
 			rows.Close()
@@ -98,8 +96,7 @@ func applyMaturedSiacoinOutputs(tx *sql.Tx, pb *processedBlock) error {
 		}
 
 		copy(scoid[:], id[:])
-		buf := bytes.NewBuffer(scoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(scoBytes))})
+		d := types.NewBufDecoder(scoBytes)
 		sco.DecodeFrom(d)
 		if err := d.Err(); err != nil {
 			rows.Close()

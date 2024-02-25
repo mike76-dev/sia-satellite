@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"errors"
-	"io"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
@@ -166,8 +165,7 @@ func findBlockByID(tx *sql.Tx, id types.BlockID) (*processedBlock, bool, error) 
 		return nil, false, err
 	}
 	pb := new(processedBlock)
-	buf := bytes.NewBuffer(pbBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(pbBytes))})
+	d := types.NewBufDecoder(pbBytes)
 	pb.DecodeFrom(d)
 	return pb, true, d.Err()
 }
@@ -279,13 +277,12 @@ func saveConsensusChange(tx *sql.Tx, ceid modules.ConsensusChangeID, cn changeNo
 
 // loadConsensusChange retrieves the consensus change node from the database.
 func loadConsensusChange(tx *sql.Tx, ceid modules.ConsensusChangeID) (cn changeNode, err error) {
-	cnBytes := make([]byte, 0, 1024)
+	var cnBytes []byte
 	err = tx.QueryRow("SELECT bytes FROM cs_cl WHERE ceid = ?", ceid[:]).Scan(&cnBytes)
 	if err != nil {
 		return
 	}
-	buf := bytes.NewBuffer(cnBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(cnBytes))})
+	d := types.NewBufDecoder(cnBytes)
 	cn.DecodeFrom(d)
 	return cn, d.Err()
 }
@@ -316,13 +313,12 @@ func countDelayedSiacoins(tx *sql.Tx) (total types.Currency, err error) {
 
 	for rows.Next() {
 		var dsco types.SiacoinOutput
-		dscoBytes := make([]byte, 0, 56)
+		var dscoBytes []byte
 		if err = rows.Scan(&dscoBytes); err != nil {
 			rows.Close()
 			return types.ZeroCurrency, err
 		}
-		buf := bytes.NewBuffer(dscoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(dscoBytes))})
+		d := types.NewBufDecoder(dscoBytes)
 		dsco.DecodeFrom(d)
 		if err = d.Err(); err != nil {
 			rows.Close()
@@ -344,13 +340,12 @@ func countSiacoins(tx *sql.Tx) (total types.Currency, err error) {
 
 	for rows.Next() {
 		var sco types.SiacoinOutput
-		scoBytes := make([]byte, 0, 56)
+		var scoBytes []byte
 		if err = rows.Scan(&scoBytes); err != nil {
 			rows.Close()
 			return types.ZeroCurrency, err
 		}
-		buf := bytes.NewBuffer(scoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(scoBytes))})
+		d := types.NewBufDecoder(scoBytes)
 		sco.DecodeFrom(d)
 		if err = d.Err(); err != nil {
 			rows.Close()
@@ -377,8 +372,7 @@ func countFileContractPayouts(tx *sql.Tx) (total types.Currency, err error) {
 			rows.Close()
 			return types.ZeroCurrency, err
 		}
-		buf := bytes.NewBuffer(fcBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(fcBytes))})
+		d := types.NewBufDecoder(fcBytes)
 		fc.DecodeFrom(d)
 		if err = d.Err(); err != nil {
 			rows.Close()
@@ -404,13 +398,12 @@ func countSiafundClaims(tx *sql.Tx) (total types.Currency, err error) {
 	}
 
 	for rows.Next() {
-		sfoBytes := make([]byte, 0, 80)
+		var sfoBytes []byte
 		if err = rows.Scan(&sfoBytes); err != nil {
 			rows.Close()
 			return types.ZeroCurrency, err
 		}
-		buf := bytes.NewBuffer(sfoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(sfoBytes))})
+		d := types.NewBufDecoder(sfoBytes)
 		var value, claimStart types.Currency
 		value.DecodeFrom(d)
 		(&types.Address{}).DecodeFrom(d)
@@ -436,13 +429,12 @@ func countSiafunds(tx *sql.Tx) (total uint64, err error) {
 
 	for rows.Next() {
 		var sfo types.SiafundOutput
-		sfoBytes := make([]byte, 0, 80)
+		var sfoBytes []byte
 		if err = rows.Scan(&sfoBytes); err != nil {
 			rows.Close()
 			return 0, err
 		}
-		buf := bytes.NewBuffer(sfoBytes)
-		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(sfoBytes))})
+		d := types.NewBufDecoder(sfoBytes)
 		sfo.DecodeFrom(d)
 		if err = d.Err(); err != nil {
 			rows.Close()
@@ -458,7 +450,7 @@ func countSiafunds(tx *sql.Tx) (total uint64, err error) {
 // findSiacoinOutput tries to find a Siacoin output with the given ID in the
 // consensus set.
 func findSiacoinOutput(tx *sql.Tx, scoid types.SiacoinOutputID) (sco types.SiacoinOutput, exists bool, err error) {
-	scoBytes := make([]byte, 0, 56)
+	var scoBytes []byte
 	err = tx.QueryRow("SELECT bytes FROM cs_sco WHERE scoid = ?", scoid[:]).Scan(&scoBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return types.SiacoinOutput{}, false, nil
@@ -466,8 +458,7 @@ func findSiacoinOutput(tx *sql.Tx, scoid types.SiacoinOutputID) (sco types.Siaco
 	if err != nil {
 		return types.SiacoinOutput{}, false, err
 	}
-	buf := bytes.NewBuffer(scoBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(scoBytes))})
+	d := types.NewBufDecoder(scoBytes)
 	sco.DecodeFrom(d)
 	return sco, true, d.Err()
 }
@@ -491,7 +482,7 @@ func removeSiacoinOutput(tx *sql.Tx, id types.SiacoinOutputID) error {
 // findSiafundOutput tries to find a Siafund output with the given ID in the
 // consensus set.
 func findSiafundOutput(tx *sql.Tx, sfoid types.SiafundOutputID) (sfo types.SiafundOutput, claimStart types.Currency, exists bool, err error) {
-	sfoBytes := make([]byte, 0, 80)
+	var sfoBytes []byte
 	err = tx.QueryRow("SELECT bytes FROM cs_sfo WHERE sfoid = ?", sfoid[:]).Scan(&sfoBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return types.SiafundOutput{}, types.Currency{}, false, nil
@@ -499,8 +490,7 @@ func findSiafundOutput(tx *sql.Tx, sfoid types.SiafundOutputID) (sfo types.Siafu
 	if err != nil {
 		return types.SiafundOutput{}, types.Currency{}, false, err
 	}
-	buf := bytes.NewBuffer(sfoBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(sfoBytes))})
+	d := types.NewBufDecoder(sfoBytes)
 	var val types.Currency
 	val.DecodeFrom(d)
 	sfo.Value = val.Lo
@@ -545,8 +535,7 @@ func findFileContract(tx *sql.Tx, fcid types.FileContractID) (fc types.FileContr
 	if err != nil {
 		return types.FileContract{}, false, err
 	}
-	buf := bytes.NewBuffer(fcBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(fcBytes))})
+	d := types.NewBufDecoder(fcBytes)
 	fc.DecodeFrom(d)
 	return fc, true, d.Err()
 }
@@ -589,13 +578,13 @@ func removeFileContract(tx *sql.Tx, id types.FileContractID) error {
 // getSiafundPool returns the current value of the Siafund pool. No error is
 // returned as the Siafund pool should always be available.
 func getSiafundPool(tx *sql.Tx) (pool types.Currency) {
-	poolBytes := make([]byte, 0, 24)
+	var poolBytes []byte
 	err := tx.QueryRow("SELECT bytes FROM cs_sfpool WHERE id = 1").Scan(&poolBytes)
 	if err != nil {
 		return types.ZeroCurrency
 	}
 
-	d := types.NewDecoder(io.LimitedReader{R: bytes.NewBuffer(poolBytes), N: int64(len(poolBytes))})
+	d := types.NewBufDecoder(poolBytes)
 	pool.DecodeFrom(d)
 	if err := d.Err(); err != nil {
 		return types.ZeroCurrency

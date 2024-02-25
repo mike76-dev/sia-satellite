@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
-	"io"
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
@@ -79,8 +78,7 @@ func (tp *TransactionPool) getFeeMedian() (medianPersist, error) {
 	}
 
 	var mp medianPersist
-	buf := bytes.NewBuffer(medianBytes)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(medianBytes))})
+	d := types.NewBufDecoder(medianBytes)
 	mp.DecodeFrom(d)
 	if err := d.Err(); err != nil {
 		return medianPersist{}, modules.AddContext(err, "unable to unmarshal median data")
