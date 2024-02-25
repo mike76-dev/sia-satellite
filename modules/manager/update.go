@@ -486,6 +486,8 @@ func (m *Manager) sendOutOfSyncWarning() {
 	if since < outOfSyncThreshold {
 		return
 	}
+	hours := int(since.Hours())
+	minutes := int(since.Minutes()) - hours*60
 
 	// Send a warning.
 	type warning struct {
@@ -503,7 +505,7 @@ func (m *Manager) sendOutOfSyncWarning() {
 	t.Execute(&b, warning{
 		Name:   m.name,
 		Height: m.cs.Height(),
-		Since:  fmt.Sprintf("%.0fh%.0fm", since.Hours(), since.Minutes()),
+		Since:  fmt.Sprintf("%dh%dm", hours, minutes),
 	})
 	err = m.ms.SendMail("Sia Satellite", m.email, "Out Of Sync Warning", &b)
 	if err != nil {
