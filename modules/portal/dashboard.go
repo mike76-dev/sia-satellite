@@ -240,6 +240,15 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 			}, http.StatusInternalServerError)
 		return
 	}
+	if data.Estimation == 0 {
+		api.portal.log.Println("ERROR: zero estimation")
+		writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "zero estimation",
+			}, http.StatusBadRequest)
+		return
+	}
 
 	// Create an allowance.
 	a := modules.DefaultAllowance
