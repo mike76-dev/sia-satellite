@@ -134,12 +134,12 @@ func (p *Portal) checkAndUpdateVerifications(host string) error {
 	}
 
 	// Check for abuse.
-	stats.Verifications.LastAttempt = time.Now().Unix()
-	stats.Verifications.Count++
 	span := time.Now().Unix() - stats.Verifications.LastAttempt
 	if span == 0 {
 		span = 1 // To avoid division by zero.
 	}
+	stats.Verifications.LastAttempt = time.Now().Unix()
+	stats.Verifications.Count++
 	p.authStats[host] = stats
 
 	if float64(stats.Verifications.Count)/float64(span) > maxVerifications {
@@ -180,12 +180,12 @@ func (p *Portal) checkAndUpdateFailedLogins(host string) error {
 	}
 
 	// Check for abuse.
-	stats.FailedLogins.LastAttempt = time.Now().Unix()
-	stats.FailedLogins.Count++
 	span := time.Now().Unix() - stats.FailedLogins.LastAttempt
 	if span == 0 {
 		span = 1 // To avoid division by zero.
 	}
+	stats.FailedLogins.LastAttempt = time.Now().Unix()
+	stats.FailedLogins.Count++
 	p.authStats[host] = stats
 
 	if float64(stats.FailedLogins.Count)/float64(span) > maxFailedLogins {
@@ -226,12 +226,12 @@ func (p *Portal) checkAndUpdatePasswordResets(host string) error {
 	}
 
 	// Check for abuse.
-	stats.PasswordResets.LastAttempt = time.Now().Unix()
-	stats.PasswordResets.Count++
 	span := time.Now().Unix() - stats.PasswordResets.LastAttempt
 	if span == 0 {
 		span = 1 // To avoid division by zero.
 	}
+	stats.PasswordResets.LastAttempt = time.Now().Unix()
+	stats.PasswordResets.Count++
 	p.authStats[host] = stats
 
 	if float64(stats.PasswordResets.Count)/float64(span) > maxPasswordResets {
