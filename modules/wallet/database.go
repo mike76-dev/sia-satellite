@@ -95,6 +95,7 @@ func (w *Wallet) updateTip(ci types.ChainIndex) error {
 
 // insertSiacoinElement inserts the given Siacoin element.
 func (w *Wallet) insertSiacoinElement(sce types.SiacoinElement) error {
+	sce.MerkleProof = append([]types.Hash256(nil), sce.MerkleProof...)
 	w.sces[sce.SiacoinOutput.Address] = sce
 	_, err := w.tx.Exec(`
 		INSERT INTO wt_sces (
@@ -143,6 +144,7 @@ func (w *Wallet) deleteSiacoinElement(addr types.Address) error {
 
 // insertSiafundElement inserts the given Siafund element.
 func (w *Wallet) insertSiafundElement(sfe types.SiafundElement) error {
+	sfe.MerkleProof = append([]types.Hash256(nil), sfe.MerkleProof...)
 	w.sfes[sfe.SiafundOutput.Address] = sfe
 	_, err := w.tx.Exec(`
 		INSERT INTO wt_sfes (

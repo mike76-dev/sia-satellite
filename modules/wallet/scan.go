@@ -34,7 +34,7 @@ type seedScanner struct {
 	dustThreshold    types.Currency           // minimum value of outputs to be included
 	keys             map[types.Address]uint64 // map address to seed index
 	largestIndexSeen uint64                   // largest index that has appeared in the blockchain
-	scannedHeight    uint64
+	tip              types.ChainIndex
 	seed             modules.Seed
 	siacoinOutputs   map[types.SiacoinOutputID]scannedOutput
 	siafundOutputs   map[types.SiafundOutputID]scannedOutput
@@ -52,96 +52,95 @@ func (s *seedScanner) generateKeys(n uint64) {
 	}
 }
 
-// ProcessChainApplyUpdate implements chain.Subscriber
-func (s *seedScanner) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, _ bool) error {
-	cau.ForEachSiacoinElement(func(sce types.SiacoinElement, spent bool) {
-		index, exists := s.keys[sce.SiacoinOutput.Address]
-		if exists {
-			if spent {
-				delete(s.siacoinOutputs, types.SiacoinOutputID(sce.ID))
-			} else if sce.SiacoinOutput.Value.Cmp(s.dustThreshold) > 0 {
-				s.siacoinOutputs[types.SiacoinOutputID(sce.ID)] = scannedOutput{
-					id:        sce.ID,
-					value:     sce.SiacoinOutput.Value,
-					seedIndex: index,
+// UpdateChainState applies and reverts the ChainManager updates.
+func (s *seedScanner) UpdateChainState(reverted []chain.RevertUpdate, applied []chain.ApplyUpdate) error {
+	for _, cru := range reverted {
+		cru.ForEachSiacoinElement(func(sce types.SiacoinElement, spent bool) {
+			index, exists := s.keys[sce.SiacoinOutput.Address]
+			if exists {
+				if !spent {
+					delete(s.siacoinOutputs, types.SiacoinOutputID(sce.ID))
+				} else if sce.SiacoinOutput.Value.Cmp(s.dustThreshold) > 0 {
+					s.siacoinOutputs[types.SiacoinOutputID(sce.ID)] = scannedOutput{
+						id:        sce.ID,
+						value:     sce.SiacoinOutput.Value,
+						seedIndex: index,
+					}
+				}
+				if index > s.largestIndexSeen {
+					s.largestIndexSeen = index
 				}
 			}
-			if index > s.largestIndexSeen {
-				s.largestIndexSeen = index
-			}
-		}
-	})
+		})
 
-	cau.ForEachSiafundElement(func(sfe types.SiafundElement, spent bool) {
-		index, exists := s.keys[sfe.SiafundOutput.Address]
-		if exists {
-			if spent {
-				delete(s.siafundOutputs, types.SiafundOutputID(sfe.ID))
-			} else {
-				s.siafundOutputs[types.SiafundOutputID(sfe.ID)] = scannedOutput{
-					id:        sfe.ID,
-					value:     types.NewCurrency(sfe.SiafundOutput.Value, 0),
-					seedIndex: index,
+		cru.ForEachSiafundElement(func(sfe types.SiafundElement, spent bool) {
+			index, exists := s.keys[sfe.SiafundOutput.Address]
+			if exists {
+				if !spent {
+					delete(s.siafundOutputs, types.SiafundOutputID(sfe.ID))
+				} else {
+					s.siafundOutputs[types.SiafundOutputID(sfe.ID)] = scannedOutput{
+						id:        sfe.ID,
+						value:     types.NewCurrency(sfe.SiafundOutput.Value, 0),
+						seedIndex: index,
+					}
+				}
+				if index > s.largestIndexSeen {
+					s.largestIndexSeen = index
 				}
 			}
-			if index > s.largestIndexSeen {
-				s.largestIndexSeen = index
-			}
-		}
-	})
+		})
+	}
 
-	s.scannedHeight = cau.State.Index.Height
-	fmt.Printf("\rWallet: scanned to height %d...", s.scannedHeight)
+	for _, cau := range applied {
+		cau.ForEachSiacoinElement(func(sce types.SiacoinElement, spent bool) {
+			index, exists := s.keys[sce.SiacoinOutput.Address]
+			if exists {
+				if spent {
+					delete(s.siacoinOutputs, types.SiacoinOutputID(sce.ID))
+				} else if sce.SiacoinOutput.Value.Cmp(s.dustThreshold) > 0 {
+					s.siacoinOutputs[types.SiacoinOutputID(sce.ID)] = scannedOutput{
+						id:        sce.ID,
+						value:     sce.SiacoinOutput.Value,
+						seedIndex: index,
+					}
+				}
+				if index > s.largestIndexSeen {
+					s.largestIndexSeen = index
+				}
+			}
+		})
+
+		cau.ForEachSiafundElement(func(sfe types.SiafundElement, spent bool) {
+			index, exists := s.keys[sfe.SiafundOutput.Address]
+			if exists {
+				if spent {
+					delete(s.siafundOutputs, types.SiafundOutputID(sfe.ID))
+				} else {
+					s.siafundOutputs[types.SiafundOutputID(sfe.ID)] = scannedOutput{
+						id:        sfe.ID,
+						value:     types.NewCurrency(sfe.SiafundOutput.Value, 0),
+						seedIndex: index,
+					}
+				}
+				if index > s.largestIndexSeen {
+					s.largestIndexSeen = index
+				}
+			}
+		})
+	}
+
+	if len(applied) > 0 {
+		s.tip = applied[len(applied)-1].State.Index
+	}
 
 	return nil
 }
 
-// ProcessChainRevertUpdate implements chain.Subscriber
-func (s *seedScanner) ProcessChainRevertUpdate(cru *chain.RevertUpdate) error {
-	cru.ForEachSiacoinElement(func(sce types.SiacoinElement, spent bool) {
-		index, exists := s.keys[sce.SiacoinOutput.Address]
-		if exists {
-			if !spent {
-				delete(s.siacoinOutputs, types.SiacoinOutputID(sce.ID))
-			} else if sce.SiacoinOutput.Value.Cmp(s.dustThreshold) > 0 {
-				s.siacoinOutputs[types.SiacoinOutputID(sce.ID)] = scannedOutput{
-					id:        sce.ID,
-					value:     sce.SiacoinOutput.Value,
-					seedIndex: index,
-				}
-			}
-			if index > s.largestIndexSeen {
-				s.largestIndexSeen = index
-			}
-		}
-	})
-
-	cru.ForEachSiafundElement(func(sfe types.SiafundElement, spent bool) {
-		index, exists := s.keys[sfe.SiafundOutput.Address]
-		if exists {
-			if !spent {
-				delete(s.siafundOutputs, types.SiafundOutputID(sfe.ID))
-			} else {
-				s.siafundOutputs[types.SiafundOutputID(sfe.ID)] = scannedOutput{
-					id:        sfe.ID,
-					value:     types.NewCurrency(sfe.SiafundOutput.Value, 0),
-					seedIndex: index,
-				}
-			}
-			if index > s.largestIndexSeen {
-				s.largestIndexSeen = index
-			}
-		}
-	})
-
-	s.scannedHeight = cru.State.Index.Height
-	return nil
-}
-
-// scan subscribes s to cm and scans the blockchain for addresses that belong
-// to s's seed. If scan returns errMaxKeys, additional keys may need to be
-// generated to find all the addresses.
-func (s *seedScanner) scan(cm *chain.Manager) error {
+// scan subscribes scans the blockchain for addresses that belong to s's seed.
+// If scan returns errMaxKeys, additional keys may need to be generated to
+// find all the addresses.
+func (s *seedScanner) scan(cm *chain.Manager, stopChan <-chan struct{}) error {
 	// Generate a bunch of keys and scan the blockchain looking for them. If
 	// none of the 'upper' half of the generated keys are found, we are done;
 	// otherwise, generate more keys and try again (bounded by a sane
@@ -149,16 +148,29 @@ func (s *seedScanner) scan(cm *chain.Manager) error {
 	//
 	// NOTE: since scanning is very slow, we aim to only scan once, which
 	// means generating many keys.
+	fmt.Println("Wallet: starting scan...")
 	numKeys := numInitialKeys
 	for s.numKeys() < maxScanKeys {
 		s.generateKeys(numKeys)
 
 		// Reset scan height between scans.
-		s.scannedHeight = 0
-		if err := cm.AddSubscriber(s, types.ChainIndex{}); err != nil {
-			return err
+		s.tip = types.ChainIndex{}
+		for s.tip != cm.Tip() {
+			select {
+			case <-stopChan:
+				return nil
+			default:
+			}
+			crus, caus, err := cm.UpdatesSince(s.tip, 100)
+			if err != nil {
+				return modules.AddContext(err, "failed to subscribe to chain manager")
+			}
+			if err := s.UpdateChainState(crus, caus); err != nil {
+				return modules.AddContext(err, "failed to update chain state")
+			}
+			fmt.Printf("Wallet: scanned to height %d...\n", s.tip.Height)
 		}
-		cm.RemoveSubscriber(s)
+
 		if s.largestIndexSeen < s.numKeys()/2 {
 			return nil
 		}

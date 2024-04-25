@@ -67,8 +67,8 @@ func (p *Portal) managedCheckWallet() {
 	}
 }
 
-// ProcessChainApplyUpdate implements chain.Subscriber.
-func (p *Portal) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, _ bool) error {
+// UpdateChainState applies or reverts the updates from the ChainManager.
+func (p *Portal) UpdateChainState(reverted []chain.RevertUpdate, applied []chain.ApplyUpdate) error {
 	addrs, err := p.getSiacoinAddresses()
 	if err != nil {
 		p.log.Error("couldn't get account addresses", zap.Error(err))
@@ -78,16 +78,29 @@ func (p *Portal) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, _ bool) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for _, txn := range cau.Block.Transactions {
-		txid := txn.ID()
-		for _, sco := range txn.SiacoinOutputs {
-			if email, exists := addrs[sco.Address]; exists {
-				if _, exists := p.transactions[txid]; !exists {
-					if err := p.addSiacoinPayment(email, sco.Value, txid); err != nil {
-						p.log.Error("couldn't add SC payment", zap.Error(err))
-						continue
+	for _, cru := range reverted {
+		for _, txn := range cru.Block.Transactions {
+			if _, exists := p.transactions[txn.ID()]; exists {
+				delete(p.transactions, txn.ID())
+				if err := p.revertSiacoinPayment(txn.ID()); err != nil {
+					p.log.Error("couldn't revert SC payment", zap.Error(err))
+				}
+			}
+		}
+	}
+
+	for _, cau := range applied {
+		for _, txn := range cau.Block.Transactions {
+			txid := txn.ID()
+			for _, sco := range txn.SiacoinOutputs {
+				if email, exists := addrs[sco.Address]; exists {
+					if _, exists := p.transactions[txid]; !exists {
+						if err := p.addSiacoinPayment(email, sco.Value, txid); err != nil {
+							p.log.Error("couldn't add SC payment", zap.Error(err))
+							continue
+						}
+						p.transactions[txid] = sco.Address
 					}
-					p.transactions[txid] = sco.Address
 				}
 			}
 		}
@@ -96,23 +109,6 @@ func (p *Portal) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, _ bool) error {
 	for txid := range p.transactions {
 		if err := p.confirmSiacoinPayment(txid); err != nil {
 			p.log.Error("couldn't confirm SC payment", zap.Error(err))
-		}
-	}
-
-	return nil
-}
-
-// ProcessChainRevertUpdate implements chain.Subscriber.
-func (p *Portal) ProcessChainRevertUpdate(cru *chain.RevertUpdate) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	for _, txn := range cru.Block.Transactions {
-		if _, exists := p.transactions[txn.ID()]; exists {
-			delete(p.transactions, txn.ID())
-			if err := p.revertSiacoinPayment(txn.ID()); err != nil {
-				p.log.Error("couldn't revert SC payment", zap.Error(err))
-			}
 		}
 	}
 

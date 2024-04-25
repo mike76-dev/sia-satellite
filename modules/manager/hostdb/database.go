@@ -115,7 +115,6 @@ func (hdb *HostDB) updateState() error {
 		SET height = ?, scan_complete = ?, disable_ip_check = ?, bid = ?
 		WHERE id = 1
 	`, hdb.tip.Height, hdb.initialScanComplete, hdb.disableIPViolationCheck, hdb.tip.ID[:])
-	hdb.lastSaved = time.Now()
 	return err
 }
 

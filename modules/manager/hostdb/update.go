@@ -117,31 +117,23 @@ func (hdb *HostDB) insertBlockchainHost(host modules.HostDBEntry) {
 	hdb.queueScan(host)
 }
 
-// ProcessChainApplyUpdate implements chain.Subscriber.
-func (hdb *HostDB) ProcessChainApplyUpdate(cau *chain.ApplyUpdate, mayCommit bool) (err error) {
+// UpdateChainState applies the ChainManager updates.
+func (hdb *HostDB) UpdateChainState(_ []chain.RevertUpdate, applied []chain.ApplyUpdate) error {
 	hdb.mu.Lock()
 	defer hdb.mu.Unlock()
 
-	// Set the block height before applying blocks to preserve previous
-	// behavior.
-	hdb.tip = cau.State.Index
+	for _, cau := range applied {
+		hdb.tip = cau.State.Index
 
-	// Add hosts announced in the block.
-	for _, host := range findHostAnnouncements(cau.Block) {
-		hdb.insertBlockchainHost(host)
-	}
-
-	if mayCommit || time.Since(hdb.lastSaved) > 3*time.Second {
-		err := hdb.updateState()
-		if err != nil {
-			hdb.log.Error("unable to save hostdb state", zap.Error(err))
+		for _, host := range findHostAnnouncements(cau.Block) {
+			hdb.insertBlockchainHost(host)
 		}
 	}
 
-	return nil
-}
+	if err := hdb.updateState(); err != nil {
+		hdb.log.Error("unable to save hostdb state", zap.Error(err))
+		return err
+	}
 
-// ProcessChainRevertUpdate implements chain.Subscriber.
-func (hdb *HostDB) ProcessChainRevertUpdate(_ *chain.RevertUpdate) error {
 	return nil
 }

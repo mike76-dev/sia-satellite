@@ -1,6 +1,7 @@
 package syncer
 
 import (
+	"context"
 	"net"
 	"path/filepath"
 
@@ -81,8 +82,8 @@ func (s *Syncer) Run() error {
 }
 
 // Connect forms an outbound connection to a peer.
-func (s *Syncer) Connect(addr string) (*syncer.Peer, error) {
-	return s.s.Connect(addr)
+func (s *Syncer) Connect(ctx context.Context, addr string) (*syncer.Peer, error) {
+	return s.s.Connect(ctx, addr)
 }
 
 // BroadcastHeader broadcasts a header to all peers.

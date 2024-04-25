@@ -3,7 +3,6 @@ package wallet
 import (
 	"bytes"
 	"database/sql"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -29,7 +28,6 @@ type (
 
 		mu      sync.Mutex
 		tg      siasync.ThreadGroup
-		updates []*chain.ApplyUpdate
 		closeFn func()
 
 		seed         modules.Seed
@@ -62,20 +60,6 @@ func (w *Wallet) Tip() types.ChainIndex {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.tip
-}
-
-// Subscribe resubscribes the indexer starting at the given height.
-func (w *Wallet) Subscribe(startHeight uint64) error {
-	var index types.ChainIndex
-	if startHeight > 0 {
-		var ok bool
-		index, ok = w.cm.BestIndex(startHeight - 1)
-		if !ok {
-			return errors.New("invalid height")
-		}
-	}
-	w.cm.RemoveSubscriber(w)
-	return w.cm.AddSubscriber(w, index)
 }
 
 // LastAddresses returns the last n addresses starting at the last seedProgress
@@ -182,6 +166,55 @@ func (w *Wallet) Annotate(pool []types.Transaction) []modules.PoolTransaction {
 	return annotated
 }
 
+func (w *Wallet) sync(index types.ChainIndex) error {
+	for index != w.cm.Tip() {
+		select {
+		case <-w.tg.StopChan():
+			return nil
+		default:
+		}
+		crus, caus, err := w.cm.UpdatesSince(index, 100)
+		if err != nil {
+			w.log.Error("failed to subscribe to chain manager", zap.Error(err))
+			return err
+		} else if err := w.UpdateChainState(crus, caus); err != nil {
+			w.log.Error("failed to update chain state", zap.Error(err))
+			return err
+		}
+		if len(caus) > 0 {
+			index = caus[len(caus)-1].State.Index
+		}
+	}
+	return nil
+}
+
+func (w *Wallet) subscribe() {
+	if err := w.sync(w.tip); err != nil {
+		return
+	}
+
+	reorgChan := make(chan types.ChainIndex, 1)
+	unsubscribe := w.cm.OnReorg(func(index types.ChainIndex) {
+		select {
+		case reorgChan <- index:
+		default:
+		}
+	})
+	defer unsubscribe()
+
+	for {
+		select {
+		case <-w.tg.StopChan():
+			return
+		case <-reorgChan:
+		}
+
+		if err := w.sync(w.tip); err != nil {
+			w.log.Error("failed to sync wallet", zap.Error(err))
+		}
+	}
+}
+
 // New creates a new wallet.
 func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, seed, dir string) (*Wallet, error) {
 	var entropy modules.Seed
@@ -250,7 +283,7 @@ func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, seed, dir string) (*Wa
 			copy(w.seed[:], entropy[:])
 			dustThreshold := w.DustThreshold()
 			scanner := newSeedScanner(w.seed, dustThreshold)
-			if err := scanner.scan(cm); err != nil {
+			if err := scanner.scan(cm, w.tg.StopChan()); err != nil {
 				w.log.Error("blockchain scan failed", zap.Error(err))
 				return
 			}
@@ -264,20 +297,13 @@ func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, seed, dir string) (*Wa
 				return
 			}
 
-			if err := cm.AddSubscriber(w, w.tip); err != nil {
-				w.log.Error("failed to subscribe to chain manager", zap.Error(err))
-				return
-			}
+			w.subscribe()
 		}()
 
 		return w, nil
+	} else {
+		go w.subscribe()
 	}
-
-	go func() {
-		if err := cm.AddSubscriber(w, w.tip); err != nil {
-			w.log.Error("failed to subscribe to chain manager", zap.Error(err))
-		}
-	}()
 
 	return w, nil
 }

@@ -176,7 +176,6 @@ type HostDB struct {
 	scanWait                bool
 	scanningThreads         int
 	loadingComplete         bool
-	lastSaved               time.Time
 
 	// staticFilteredTree is a hosttree that only contains the hosts that align
 	// with the filterMode. The filteredHosts are the hosts that are submitted
@@ -369,16 +368,13 @@ func hostdbBlockingStartup(db *sql.DB, cm *chain.Manager, s modules.Syncer, dir 
 
 	// Spawn the scan loop.
 	go hdb.threadedScan()
-	hdb.tg.OnStop(func() {
-		cm.RemoveSubscriber(hdb)
-	})
 
 	return hdb, nil
 }
 
 // hostdbAsyncStartup handles the async portion of New.
-func hostdbAsyncStartup(hdb *HostDB, cm *chain.Manager) error {
-	err := cm.AddSubscriber(hdb, hdb.tip)
+func hostdbAsyncStartup(hdb *HostDB) error {
+	err := hdb.sync(hdb.tip)
 	if err != nil {
 		// Subscribe again using the new ID. This will cause a triggered scan
 		// on all of the hosts, but that should be acceptable.
@@ -389,10 +385,29 @@ func hostdbAsyncStartup(hdb *HostDB, cm *chain.Manager) error {
 		if err != nil {
 			return err
 		}
-		err = cm.AddSubscriber(hdb, hdb.tip)
+		err = hdb.sync(hdb.tip)
 	}
-	if err != nil {
-		return err
+	return err
+}
+
+func (hdb *HostDB) sync(index types.ChainIndex) error {
+	for index != hdb.cm.Tip() {
+		select {
+		case <-hdb.tg.StopChan():
+			return nil
+		default:
+		}
+		crus, caus, err := hdb.cm.UpdatesSince(index, 100)
+		if err != nil {
+			hdb.log.Error("failed to subscribe to chain manager", zap.Error(err))
+			return err
+		} else if err := hdb.UpdateChainState(crus, caus); err != nil {
+			hdb.log.Error("failed to update chain state", zap.Error(err))
+			return err
+		}
+		if len(caus) > 0 {
+			index = caus[len(caus)-1].State.Index
+		}
 	}
 	return nil
 }
@@ -417,7 +432,7 @@ func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, dir string) (*HostDB, 
 		}
 		defer hdb.tg.Done()
 		// Subscribe to the consensus set in a separate goroutine.
-		err := hostdbAsyncStartup(hdb, cm)
+		err := hostdbAsyncStartup(hdb)
 		if err != nil {
 			errChan <- err
 		}

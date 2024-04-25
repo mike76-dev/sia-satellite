@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/node/api"
@@ -44,7 +45,9 @@ func (s *server) syncerConnectHandler(jc jape.Context) {
 	if jc.Decode(&addr) != nil {
 		return
 	}
-	_, err := s.s.Connect(addr)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := s.s.Connect(ctx, addr)
 	jc.Check("couldn't connect to peer", err)
 }
 

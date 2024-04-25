@@ -6,6 +6,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
+	"go.sia.tech/core/types"
 	"go.uber.org/zap"
 )
 
@@ -139,15 +140,34 @@ func (m *Manager) initPersist(dir string) error {
 
 	// Subscribe to the consensus set using the most recent consensus change.
 	go func() {
-		err := m.cm.AddSubscriber(m, m.cm.Tip())
+		err := m.sync(m.cm.Tip())
 		if err != nil {
 			m.log.Error("failed to subscribe", zap.Error(err))
 			return
 		}
 	}()
-	m.tg.OnStop(func() {
-		m.cm.RemoveSubscriber(m)
-	})
 
+	return nil
+}
+
+func (m *Manager) sync(index types.ChainIndex) error {
+	for index != m.cm.Tip() {
+		select {
+		case <-m.tg.StopChan():
+			return nil
+		default:
+		}
+		crus, caus, err := m.cm.UpdatesSince(index, 1000)
+		if err != nil {
+			m.log.Error("failed to subscribe to chain manager", zap.Error(err))
+			return err
+		} else if err := m.UpdateChainState(crus, caus); err != nil {
+			m.log.Error("failed to update chain state", zap.Error(err))
+			return err
+		}
+		if len(caus) > 0 {
+			index = caus[len(caus)-1].State.Index
+		}
+	}
 	return nil
 }

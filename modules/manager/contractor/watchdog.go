@@ -184,7 +184,7 @@ func (w *watchdog) callMonitorContract(args monitorContractArgs) error {
 
 // callScanApplyUpdate scans applied blocks, updating the watchdog's state
 // with all information relevant to monitored contracts.
-func (w *watchdog) callScanApplyUpdate(cau *chain.ApplyUpdate) {
+func (w *watchdog) callScanApplyUpdate(cau chain.ApplyUpdate) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -196,7 +196,7 @@ func (w *watchdog) callScanApplyUpdate(cau *chain.ApplyUpdate) {
 
 // callScanRevertUpdate scans reverted blocks, updating the watchdog's state
 // with all information relevant to monitored contracts.
-func (w *watchdog) callScanRevertUpdate(cru *chain.RevertUpdate) {
+func (w *watchdog) callScanRevertUpdate(cru chain.RevertUpdate) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

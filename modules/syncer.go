@@ -1,6 +1,8 @@
 package modules
 
 import (
+	"context"
+
 	"go.sia.tech/core/gateway"
 	"go.sia.tech/core/types"
 	"go.sia.tech/coreutils/syncer"
@@ -27,7 +29,7 @@ type Syncer interface {
 	Close() error
 
 	// Connect forms an outbound connection to a peer.
-	Connect(addr string) (*syncer.Peer, error)
+	Connect(ctx context.Context, addr string) (*syncer.Peer, error)
 
 	// PeerInfo returns the information about the current peers.
 	PeerInfo() []syncer.PeerInfo

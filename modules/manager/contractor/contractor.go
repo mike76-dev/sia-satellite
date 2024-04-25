@@ -287,7 +287,7 @@ func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, m modules.Manager, wal
 			return
 		}
 		defer c.tg.Done()
-		err := contractorAsyncStartup(c, cm)
+		err := contractorAsyncStartup(c)
 		if err != nil {
 			c.log.Error("couldn't start contractor", zap.Error(err))
 		}
@@ -344,11 +344,6 @@ func contractorBlockingStartup(db *sql.DB, cm *chain.Manager, s modules.Syncer, 
 	// Update the pubkeysToContractID map.
 	c.managedUpdatePubKeysToContractIDMap()
 
-	// Unsubscribe from the consensus set upon shutdown.
-	c.tg.OnStop(func() {
-		cm.RemoveSubscriber(c)
-	})
-
 	// We may have resubscribed. Save now so that we don't lose our work.
 	c.mu.Lock()
 	err = c.save()
@@ -360,18 +355,37 @@ func contractorBlockingStartup(db *sql.DB, cm *chain.Manager, s modules.Syncer, 
 	return c, nil
 }
 
+func (c *Contractor) sync(index types.ChainIndex) error {
+	for index != c.cm.Tip() {
+		select {
+		case <-c.tg.StopChan():
+			return nil
+		default:
+		}
+		crus, caus, err := c.cm.UpdatesSince(index, 1000)
+		if err != nil {
+			c.log.Error("failed to subscribe to chain manager", zap.Error(err))
+			return err
+		} else if err := c.UpdateChainState(crus, caus); err != nil {
+			c.log.Error("failed to update chain state", zap.Error(err))
+			return err
+		}
+		if len(caus) > 0 {
+			index = caus[len(caus)-1].State.Index
+		}
+	}
+	return nil
+}
+
 // contractorAsyncStartup handles the async portion of New.
-func contractorAsyncStartup(c *Contractor, cm *chain.Manager) error {
-	err := cm.AddSubscriber(c, c.tip)
+func contractorAsyncStartup(c *Contractor) error {
+	err := c.sync(c.tip)
 	if err != nil {
 		// Reset the contractor consensus variables and try rescanning.
 		c.tip = types.ChainIndex{}
-		err = cm.AddSubscriber(c, c.tip)
+		err = c.sync(c.tip)
 	}
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // managedSynced returns true if the contractor is synced with the consensusset.

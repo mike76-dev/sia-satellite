@@ -72,6 +72,17 @@ func (eps *EphemeralPeerStore) Peers() ([]core.PeerInfo, error) {
 	return peers, nil
 }
 
+// PeerInfo implements PeerStore.
+func (eps *EphemeralPeerStore) PeerInfo(addr string) (core.PeerInfo, error) {
+	eps.mu.Lock()
+	defer eps.mu.Unlock()
+	info, ok := eps.peers[addr]
+	if !ok {
+		return core.PeerInfo{}, core.ErrPeerNotFound
+	}
+	return info, nil
+}
+
 // UpdatePeerInfo implements PeerStore.
 func (eps *EphemeralPeerStore) UpdatePeerInfo(addr string, fn func(*core.PeerInfo)) error {
 	eps.mu.Lock()

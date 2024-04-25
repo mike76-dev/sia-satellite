@@ -132,19 +132,40 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cm *chain.M
 
 	// Subscribe to the consensus set using the most recent consensus change.
 	go func() {
-		err := pt.cm.AddSubscriber(pt, pt.cm.Tip())
+		err := pt.sync(pt.cm.Tip())
 		if err != nil {
 			pt.log.Error("couldn't subscribe to consensus updates", zap.Error(err))
 			return
 		}
 	}()
 	pt.tg.OnStop(func() {
-		pt.cm.RemoveSubscriber(pt)
 		// We don't want any recently made payments to go unnoticed.
 		pt.managedCheckWallet()
 	})
 
 	return pt, nil
+}
+
+func (p *Portal) sync(index types.ChainIndex) error {
+	for index != p.cm.Tip() {
+		select {
+		case <-p.tg.StopChan():
+			return nil
+		default:
+		}
+		crus, caus, err := p.cm.UpdatesSince(index, 1000)
+		if err != nil {
+			p.log.Error("failed to subscribe to chain manager", zap.Error(err))
+			return err
+		} else if err := p.UpdateChainState(crus, caus); err != nil {
+			p.log.Error("failed to update chain state", zap.Error(err))
+			return err
+		}
+		if len(caus) > 0 {
+			index = caus[len(caus)-1].State.Index
+		}
+	}
+	return nil
 }
 
 // Close shuts down the portal.
