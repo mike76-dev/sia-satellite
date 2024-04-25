@@ -4,12 +4,11 @@ import (
 	"fmt"
 
 	"github.com/mike76-dev/sia-satellite/modules"
-	"github.com/mike76-dev/sia-satellite/persist"
-
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
 )
 
-const scanMultiplier = 4 // How many more keys to generate after each scan iteration.
+const scanMultiplier = 4 // how many more keys to generate after each scan iteration
 
 var errMaxKeys = fmt.Errorf("refused to generate more than %v keys from seed", maxScanKeys)
 
@@ -32,15 +31,13 @@ type scannedOutput struct {
 // A seedScanner scans the blockchain for addresses that belong to a given
 // seed.
 type seedScanner struct {
-	dustThreshold    types.Currency           // Minimum value of outputs to be included.
-	keys             map[types.Address]uint64 // Map address to seed index.
-	largestIndexSeen uint64                   // Largest index that has appeared in the blockchain.
-	scannedHeight    uint64
+	dustThreshold    types.Currency           // minimum value of outputs to be included
+	keys             map[types.Address]uint64 // map address to seed index
+	largestIndexSeen uint64                   // largest index that has appeared in the blockchain
+	tip              types.ChainIndex
 	seed             modules.Seed
 	siacoinOutputs   map[types.SiacoinOutputID]scannedOutput
 	siafundOutputs   map[types.SiafundOutputID]scannedOutput
-
-	log *persist.Logger
 }
 
 func (s *seedScanner) numKeys() uint64 {
@@ -50,83 +47,100 @@ func (s *seedScanner) numKeys() uint64 {
 // generateKeys generates n additional keys from the seedScanner's seed.
 func (s *seedScanner) generateKeys(n uint64) {
 	initialProgress := s.numKeys()
-	for i, k := range generateKeys(s.seed, initialProgress, n) {
-		s.keys[k.UnlockConditions.UnlockHash()] = initialProgress + uint64(i)
+	for i, key := range generateKeys(s.seed, initialProgress, n) {
+		s.keys[types.StandardUnlockHash(key.PublicKey())] = initialProgress + uint64(i)
 	}
 }
 
-// ProcessConsensusChange scans the blockchain for information relevant to the
-// seedScanner.
-func (s *seedScanner) ProcessConsensusChange(cc modules.ConsensusChange) {
-	// Update outputs.
-	for _, diff := range cc.SiacoinOutputDiffs {
-		if diff.Direction == modules.DiffApply {
-			if index, exists := s.keys[diff.SiacoinOutput.Address]; exists && diff.SiacoinOutput.Value.Cmp(s.dustThreshold) > 0 {
-				s.siacoinOutputs[diff.ID] = scannedOutput{
-					id:        types.Hash256(diff.ID),
-					value:     diff.SiacoinOutput.Value,
-					seedIndex: index,
+// UpdateChainState applies and reverts the ChainManager updates.
+func (s *seedScanner) UpdateChainState(reverted []chain.RevertUpdate, applied []chain.ApplyUpdate) error {
+	for _, cru := range reverted {
+		cru.ForEachSiacoinElement(func(sce types.SiacoinElement, spent bool) {
+			index, exists := s.keys[sce.SiacoinOutput.Address]
+			if exists {
+				if !spent {
+					delete(s.siacoinOutputs, types.SiacoinOutputID(sce.ID))
+				} else if sce.SiacoinOutput.Value.Cmp(s.dustThreshold) > 0 {
+					s.siacoinOutputs[types.SiacoinOutputID(sce.ID)] = scannedOutput{
+						id:        sce.ID,
+						value:     sce.SiacoinOutput.Value,
+						seedIndex: index,
+					}
+				}
+				if index > s.largestIndexSeen {
+					s.largestIndexSeen = index
 				}
 			}
-		} else if diff.Direction == modules.DiffRevert {
-			// NOTE: DiffRevert means the output was either spent or was in a
-			// block that was reverted.
-			if _, exists := s.keys[diff.SiacoinOutput.Address]; exists {
-				delete(s.siacoinOutputs, diff.ID)
-			}
-		}
-	}
-	for _, diff := range cc.SiafundOutputDiffs {
-		if diff.Direction == modules.DiffApply {
-			// Do not compare against dustThreshold here; we always want to
-			// sweep every Siafund found.
-			if index, exists := s.keys[diff.SiafundOutput.Address]; exists {
-				s.siafundOutputs[diff.ID] = scannedOutput{
-					id:        types.Hash256(diff.ID),
-					value:     types.NewCurrency(diff.SiafundOutput.Value, 0),
-					seedIndex: index,
+		})
+
+		cru.ForEachSiafundElement(func(sfe types.SiafundElement, spent bool) {
+			index, exists := s.keys[sfe.SiafundOutput.Address]
+			if exists {
+				if !spent {
+					delete(s.siafundOutputs, types.SiafundOutputID(sfe.ID))
+				} else {
+					s.siafundOutputs[types.SiafundOutputID(sfe.ID)] = scannedOutput{
+						id:        sfe.ID,
+						value:     types.NewCurrency(sfe.SiafundOutput.Value, 0),
+						seedIndex: index,
+					}
+				}
+				if index > s.largestIndexSeen {
+					s.largestIndexSeen = index
 				}
 			}
-		} else if diff.Direction == modules.DiffRevert {
-			// NOTE: DiffRevert means the output was either spent or was in a
-			// block that was reverted.
-			if _, exists := s.keys[diff.SiafundOutput.Address]; exists {
-				delete(s.siafundOutputs, diff.ID)
-			}
-		}
+		})
 	}
 
-	// Update s.largestIndexSeen.
-	for _, diff := range cc.SiacoinOutputDiffs {
-		index, exists := s.keys[diff.SiacoinOutput.Address]
-		if exists {
-			if index > s.largestIndexSeen {
-				s.largestIndexSeen = index
+	for _, cau := range applied {
+		cau.ForEachSiacoinElement(func(sce types.SiacoinElement, spent bool) {
+			index, exists := s.keys[sce.SiacoinOutput.Address]
+			if exists {
+				if spent {
+					delete(s.siacoinOutputs, types.SiacoinOutputID(sce.ID))
+				} else if sce.SiacoinOutput.Value.Cmp(s.dustThreshold) > 0 {
+					s.siacoinOutputs[types.SiacoinOutputID(sce.ID)] = scannedOutput{
+						id:        sce.ID,
+						value:     sce.SiacoinOutput.Value,
+						seedIndex: index,
+					}
+				}
+				if index > s.largestIndexSeen {
+					s.largestIndexSeen = index
+				}
 			}
-		}
-	}
-	for _, diff := range cc.SiafundOutputDiffs {
-		index, exists := s.keys[diff.SiafundOutput.Address]
-		if exists {
-			if index > s.largestIndexSeen {
-				s.largestIndexSeen = index
+		})
+
+		cau.ForEachSiafundElement(func(sfe types.SiafundElement, spent bool) {
+			index, exists := s.keys[sfe.SiafundOutput.Address]
+			if exists {
+				if spent {
+					delete(s.siafundOutputs, types.SiafundOutputID(sfe.ID))
+				} else {
+					s.siafundOutputs[types.SiafundOutputID(sfe.ID)] = scannedOutput{
+						id:        sfe.ID,
+						value:     types.NewCurrency(sfe.SiafundOutput.Value, 0),
+						seedIndex: index,
+					}
+				}
+				if index > s.largestIndexSeen {
+					s.largestIndexSeen = index
+				}
 			}
-		}
+		})
 	}
 
-	// Adjust the scanned height and print the scan progress.
-	s.scannedHeight = cc.BlockHeight
-	if !cc.Synced {
-		fmt.Printf("\rWallet: scanned to height %d...", s.scannedHeight)
-	} else {
-		fmt.Println("\nDone!")
+	if len(applied) > 0 {
+		s.tip = applied[len(applied)-1].State.Index
 	}
+
+	return nil
 }
 
-// scan subscribes s to cs and scans the blockchain for addresses that belong
-// to s's seed. If scan returns errMaxKeys, additional keys may need to be
-// generated to find all the addresses.
-func (s *seedScanner) scan(cs modules.ConsensusSet, cancel <-chan struct{}) error {
+// scan subscribes scans the blockchain for addresses that belong to s's seed.
+// If scan returns errMaxKeys, additional keys may need to be generated to
+// find all the addresses.
+func (s *seedScanner) scan(cm *chain.Manager, stopChan <-chan struct{}) error {
 	// Generate a bunch of keys and scan the blockchain looking for them. If
 	// none of the 'upper' half of the generated keys are found, we are done;
 	// otherwise, generate more keys and try again (bounded by a sane
@@ -134,24 +148,37 @@ func (s *seedScanner) scan(cs modules.ConsensusSet, cancel <-chan struct{}) erro
 	//
 	// NOTE: since scanning is very slow, we aim to only scan once, which
 	// means generating many keys.
+	fmt.Println("Wallet: starting scan...")
 	numKeys := numInitialKeys
 	for s.numKeys() < maxScanKeys {
 		s.generateKeys(numKeys)
 
 		// Reset scan height between scans.
-		s.scannedHeight = 0
-		if err := cs.ConsensusSetSubscribe(s, modules.ConsensusChangeBeginning, cancel); err != nil {
-			return err
+		s.tip = types.ChainIndex{}
+		for s.tip != cm.Tip() {
+			select {
+			case <-stopChan:
+				return nil
+			default:
+			}
+			crus, caus, err := cm.UpdatesSince(s.tip, 100)
+			if err != nil {
+				return modules.AddContext(err, "failed to subscribe to chain manager")
+			}
+			if err := s.UpdateChainState(crus, caus); err != nil {
+				return modules.AddContext(err, "failed to update chain state")
+			}
+			fmt.Printf("Wallet: scanned to height %d...\n", s.tip.Height)
 		}
-		cs.Unsubscribe(s)
-		if s.largestIndexSeen < s.numKeys() / 2 {
+
+		if s.largestIndexSeen < s.numKeys()/2 {
 			return nil
 		}
 
 		// Increase number of keys generated each iteration, capping so that
 		// we do not exceed maxScanKeys.
 		numKeys *= scanMultiplier
-		if numKeys > maxScanKeys - s.numKeys() {
+		if numKeys > maxScanKeys-s.numKeys() {
 			numKeys = maxScanKeys - s.numKeys()
 		}
 	}
@@ -159,13 +186,12 @@ func (s *seedScanner) scan(cs modules.ConsensusSet, cancel <-chan struct{}) erro
 }
 
 // newSeedScanner returns a new seedScanner.
-func newSeedScanner(seed modules.Seed, log *persist.Logger) *seedScanner {
+func newSeedScanner(seed modules.Seed, dustThreshold types.Currency) *seedScanner {
 	return &seedScanner{
 		seed:           seed,
+		dustThreshold:  dustThreshold,
 		keys:           make(map[types.Address]uint64, numInitialKeys),
 		siacoinOutputs: make(map[types.SiacoinOutputID]scannedOutput),
 		siafundOutputs: make(map[types.SiafundOutputID]scannedOutput),
-
-		log: log,
 	}
 }

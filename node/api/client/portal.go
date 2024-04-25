@@ -1,50 +1,36 @@
 package client
 
 import (
-	"encoding/json"
-
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/node/api"
 )
 
-// PortalCreditsGet requests the /portal/credits resource.
-func (c *Client) PortalCreditsGet() (credits modules.CreditData, err error) {
-	url := "/portal/credits"
-	err = c.get(url, &credits)
+// PortalCredits requests the /portal/credits resource.
+func (c *Client) PortalCredits() (credits modules.CreditData, err error) {
+	err = c.c.GET("/portal/credits", &credits)
 	return
 }
 
-// PortalCreditsPost requests the /portal/credits resource.
-func (c *Client) PortalCreditsPost(credits modules.CreditData) (err error) {
-	data, err := json.Marshal(credits)
-	if err != nil {
-		return err
-	}
-	err = c.post("/portal/credits", string(data), nil)
-	return
+// PortalSetCredits requests the /portal/credits resource.
+func (c *Client) PortalSetCredits(credits modules.CreditData) (err error) {
+	return c.c.POST("/portal/credits", &credits, nil)
 }
 
-// PortalAnnouncementGet requests the /portal/announcement resource.
-func (c *Client) PortalAnnouncementGet() (string, uint64, error) {
-	url := "/portal/announcement"
+// PortalAnnouncement requests the /portal/announcement resource.
+func (c *Client) PortalAnnouncement() (string, uint64, error) {
 	var req api.Announcement
-	err := c.get(url, &req)
+	err := c.c.GET("/portal/announcement", &req)
 	if err != nil {
 		return "", 0, err
 	}
 	return req.Text, req.Expires, nil
 }
 
-// PortalAnnouncementPost requests the /portal/announcement resource.
-func (c *Client) PortalAnnouncementPost(text string, expires uint64) (err error) {
+// PortalSetAnnouncement requests the /portal/announcement resource.
+func (c *Client) PortalSetAnnouncement(text string, expires uint64) (err error) {
 	req := api.Announcement{
 		Text:    text,
 		Expires: expires,
 	}
-	data, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	err = c.post("/portal/announcement", string(data), nil)
-	return
+	return c.c.POST("/portal/announcement", &req, nil)
 }

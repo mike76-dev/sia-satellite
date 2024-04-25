@@ -2,6 +2,7 @@ package provider
 
 import (
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 
@@ -22,7 +23,7 @@ func (p *Provider) establishDefaults() {
 	// The generated keys are important, save them.
 	err := p.save()
 	if err != nil {
-		p.log.Println("ERROR: failed to save provider persistence:", err)
+		p.log.Error("failed to save provider persistence", zap.Error(err))
 	}
 }
 
@@ -64,6 +65,6 @@ func (p *Provider) save() error {
 		REPLACE INTO pr_info (id, public_key, secret_key, address)
 		VALUES (1, ?, ?, ?)
 	`, p.publicKey[:], p.secretKey, p.autoAddress)
-	
+
 	return err
 }

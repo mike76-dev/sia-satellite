@@ -18,7 +18,6 @@ const scanHistoryLen = 30
 
 var (
 	hostdbNumHosts int
-	hostdbVerbose  bool
 )
 
 var (
@@ -55,7 +54,7 @@ var (
 )
 
 // printScoreBreakdown prints the score breakdown of a host, provided the info.
-func printScoreBreakdown(info *api.HostdbHostsGET) {
+func printScoreBreakdown(info *api.HostdbHostGET) {
 	fmt.Println("\n  Score Breakdown:")
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "\t\tAge:\t %.3f\n", info.ScoreBreakdown.Age)
@@ -75,12 +74,8 @@ func printScoreBreakdown(info *api.HostdbHostsGET) {
 // Lists hosts known to the hostdb.
 func hostdbcmd() {
 	if !verbose {
-		info, err := httpClient.HostDbActiveGet()
-		if modules.ContainsError(err, api.ErrAPICallNotRecognized) {
-			// Assume module is not loaded if status command is not recognized.
-			fmt.Printf("HostDB:\n  Status: %s\n\n", moduleNotReadyStatus)
-			return
-		} else if err != nil {
+		info, err := httpClient.HostDbActiveHosts()
+		if err != nil {
 			die("Could not fetch host list:", err)
 		}
 
@@ -91,7 +86,7 @@ func hostdbcmd() {
 
 		// Strip down to the number of requested hosts.
 		if hostdbNumHosts != 0 && hostdbNumHosts < len(info.Hosts) {
-			info.Hosts = info.Hosts[len(info.Hosts) - hostdbNumHosts:]
+			info.Hosts = info.Hosts[len(info.Hosts)-hostdbNumHosts:]
 		}
 
 		fmt.Println(len(info.Hosts), "Active Hosts:")
@@ -99,13 +94,13 @@ func hostdbcmd() {
 		fmt.Fprintln(w, "\t\tAddress\tVersion\tPrice (per TB per Mo)")
 		for i, host := range info.Hosts {
 			price := host.Settings.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)
-			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\n", len(info.Hosts) - i, host.Settings.NetAddress, host.Settings.Version, price)
+			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\n", len(info.Hosts)-i, host.Settings.NetAddress, host.Settings.Version, price)
 		}
 		if err := w.Flush(); err != nil {
 			die("failed to flush writer")
 		}
 	} else {
-		info, err := httpClient.HostDbAllGet()
+		info, err := httpClient.HostDbAllHosts()
 		if err != nil {
 			die("Could not fetch host list:", err)
 		}
@@ -117,11 +112,11 @@ func hostdbcmd() {
 		// Iterate through the hosts and divide by category.
 		var activeHosts, inactiveHosts, offlineHosts []api.ExtendedHostDBEntry
 		for _, host := range info.Hosts {
-			if host.Settings.AcceptingContracts && len(host.ScanHistory) > 0 && host.ScanHistory[len(host.ScanHistory) - 1].Success {
+			if host.Settings.AcceptingContracts && len(host.ScanHistory) > 0 && host.ScanHistory[len(host.ScanHistory)-1].Success {
 				activeHosts = append(activeHosts, host)
 				continue
 			}
-			if len(host.ScanHistory) > 0 && host.ScanHistory[len(host.ScanHistory) - 1].Success {
+			if len(host.ScanHistory) > 0 && host.ScanHistory[len(host.ScanHistory)-1].Success {
 				inactiveHosts = append(inactiveHosts, host)
 				continue
 			}
@@ -129,13 +124,13 @@ func hostdbcmd() {
 		}
 
 		if hostdbNumHosts > 0 && len(offlineHosts) > hostdbNumHosts {
-			offlineHosts = offlineHosts[len(offlineHosts) - hostdbNumHosts:]
+			offlineHosts = offlineHosts[len(offlineHosts)-hostdbNumHosts:]
 		}
 		if hostdbNumHosts > 0 && len(inactiveHosts) > hostdbNumHosts {
-			inactiveHosts = inactiveHosts[len(inactiveHosts) - hostdbNumHosts:]
+			inactiveHosts = inactiveHosts[len(inactiveHosts)-hostdbNumHosts:]
 		}
 		if hostdbNumHosts > 0 && len(activeHosts) > hostdbNumHosts {
-			activeHosts = activeHosts[len(activeHosts) - hostdbNumHosts:]
+			activeHosts = activeHosts[len(activeHosts)-hostdbNumHosts:]
 		}
 
 		fmt.Println()
@@ -160,14 +155,14 @@ func hostdbcmd() {
 					recentTime = scan.Timestamp
 					recentSuccess = scan.Success
 				}
-				uptimeRatio = float64(uptime) / float64(uptime + downtime)
+				uptimeRatio = float64(uptime) / float64(uptime+downtime)
 			}
 
 			// Get the scan history string.
 			scanHistStr := ""
 			displayScans := host.ScanHistory
 			if len(host.ScanHistory) > scanHistoryLen {
-				displayScans = host.ScanHistory[len(host.ScanHistory) - scanHistoryLen:]
+				displayScans = host.ScanHistory[len(host.ScanHistory)-scanHistoryLen:]
 			}
 			for _, scan := range displayScans {
 				if scan.Success {
@@ -181,7 +176,7 @@ func hostdbcmd() {
 			// recent scans.
 			price := host.Settings.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)
 			downloadBWPrice := host.Settings.StoragePrice.Mul64(modules.BytesPerTerabyte)
-			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(offlineHosts) - i, host.PublicKeyString, host.Settings.NetAddress, host.Settings.Version, modules.FilesizeUnits(host.Settings.RemainingStorage), price, downloadBWPrice, uptimeRatio, scanHistStr)
+			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(offlineHosts)-i, host.PublicKeyString, host.Settings.NetAddress, host.Settings.Version, modules.FilesizeUnits(host.Settings.RemainingStorage), price, downloadBWPrice, uptimeRatio, scanHistStr)
 		}
 		if err := w.Flush(); err != nil {
 			die("failed to flush writer")
@@ -209,7 +204,7 @@ func hostdbcmd() {
 					recentTime = scan.Timestamp
 					recentSuccess = scan.Success
 				}
-				uptimeRatio = float64(uptime) / float64(uptime + downtime)
+				uptimeRatio = float64(uptime) / float64(uptime+downtime)
 			}
 
 			// Get a string representation of the historic outcomes of the most
@@ -217,7 +212,7 @@ func hostdbcmd() {
 			scanHistStr := ""
 			displayScans := host.ScanHistory
 			if len(host.ScanHistory) > scanHistoryLen {
-				displayScans = host.ScanHistory[len(host.ScanHistory) - scanHistoryLen:]
+				displayScans = host.ScanHistory[len(host.ScanHistory)-scanHistoryLen:]
 			}
 			for _, scan := range displayScans {
 				if scan.Success {
@@ -230,7 +225,7 @@ func hostdbcmd() {
 			price := host.Settings.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)
 			collateral := host.Settings.Collateral.Mul(modules.BlockBytesPerMonthTerabyte)
 			downloadBWPrice := host.Settings.DownloadBandwidthPrice.Mul64(modules.BytesPerTerabyte)
-			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(inactiveHosts) - i, host.PublicKeyString, host.Settings.NetAddress, host.Settings.Version, modules.FilesizeUnits(host.Settings.RemainingStorage), price, collateral, downloadBWPrice, uptimeRatio, scanHistStr)
+			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(inactiveHosts)-i, host.PublicKeyString, host.Settings.NetAddress, host.Settings.Version, modules.FilesizeUnits(host.Settings.RemainingStorage), price, collateral, downloadBWPrice, uptimeRatio, scanHistStr)
 		}
 		fmt.Fprintln(w, "\t\tPubkey\tAddress\tVersion\tRemaining Storage\tPrice (/ TB / Month)\tCollateral (/ TB / Month)\tDownload Price (/ TB)\tUptime\tRecent Scans")
 		if err := w.Flush(); err != nil {
@@ -243,7 +238,7 @@ func hostdbcmd() {
 		referenceScore := big.NewRat(1, 1)
 		if len(activeHosts) > 0 {
 			referenceIndex := len(activeHosts) * 3 / 5
-			hostInfo, err := httpClient.HostDbHostsGet(activeHosts[referenceIndex].PublicKey)
+			hostInfo, err := httpClient.HostDbHost(activeHosts[referenceIndex].PublicKey)
 			if err != nil {
 				die("Could not fetch provided host:", err)
 			}
@@ -274,7 +269,7 @@ func hostdbcmd() {
 					recentTime = scan.Timestamp
 					recentSuccess = scan.Success
 				}
-				uptimeRatio = float64(uptime) / float64(uptime + downtime)
+				uptimeRatio = float64(uptime) / float64(uptime+downtime)
 			}
 
 			// Get a string representation of the historic outcomes of the most
@@ -282,7 +277,7 @@ func hostdbcmd() {
 			scanHistStr := ""
 			displayScans := host.ScanHistory
 			if len(host.ScanHistory) > scanHistoryLen {
-				displayScans = host.ScanHistory[len(host.ScanHistory) - scanHistoryLen:]
+				displayScans = host.ScanHistory[len(host.ScanHistory)-scanHistoryLen:]
 			}
 			for _, scan := range displayScans {
 				if scan.Success {
@@ -293,7 +288,7 @@ func hostdbcmd() {
 			}
 
 			// Grab the score information for the active hosts.
-			hostInfo, err := httpClient.HostDbHostsGet(host.PublicKey)
+			hostInfo, err := httpClient.HostDbHost(host.PublicKey)
 			if err != nil {
 				die("Could not fetch provided host:", err)
 			}
@@ -302,7 +297,7 @@ func hostdbcmd() {
 			price := host.Settings.StoragePrice.Mul(modules.BlockBytesPerMonthTerabyte)
 			collateral := host.Settings.Collateral.Mul(modules.BlockBytesPerMonthTerabyte)
 			downloadBWPrice := host.Settings.DownloadBandwidthPrice.Mul64(modules.BytesPerTerabyte)
-			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%12.6g\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(activeHosts) - i, host.PublicKeyString, host.Settings.NetAddress, host.Settings.Version, score, modules.FilesizeUnits(host.Settings.RemainingStorage), host.Settings.ContractPrice, price, collateral, downloadBWPrice, uptimeRatio, scanHistStr)
+			fmt.Fprintf(w, "\t%v:\t%v\t%v\t%v\t%12.6g\t%v\t%v\t%v\t%v\t%v\t%.3f\t%s\n", len(activeHosts)-i, host.PublicKeyString, host.Settings.NetAddress, host.Settings.Version, score, modules.FilesizeUnits(host.Settings.RemainingStorage), host.Settings.ContractPrice, price, collateral, downloadBWPrice, uptimeRatio, scanHistStr)
 		}
 		fmt.Fprintln(w, "\t\tPubkey\tAddress\tVersion\tScore\tRemaining Storage\tContract Fee\tPrice (/ TB / Month)\tCollateral (/ TB / Month)\tDownload Price (/TB)\tUptime\tRecent Scans")
 		if err := w.Flush(); err != nil {
@@ -314,7 +309,7 @@ func hostdbcmd() {
 // hostdbfiltermodecmd is the handler for the command `satc hostdb
 // filtermode`.
 func hostdbfiltermodecmd() {
-	hdfmg, err := httpClient.HostDbFilterModeGet()
+	hdfmg, err := httpClient.HostDbFilterMode()
 	if err != nil {
 		die(err)
 	}
@@ -365,7 +360,7 @@ func hostdbsetfiltermodecmd(cmd *cobra.Command, args []string) {
 		die()
 	}
 
-	err = httpClient.HostDbFilterModePost(fm, hosts, netAddresses)
+	err = httpClient.HostDbSetFilterMode(fm, hosts, netAddresses)
 	if err != nil {
 		fmt.Println("Could not set hostdb filtermode: ", err)
 		die()
@@ -380,7 +375,7 @@ func hostdbviewcmd(pubkey string) {
 	if err := publicKey.UnmarshalText([]byte(pubkey)); err != nil {
 		die("Could not unmarshal public key:", err)
 	}
-	info, err := httpClient.HostDbHostsGet(publicKey)
+	info, err := httpClient.HostDbHost(publicKey)
 	if err != nil {
 		die("Could not fetch provided host:", err)
 	}
@@ -440,7 +435,7 @@ func hostdbviewcmd(pubkey string) {
 			recentTime = scan.Timestamp
 			recentSuccess = scan.Success
 		}
-		uptimeRatio = float64(uptime) / float64(uptime + downtime)
+		uptimeRatio = float64(uptime) / float64(uptime+downtime)
 	}
 
 	// Compute the uptime ratio, but shift by 0.02 to acknowledge fully that

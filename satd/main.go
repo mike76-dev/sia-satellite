@@ -7,19 +7,16 @@ import (
 	"os"
 
 	"github.com/mike76-dev/sia-satellite/persist"
-
 	"golang.org/x/term"
 )
 
 // Default config values.
 var defaultConfig = persist.SatdConfig{
 	Name:          "",
-	UserAgent:     "Sat-Agent",
 	GatewayAddr:   ":0",
 	APIAddr:       "localhost:9990",
 	SatelliteAddr: ":9992",
 	Dir:           ".",
-	Bootstrap:     true,
 	DBUser:        "",
 	DBName:        "satellite",
 	PortalPort:    ":8080",
@@ -59,6 +56,22 @@ func getDBPassword() string {
 	return dbPassword
 }
 
+func getWalletSeed() string {
+	seed := os.Getenv("SATD_WALLET_SEED")
+	if seed != "" {
+		log.Println("Using SATD_WALLET_SEED environment variable.")
+	} else {
+		fmt.Print("Enter wallet seed: ")
+		pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if err != nil {
+			log.Fatalf("Could not read database password: %v\n", err)
+		}
+		seed = string(pw)
+	}
+	return seed
+}
+
 func main() {
 	log.SetFlags(0)
 
@@ -77,21 +90,16 @@ func main() {
 
 	// Parse command line flags. If set, they override the loaded config.
 	name := flag.String("name", "", "name of the satellite node")
-	userAgent := flag.String("agent", "", "custom agent used for API calls")
 	gatewayAddr := flag.String("addr", "", "address to listen on for peer connections")
 	apiAddr := flag.String("api-addr", "", "address to serve API on")
 	satelliteAddr := flag.String("sat-addr", "", "address to listen on for renter requests")
 	dir := flag.String("dir", "", "directory to store node state in")
-	bootstrap := flag.Bool("bootstrap", true, "bootstrap the gateway and consensus modules")
 	dbUser := flag.String("db-user", "", "username for accessing the database")
 	dbName := flag.String("db-name", "", "name of MYSQL database")
 	portalPort := flag.String("portal", "", "port number the portal server listens at")
 	flag.Parse()
 	if *name != "" {
 		config.Name = *name
-	}
-	if *userAgent != "" {
-		config.UserAgent = *userAgent
 	}
 	if *gatewayAddr != "" {
 		config.GatewayAddr = *gatewayAddr
@@ -105,7 +113,6 @@ func main() {
 	if *dir != "" {
 		config.Dir = *dir
 	}
-	config.Bootstrap = *bootstrap
 	if *dbUser != "" {
 		config.DBUser = *dbUser
 	}
@@ -128,6 +135,9 @@ func main() {
 	// Fetch DB password.
 	dbPassword := getDBPassword()
 
+	// Fetch wallet seed.
+	seed := getWalletSeed()
+
 	// Create the state directory if it does not yet exist.
 	// This also checks if the provided directory parameter is valid.
 	err = os.MkdirAll(config.Dir, 0700)
@@ -136,7 +146,7 @@ func main() {
 	}
 
 	// Start satd. startDaemon will only return when it is shutting down.
-	err = startDaemon(&config, apiPassword, dbPassword)
+	err = startDaemon(&config, apiPassword, dbPassword, seed)
 	if err != nil {
 		log.Fatalln(err)
 	}

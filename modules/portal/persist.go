@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 )
 
 const (
@@ -51,7 +52,7 @@ func (p *Portal) threadedSaveLoop() {
 			defer p.mu.Unlock()
 			err = p.save()
 			if err != nil {
-				p.log.Println("ERROR: unable to save portal persistence:", err)
+				p.log.Error("unable to save portal persistence", zap.Error(err))
 			}
 		}()
 	}

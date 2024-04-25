@@ -1,195 +1,196 @@
 package api
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log"
-	"net/http"
-	"strings"
-	"sync"
-
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.sia.tech/core/types"
 )
 
-const (
-	// StatusModuleNotLoaded is a custom http code to indicate that a module
-	// wasn't yet loaded by the Daemon and can therefore not be reached.
-	StatusModuleNotLoaded = 490
-)
-
-// ErrAPICallNotRecognized is returned by API client calls made to modules that
-// are not yet loaded.
-var ErrAPICallNotRecognized = errors.New("API call not recognized")
-
-// Error is a type that is encoded as JSON and returned in an API response in
-// the event of an error. Only the Message field is required. More fields may
-// be added to this struct in the future for better error reporting.
-type Error struct {
-	// Message describes the error in English. Typically it is set to
-	// `err.Error()`. This field is required.
-	Message string `json:"message"`
+// DaemonVersion holds the version information for satd.
+type DaemonVersion struct {
+	Version     string `json:"version"`
+	GitRevision string `json:"gitRevision"`
+	BuildTime   string `json:"buildTime"`
 }
 
-// Error implements the error interface for the Error type. It returns only the
-// Message field.
-func (err Error) Error() string {
-	return err.Message
+// SyncerPeer contains the information about a peer.
+type SyncerPeer struct {
+	Address string `json:"address"`
+	Version string `json:"version"`
+	Inbound bool   `json:"inbound"`
 }
 
-// HttpGET is a utility function for making http get requests with a
-// whitelisted user-agent. A non-2xx response does not return an error.
-func HttpGET(url string) (resp *http.Response, err error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Sat-Agent")
-	return http.DefaultClient.Do(req)
+// ConsensusTipResponse is the response type for /consensus/tip.
+type ConsensusTipResponse struct {
+	Height  uint64        `json:"height"`
+	BlockID types.BlockID `json:"id"`
+	Synced  bool          `json:"synced"`
 }
 
-// HttpGETAuthenticated is a utility function for making authenticated http get
-// requests with a whitelisted user-agent and the supplied password. A
-// non-2xx response does not return an error.
-func HttpGETAuthenticated(url string, password string) (resp *http.Response, err error) {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Sat-Agent")
-	req.SetBasicAuth("", password)
-	return http.DefaultClient.Do(req)
+// TxpoolBroadcastRequest is the request type for /txpool/broadcast.
+type TxpoolBroadcastRequest struct {
+	Transactions   []types.Transaction   `json:"transactions"`
+	V2Transactions []types.V2Transaction `json:"v2transactions"`
 }
 
-// HttpPOST is a utility function for making post requests with a
-// whitelisted user-agent. A non-2xx response does not return an error.
-func HttpPOST(url string, data string) (resp *http.Response, err error) {
-	req, err := http.NewRequest("POST", url, strings.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Sat-Agent")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return http.DefaultClient.Do(req)
+// TxpoolTransactionsResponse is the response type for /txpool/transactions.
+type TxpoolTransactionsResponse struct {
+	Transactions   []types.Transaction   `json:"transactions"`
+	V2Transactions []types.V2Transaction `json:"v2transactions"`
 }
 
-// HttpPOSTAuthenticated is a utility function for making authenticated http
-// post requests with a whitelisted user-agent and the supplied
-// password. A non-2xx response does not return an error.
-func HttpPOSTAuthenticated(url string, data string, password string) (resp *http.Response, err error) {
-	req, err := http.NewRequest("POST", url, strings.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Sat-Agent")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth("", password)
-	return http.DefaultClient.Do(req)
+// WalletBalanceResponse is the response type for /wallet/balance.
+type WalletBalanceResponse struct {
+	Height           uint64         `json:"height"`
+	Siacoins         types.Currency `json:"siacoins"`
+	ImmatureSiacoins types.Currency `json:"immatureSiacoins"`
+	IncomingSiacoins types.Currency `json:"incomingSiacoins"`
+	OutgoingSiacoins types.Currency `json:"outgoingSiacoins"`
+	Siafunds         uint64         `json:"siafunds"`
+	RecommendedFee   types.Currency `json:"recommendedFee"`
 }
 
-type (
-	// API encapsulates a collection of modules and implements a http.Handler
-	// to access their methods.
-	API struct {
-		cs       modules.ConsensusSet
-		gateway  modules.Gateway
-		manager  modules.Manager
-		portal   modules.Portal
-		provider modules.Provider
-		tpool    modules.TransactionPool
-		wallet   modules.Wallet
-
-		router   http.Handler
-		routerMu sync.RWMutex
-
-		requiredUserAgent string
-		requiredPassword  string
-		modulesSet        bool
-		Shutdown          func() error
-	}
-)
-
-// ServeHTTP implements the http.Handler interface.
-func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	api.routerMu.RLock()
-	api.router.ServeHTTP(w, r)
-	api.routerMu.RUnlock()
+// WalletOutputsResponse is the response type for /wallet/outputs.
+type WalletOutputsResponse struct {
+	SiacoinOutputs []types.SiacoinElement `json:"siacoinOutputs"`
+	SiafundOutputs []types.SiafundElement `json:"siafundOutputs"`
 }
 
-// SetModules allows for replacing the modules in the API at runtime.
-func (api *API) SetModules(g modules.Gateway, cs modules.ConsensusSet, m modules.Manager, portal modules.Portal, p modules.Provider, tp modules.TransactionPool, w modules.Wallet) {
-	if api.modulesSet {
-		log.Fatal("can't call SetModules more than once")
-	}
-	api.cs         = cs
-	api.gateway    = g
-	api.manager    = m
-	api.portal     = portal
-	api.provider   = p
-	api.tpool      = tp
-	api.wallet     = w
-	api.modulesSet = true
-	api.buildHTTPRoutes()
+// WalletSendRequest is the request type for /wallet/send.
+type WalletSendRequest struct {
+	Amount      types.Currency `json:"amount"`
+	Destination types.Address  `json:"destination"`
 }
 
-// New creates a new API. The API will require authentication using HTTP basic
-// auth for certain endpoints if the supplied password is not the empty string.
-// Usernames are ignored for authentication.
-func New(requiredUserAgent string, requiredPassword string, g modules.Gateway, cs modules.ConsensusSet, m modules.Manager, portal modules.Portal, p modules.Provider, tp modules.TransactionPool, w modules.Wallet) *API {
-	api := &API{
-		cs:       cs,
-		gateway:  g,
-		manager:  m,
-		portal:   portal,
-		provider: p,
-		tpool:    tp,
-		wallet:   w,
-
-		requiredUserAgent: requiredUserAgent,
-		requiredPassword:  requiredPassword,
-	}
-
-	// Register API handlers
-	api.buildHTTPRoutes()
-
-	return api
+// ExchangeRate contains the exchange rate of a given currency.
+type ExchangeRate struct {
+	Currency string  `json:"currency"`
+	Rate     float64 `json:"rate"`
 }
 
-// UnrecognizedCallHandler handles calls to not-loaded modules.
-func (api *API) UnrecognizedCallHandler(w http.ResponseWriter, _ *http.Request) {
-	var errStr string
-	errStr = fmt.Sprintf("%d Module not loaded", StatusModuleNotLoaded)
-	WriteError(w, Error{errStr}, StatusModuleNotLoaded)
+// HostAverages contains the host network averages.
+type HostAverages struct {
+	modules.HostAverages
+	Rate float64 `json:"rate"`
 }
 
-// WriteError writes an error to the API caller.
-func WriteError(w http.ResponseWriter, err Error, code int) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(code)
-	encodingErr := json.NewEncoder(w).Encode(err)
-	if _, isJsonErr := encodingErr.(*json.SyntaxError); isJsonErr {
-		// Marshalling should only fail in the event of a developer error.
-		// Specifically, only non-marshallable types should cause an error here.
-		log.Fatal("failed to encode API error response:", encodingErr)
-	}
+// Renter contains information about the renter.
+type Renter struct {
+	Email     string          `json:"email"`
+	PublicKey types.PublicKey `json:"publickey"`
 }
 
-// WriteJSON writes the object to the ResponseWriter. If the encoding fails, an
-// error is written instead. The Content-Type of the response header is set
-// accordingly.
-func WriteJSON(w http.ResponseWriter, obj interface{}) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	err := json.NewEncoder(w).Encode(obj)
-	if _, isJsonErr := err.(*json.SyntaxError); isJsonErr {
-		// Marshalling should only fail in the event of a developer error.
-		// Specifically, only non-marshallable types should cause an error here.
-		log.Fatal("failed to encode API response:", err)
-	}
+// RentersGET contains the list of the renters.
+type RentersGET struct {
+	Renters []Renter `json:"renters"`
 }
 
-// WriteSuccess writes the HTTP header with status 204 No Content to the
-// ResponseWriter. WriteSuccess should only be used to indicate that the
-// requested action succeeded AND there is no data to return.
-func WriteSuccess(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusNoContent)
+// RenterContract represents a contract formed by the renter.
+type RenterContract struct {
+	// Amount of contract funds that have been spent on downloads.
+	DownloadSpending types.Currency `json:"downloadspending"`
+	// Block height that the file contract ends on.
+	EndHeight uint64 `json:"endheight"`
+	// Fees paid in order to form the file contract.
+	Fees types.Currency `json:"fees"`
+	// Amount of contract funds that have been spent on funding an ephemeral
+	// account on the host.
+	FundAccountSpending types.Currency `json:"fundaccountspending"`
+	// Public key of the renter that formed the contract.
+	RenterPublicKey types.PublicKey `json:"renterpublickey"`
+	// Public key of the host the contract was formed with.
+	HostPublicKey types.PublicKey `json:"hostpublickey"`
+	// HostVersion is the version of Sia that the host is running.
+	HostVersion string `json:"hostversion"`
+	// ID of the file contract.
+	ID types.FileContractID `json:"id"`
+	// A signed transaction containing the most recent contract revision.
+	LastTransaction types.Transaction `json:"lasttransaction"`
+	// Amount of contract funds that have been spent on maintenance tasks
+	// such as updating the price table or syncing the ephemeral account
+	// balance.
+	MaintenanceSpending modules.MaintenanceSpending `json:"maintenancespending"`
+	// Address of the host the file contract was formed with.
+	NetAddress string `json:"netaddress"`
+	// Remaining funds left to spend on uploads & downloads.
+	RenterFunds types.Currency `json:"renterfunds"`
+	// Size of the file contract, which is typically equal to the number of
+	// bytes that have been uploaded to the host.
+	Size uint64 `json:"size"`
+	// Block height that the file contract began on.
+	StartHeight uint64 `json:"startheight"`
+	// Amount of contract funds that have been spent on storage.
+	StorageSpending types.Currency `json:"storagespending"`
+	// Total cost to the wallet of forming the file contract.
+	TotalCost types.Currency `json:"totalcost"`
+	// Amount of contract funds that have been spent on uploads.
+	UploadSpending types.Currency `json:"uploadspending"`
+	// Signals if contract is good for uploading data.
+	GoodForUpload bool `json:"goodforupload"`
+	// Signals if contract is good for a renewal.
+	GoodForRenew bool `json:"goodforrenew"`
+	// Signals if a contract has been marked as bad.
+	BadContract bool `json:"badcontract"`
+}
+
+// RenterContracts contains the renter's contracts.
+type RenterContracts struct {
+	ActiveContracts           []RenterContract `json:"activecontracts"`
+	PassiveContracts          []RenterContract `json:"passivecontracts"`
+	RefreshedContracts        []RenterContract `json:"refreshedcontracts"`
+	DisabledContracts         []RenterContract `json:"disabledcontracts"`
+	ExpiredContracts          []RenterContract `json:"expiredcontracts"`
+	ExpiredRefreshedContracts []RenterContract `json:"expiredrefreshedcontracts"`
+}
+
+// EmailPreferences contains the email preferences.
+type EmailPreferences struct {
+	Email         string         `json:"email"`
+	WarnThreshold types.Currency `json:"threshold"`
+}
+
+// ExtendedHostDBEntry is an extension to modules.HostDBEntry that includes
+// the string representation of the public key.
+type ExtendedHostDBEntry struct {
+	modules.HostDBEntry
+	PublicKeyString string `json:"publickeystring"`
+}
+
+// HostdbHostsGET lists active hosts on the network.
+type HostdbHostsGET struct {
+	Hosts []ExtendedHostDBEntry `json:"hosts"`
+}
+
+// HostdbHostGET lists detailed statistics for a particular host, selected
+// by pubkey.
+type HostdbHostGET struct {
+	Entry          ExtendedHostDBEntry        `json:"entry"`
+	ScoreBreakdown modules.HostScoreBreakdown `json:"scorebreakdown"`
+}
+
+// HostdbGET holds information about the hostdb.
+type HostdbGET struct {
+	BlockHeight         uint64 `json:"blockheight"`
+	InitialScanComplete bool   `json:"initialscancomplete"`
+}
+
+// HostdbFilterModeGET contains the information about the HostDB's
+// filtermode.
+type HostdbFilterModeGET struct {
+	FilterMode   string   `json:"filtermode"`
+	Hosts        []string `json:"hosts"`
+	NetAddresses []string `json:"netaddresses"`
+}
+
+// HostdbFilterModePOST contains the information needed to set the the
+// FilterMode of the hostDB.
+type HostdbFilterModePOST struct {
+	FilterMode   string            `json:"filtermode"`
+	Hosts        []types.PublicKey `json:"hosts"`
+	NetAddresses []string          `json:"netaddresses"`
+}
+
+// Announcement contains the information about a portal announcement.
+type Announcement struct {
+	Text    string `json:"text"`
+	Expires uint64 `json:"expires"`
 }

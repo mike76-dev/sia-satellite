@@ -11,6 +11,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/internal/build"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
+	"go.uber.org/zap"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
@@ -32,7 +33,7 @@ type (
 // transaction set.
 func (c *Contractor) prepareContractRenewal(host modules.HostDBEntry, oldRev types.FileContractRevision, contractFunding, hostCollateral types.Currency, endHeight uint64, address types.Address) ([]types.Transaction, types.Transaction, []types.Transaction, types.Currency, types.Currency, types.Currency, []types.Hash256, error) {
 	c.mu.RLock()
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 	c.mu.RUnlock()
 
 	// Create the final revision from the provided revision.
@@ -43,12 +44,16 @@ func (c *Contractor) prepareContractRenewal(host modules.HostDBEntry, oldRev typ
 	finalRevision.RevisionNumber = math.MaxUint64
 
 	// Prepare the new contract.
-	fc, basePrice := rhpv3.PrepareContractRenewal(oldRev, host.Settings.Address, address, contractFunding, hostCollateral, host.PriceTable, endHeight)
+	expectedStorage := fundsToExpectedStorage(contractFunding, endHeight-blockHeight, host.Settings)
+	fc, basePrice, err := rhpv3.PrepareContractRenewal(oldRev, host.Settings.Address, address, contractFunding, hostCollateral, host.PriceTable, expectedStorage, endHeight)
+	if err != nil {
+		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, nil, modules.AddContext(err, "unable to prepare contract renewal")
+	}
 
 	// RHP3 contains both the contract and final revision. So we double the
 	// estimation.
-	_, txnFee := c.tpool.FeeEstimation()
-	minerFee := txnFee.Mul64(2 * modules.EstimatedFileContractTransactionSetSize)
+	txnFee := c.cm.RecommendedFee()
+	minerFee := txnFee.Mul64(2 * 2048)
 
 	// Create the transaction containing both the final revision and new
 	// contract.
@@ -64,16 +69,18 @@ func (c *Contractor) prepareContractRenewal(host modules.HostDBEntry, oldRev typ
 	totalCost := cost.Add(minerFee).Add(basePrice).Add(tax)
 
 	// Fund the transaction.
-	parentTxn, toSign, err := c.wallet.FundTransaction(&txn, totalCost)
+	parents, toSign, err := c.wallet.Fund(&txn, totalCost)
 	if err != nil {
-		c.wallet.ReleaseInputs(append([]types.Transaction{parentTxn}, txn))
 		return nil, types.Transaction{}, nil, types.ZeroCurrency, types.ZeroCurrency, types.ZeroCurrency, nil, modules.AddContext(err, "unable to fund transaction")
 	}
 
 	// Make a copy of the transactions to be used to by the watchdog
 	// to double spend these inputs in case the contract never appears on chain.
 	sweepTxn := modules.CopyTransaction(txn)
-	sweepParents := []types.Transaction{modules.CopyTransaction(parentTxn)}
+	var sweepParents []types.Transaction
+	for _, parent := range parents {
+		sweepParents = append(sweepParents, modules.CopyTransaction(parent))
+	}
 
 	// Add an output that sends all funds back to the Satellite address.
 	output := types.SiacoinOutput{
@@ -82,14 +89,14 @@ func (c *Contractor) prepareContractRenewal(host modules.HostDBEntry, oldRev typ
 	}
 	sweepTxn.SiacoinOutputs = append(sweepTxn.SiacoinOutputs, output)
 
-	return append([]types.Transaction{parentTxn}, txn), sweepTxn, sweepParents, totalCost, minerFee, tax, toSign, nil
+	return append(parents, txn), sweepTxn, sweepParents, totalCost, minerFee, tax, toSign, nil
 }
 
 // managedRenewContract will try to renew a contract, returning the
 // amount of money that was put into the contract for renewal.
 func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rpk types.PublicKey, rsk types.PrivateKey, contractFunding types.Currency, endHeight uint64) (fundsSpent types.Currency, newContract modules.RenterContract, err error) {
 	c.mu.RLock()
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 
 	// Check if we know this renter.
 	renter, exists := c.renters[rpk]
@@ -185,7 +192,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		host.PriceTable = pt
 
 		// Check if the host is gouging.
-		_, txnFee := c.tpool.FeeEstimation()
+		txnFee := c.cm.RecommendedFee()
 		if err := modules.CheckGouging(allowance, blockHeight, &hostSettings, &pt, txnFee); err != nil {
 			hostFault = true
 			return modules.AddContext(err, "host is gouging")
@@ -228,25 +235,22 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		}
 
 		// Renew the contract.
-		rev, txnSet, err = proto.RPCRenewContract(ctx, t, esk, oldRev, renterTxnSet, toSign, c.wallet)
+		rev, txnSet, err = proto.RPCRenewContract(ctx, t, esk, oldRev, renterTxnSet, toSign, c.wallet, c.cm.TipState())
 		if err != nil {
 			if !modules.ContainsError(err, errors.New("failed to sign transaction")) {
 				hostFault = true
 			}
-			c.wallet.ReleaseInputs(renterTxnSet)
+			c.wallet.Release(renterTxnSet)
 			return modules.AddContext(err, "couldn't renew contract")
 		}
 
 		// Submit to blockchain.
-		err = c.tpool.AcceptTransactionSet(txnSet)
-		if modules.ContainsError(err, errDuplicateTransactionSet) {
-			// As long as it made it into the transaction pool, we're good.
-			err = nil
-		}
+		_, err = c.cm.AddPoolTransactions(txnSet)
 		if err != nil {
-			c.wallet.ReleaseInputs(txnSet)
-			return modules.AddContext(err, "couldn't broadcast transaction set")
+			c.wallet.Release(txnSet)
+			return modules.AddContext(err, "invalid transaction set")
 		}
+		c.s.BroadcastTransactionSet(txnSet)
 
 		return nil
 	})
@@ -300,7 +304,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		// Update the hostdb to include the new contract.
 		err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 		if err != nil {
-			c.log.Println("ERROR: unable to update hostdb contracts:", err)
+			c.log.Error("unable to update hostdb contracts", zap.Error(err))
 		}
 	}
 
@@ -314,7 +318,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 			totalFailures++
 			c.numFailedRenews[id] = totalFailures
 			c.mu.Unlock()
-			c.log.Println("INFO: remote host determined to be at fault, tallying up failed renews", totalFailures, id)
+			c.log.Info("remote host determined to be at fault, tallying up failed renews", zap.Uint64("failures", totalFailures), zap.Stringer("fcid", id))
 		}
 
 		// Check if contract has to be replaced.
@@ -330,11 +334,10 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 			oldUtility.Locked = true
 			err := c.managedUpdateContractUtility(oldFC, oldUtility)
 			if err != nil {
-				c.log.Println("WARN: failed to mark contract as !goodForRenew:", err)
+				c.log.Warn("failed to mark contract as !goodForRenew", zap.Error(err))
 			}
 
-			c.log.Printf("WARN: consistently failed to renew %v, marked as bad and locked: %v\n",
-				hostPubKey, errRenew)
+			c.log.Warn(fmt.Sprintf("consistently failed to renew %v, marked as bad and locked", hostPubKey), zap.Error(errRenew))
 			c.staticContracts.Return(oldFC)
 
 			return types.ZeroCurrency, newContract, modules.AddContext(errRenew, "contract marked as bad for too many consecutive failed renew attempts")
@@ -342,12 +345,12 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 
 		// Seems like it doesn't have to be replaced yet. Log the
 		// failure and number of renews that have failed so far.
-		c.log.Printf("WARN: failed to renew contract %v [%v]: '%v', current height: %v, proposed end height: %v", hostPubKey, numRenews, errRenew, blockHeight, endHeight)
+		c.log.Warn(fmt.Sprintf("failed to renew contract %v [%v]: '%v', current height: %v, proposed end height: %v", hostPubKey, numRenews, errRenew, blockHeight, endHeight))
 		c.staticContracts.Return(oldFC)
 
 		return types.ZeroCurrency, newContract, modules.AddContext(errRenew, "contract renewal with host was unsuccessful")
 	}
-	c.log.Printf("INFO: renewed contract %v\n", id)
+	c.log.Info("renewed contract", zap.Stringer("id", id))
 
 	// Update the utility values for the new contract, and for the old
 	// contract.
@@ -356,7 +359,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 		GoodForRenew:  true,
 	}
 	if err := c.managedAcquireAndUpdateContractUtility(newContract.ID, newUtility); err != nil {
-		c.log.Println("ERROR: failed to update the contract utilities", err)
+		c.log.Error("failed to update the contract utilities", zap.Error(err))
 		c.staticContracts.Return(oldFC)
 		return fundsSpent, newContract, nil
 	}
@@ -365,7 +368,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 	oldUtility.GoodForUpload = false
 	oldUtility.Locked = true
 	if err := c.managedUpdateContractUtility(oldFC, oldUtility); err != nil {
-		c.log.Println("ERROR: failed to update the contract utilities", err)
+		c.log.Error("failed to update the contract utilities", zap.Error(err))
 		c.staticContracts.Return(oldFC)
 		return fundsSpent, newContract, nil
 	}
@@ -385,7 +388,7 @@ func (c *Contractor) managedRenewContract(oldContract modules.RenterContract, rp
 	// Update the database.
 	err = c.updateRenewedContract(id, newContract.ID)
 	if err != nil {
-		c.log.Println("ERROR: failed to update contracts in the database.")
+		c.log.Error("failed to update contracts in the database", zap.Error(err))
 	}
 
 	// Delete the old contract.
@@ -408,7 +411,7 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 	// Check if we know this renter.
 	c.mu.RLock()
 	renter, exists := c.renters[rpk]
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 	c.mu.RUnlock()
 	if !exists {
 		return nil, ErrRenterNotFound
@@ -417,16 +420,6 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 	// The total number of renews that failed for any reason.
 	var numRenewFails int
 	var renewErr error
-
-	// Register or unregister and alerts related to contract renewal.
-	var registerLowFundsAlert bool
-	defer func() {
-		if registerLowFundsAlert {
-			c.staticAlerter.RegisterAlert(modules.AlertIDRenterAllowanceLowFunds, AlertMSGAllowanceLowFunds, AlertCauseInsufficientAllowanceFunds, modules.SeverityWarning)
-		} else {
-			c.staticAlerter.UnregisterAlert(modules.AlertIDRenterAllowanceLowFunds)
-		}
-	}()
 
 	var renewSet []fileContractRenewal
 	var fundsRemaining types.Currency
@@ -437,11 +430,11 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 		rc, ok := c.staticContracts.View(id)
 		r, err := c.managedFindRenter(id)
 		if err != nil {
-			c.log.Println("WARN: contract ID submitted that has no known renter associated with it:", id)
+			c.log.Warn("contract ID submitted that has no known renter associated with it", zap.Stringer("id", id))
 			continue
 		}
 		if !ok || r.PublicKey != rpk {
-			c.log.Println("WARN: contract ID submitted that doesn't belong to this renter:", id, renter.PublicKey)
+			c.log.Warn("contract ID submitted that doesn't belong to this renter", zap.Stringer("id", id), zap.Stringer("renter", renter.PublicKey))
 			continue
 		}
 
@@ -454,7 +447,7 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 		spending, err := c.PeriodSpending(renter.PublicKey)
 		if err != nil {
 			// This should only error if the contractor is shutting down.
-			c.log.Println("WARN: error getting period spending:", err)
+			c.log.Warn("error getting period spending", zap.Error(err))
 			return nil, err
 		}
 
@@ -469,24 +462,24 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 		// settings.
 		host, _, err := c.hdb.Host(rc.HostPublicKey)
 		if err != nil {
-			c.log.Println("WARN: error getting host", err)
+			c.log.Warn("error getting host", zap.Error(err))
 			continue
 		}
 		if host.Filtered {
-			c.log.Println("INFO: contract skipped because it is filtered")
+			c.log.Info("contract skipped because it is filtered")
 			continue
 		}
 
 		// Skip hosts that can't use the current renter-host protocol.
 		if build.VersionCmp(host.Settings.Version, minimumSupportedRenterHostProtocolVersion) < 0 {
-			c.log.Println("INFO: contract skipped because host is using an outdated version", host.Settings.Version)
+			c.log.Info("contract skipped because host is using an outdated version", zap.String("version", host.Settings.Version))
 			continue
 		}
 
 		// Skip contracts which do not exist or are otherwise unworthy for
 		// renewal.
 		if renter.Settings.AutoRenewContracts && (!ok || !cu.GoodForRenew) {
-			c.log.Println("INFO: contract skipped because it is not good for renew (utility.GoodForRenew, exists)", cu.GoodForRenew, ok)
+			c.log.Info("contract skipped because it is not good for renew", zap.Bool("GFR", cu.GoodForRenew), zap.Bool("exists", ok))
 			continue
 		}
 
@@ -495,7 +488,7 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 		// (which is now ending).
 		renewAmount, err := c.managedEstimateRenewFundingRequirements(rc, blockHeight, renter.Allowance)
 		if err != nil {
-			c.log.Println("WARN: contract skipped because there was an error estimating renew funding requirements", renewAmount, err)
+			c.log.Warn("contract skipped because there was an error estimating renew funding requirements", zap.Stringer("amount", renewAmount), zap.Error(err))
 			continue
 		}
 		renewSet = append(renewSet, fileContractRenewal{
@@ -504,10 +497,10 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 			renterPubKey: rpk,
 			secretKey:    rsk,
 		})
-		c.log.Println("INFO: contract has been added to the renew set")
+		c.log.Info("contract has been added to the renew set")
 	}
 	if len(renewSet) != 0 {
-		c.log.Printf("INFO: renewing %v contracts\n", len(renewSet))
+		c.log.Info("renewing contracts", zap.Int("number", len(renewSet)))
 	}
 
 	// Go through the contracts we've assembled for renewal.
@@ -515,21 +508,14 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 		// Return here if an interrupt or kill signal has been sent.
 		select {
 		case <-c.tg.StopChan():
-			c.log.Println("INFO: returning because the manager was stopped")
+			c.log.Info("returning because the manager was stopped")
 			return nil, errors.New("the manager was stopped")
 		default:
 		}
 
-		unlocked, err := c.wallet.Unlocked()
-		if !unlocked || err != nil {
-			c.log.Println("ERROR: contractor is attempting to renew contracts that are about to expire, however the wallet is locked")
-			return nil, err
-		}
-
 		// Skip this renewal if we don't have enough funds remaining.
 		if renewal.amount.Cmp(fundsRemaining) > 0 {
-			c.log.Println("WARN: skipping renewal because there are not enough funds remaining in the allowance", renewal.contract.ID, renewal.amount, fundsRemaining)
-			registerLowFundsAlert = true
+			c.log.Warn("skipping renewal because there are not enough funds remaining in the allowance", zap.Stringer("fcid", renewal.contract.ID), zap.Stringer("amount", renewal.amount), zap.Stringer("remaining", fundsRemaining))
 			continue
 		}
 
@@ -539,9 +525,9 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 		fundsSpent, newContract, err := c.managedRenewContract(renewal.contract, renewal.renterPubKey, renewal.secretKey, renewal.amount, renter.ContractEndHeight())
 		if modules.ContainsError(err, errContractNotGFR) {
 			// Do not add a renewal error.
-			c.log.Println("INFO: contract skipped because it is not good for renew", renewal.contract.ID)
+			c.log.Info("contract skipped because it is not good for renew", zap.Stringer("fcid", renewal.contract.ID))
 		} else if err != nil {
-			c.log.Println("ERROR: error renewing contract", renewal.contract.ID, err)
+			c.log.Error("error renewing contract", zap.Stringer("id", renewal.contract.ID), zap.Error(err))
 			renewErr = modules.ComposeErrors(renewErr, err)
 			numRenewFails++
 		}
@@ -554,13 +540,13 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 			amount := funds / hastings
 			err = c.m.LockSiacoins(renter.Email, amount)
 			if err != nil {
-				c.log.Println("ERROR: couldn't lock funds")
+				c.log.Error("couldn't lock funds", zap.Error(err))
 			}
 
 			// Increment the number of renewals in the database.
 			err = c.m.IncrementStats(renter.Email, true)
 			if err != nil {
-				c.log.Println("ERROR: couldn't update stats")
+				c.log.Error("couldn't update stats", zap.Error(err))
 			}
 
 			// Add this contract to the contractor and save.
@@ -570,7 +556,7 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 				GoodForRenew:  true,
 			})
 			if err != nil {
-				c.log.Println("ERROR: failed to update the contract utilities", err)
+				c.log.Error("failed to update the contract utilities", zap.Error(err))
 				continue
 			}
 
@@ -578,7 +564,7 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 			err = c.save()
 			c.mu.Unlock()
 			if err != nil {
-				c.log.Println("ERROR: unable to save the contractor:", err)
+				c.log.Error("unable to save the contractor", zap.Error(err))
 			}
 		}
 	}
@@ -604,7 +590,7 @@ func (c *Contractor) RenewContracts(rpk types.PublicKey, rsk types.PrivateKey, c
 // Renter-Satellite protocol.
 func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk types.PublicKey, oldContract modules.RenterContract, contractFunding types.Currency, endHeight uint64) (fundsSpent types.Currency, newContract modules.RenterContract, err error) {
 	c.mu.RLock()
-	blockHeight := c.blockHeight
+	blockHeight := c.tip.Height
 
 	// Check if we know this renter.
 	renter, exists := c.renters[rpk]
@@ -700,7 +686,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		host.PriceTable = pt
 
 		// Check if the host is gouging.
-		_, txnFee := c.tpool.FeeEstimation()
+		txnFee := c.cm.RecommendedFee()
 		if err := modules.CheckGouging(allowance, blockHeight, &hostSettings, &pt, txnFee); err != nil {
 			hostFault = true
 			return modules.AddContext(err, "host is gouging")
@@ -740,25 +726,22 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		}
 
 		// Renew the contract.
-		rev, txnSet, err = proto.RPCTrustlessRenewContract(ctx, s, t, renterTxnSet, toSign, c.wallet)
+		rev, txnSet, err = proto.RPCTrustlessRenewContract(ctx, s, t, renterTxnSet, toSign, c.wallet, c.cm.TipState())
 		if err != nil {
 			if !modules.ContainsError(err, errors.New("failed to sign transaction")) && !modules.ContainsError(err, errors.New("invalid renter signature")) {
 				hostFault = true
 			}
-			c.wallet.ReleaseInputs(renterTxnSet)
+			c.wallet.Release(renterTxnSet)
 			return modules.AddContext(err, "couldn't renew contract")
 		}
 
 		// Submit to blockchain.
-		err = c.tpool.AcceptTransactionSet(txnSet)
-		if modules.ContainsError(err, errDuplicateTransactionSet) {
-			// As long as it made it into the transaction pool, we're good.
-			err = nil
-		}
+		_, err = c.cm.AddPoolTransactions(txnSet)
 		if err != nil {
-			c.wallet.ReleaseInputs(txnSet)
-			return modules.AddContext(err, "couldn't broadcast transaction set")
+			c.wallet.Release(txnSet)
+			return modules.AddContext(err, "invalid transaction set")
 		}
+		c.s.BroadcastTransactionSet(txnSet)
 
 		return nil
 	})
@@ -812,7 +795,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		// Update the hostdb to include the new contract.
 		err = c.hdb.UpdateContracts(c.staticContracts.ViewAll())
 		if err != nil {
-			c.log.Println("ERROR: unable to update hostdb contracts:", err)
+			c.log.Error("unable to update hostdb contracts", zap.Error(err))
 		}
 	}
 
@@ -825,7 +808,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 			c.numFailedRenews[id]++
 			totalFailures := c.numFailedRenews[id]
 			c.mu.Unlock()
-			c.log.Println("INFO: remote host determined to be at fault, tallying up failed renews", totalFailures, id)
+			c.log.Info("remote host determined to be at fault, tallying up failed renews", zap.Uint64("failures", totalFailures), zap.Stringer("fcid", id))
 		}
 
 		// Check if contract has to be replaced.
@@ -841,11 +824,10 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 			oldUtility.Locked = true
 			err := c.managedUpdateContractUtility(oldFC, oldUtility)
 			if err != nil {
-				c.log.Println("WARN: failed to mark contract as !goodForRenew:", err)
+				c.log.Warn("failed to mark contract as !goodForRenew", zap.Error(err))
 			}
 
-			c.log.Printf("WARN: consistently failed to renew %v, marked as bad and locked: %v\n",
-				hostPubKey, errRenew)
+			c.log.Warn(fmt.Sprintf("consistently failed to renew %v, marked as bad and locked", hostPubKey), zap.Error(errRenew))
 			c.staticContracts.Return(oldFC)
 
 			return types.ZeroCurrency, newContract, modules.AddContext(errRenew, "contract marked as bad for too many consecutive failed renew attempts")
@@ -853,12 +835,12 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 
 		// Seems like it doesn't have to be replaced yet. Log the
 		// failure and number of renews that have failed so far.
-		c.log.Printf("WARN: failed to renew contract %v [%v]: '%v', current height: %v, proposed end height: %v", hostPubKey, numRenews, errRenew, blockHeight, endHeight)
+		c.log.Warn(fmt.Sprintf("failed to renew contract %v [%v]: '%v', current height: %v, proposed end height: %v", hostPubKey, numRenews, errRenew, blockHeight, endHeight))
 		c.staticContracts.Return(oldFC)
 
 		return types.ZeroCurrency, newContract, modules.AddContext(errRenew, "contract renewal with host was unsuccessful")
 	}
-	c.log.Printf("INFO: renewed contract %v\n", id)
+	c.log.Info("renewed contract", zap.Stringer("id", id))
 
 	// Update the utility values for the new contract, and for the old
 	// contract.
@@ -867,7 +849,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 		GoodForRenew:  true,
 	}
 	if err := c.managedAcquireAndUpdateContractUtility(newContract.ID, newUtility); err != nil {
-		c.log.Println("ERROR: failed to update the contract utilities", err)
+		c.log.Error("failed to update the contract utilities", zap.Error(err))
 		c.staticContracts.Return(oldFC)
 		return fundsSpent, newContract, nil
 	}
@@ -876,7 +858,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 	oldUtility.GoodForUpload = false
 	oldUtility.Locked = true
 	if err := c.managedUpdateContractUtility(oldFC, oldUtility); err != nil {
-		c.log.Println("ERROR: failed to update the contract utilities", err)
+		c.log.Error("failed to update the contract utilities", zap.Error(err))
 		c.staticContracts.Return(oldFC)
 		return fundsSpent, newContract, nil
 	}
@@ -896,7 +878,7 @@ func (c *Contractor) managedTrustlessRenewContract(s *modules.RPCSession, rpk ty
 	// Update the database.
 	err = c.updateRenewedContract(id, newContract.ID)
 	if err != nil {
-		c.log.Println("ERROR: failed to update contracts in the database.")
+		c.log.Error("failed to update contracts in the database", zap.Error(err))
 	}
 
 	// Delete the old contract.
@@ -927,25 +909,18 @@ func (c *Contractor) RenewContract(s *modules.RPCSession, rpk types.PublicKey, c
 	// Check if the contract belongs to the renter.
 	r, err := c.managedFindRenter(contract.ID)
 	if err != nil {
-		c.log.Println("WARN: contract ID submitted that has no known renter associated with it:", contract.ID)
+		c.log.Warn("contract ID submitted that has no known renter associated with it", zap.Stringer("id", contract.ID))
 		return modules.RenterContract{}, err
 	}
 	if r.PublicKey != rpk {
-		c.log.Println("WARN: contract ID submitted that doesn't belong to this renter:", contract.ID, renter.PublicKey)
+		c.log.Warn("contract ID submitted that doesn't belong to this renter", zap.Stringer("id", contract.ID), zap.Stringer("renter", renter.PublicKey))
 		return modules.RenterContract{}, errors.New("contract doesn't belong to this renter")
-	}
-
-	// Check if the wallet is unlocked.
-	unlocked, err := c.wallet.Unlocked()
-	if !unlocked || err != nil {
-		c.log.Println("ERROR: contractor is attempting to renew a contract but the wallet is locked")
-		return modules.RenterContract{}, err
 	}
 
 	// Renew the contract.
 	fundsSpent, newContract, err := c.managedTrustlessRenewContract(s, rpk, contract, funding, endHeight)
 	if err != nil {
-		c.log.Printf("WARN: attempted to renew a contract with %v, but renewal failed: %v\n", contract.HostPublicKey, err)
+		c.log.Warn(fmt.Sprintf("attempted to renew a contract with %v, but renewal failed", contract.HostPublicKey), zap.Error(err))
 		return modules.RenterContract{}, err
 	}
 
@@ -955,13 +930,13 @@ func (c *Contractor) RenewContract(s *modules.RPCSession, rpk types.PublicKey, c
 	amount := funds / hastings
 	err = c.m.LockSiacoins(renter.Email, amount)
 	if err != nil {
-		c.log.Println("ERROR: couldn't lock funds")
+		c.log.Error("couldn't lock funds", zap.Error(err))
 	}
 
 	// Increment the number of renewals in the database.
 	err = c.m.IncrementStats(renter.Email, true)
 	if err != nil {
-		c.log.Println("ERROR: couldn't update stats")
+		c.log.Error("couldn't update stats", zap.Error(err))
 	}
 
 	// Add this contract to the contractor and save.
@@ -970,14 +945,14 @@ func (c *Contractor) RenewContract(s *modules.RPCSession, rpk types.PublicKey, c
 		GoodForRenew:  true,
 	})
 	if err != nil {
-		c.log.Println("ERROR: failed to update the contract utilities", err)
+		c.log.Error("failed to update the contract utilities", zap.Error(err))
 		return modules.RenterContract{}, err
 	}
 	c.mu.Lock()
 	err = c.save()
 	c.mu.Unlock()
 	if err != nil {
-		c.log.Println("ERROR: unable to save the contractor:", err)
+		c.log.Error("unable to save the contractor", zap.Error(err))
 	}
 
 	return newContract, nil

@@ -1,40 +1,38 @@
 package client
 
 import (
-	"encoding/json"
-
-	"github.com/mike76-dev/sia-satellite/node/api"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/node/api"
 
 	"go.sia.tech/core/types"
 )
 
-// HostDbGet requests the /hostdb endpoint's resources.
-func (c *Client) HostDbGet() (hdg api.HostdbGet, err error) {
-	err = c.get("/hostdb", &hdg)
+// HostDb requests the /hostdb endpoint's resources.
+func (c *Client) HostDb() (hdg api.HostdbGET, err error) {
+	err = c.c.GET("/hostdb", &hdg)
 	return
 }
 
-// HostDbActiveGet requests the /hostdb/active endpoint's resources.
-func (c *Client) HostDbActiveGet() (hdag api.HostdbActiveGET, err error) {
-	err = c.get("/hostdb/active", &hdag)
+// HostDbActiveHosts requests the /hostdb/active endpoint's resources.
+func (c *Client) HostDbActiveHosts() (hdag api.HostdbHostsGET, err error) {
+	err = c.c.GET("/hostdb/active", &hdag)
 	return
 }
 
-// HostDbAllGet requests the /hostdb/all endpoint's resources.
-func (c *Client) HostDbAllGet() (hdag api.HostdbAllGET, err error) {
-	err = c.get("/hostdb/all", &hdag)
+// HostDbAllHosts requests the /hostdb/all endpoint's resources.
+func (c *Client) HostDbAllHosts() (hdag api.HostdbHostsGET, err error) {
+	err = c.c.GET("/hostdb/all", &hdag)
 	return
 }
 
-// HostDbFilterModeGet requests the /hostdb/filtermode GET endpoint.
-func (c *Client) HostDbFilterModeGet() (hdfmg api.HostdbFilterModeGET, err error) {
-	err = c.get("/hostdb/filtermode", &hdfmg)
+// HostDbFilterMode requests the /hostdb/filtermode GET endpoint.
+func (c *Client) HostDbFilterMode() (hdfmg api.HostdbFilterModeGET, err error) {
+	err = c.c.GET("/hostdb/filtermode", &hdfmg)
 	return
 }
 
-// HostDbFilterModePost requests the /hostdb/filtermode POST endpoint.
-func (c *Client) HostDbFilterModePost(fm modules.FilterMode, hosts []types.PublicKey, netAddresses []string) (err error) {
+// HostDbSetFilterMode requests the /hostdb/filtermode POST endpoint.
+func (c *Client) HostDbSetFilterMode(fm modules.FilterMode, hosts []types.PublicKey, netAddresses []string) (err error) {
 	filterMode := fm.String()
 	hdblp := api.HostdbFilterModePOST{
 		FilterMode:   filterMode,
@@ -42,16 +40,11 @@ func (c *Client) HostDbFilterModePost(fm modules.FilterMode, hosts []types.Publi
 		NetAddresses: netAddresses,
 	}
 
-	data, err := json.Marshal(hdblp)
-	if err != nil {
-		return err
-	}
-	err = c.post("/hostdb/FilterMode", string(data), nil)
-	return
+	return c.c.POST("/hostdb/filtermode", &hdblp, nil)
 }
 
-// HostDbHostsGet request the /hostdb/hosts/:pubkey endpoint's resources.
-func (c *Client) HostDbHostsGet(pk types.PublicKey) (hhg api.HostdbHostsGET, err error) {
-	err = c.get("/hostdb/hosts/" + pk.String(), &hhg)
+// HostDbHost request the /hostdb/host/:publickey endpoint's resources.
+func (c *Client) HostDbHost(pk types.PublicKey) (hhg api.HostdbHostGET, err error) {
+	err = c.c.GET("/hostdb/host/"+pk.String(), &hhg)
 	return
 }

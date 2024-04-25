@@ -2,8 +2,10 @@ package contractor
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 )
@@ -79,7 +81,7 @@ func (c *Contractor) managedMarkContractUtility(contract modules.RenterContract,
 	host, u, needsUpdate := c.managedHostInHostDBCheck(contract)
 	if needsUpdate {
 		if err := c.managedUpdateContractUtility(sc, u); err != nil {
-			c.log.Println("ERROR: unable to acquire and update contract utility:", err)
+			c.log.Error("unable to acquire and update contract utility", zap.Error(err))
 			return modules.AddContext(err, "unable to update utility after hostdb check")
 		}
 		return nil
@@ -90,7 +92,7 @@ func (c *Contractor) managedMarkContractUtility(contract modules.RenterContract,
 	if needsUpdate {
 		err := c.managedUpdateContractUtility(sc, u)
 		if err != nil {
-			c.log.Println("ERROR: unable to acquire and update contract utility:", err)
+			c.log.Error("unable to acquire and update contract utility", zap.Error(err))
 			return modules.AddContext(err, "unable to update utility after criticalUtilityChecks")
 		}
 		return nil
@@ -98,7 +100,7 @@ func (c *Contractor) managedMarkContractUtility(contract modules.RenterContract,
 
 	sb, err := c.hdb.ScoreBreakdown(host)
 	if err != nil {
-		c.log.Println("ERROR: unable to get ScoreBreakdown for", host.PublicKey.String(), "got err:", err)
+		c.log.Error(fmt.Sprintf("unable to get ScoreBreakdown for %v", host.PublicKey), zap.Error(err))
 		return nil // It may just be this host that has an issue.
 	}
 
@@ -107,7 +109,7 @@ func (c *Contractor) managedMarkContractUtility(contract modules.RenterContract,
 	if utilityUpdateStatus == necessaryUtilityUpdate || utilityUpdateStatus == suggestedUtilityUpdate {
 		err = c.managedUpdateContractUtility(sc, u)
 		if err != nil {
-			c.log.Println("ERROR: unable to acquire and update contract utility:", err)
+			c.log.Error("unable to acquire and update contract utility", zap.Error(err))
 			return modules.AddContext(err, "unable to update utility after checkHostScore")
 		}
 		return nil
@@ -115,7 +117,7 @@ func (c *Contractor) managedMarkContractUtility(contract modules.RenterContract,
 
 	// All checks passed, marking contract as GFU and GFR.
 	if !u.GoodForUpload || !u.GoodForRenew {
-		c.log.Println("INFO: marking contract as being both GoodForUpload and GoodForRenew:", u.GoodForUpload, u.GoodForRenew, contract.ID)
+		c.log.Info("marking contract as being both GoodForUpload and GoodForRenew", zap.Stringer("fcid", contract.ID), zap.Bool("GFU", u.GoodForUpload), zap.Bool("GFR", u.GoodForRenew))
 	}
 	u.GoodForUpload = true
 	u.GoodForRenew = true
@@ -123,7 +125,7 @@ func (c *Contractor) managedMarkContractUtility(contract modules.RenterContract,
 	// Apply changes.
 	err = c.managedUpdateContractUtility(sc, u)
 	if err != nil {
-		c.log.Println("ERROR: unable to acquire and update contract utility:", err)
+		c.log.Error("unable to acquire and update contract utility", zap.Error(err))
 		return modules.AddContext(err, "unable to update utility after all checks passed.")
 	}
 

@@ -29,14 +29,14 @@ var (
 	}
 
 	managerBalanceCmd = &cobra.Command{
-		Use:   "balance [public_key}",
+		Use:   "balance [public_key]",
 		Short: "Print the renter balance",
 		Long:  "Print the balance of the renter with the given public key.",
 		Run:   wrap(managerbalancecmd),
 	}
 
 	managerContractsCmd = &cobra.Command{
-		Use:   "contracts [public_key] or contracts all",
+		Use:   "contracts [public_key] | contracts all",
 		Short: "Print the list of the contracts",
 		Long:  "Print the list of the contracts. A renter public key may be provided.",
 		Run:   wrap(managercontractscmd),
@@ -118,7 +118,7 @@ For payment_plan, either 'prepayment' or 'invoicing' are accepted.`,
 // manageraveragescmd is the handler for the command `satc manager averages [currency]`.
 // Displays the host network averages in the given currency.
 func manageraveragescmd(currency string) {
-	ha, err := httpClient.ManagerAveragesGet(currency)
+	ha, err := httpClient.ManagerAverages(currency)
 	if err != nil {
 		die(err)
 	}
@@ -148,7 +148,7 @@ func manageraveragescmd(currency string) {
 // managerrenterscmd is the handler for the command `satc manager renters`.
 // Prints the list of the renters.
 func managerrenterscmd() {
-	renters, err := httpClient.ManagerRentersGet()
+	renters, err := httpClient.ManagerRenters()
 	if err != nil {
 		die(err)
 	}
@@ -166,7 +166,7 @@ func managerrenterscmd() {
 // managerrentercmd is the handler for the command `satc manager renter [public_key]`.
 // Prints the settings of the given renter.
 func managerrentercmd(key string) {
-	renter, err := httpClient.ManagerRenterGet(key)
+	renter, err := httpClient.ManagerRenter(key)
 	if err != nil {
 		die(err)
 	}
@@ -213,7 +213,7 @@ Auto Repair Files:    %v
 // managerbalancecmd is the handler for the command `satc manager balance [public_key]`.
 // Prints the balance of the given renter.
 func managerbalancecmd(key string) {
-	ub, err := httpClient.ManagerBalanceGet(key)
+	ub, err := httpClient.ManagerBalance(key)
 	if err != nil {
 		die(err)
 	}
@@ -232,7 +232,7 @@ func managercontractscmd(key string) {
 	if strings.ToLower(key) == "all" {
 		key = ""
 	}
-	contracts, err := httpClient.ManagerContractsGet(key)
+	contracts, err := httpClient.ManagerContracts(key)
 	if err != nil {
 		die(err)
 	}
@@ -413,15 +413,15 @@ Expired Refreshed: %v
 // managercmd is the handler for the command `satc manager`.
 // Prints the information about the manager.
 func managercmd() {
-	renters, err := httpClient.ManagerRentersGet()
+	renters, err := httpClient.ManagerRenters()
 	if err != nil {
 		die(err)
 	}
-	contracts, err := httpClient.ManagerContractsGet("")
+	contracts, err := httpClient.ManagerContracts("")
 	if err != nil {
 		die(err)
 	}
-	maintenance, err := httpClient.ManagerMaintenanceGet()
+	maintenance, err := httpClient.ManagerMaintenance()
 	if err != nil {
 		die(err)
 	}
@@ -435,7 +435,7 @@ Maintenance:      %v
 // managerpreferencescmd is the handler for the command `satc manager preferences`.
 // Prints the email preferences.
 func managerpreferencescmd() {
-	ep, err := httpClient.ManagerPreferencesGet()
+	ep, err := httpClient.ManagerPreferences()
 	if err != nil {
 		die(err)
 	}
@@ -460,7 +460,7 @@ func managersetpreferencescmd(email, wt string) {
 		die(err)
 	}
 
-	err = httpClient.ManagerPreferencesPost(api.EmailPreferences{
+	err = httpClient.ManagerUpdatePreferences(api.EmailPreferences{
 		Email:         email,
 		WarnThreshold: threshold,
 	})
@@ -474,7 +474,7 @@ func managersetpreferencescmd(email, wt string) {
 // managerpricescmd is the handler for the command `satc manager prices`.
 // Prints the current prices.
 func managerpricescmd() {
-	prices, err := httpClient.ManagerPricesGet()
+	prices, err := httpClient.ManagerPrices()
 	if err != nil {
 		die(err)
 	}
@@ -518,7 +518,7 @@ Repair a Slab (in SC):
 // `satc manager setprices [type] [payment_plan] [value]`.
 // Changes the current prices.
 func managersetpricescmd(typ, plan, v string) {
-	prices, err := httpClient.ManagerPricesGet()
+	prices, err := httpClient.ManagerPrices()
 	if err != nil {
 		die(err)
 	}
@@ -573,7 +573,7 @@ func managersetpricescmd(typ, plan, v string) {
 		die(errors.New("invalid price type"))
 	}
 
-	err = httpClient.ManagerPricesPost(prices)
+	err = httpClient.ManagerUpdatePrices(prices)
 	if err != nil {
 		die(err)
 	}
@@ -584,7 +584,7 @@ func managersetpricescmd(typ, plan, v string) {
 // managermaintenancecmd is the handler for the command `satc manager maintenance`.
 // Prints the information about the satellite maintenance.
 func managermaintenancecmd() {
-	maintenance, err := httpClient.ManagerMaintenanceGet()
+	maintenance, err := httpClient.ManagerMaintenance()
 	if err != nil {
 		die(err)
 	}
@@ -596,7 +596,7 @@ func managermaintenancecmd() {
 // `satc manager maintenance start`.
 // Starts a satellite maintenance.
 func managermaintenancestartcmd() {
-	err := httpClient.ManagerMaintenancePost(true)
+	err := httpClient.ManagerSetMaintenance(true)
 	if err != nil {
 		die(err)
 	}
@@ -608,7 +608,7 @@ func managermaintenancestartcmd() {
 // `satc manager maintenance stop`.
 // Stops a running satellite maintenance.
 func managermaintenancestopcmd() {
-	err := httpClient.ManagerMaintenancePost(false)
+	err := httpClient.ManagerSetMaintenance(false)
 	if err != nil {
 		die(err)
 	}

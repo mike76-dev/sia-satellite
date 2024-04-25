@@ -2,8 +2,6 @@ package portal
 
 import (
 	"database/sql"
-	"errors"
-	"fmt"
 	"net"
 	"path/filepath"
 	"sync"
@@ -13,23 +11,15 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
 	"go.sia.tech/core/types"
-)
-
-var (
-	// Nil dependency errors.
-	errNilDB       = errors.New("portal cannot use a nil database")
-	errNilMail     = errors.New("portal cannot use a nil mail client")
-	errNilCS       = errors.New("portal cannot use a nil state")
-	errNilWallet   = errors.New("portal cannot use a nil wallet")
-	errNilManager  = errors.New("portal cannot use a nil manager")
-	errNilProvider = errors.New("portal cannot use a nil provider")
+	"go.sia.tech/coreutils/chain"
+	"go.uber.org/zap"
 )
 
 // Portal contains the information related to the server.
 type Portal struct {
 	// Dependencies.
 	db       *sql.DB
-	cs       modules.ConsensusSet
+	cm       *chain.Manager
 	w        modules.Wallet
 	manager  modules.Manager
 	provider modules.Provider
@@ -50,44 +40,23 @@ type Portal struct {
 	name string
 
 	// Utilities.
-	listener      net.Listener
-	log           *persist.Logger
-	mu            sync.Mutex
-	tg            siasync.ThreadGroup
-	staticAlerter *modules.GenericAlerter
-	closeChan     chan int
-	ms            mail.MailSender
+	listener  net.Listener
+	log       *zap.Logger
+	mu        sync.Mutex
+	tg        siasync.ThreadGroup
+	closeChan chan int
+	ms        mail.MailSender
 }
 
 // New returns an initialized portal server.
-func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.ConsensusSet, w modules.Wallet, m modules.Manager, p modules.Provider, dir string) (*Portal, error) {
+func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cm *chain.Manager, w modules.Wallet, m modules.Manager, p modules.Provider, dir string) (*Portal, error) {
 	var err error
-
-	// Check that all the dependencies were provided.
-	if db == nil {
-		return nil, errNilDB
-	}
-	if ms == nil {
-		return nil, errNilMail
-	}
-	if cs == nil {
-		return nil, errNilCS
-	}
-	if w == nil {
-		return nil, errNilWallet
-	}
-	if m == nil {
-		return nil, errNilManager
-	}
-	if p == nil {
-		return nil, errNilProvider
-	}
 
 	// Create the portal object.
 	pt := &Portal{
 		db:       db,
 		ms:       ms,
-		cs:       cs,
+		cm:       cm,
 		w:        w,
 		manager:  m,
 		provider: p,
@@ -100,8 +69,7 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 		transactions: make(map[types.TransactionID]types.Address),
 		name:         config.Name,
 
-		staticAlerter: modules.NewAlerter("portal"),
-		closeChan:     make(chan int, 1),
+		closeChan: make(chan int, 1),
 	}
 
 	// Call stop in the event of a partial startup.
@@ -113,20 +81,16 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 	}()
 
 	// Create the logger.
-	pt.log, err = persist.NewFileLogger(filepath.Join(dir, "portal.log"))
+	logger, closeFn, err := persist.NewFileLogger(filepath.Join(dir, "portal.log"))
 	if err != nil {
 		return nil, err
 	}
 	// Establish the closing of the logger.
 	pt.tg.AfterStop(func() {
-		err := pt.log.Close()
-		if err != nil {
-			// The logger may or may not be working here, so use a Println
-			// instead.
-			fmt.Println("ERROR: failed to close the portal logger:", err)
-		}
+		closeFn()
 	})
-	pt.log.Println("INFO: portal created, started logging")
+	pt.log = logger
+	pt.log.Info("portal created, started logging")
 
 	// Load the portal persistence.
 	if err = pt.load(); err != nil {
@@ -156,34 +120,52 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cs modules.
 		pt.mu.Lock()
 		defer pt.mu.Unlock()
 		if err := pt.save(); err != nil {
-			pt.log.Println("ERROR: unable to save portal:", err)
+			pt.log.Error("unable to save portal", zap.Error(err))
 		}
 	})
 
 	// Start listening to API requests.
 	if err = pt.initNetworking("127.0.0.1" + pt.apiPort); err != nil {
-		pt.log.Println("ERROR: unable to start the portal server:", err)
+		pt.log.Error("unable to start the portal server", zap.Error(err))
 		return nil, err
 	}
 
 	// Subscribe to the consensus set using the most recent consensus change.
 	go func() {
-		err := pt.cs.ConsensusSetSubscribe(pt, modules.ConsensusChangeRecent, pt.tg.StopChan())
-		if modules.ContainsError(err, siasync.ErrStopped) {
-			return
-		}
+		err := pt.sync(pt.cm.Tip())
 		if err != nil {
-			pt.log.Critical(err)
+			pt.log.Error("couldn't subscribe to consensus updates", zap.Error(err))
 			return
 		}
 	}()
 	pt.tg.OnStop(func() {
-		pt.cs.Unsubscribe(pt)
 		// We don't want any recently made payments to go unnoticed.
 		pt.managedCheckWallet()
 	})
 
 	return pt, nil
+}
+
+func (p *Portal) sync(index types.ChainIndex) error {
+	for index != p.cm.Tip() {
+		select {
+		case <-p.tg.StopChan():
+			return nil
+		default:
+		}
+		crus, caus, err := p.cm.UpdatesSince(index, 1000)
+		if err != nil {
+			p.log.Error("failed to subscribe to chain manager", zap.Error(err))
+			return err
+		} else if err := p.UpdateChainState(crus, caus); err != nil {
+			p.log.Error("failed to update chain state", zap.Error(err))
+			return err
+		}
+		if len(caus) > 0 {
+			index = caus[len(caus)-1].State.Index
+		}
+	}
+	return nil
 }
 
 // Close shuts down the portal.

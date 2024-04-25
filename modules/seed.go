@@ -1,7 +1,6 @@
 package modules
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
@@ -9,8 +8,8 @@ import (
 	"strings"
 
 	"go.sia.tech/core/types"
-
 	"golang.org/x/crypto/blake2b"
+	"lukechampine.com/frand"
 )
 
 // NOTE: This is not a full implementation of BIP39; only 12-word phrases (128
@@ -22,46 +21,54 @@ func memclr(p []byte) {
 	}
 }
 
+// Seed represents a 16-byte wallet seed.
+type Seed [16]byte
+
 // NewSeedPhrase returns a random seed phrase.
 func NewSeedPhrase() string {
-	var entropy Seed
-	if _, err := rand.Read(entropy[:]); err != nil {
-		panic("insufficient system entropy")
-	}
-	return EncodeBIP39Phrase(entropy)
+	var entropy [16]byte
+	frand.Read(entropy[:])
+	p := encodeBIP39Phrase(&entropy)
+	memclr(entropy[:])
+	return p
 }
 
-// KeyFromPhrase returns the Ed25519 key derived from the supplied seed phrase.
-func KeyFromPhrase(phrase string) (types.PrivateKey, error) {
-	entropy, err := DecodeBIP39Phrase(phrase)
+// SeedFromPhrase converts the supplied phrase into a 16-byte seed.
+func SeedFromPhrase(seed *Seed, phrase string) error {
+	entropy, err := decodeBIP39Phrase(phrase)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	h := blake2b.Sum256(entropy[:])
+	copy(seed[:], entropy[:])
 	memclr(entropy[:])
+	return nil
+}
+
+// KeyFromSeed returns the Ed25519 key derived from the supplied seed
+// at the specified index.
+func KeyFromSeed(seed *Seed, index uint64) types.PrivateKey {
+	h := blake2b.Sum256(seed[:])
 	buf := make([]byte, 32+8)
 	copy(buf[:32], h[:])
+	binary.LittleEndian.PutUint64(buf[32:], index)
+	h = blake2b.Sum256(buf)
+	key := types.NewPrivateKeyFromSeed(h[:])
 	memclr(h[:])
-	binary.LittleEndian.PutUint64(buf[32:], 0)
-	seed := blake2b.Sum256(buf)
-	key := types.NewPrivateKeyFromSeed(seed[:])
-	memclr(seed[:])
-	return key, nil
+	return key
 }
 
-// bip39checksum is a helper function that generates a checksum of the entropy.
-func bip39checksum(entropy Seed) uint64 {
+func bip39checksum(entropy *[16]byte) uint64 {
 	hash := sha256.Sum256(entropy[:])
 	return uint64((hash[0] & 0xF0) >> 4)
 }
 
-// EncodeBIP39Phrase derives a seed phrase from the entropy.
-func EncodeBIP39Phrase(entropy Seed) string {
-	// Convert entropy to a 128-bit integer.
+// encodeBIP39Phrase converts 16-byte entropy to a seed phrase.
+func encodeBIP39Phrase(entropy *[16]byte) string {
+	// convert entropy to a 128-bit integer
 	hi := binary.BigEndian.Uint64(entropy[:8])
 	lo := binary.BigEndian.Uint64(entropy[8:])
 
-	// Convert each group of 11 bits into a word.
+	// convert each group of 11 bits into a word
 	words := make([]string, 12)
 	// last word is special: 4 bits are checksum
 	w := ((lo & 0x7F) << 4) | bip39checksum(entropy)
@@ -77,43 +84,43 @@ func EncodeBIP39Phrase(entropy Seed) string {
 	return strings.Join(words, " ")
 }
 
-// DecodeBIP39Phrase converts a seed phrase into a byte slice.
-func DecodeBIP39Phrase(phrase string) (Seed, error) {
-	// Validate that the phrase is well formed and only contains words that
-	// are present in the word list.
+// decodeBIP39Phrase converts the seed phrase to 16-byte entropy.
+func decodeBIP39Phrase(phrase string) (*[16]byte, error) {
+	// validate that the phrase is well formed and only contains words that
+	// are present in the word list
 	words := strings.Fields(phrase)
 	if n := len(words); n != 12 {
-		return Seed{}, errors.New("wrong number of words in seed phrase")
+		return nil, errors.New("wrong number of words in seed phrase")
 	}
 	for _, word := range words {
 		if _, ok := wordMap[word]; !ok {
-			return Seed{}, fmt.Errorf("unrecognized word %q in seed phrase", word)
+			return nil, fmt.Errorf("unrecognized word %q in seed phrase", word)
 		}
 	}
 
-	// Convert words to 128 bits, 11 bits at a time.
+	// convert words to 128 bits, 11 bits at a time
 	var lo, hi uint64
 	for _, v := range words[:len(words)-1] {
 		hi = hi<<11 | lo>>(64-11)
 		lo = lo<<11 | wordMap[v]
 	}
-	// Last word is special: least-significant 4 bits are checksum, so shift
-	// them off and only add the remaining 7 bits.
+	// last word is special: least-significant 4 bits are checksum, so shift
+	// them off and only add the remaining 7 bits
 	w := wordMap[words[len(words)-1]]
 	checksum := w & 0xF
 	hi = hi<<7 | lo>>(64-7)
 	lo = lo<<7 | w>>4
 
-	// Convert to big-endian byte slice.
-	var entropy Seed
+	// convert to big-endian byte slice
+	var entropy [16]byte
 	binary.BigEndian.PutUint64(entropy[:8], hi)
 	binary.BigEndian.PutUint64(entropy[8:], lo)
 
-	// Validate checksum.
-	if bip39checksum(entropy) != checksum {
-		return Seed{}, errors.New("invalid checksum")
+	// validate checksum
+	if bip39checksum(&entropy) != checksum {
+		return nil, errors.New("invalid checksum")
 	}
-	return entropy, nil
+	return &entropy, nil
 }
 
 var wordMap = func() map[string]uint64 {

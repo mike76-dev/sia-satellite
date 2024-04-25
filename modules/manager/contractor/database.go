@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/internal/object"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 	"lukechampine.com/frand"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
@@ -40,9 +42,9 @@ func (c *Contractor) initDB() error {
 		return nil
 	}
 	_, err = c.db.Exec(`
-		INSERT INTO ctr_info (height, last_change, synced)
+		INSERT INTO ctr_info (height, bid, synced)
 		VALUES (?, ?, ?)
-	`, 0, modules.ConsensusChangeBeginning[:], false)
+	`, 0, []byte{}, false)
 	return err
 }
 
@@ -52,7 +54,7 @@ func (c *Contractor) loadState() error {
 	var height uint64
 	var synced bool
 	err := c.db.QueryRow(`
-		SELECT height, last_change, synced
+		SELECT height, bid, synced
 		FROM ctr_info
 		WHERE id = 1
 	`).Scan(&height, &cc, &synced)
@@ -60,8 +62,8 @@ func (c *Contractor) loadState() error {
 		return err
 	}
 
-	c.blockHeight = height
-	copy(c.lastChange[:], cc)
+	c.tip.Height = height
+	copy(c.tip.ID[:], cc)
 	c.synced = make(chan struct{})
 	if synced {
 		close(c.synced)
@@ -80,9 +82,9 @@ func (c *Contractor) updateState() error {
 	}
 	_, err := c.db.Exec(`
 		UPDATE ctr_info
-		SET height = ?, last_change = ?, synced = ?
+		SET height = ?, bid = ?, synced = ?
 		WHERE id = 1
-	`, c.blockHeight, c.lastChange[:], synced)
+	`, c.tip.Height, c.tip.ID[:], synced)
 	return err
 }
 
@@ -173,7 +175,7 @@ func (c *Contractor) updateDoubleSpent() error {
 
 	_, err = tx.Exec("DELETE FROM ctr_dspent")
 	if err != nil {
-		c.log.Println("ERROR: couldn't clear double-spent contracts:", err)
+		c.log.Error("couldn't clear double-spent contracts", zap.Error(err))
 		tx.Rollback()
 		return err
 	}
@@ -181,7 +183,7 @@ func (c *Contractor) updateDoubleSpent() error {
 	for id, height := range c.doubleSpentContracts {
 		_, err := tx.Exec("INSERT INTO ctr_dspent (id, height) VALUES (?, ?)", id[:], height)
 		if err != nil {
-			c.log.Println("ERROR: couldn't update double-spent contracts:", err)
+			c.log.Error("couldn't update double-spent contracts", zap.Error(err))
 			tx.Rollback()
 			return err
 		}
@@ -204,7 +206,7 @@ func (c *Contractor) loadRenewHistory() error {
 	var fcid, fcidNew, fcidOld types.FileContractID
 	for rows.Next() {
 		if err := rows.Scan(&id, &from, &to); err != nil {
-			c.log.Println("Error scanning database row:", err)
+			c.log.Error("error scanning database row", zap.Error(err))
 			continue
 		}
 		copy(fcid[:], id)
@@ -232,7 +234,7 @@ func (c *Contractor) loadRenters() error {
 		FROM ctr_renters
 	`)
 	if err != nil {
-		c.log.Println("ERROR: could not load the renters:", err)
+		c.log.Error("could not load the renters", zap.Error(err))
 		return err
 	}
 	defer rows.Close()
@@ -257,7 +259,7 @@ func (c *Contractor) loadRenters() error {
 			&autoRepair,
 			&proxyUploads,
 		); err != nil {
-			c.log.Println("ERROR: could not load the renter:", err)
+			c.log.Error("could not load the renter", zap.Error(err))
 			continue
 		}
 
@@ -293,13 +295,13 @@ func (c *Contractor) loadRenters() error {
 func (w *watchdog) save() error {
 	tx, err := w.contractor.db.Begin()
 	if err != nil {
-		w.contractor.log.Println("ERROR: couldn't save watchdog:", err)
+		w.contractor.log.Error("couldn't save watchdog", zap.Error(err))
 		return err
 	}
 
 	_, err = tx.Exec("DELETE FROM ctr_watchdog")
 	if err != nil {
-		w.contractor.log.Println("ERROR: couldn't clear watchdog data:", err)
+		w.contractor.log.Error("couldn't clear watchdog data", zap.Error(err))
 		tx.Rollback()
 		return err
 	}
@@ -311,7 +313,7 @@ func (w *watchdog) save() error {
 		e.Flush()
 		_, err := tx.Exec("INSERT INTO ctr_watchdog (id, bytes) VALUES (?, ?)", id[:], buf.Bytes())
 		if err != nil {
-			w.contractor.log.Println("ERROR: couldn't save watchdog:", err)
+			w.contractor.log.Error("couldn't save watchdog", zap.Error(err))
 			tx.Rollback()
 			return err
 		}
@@ -324,13 +326,13 @@ func (w *watchdog) save() error {
 func (w *watchdog) load() error {
 	tx, err := w.contractor.db.Begin()
 	if err != nil {
-		w.contractor.log.Println("ERROR: couldn't load watchdog:", err)
+		w.contractor.log.Error("couldn't load watchdog", zap.Error(err))
 		return err
 	}
 
 	rows, err := tx.Query("SELECT id, bytes FROM ctr_watchdog")
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		w.contractor.log.Println("ERROR: couldn't load watchdog:", err)
+		w.contractor.log.Error("couldn't load watchdog", zap.Error(err))
 		tx.Rollback()
 		return err
 	}
@@ -340,7 +342,7 @@ func (w *watchdog) load() error {
 		id := make([]byte, 32)
 		var fcsBytes []byte
 		if err := rows.Scan(&id, &fcsBytes); err != nil {
-			w.contractor.log.Println("ERROR: couldn't load watchdog:", err)
+			w.contractor.log.Error("couldn't load watchdog", zap.Error(err))
 			rows.Close()
 			tx.Rollback()
 			return err
@@ -351,7 +353,7 @@ func (w *watchdog) load() error {
 		d := types.NewDecoder(io.LimitedReader{R: buf, N: int64(len(fcsBytes))})
 		fcs.DecodeFrom(d)
 		if err := d.Err(); err != nil {
-			w.contractor.log.Println("ERROR: couldn't load watchdog:", err)
+			w.contractor.log.Error("couldn't load watchdog", zap.Error(err))
 			rows.Close()
 			tx.Rollback()
 			return err
@@ -378,7 +380,7 @@ func (w *watchdog) load() error {
 func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 	tx, err := c.db.Begin()
 	if err != nil {
-		c.log.Println("ERROR: unable to start transaction:", err)
+		c.log.Error("unable to start transaction", zap.Error(err))
 		return modules.AddContext(err, "unable to start transaction")
 	}
 
@@ -386,7 +388,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 	var slabs []types.Hash256
 	rows, err := tx.Query("SELECT enc_key FROM ctr_slabs WHERE renter_pk = ?", pk[:])
 	if err != nil {
-		c.log.Println("ERROR: unable to query slabs:", err)
+		c.log.Error("unable to query slabs", zap.Error(err))
 		tx.Rollback()
 		return modules.AddContext(err, "unable to query slabs")
 	}
@@ -395,7 +397,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 		s := make([]byte, 32)
 		if err := rows.Scan(&s); err != nil {
 			rows.Close()
-			c.log.Println("ERROR: unable to load slab ID:", err)
+			c.log.Error("unable to load slab ID", zap.Error(err))
 			tx.Rollback()
 			return modules.AddContext(err, "unable to load slab ID")
 		}
@@ -409,7 +411,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 	for _, slab := range slabs {
 		_, err := tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", slab[:])
 		if err != nil {
-			c.log.Println("ERROR: unable to delete shards:", err)
+			c.log.Error("unable to delete shards", zap.Error(err))
 			continue
 		}
 	}
@@ -417,7 +419,7 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 	// Delete slabs.
 	_, err = tx.Exec("DELETE FROM ctr_slabs WHERE renter_pk = ?", pk[:])
 	if err != nil {
-		c.log.Println("ERROR: unable to delete slabs:", err)
+		c.log.Error("unable to delete slabs", zap.Error(err))
 		tx.Rollback()
 		return modules.AddContext(err, "unable to delete slabs")
 	}
@@ -425,14 +427,14 @@ func (c *Contractor) DeleteMetadata(pk types.PublicKey) error {
 	// Delete objects.
 	_, err = tx.Exec("DELETE FROM ctr_metadata WHERE renter_pk = ?", pk[:])
 	if err != nil {
-		c.log.Println("ERROR: unable to delete metadata:", err)
+		c.log.Error("unable to delete metadata", zap.Error(err))
 		tx.Rollback()
 		return modules.AddContext(err, "unable to delete metadata")
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		c.log.Println("ERROR: unable to commit transaction:", err)
+		c.log.Error("unable to commit transaction", zap.Error(err))
 		return modules.AddContext(err, "unable to commit transaction")
 	}
 
@@ -1509,20 +1511,20 @@ func (c *Contractor) uploadPackedSlabs(rpk types.PublicKey) error {
 func (c *Contractor) managedUploadBufferedFiles() {
 	// Skip if a satellite maintenance is running.
 	if c.m.Maintenance() {
-		c.log.Println("INFO: skipping file uploads because satellite maintenance is running")
+		c.log.Info("skipping file uploads because satellite maintenance is running")
 		return
 	}
 
 	// No file uploads unless contractor is synced.
 	if !c.managedSynced() {
-		c.log.Println("INFO: skipping file uploads since consensus isn't synced yet")
+		c.log.Info("skipping file uploads since consensus isn't synced yet")
 		return
 	}
 
 	c.mu.Lock()
 	if c.uploadingBufferedFiles {
 		c.mu.Unlock()
-		c.log.Println("INFO: skipping file uploads since another thread is running already")
+		c.log.Info("skipping file uploads since another thread is running already")
 		return
 	}
 	c.uploadingBufferedFiles = true
@@ -1533,7 +1535,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 		c.mu.Unlock()
 		pending, err := c.uploadPending()
 		if err != nil {
-			c.log.Println("ERROR: couldn't check files pending upload")
+			c.log.Error("couldn't check files pending upload", zap.Error(err))
 			return
 		}
 		if pending {
@@ -1541,7 +1543,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 		}
 	}()
 
-	c.log.Println("INFO: uploading buffered files")
+	c.log.Info("uploading buffered files")
 
 	// Sort the files by the upload timestamp, the older come first.
 	rows, err := c.db.Query(`
@@ -1551,7 +1553,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 		ORDER BY filename ASC
 	`)
 	if err != nil {
-		c.log.Println("ERROR: couldn't query buffered files:", err)
+		c.log.Error("couldn't query buffered files", zap.Error(err))
 		return
 	}
 	defer rows.Close()
@@ -1567,7 +1569,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 		var bucket, path, mimeType []byte
 		if err := rows.Scan(&n, &bucket, &path, &mimeType, &pk, &encrypted); err != nil {
 			rows.Close()
-			c.log.Println("ERROR: couldn't scan file record:", err)
+			c.log.Error("couldn't scan file record", zap.Error(err))
 			return
 		}
 		var rpk types.PublicKey
@@ -1578,7 +1580,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 			name := filepath.Join(c.m.BufferedFilesDir(), n)
 			file, err := os.Open(name)
 			if err != nil {
-				c.log.Println("ERROR: couldn't open file:", err)
+				c.log.Error("couldn't open file", zap.Error(err))
 				return err
 			}
 			defer func() {
@@ -1586,7 +1588,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 				if err == nil {
 					err = os.Remove(name)
 					if err != nil {
-						c.log.Println("ERROR: couldn't delete file:", err)
+						c.log.Error("couldn't delete file", zap.Error(err))
 						return
 					}
 					_, err = c.db.Exec(`
@@ -1597,7 +1599,7 @@ func (c *Contractor) managedUploadBufferedFiles() {
 						AND filepath = ?
 					`, pk, n, bucket, path)
 					if err != nil {
-						c.log.Println("ERROR: couldn't delete file record:", err)
+						c.log.Error("couldn't delete file record", zap.Error(err))
 						return
 					}
 				}
@@ -1606,19 +1608,19 @@ func (c *Contractor) managedUploadBufferedFiles() {
 			// Upload the data.
 			fm, err := c.managedUploadObject(file, rpk, bucket, path, mimeType, encrypted)
 			if err != nil {
-				c.log.Println("ERROR: couldn't upload object:", err)
+				c.log.Error("couldn't upload object", zap.Error(err))
 				return err
 			}
 
 			// Store the object in the database.
 			if err := c.updateMetadata(rpk, fm, false); err != nil {
-				c.log.Println("ERROR: couldn't save object:", err)
+				c.log.Error("couldn't save object", zap.Error(err))
 				return err
 			}
 
 			// Upload any complete slabs.
 			if err := c.uploadPackedSlabs(rpk); err != nil {
-				c.log.Println("ERROR: couldn't upload packed slabs:", err)
+				c.log.Error("couldn't upload packed slabs", zap.Error(err))
 				return err
 			}
 
@@ -1653,7 +1655,7 @@ func (c *Contractor) threadedUploadBufferedFiles() {
 func (c *Contractor) managedPruneOrphanedSlabs() {
 	tx, err := c.db.Begin()
 	if err != nil {
-		c.log.Println("ERROR: unable to start transaction:", err)
+		c.log.Error("unable to start transaction", zap.Error(err))
 		return
 	}
 
@@ -1672,7 +1674,7 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 		)
 	`, uint64(time.Now().Add(-orphanedSlabPruneThreshold).Unix()))
 	if err != nil {
-		c.log.Println("ERROR: unable to query slabs:", err)
+		c.log.Error("unable to query slabs", zap.Error(err))
 		tx.Rollback()
 		return
 	}
@@ -1681,7 +1683,7 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 	for rows.Next() {
 		key := make([]byte, 32)
 		if err := rows.Scan(&key); err != nil {
-			c.log.Println("ERROR: unable to get slab ID:", err)
+			c.log.Error("unable to get slab ID", zap.Error(err))
 			rows.Close()
 			tx.Rollback()
 			return
@@ -1696,7 +1698,7 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 	for _, id := range ids {
 		_, err := tx.Exec("DELETE FROM ctr_shards WHERE slab_id = ?", id[:])
 		if err != nil {
-			c.log.Println("ERROR: unable to delete shards:", err)
+			c.log.Error("unable to delete shards", zap.Error(err))
 			tx.Rollback()
 			return
 		}
@@ -1705,13 +1707,13 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 	// Delete the slabs.
 	res, err := tx.Exec("DELETE FROM ctr_slabs WHERE orphan = TRUE")
 	if err != nil {
-		c.log.Println("ERROR: unable to delete orphaned slabs:", err)
+		c.log.Error("unable to delete orphaned slabs", zap.Error(err))
 		tx.Rollback()
 		return
 	}
 	num, _ := res.RowsAffected()
 	if num > 0 {
-		c.log.Printf("INFO: deleted %d orphaned slabs\n", num)
+		c.log.Info(fmt.Sprintf("deleted %d orphaned slabs", num))
 	}
 
 	// Delete orphaned shards.
@@ -1723,17 +1725,17 @@ func (c *Contractor) managedPruneOrphanedSlabs() {
 		)
 	`)
 	if err != nil {
-		c.log.Println("ERROR: unable to delete orphaned shards:", err)
+		c.log.Error("unable to delete orphaned shards", zap.Error(err))
 		tx.Rollback()
 		return
 	}
 	num, _ = res.RowsAffected()
 	if num > 0 {
-		c.log.Printf("INFO: deleted %d orphaned shards\n", num)
+		c.log.Info(fmt.Sprintf("deleted %d orphaned shards", num))
 	}
 
 	if err := tx.Commit(); err != nil {
-		c.log.Println("ERROR: unable to commit transaction:", err)
+		c.log.Error("unable to commit transaction", zap.Error(err))
 	}
 }
 

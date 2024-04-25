@@ -17,6 +17,7 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/proto"
 	"github.com/montanaflynn/stats"
+	"go.uber.org/zap"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
@@ -245,7 +246,7 @@ func (c *Contractor) managedUploadObject(r io.Reader, rpk types.PublicKey, bucke
 
 	// Fetch necessary params.
 	c.mu.RLock()
-	bh := c.blockHeight
+	bh := c.tip.Height
 	c.mu.RUnlock()
 	contracts := c.staticContracts.ByRenter(rpk)
 
@@ -304,7 +305,7 @@ func (c *Contractor) managedUploadPackedSlab(rpk types.PublicKey, data []byte, k
 
 	// Fetch the renter.
 	c.mu.RLock()
-	bh := c.blockHeight
+	bh := c.tip.Height
 	renter, exists := c.renters[rpk]
 	c.mu.RUnlock()
 	if !exists {
@@ -625,7 +626,7 @@ func (mgr *uploadManager) renewUploader(u *uploader) {
 	// Remove the uploader if we can't renew it.
 	mgr.mu.Lock()
 	if !exists || !ok {
-		mgr.contractor.log.Printf("ERROR: failed to fetch renewed contract for uploader %v\n", fcid)
+		mgr.contractor.log.Error("failed to fetch renewed contract for uploader", zap.Stringer("fcid", fcid))
 		for i := 0; i < len(mgr.uploaders); i++ {
 			if mgr.uploaders[i] == u {
 				mgr.uploaders = append(mgr.uploaders[:i], mgr.uploaders[i+1:]...)
@@ -902,7 +903,7 @@ func (u *upload) uploadShards(ctx context.Context, shards [][]byte, nextSlabChan
 		// Relaunch non-overdrive uploads.
 		if !done && resp.err != nil && !resp.req.overdrive {
 			if overdriving, err := slab.launch(resp.req); err != nil {
-				u.mgr.contractor.log.Println("ERROR: failed to relaunch a sector upload:", err)
+				u.mgr.contractor.log.Error("failed to relaunch a sector upload", zap.Error(err))
 				if !overdriving {
 					break // Fail the upload.
 				}

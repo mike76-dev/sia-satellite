@@ -32,7 +32,7 @@ func isOffline(host modules.HostDBEntry) bool {
 	}
 	// Otherwise we use the last 2 scans. This way a short connectivity problem
 	// won't mark the host as offline.
-	success1 := host.ScanHistory[len(host.ScanHistory) - 1].Success
-	success2 := host.ScanHistory[len(host.ScanHistory) - 2].Success
+	success1 := host.ScanHistory[len(host.ScanHistory)-1].Success
+	success2 := host.ScanHistory[len(host.ScanHistory)-2].Success
 	return !(success1 || success2)
 }

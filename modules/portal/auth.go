@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"go.uber.org/zap"
 )
 
 const (
@@ -108,7 +109,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 	// Check if the user account exists.
 	exists, cErr := api.portal.userExists(email)
 	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		api.portal.log.Error("error querying database", zap.Error(cErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -138,7 +139,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 	// Check if the account is verified and the password is correct.
 	verified, passwordOK, cErr := api.portal.isVerified(email, password)
 	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		api.portal.log.Error("error querying database", zap.Error(cErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -171,7 +172,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 	t := time.Now().Add(7 * 24 * time.Hour)
 	token, tErr := api.portal.generateToken(cookiePrefix, email, t)
 	if tErr != nil {
-		api.portal.log.Printf("ERROR: error generating token: %v\n", tErr)
+		api.portal.log.Error("error generating token", zap.Error(tErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -223,7 +224,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	// Check if the email address is already registered.
 	exists, cErr := api.portal.userExists(email)
 	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		api.portal.log.Error("error querying database", zap.Error(cErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -235,7 +236,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 		// Check if the account is verified already.
 		verified, passwordOK, cErr := api.portal.isVerified(email, password)
 		if cErr != nil {
-			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+			api.portal.log.Error("error querying database", zap.Error(cErr))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,
@@ -277,7 +278,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 
 	// Create a new account.
 	if cErr := api.portal.updateAccount(email, password, false); cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		api.portal.log.Error("error querying database", zap.Error(cErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -310,7 +311,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 	// Generate a verification link.
 	token, err := api.portal.generateToken(verifyPrefix, email, time.Now().Add(24*time.Hour))
 	if err != nil {
-		api.portal.log.Printf("ERROR: error generating token: %v\n", err)
+		api.portal.log.Error("error generating token", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -320,7 +321,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 	}
 	path := req.Header["Referer"]
 	if len(path) == 0 {
-		api.portal.log.Printf("ERROR: unable to fetch referer URL")
+		api.portal.log.Error("unable to fetch referer URL")
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -337,7 +338,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 	t := template.New("verify")
 	t, err = t.Parse(verifyTemplate)
 	if err != nil {
-		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		api.portal.log.Error("unable to parse HTML template", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -351,7 +352,7 @@ func (api *portalAPI) sendVerificationLinkByMail(w http.ResponseWriter, req *htt
 	// Send verification link by email.
 	err = api.portal.ms.SendMail("Sia Satellite", email, "Action Required", &b)
 	if err != nil {
-		api.portal.log.Printf("ERROR: unable to send verification link: %v\n", err)
+		api.portal.log.Error("unable to send verification link", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -369,7 +370,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 	// Generate a password reset link.
 	token, err := api.portal.generateToken(resetPrefix, email, time.Now().Add(time.Hour))
 	if err != nil {
-		api.portal.log.Printf("ERROR: error generating token: %v\n", err)
+		api.portal.log.Error("error generating token", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -379,7 +380,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 	}
 	path := req.Header["Referer"]
 	if len(path) == 0 {
-		api.portal.log.Printf("ERROR: unable to fetch referer URL")
+		api.portal.log.Error("unable to fetch referer URL")
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -396,7 +397,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 	t := template.New("reset")
 	t, err = t.Parse(resetTemplate)
 	if err != nil {
-		api.portal.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		api.portal.log.Error("unable to parse HTML template", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -410,7 +411,7 @@ func (api *portalAPI) sendPasswordResetLinkByMail(w http.ResponseWriter, req *ht
 	// Send password reset link by email.
 	err = api.portal.ms.SendMail("Sia Satellite", email, "Reset Your Password", &b)
 	if err != nil {
-		api.portal.log.Printf("ERROR: unable to send password reset link: %v\n", err)
+		api.portal.log.Error("unable to send password reset link", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -488,7 +489,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 		// Check if any promo action is running.
 		err = api.portal.creditAccount(email)
 		if err != nil {
-			api.portal.log.Printf("ERROR: unable to credit user account: %v\n", err)
+			api.portal.log.Error("unable to credit user account", zap.Error(err))
 		}
 
 	case resetPrefix:
@@ -505,7 +506,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 		// Check if the email address is already registered.
 		exists, cErr := api.portal.userExists(email)
 		if cErr != nil {
-			api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+			api.portal.log.Error("error querying database", zap.Error(cErr))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,
@@ -530,7 +531,7 @@ func (api *portalAPI) authHandlerGET(w http.ResponseWriter, req *http.Request, _
 		// Set the expiration the same as of the password reset token.
 		ct, err := api.portal.generateToken(changePrefix, email, expires)
 		if err != nil {
-			api.portal.log.Printf("ERROR: error generating token: %v\n", err)
+			api.portal.log.Error("error generating token", zap.Error(err))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,
@@ -588,7 +589,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 	// Check if such account exists.
 	exists, cErr := api.portal.userExists(data.Email)
 	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		api.portal.log.Error("error querying database", zap.Error(cErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -686,7 +687,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	// Check if the user account exists.
 	exists, cErr := api.portal.userExists(email)
 	if cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		api.portal.log.Error("error querying database", zap.Error(cErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -709,7 +710,7 @@ func (api *portalAPI) changeHandlerPOST(w http.ResponseWriter, req *http.Request
 	// verified in any case, because the email address has
 	// been verified.
 	if cErr := api.portal.updateAccount(email, password, true); cErr != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", cErr)
+		api.portal.log.Error("error querying database", zap.Error(cErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -733,7 +734,7 @@ func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request,
 	// Check if the account is allowed to be deleted.
 	ub, err := api.portal.manager.GetBalance(email)
 	if err != nil {
-		api.portal.log.Printf("ERROR: couldn't get account balance: %v\n", err)
+		api.portal.log.Error("couldn't get account balance", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -753,7 +754,7 @@ func (api *portalAPI) deleteHandlerGET(w http.ResponseWriter, req *http.Request,
 
 	// Remove the account from the database.
 	if err = api.portal.deleteAccount(email); err != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+		api.portal.log.Error("error querying database", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -795,7 +796,7 @@ func (api *portalAPI) verifyCookie(w http.ResponseWriter, token string) (email s
 	// Check if the user account exists.
 	exists, err := api.portal.userExists(email)
 	if err != nil {
-		api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+		api.portal.log.Error("error querying database", zap.Error(err))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,

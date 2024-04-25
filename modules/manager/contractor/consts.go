@@ -25,25 +25,6 @@ const (
 	fundAccountTimeout = 10 * time.Second
 )
 
-// Constants related to the contractor's alerts.
-const (
-	// AlertCauseInsufficientAllowanceFunds indicates that the cause for the
-	// alert was insufficient allowance funds remaining.
-	AlertCauseInsufficientAllowanceFunds = "Insufficient allowance funds remaining"
-
-	// AlertMSGAllowanceLowFunds indicates that forming/renewing a contract during
-	// contract maintenance isn't possible due to the allowance being low on
-	// funds.
-	AlertMSGAllowanceLowFunds = "At least one contract formation/renewal failed due to the allowance being low on funds"
-
-	// AlertMSGFailedContractRenewal indicates that the contract renewal failed.
-	AlertMSGFailedContractRenewal = "Contractor is attempting to renew/refresh contracts but failed"
-
-	// AlertMSGWalletLockedDuringMaintenance indicates that forming/renewing a
-	// contract during contract maintenance isn't possible due to a locked wallet.
-	AlertMSGWalletLockedDuringMaintenance = "At least one contract failed to form/renew due to the wallet being locked"
-)
-
 // Constants related to contract formation parameters.
 const (
 	// ContractFeeFundingMulFactor is the multiplying factor for contract fees

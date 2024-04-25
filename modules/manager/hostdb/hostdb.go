@@ -20,19 +20,16 @@ import (
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/hostdb/hosttree"
 	"github.com/mike76-dev/sia-satellite/persist"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
 )
 
 var (
 	// ErrInitialScanIncomplete is returned whenever an operation is not
 	// allowed to be executed before the initial host scan has finished.
 	ErrInitialScanIncomplete = errors.New("initial hostdb scan is not yet completed")
-
-	// Nil dependency errors.
-	errNilCS                 = errors.New("cannot create hostdb with nil consensus set")
-	errNilGateway            = errors.New("cannot create hostdb with nil gateway")
-	errNilDB                 = errors.New("cannot create hostdb with nil database")
 
 	// errHostNotFoundInTree is returned when the host is not found in the
 	// hosttree.
@@ -123,7 +120,7 @@ func (bd *filteredDomains) managedIsFiltered(addr modules.NetAddress) bool {
 	// we check is of the format domain.com. This is to protect the user
 	// from accidentally submitting `com`, or some other TLD, and blocking
 	// every host in the HostDB.
-	for i := 0; i < len(elements) - 1; i++ {
+	for i := 0; i < len(elements)-1; i++ {
 		domainToCheck := strings.Join(elements[i:], ".")
 		if _, blocked := bd.domains[domainToCheck]; blocked {
 			return true
@@ -144,14 +141,13 @@ type contractInfo struct {
 // for uploading files.
 type HostDB struct {
 	// Dependencies.
-	db      *sql.DB
-	cs      modules.ConsensusSet
-	gateway modules.Gateway
+	db *sql.DB
+	cm *chain.Manager
+	s  modules.Syncer
 
-	staticLog     *persist.Logger
-	mu            sync.RWMutex
-	staticAlerter *modules.GenericAlerter
-	tg            siasync.ThreadGroup
+	log *zap.Logger
+	mu  sync.RWMutex
+	tg  siasync.ThreadGroup
 
 	// knownContracts are contracts which the HostDB was informed about by the
 	// Contractor. It contains infos about active contracts we have formed with
@@ -179,7 +175,6 @@ type HostDB struct {
 	scanMap                 map[string]struct{}
 	scanWait                bool
 	scanningThreads         int
-	synced                  bool
 	loadingComplete         bool
 
 	// staticFilteredTree is a hosttree that only contains the hosts that align
@@ -193,8 +188,7 @@ type HostDB struct {
 	// filteredDomains tracks blocked domains for the hostdb.
 	filteredDomains *filteredDomains
 
-	blockHeight uint64
-	lastChange  modules.ConsensusChangeID
+	tip types.ChainIndex
 }
 
 // Enforce that HostDB satisfies the modules.HostDB interface.
@@ -274,13 +268,6 @@ func (hdb *HostDB) managedSetScoreFunction(sf hosttree.ScoreFunc) error {
 	return err
 }
 
-// managedSynced returns true if the hostdb is synced with the consensusset.
-func (hdb *HostDB) managedSynced() bool {
-	hdb.mu.RLock()
-	defer hdb.mu.RUnlock()
-	return hdb.synced
-}
-
 // updateContracts rebuilds the knownContracts of the HostDB using the provided
 // contracts.
 func (hdb *HostDB) updateContracts(contracts []modules.RenterContract) {
@@ -288,7 +275,7 @@ func (hdb *HostDB) updateContracts(contracts []modules.RenterContract) {
 	knownContracts := make(map[string][]contractInfo)
 	for _, contract := range contracts {
 		if n := len(contract.Transaction.FileContractRevisions); n != 1 {
-			hdb.staticLog.Println("CRITICAL: contract's transaction should contain 1 revision but had ", n)
+			hdb.log.Error(fmt.Sprintf("contract's transaction should contain 1 revision but had %d", n))
 			continue
 		}
 		kc, exists := knownContracts[contract.HostPublicKey.String()]
@@ -307,7 +294,7 @@ func (hdb *HostDB) updateContracts(contracts []modules.RenterContract) {
 				kc = append(kc, contractInfo{
 					RenterPublicKey: contract.RenterPublicKey,
 					HostPublicKey:   contract.HostPublicKey,
-		  		StoredData:      contract.Transaction.FileContractRevisions[0].Filesize,
+					StoredData:      contract.Transaction.FileContractRevisions[0].Filesize,
 				})
 			}
 			knownContracts[contract.HostPublicKey.String()] = kc
@@ -323,41 +310,29 @@ func (hdb *HostDB) updateContracts(contracts []modules.RenterContract) {
 	// Update the set of known contracts in the hostdb, log if the number of
 	// contracts has decreased.
 	if len(hdb.knownContracts) > len(knownContracts) {
-		hdb.staticLog.Printf("INFO: hostdb is decreasing from %v known contracts to %v known contracts", len(hdb.knownContracts), len(knownContracts))
+		hdb.log.Info(fmt.Sprintf("hostdb is decreasing from %v known contracts to %v known contracts", len(hdb.knownContracts), len(knownContracts)))
 	}
 	hdb.knownContracts = knownContracts
 
 	// Save the hostdb to persist the update.
 	err := hdb.saveKnownContracts()
 	if err != nil {
-		hdb.staticLog.Println("ERROR: couldn't save set of known contracts:", err)
+		hdb.log.Error("couldn't save set of known contracts", zap.Error(err))
 	}
 }
 
 // hostdbBlockingStartup handles the blocking portion of New.
-func hostdbBlockingStartup(db *sql.DB, g modules.Gateway, cs modules.ConsensusSet, dir string) (*HostDB, error) {
-	// Check for nil inputs.
-	if g == nil {
-		return nil, errNilGateway
-	}
-	if cs == nil {
-		return nil, errNilCS
-	}
-	if db == nil {
-		return nil, errNilDB
-	}
-
+func hostdbBlockingStartup(db *sql.DB, cm *chain.Manager, s modules.Syncer, dir string) (*HostDB, error) {
 	// Create the HostDB object.
 	hdb := &HostDB{
-		db:      db,
-		cs:      cs,
-		gateway: g,
+		db: db,
+		cm: cm,
+		s:  s,
 
 		filteredDomains: newFilteredDomains(nil),
 		filteredHosts:   make(map[string]types.PublicKey),
 		knownContracts:  make(map[string][]contractInfo),
 		scanMap:         make(map[string]struct{}),
-		staticAlerter:   modules.NewAlerter("hostdb"),
 	}
 
 	// Set the allowance and hostscore function.
@@ -365,21 +340,18 @@ func hostdbBlockingStartup(db *sql.DB, g modules.Gateway, cs modules.ConsensusSe
 	hdb.scoreFunc = hdb.managedCalculateHostScoreFn(hdb.allowance)
 
 	// Create the logger.
-	logger, err := persist.NewFileLogger(filepath.Join(dir, "hostdb.log"))
+	logger, closeFn, err := persist.NewFileLogger(filepath.Join(dir, "hostdb.log"))
 	if err != nil {
 		return nil, err
 	}
-	hdb.staticLog = logger
+	hdb.log = logger
 	hdb.tg.AfterStop(func() {
-		if err := hdb.staticLog.Close(); err != nil {
-			// Resort to println as the logger is in an uncertain state.
-			fmt.Println("Failed to close the hostdb logger:", err)
-		}
+		closeFn()
 	})
 
 	// The host tree is used to manage hosts and query them at random. The
 	// filteredTree is used when whitelist or blacklist is enabled.
-	hdb.staticHostTree = hosttree.New(hdb.scoreFunc, hdb.staticLog)
+	hdb.staticHostTree = hosttree.New(hdb.scoreFunc, hdb.log)
 	hdb.filteredTree = hdb.staticHostTree
 
 	// Load the prior persistence structures.
@@ -396,47 +368,56 @@ func hostdbBlockingStartup(db *sql.DB, g modules.Gateway, cs modules.ConsensusSe
 
 	// Spawn the scan loop.
 	go hdb.threadedScan()
-	hdb.tg.OnStop(func() {
-		cs.Unsubscribe(hdb)
-	})
 
 	return hdb, nil
 }
 
 // hostdbAsyncStartup handles the async portion of New.
-func hostdbAsyncStartup(hdb *HostDB, cs modules.ConsensusSet) error {
-	err := cs.ConsensusSetSubscribe(hdb, hdb.lastChange, hdb.tg.StopChan())
-	if modules.ContainsError(err, siasync.ErrStopped) {
-		return err
-	}
-	if modules.ContainsError(err, modules.ErrInvalidConsensusChangeID) {
+func hostdbAsyncStartup(hdb *HostDB) error {
+	err := hdb.sync(hdb.tip)
+	if err != nil {
 		// Subscribe again using the new ID. This will cause a triggered scan
 		// on all of the hosts, but that should be acceptable.
 		hdb.mu.Lock()
-		hdb.blockHeight = 0
-		hdb.lastChange = modules.ConsensusChangeBeginning
+		hdb.tip = types.ChainIndex{}
 		err = hdb.reset()
 		hdb.mu.Unlock()
 		if err != nil {
 			return err
 		}
-		err = cs.ConsensusSetSubscribe(hdb, hdb.lastChange, hdb.tg.StopChan())
+		err = hdb.sync(hdb.tip)
 	}
-	if modules.ContainsError(err, siasync.ErrStopped) {
-		return nil
-	}
-	if err != nil {
-		return err
+	return err
+}
+
+func (hdb *HostDB) sync(index types.ChainIndex) error {
+	for index != hdb.cm.Tip() {
+		select {
+		case <-hdb.tg.StopChan():
+			return nil
+		default:
+		}
+		crus, caus, err := hdb.cm.UpdatesSince(index, 100)
+		if err != nil {
+			hdb.log.Error("failed to subscribe to chain manager", zap.Error(err))
+			return err
+		} else if err := hdb.UpdateChainState(crus, caus); err != nil {
+			hdb.log.Error("failed to update chain state", zap.Error(err))
+			return err
+		}
+		if len(caus) > 0 {
+			index = caus[len(caus)-1].State.Index
+		}
 	}
 	return nil
 }
 
 // New returns a new HostDB.
-func New(db *sql.DB, g modules.Gateway, cs modules.ConsensusSet, dir string) (*HostDB, <-chan error) {
+func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, dir string) (*HostDB, <-chan error) {
 	errChan := make(chan error, 1)
 
 	// Blocking startup.
-	hdb, err := hostdbBlockingStartup(db, g, cs, dir)
+	hdb, err := hostdbBlockingStartup(db, cm, s, dir)
 	if err != nil {
 		errChan <- err
 		return nil, errChan
@@ -451,7 +432,7 @@ func New(db *sql.DB, g modules.Gateway, cs modules.ConsensusSet, dir string) (*H
 		}
 		defer hdb.tg.Done()
 		// Subscribe to the consensus set in a separate goroutine.
-		err := hostdbAsyncStartup(hdb, cs)
+		err := hostdbAsyncStartup(hdb)
 		if err != nil {
 			errChan <- err
 		}
@@ -476,7 +457,7 @@ func (hdb *HostDB) ActiveHosts() (activeHosts []modules.HostDBEntry, err error) 
 		if len(entry.ScanHistory) == 0 {
 			continue
 		}
-		if !entry.ScanHistory[len(entry.ScanHistory) - 1].Success {
+		if !entry.ScanHistory[len(entry.ScanHistory)-1].Success {
 			continue
 		}
 		if !entry.Settings.AcceptingContracts {
@@ -577,7 +558,7 @@ func (hdb *HostDB) Host(pk types.PublicKey) (modules.HostDBEntry, bool, error) {
 	_, ok := filteredHosts[pk.String()]
 	host.Filtered = whitelist != ok
 	hdb.mu.RLock()
-	updateHostHistoricInteractions(&host, hdb.blockHeight)
+	updateHostHistoricInteractions(&host, hdb.tip.Height)
 	hdb.mu.RUnlock()
 	return host, exists, nil
 }
@@ -617,10 +598,10 @@ func (hdb *HostDB) SetFilterMode(fm modules.FilterMode, hosts []types.PublicKey,
 		for _, pk := range hdb.filteredHosts {
 			err := hdb.staticHostTree.SetFiltered(pk, false)
 			if err != nil {
-				hdb.staticLog.Println("ERROR: unable to mark entry as not filtered:", err)
+				hdb.log.Error("unable to mark entry as not filtered", zap.Error(err))
 			}
 			if err := hdb.filterHost(pk, false); err != nil {
-				hdb.staticLog.Println("ERROR: unable to save unfiltered host:", err)
+				hdb.log.Error("unable to save unfiltered host", zap.Error(err))
 			}
 		}
 		// Reset filtered fields.
@@ -638,7 +619,7 @@ func (hdb *HostDB) SetFilterMode(fm modules.FilterMode, hosts []types.PublicKey,
 	}
 
 	// Create filtered HostTree.
-	hdb.filteredTree = hosttree.New(hdb.scoreFunc, hdb.staticLog)
+	hdb.filteredTree = hosttree.New(hdb.scoreFunc, hdb.log)
 	filteredDomains := newFilteredDomains(netAddresses)
 
 	// Create filteredHosts map.
@@ -653,10 +634,10 @@ func (hdb *HostDB) SetFilterMode(fm modules.FilterMode, hosts []types.PublicKey,
 		// Update host in unfiltered hosttree.
 		err := hdb.staticHostTree.SetFiltered(h, true)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: unable to mark entry as filtered:", err)
+			hdb.log.Error("unable to mark entry as filtered", zap.Error(err))
 		}
 		if err := hdb.filterHost(h, true); err != nil {
-			hdb.staticLog.Println("ERROR: unable to save filtered host:", err)
+			hdb.log.Error("unable to save filtered host", zap.Error(err))
 		}
 	}
 
@@ -671,10 +652,10 @@ func (hdb *HostDB) SetFilterMode(fm modules.FilterMode, hosts []types.PublicKey,
 		// Update host in unfiltered hosttree.
 		err := hdb.staticHostTree.SetFiltered(host.PublicKey, true)
 		if err != nil {
-			hdb.staticLog.Println("ERROR: unable to mark entry as filtered:", err)
+			hdb.log.Error("unable to mark entry as filtered", zap.Error(err))
 		}
 		if err := hdb.filterHost(host.PublicKey, true); err != nil {
-			hdb.staticLog.Println("ERROR: unable to save filtered host:", err)
+			hdb.log.Error("unable to save filtered host", zap.Error(err))
 		}
 	}
 	for _, host := range allHosts {
@@ -705,7 +686,7 @@ func (hdb *HostDB) InitialScanComplete() (complete bool, height uint64, err erro
 	hdb.mu.Lock()
 	defer hdb.mu.Unlock()
 	complete = hdb.initialScanComplete
-	height = hdb.blockHeight
+	height = hdb.tip.Height
 	return
 }
 

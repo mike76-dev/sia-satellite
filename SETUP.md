@@ -20,7 +20,7 @@ Log into your server and download the Satellite files. This guide assumes that y
 ```
 mkdir ~/satellite
 cd ~/satellite
-wget -q https://github.com/mike76-dev/satellite/releases/download/v0.10.0/satellite_linux_amd64.zip
+wget -q https://github.com/mike76-dev/sia-satellite/releases/download/v0.10.0/satellite_linux_amd64.zip
 unzip satellite_linux_amd64.zip
 rm satellite_linux_amd64.zip
 ```

@@ -1,14 +1,12 @@
 "Satd Configuration"
-"0.3.0"
+"0.4.0"
 {
 	"name": "",
-	"agent": "Sat-Agent",
 	"gateway": ":0",
 	"api": "localhost:9990",
 	"satellite": ":9992",
 	"mux": ":9993",
 	"dir": "",
-	"bootstrap": true,
 	"dbUser": "",
 	"dbName": "",
 	"portal": ":8080"

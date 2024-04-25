@@ -5,6 +5,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/modules/manager/contractor/contractset"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 )
@@ -63,7 +64,7 @@ func (c *Contractor) updatePubKeysToContractIDMap(contracts []modules.RenterCont
 	// the pubKeysToContractID map.
 	for pk, fcid := range uniqueGFU {
 		if c.pubKeysToContractID[pk] != fcid {
-			c.log.Println("CRITICAL: contractor is not correctly mapping from pubkey to contract id, missing GFU contracts")
+			c.log.Error("contractor is not correctly mapping from pubkey to contract id, missing GFU contracts")
 		}
 	}
 }
@@ -77,7 +78,7 @@ func (c *Contractor) tryAddContractToPubKeysMap(newContract modules.RenterContra
 	if exists {
 		gfu, gfr := newContract.Utility.GoodForUpload, newContract.Utility.GoodForRenew
 		if gfu || gfr {
-			c.log.Println("CRITICAL: renewed contract is marked as good for upload or good for renew", gfu, gfr)
+			c.log.Error("renewed contract is marked as good for upload or good for renew", zap.Bool("GFU", gfu), zap.Bool("GFR", gfr))
 		}
 		return
 	}
@@ -88,7 +89,7 @@ func (c *Contractor) tryAddContractToPubKeysMap(newContract modules.RenterContra
 	if exists {
 		// Sanity check - the contractor should not have multiple contract tips for the
 		// same contract.
-		c.log.Println("ERROR: contractor has multiple contracts that don't form a renewedTo line for the same host and the same renter")
+		c.log.Error("contractor has multiple contracts that don't form a renewedTo line for the same host and the same renter")
 	}
 	c.pubKeysToContractID[pk] = newContract.ID
 }

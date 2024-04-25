@@ -10,8 +10,10 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/external"
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
 )
 
 const (
@@ -72,7 +74,7 @@ func (m *Manager) calculateAverages() {
 
 	hosts, err := m.ActiveHosts()
 	if err != nil {
-		m.log.Println("ERROR: could not fetch active hosts", err)
+		m.log.Error("could not fetch active hosts", zap.Error(err))
 		return
 	}
 
@@ -117,7 +119,7 @@ func (m *Manager) calculateAverages() {
 
 	// Save to disk.
 	if err := dbPutAverages(m.dbTx, m.hostAverages); err != nil {
-		m.log.Println("ERROR: couldn't save network averages:", err)
+		m.log.Error("couldn't save network averages", zap.Error(err))
 	}
 }
 
@@ -144,7 +146,7 @@ func (m *Manager) threadedCalculateAverages() {
 func (m *Manager) fetchExchangeRates() {
 	data, err := external.FetchSCRates()
 	if err != nil {
-		m.log.Println("ERROR:", err)
+		m.log.Error("couldn't fetch exchange rates", zap.Error(err))
 		return
 	}
 
@@ -233,9 +235,8 @@ const reportTemplate = `
 	</html>
 `
 
-// ProcessConsensusChange gets called to inform Manager about the
-// changes in the consensus set.
-func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
+// UpdateChainState applies the updates from the ChainManager.
+func (m *Manager) UpdateChainState(_ []chain.RevertUpdate, applied []chain.ApplyUpdate) (err error) {
 	// Define a helper.
 	convertSize := func(size uint64) string {
 		if size < 1024 {
@@ -255,8 +256,8 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 		return fmt.Sprintf("%.2f %s", s, sizes[i])
 	}
 
-	// Process the applied blocks till the first found in the following month.
-	for _, block := range cc.AppliedBlocks {
+	for _, cau := range applied {
+		block := cau.Block
 		m.mu.Lock()
 		m.lastBlockTimestamp = block.Timestamp
 		currentMonth := m.currentMonth.Timestamp.Month()
@@ -267,13 +268,13 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 			m.mu.Lock()
 			m.prevMonth = m.currentMonth
 			m.currentMonth = blockTimestamp{
-				BlockHeight: cc.BlockHeight,
+				BlockHeight: cau.State.Index.Height,
 				Timestamp:   block.Timestamp,
 			}
 			err := dbPutBlockTimestamps(m.dbTx, m.currentMonth, m.prevMonth)
 			m.mu.Unlock()
 			if err != nil {
-				m.log.Println("ERROR: couldn't save block timestamps", err)
+				m.log.Error("couldn't save block timestamps", zap.Error(err))
 			}
 
 			// Calculate the monthly spendings of each renter.
@@ -283,12 +284,12 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 			for _, renter := range renters {
 				ub, err := m.GetBalance(renter.Email)
 				if err != nil {
-					m.log.Println("ERROR: couldn't retrieve balance:", err)
+					m.log.Error("couldn't retrieve balance", zap.Error(err))
 					continue
 				}
 				us, err := m.GetSpendings(renter.Email, int(currentMonth), currentYear)
 				if err != nil {
-					m.log.Println("ERROR: couldn't retrieve renter spendings:", err)
+					m.log.Error("couldn't retrieve renter spendings", zap.Error(err))
 					continue
 				}
 				formed += us.Formed
@@ -323,7 +324,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				}
 				count, data, err := m.numSlabs(renter.PublicKey)
 				if err != nil {
-					m.log.Println("ERROR: couldn't retrieve slab count:", err)
+					m.log.Error("couldn't retrieve slab count", zap.Error(err))
 					continue
 				}
 				var storageFee, dataFee float64
@@ -346,11 +347,11 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				us.Overhead += partialCost
 				err = m.UpdateSpendings(renter.Email, us, int(currentMonth), currentYear)
 				if err != nil {
-					m.log.Println("ERROR: couldn't update spendings:", err)
+					m.log.Error("couldn't update spendings", zap.Error(err))
 				}
 				if ub.OnHold > 0 && ub.OnHold < uint64(time.Now().Unix()-int64(modules.OnHoldThreshold.Seconds())) {
 					// Account on hold, delete the file metadata.
-					m.log.Println("WARN: account on hold, deleting stored metadata")
+					m.log.Warn("account on hold, deleting stored metadata")
 					m.DeleteBufferedFiles(renter.PublicKey)
 					m.DeleteMultipartUploads(renter.PublicKey)
 					m.DeleteMetadata(renter.PublicKey)
@@ -359,7 +360,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				// Deduct from the account balance.
 				if !ub.Subscribed && ub.Balance < storageCost+partialCost {
 					// Insufficient balance, delete the file metadata.
-					m.log.Println("WARN: insufficient account balance, deleting stored metadata")
+					m.log.Warn("insufficient account balance, deleting stored metadata")
 					m.DeleteBufferedFiles(renter.PublicKey)
 					m.DeleteMultipartUploads(renter.PublicKey)
 					m.DeleteMetadata(renter.PublicKey)
@@ -367,7 +368,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				}
 				ub.Balance -= (storageCost + partialCost)
 				if err := m.UpdateBalance(renter.Email, ub); err != nil {
-					m.log.Println("ERROR: couldn't update balance", err)
+					m.log.Error("couldn't update balance", zap.Error(err))
 				}
 			}
 
@@ -401,7 +402,7 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				t := template.New("report")
 				t, err := t.Parse(reportTemplate)
 				if err != nil {
-					m.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+					m.log.Error("unable to parse HTML template", zap.Error(err))
 					return
 				}
 				var b bytes.Buffer
@@ -428,26 +429,27 @@ func (m *Manager) ProcessConsensusChange(cc modules.ConsensusChange) {
 				})
 				err = m.ms.SendMail("Sia Satellite", m.email, "Your Monthly Report", &b)
 				if err != nil {
-					m.log.Println("ERROR: unable to send a monthly report:", err)
+					m.log.Error("unable to send monthly report", zap.Error(err))
 				}
 			}()
 
 			// Delete old spendings records from the database.
 			err = m.deleteOldSpendings()
 			if err != nil {
-				m.log.Println("ERROR: couldn't delete old spendings:", err)
+				m.log.Error("couldn't delete old spendings", zap.Error(err))
 			}
 
 			// Spin a thread to invoice the subscribed accounts.
 			go m.threadedSettleAccounts()
 
 			m.syncDB()
-			break
 		}
 	}
 
 	// Send a warning email if the wallet balance becomes low.
 	m.sendWarning()
+
+	return nil
 }
 
 // outOfSyncTemplate contains the text send by email when the last
@@ -498,18 +500,18 @@ func (m *Manager) sendOutOfSyncWarning() {
 	t := template.New("warning")
 	t, err := t.Parse(outOfSyncTemplate)
 	if err != nil {
-		m.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		m.log.Error("unable to parse HTML template", zap.Error(err))
 		return
 	}
 	var b bytes.Buffer
 	t.Execute(&b, warning{
 		Name:   m.name,
-		Height: m.cs.Height(),
+		Height: m.cm.Tip().Height,
 		Since:  fmt.Sprintf("%dh%dm", hours, minutes),
 	})
 	err = m.ms.SendMail("Sia Satellite", m.email, "Out Of Sync Warning", &b)
 	if err != nil {
-		m.log.Println("ERROR: unable to send a warning:", err)
+		m.log.Error("unable to send warning", zap.Error(err))
 		return
 	}
 

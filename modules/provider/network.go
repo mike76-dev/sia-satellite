@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -18,59 +19,6 @@ import (
 
 	"lukechampine.com/frand"
 )
-
-// threadedUpdateHostname periodically runs 'managedLearnHostname', which
-// checks if the Satellite's hostname has changed.
-func (p *Provider) threadedUpdateHostname(closeChan chan struct{}) {
-	defer close(closeChan)
-	for {
-		p.managedLearnHostname()
-		// Wait 30 minutes to check again. We want the Satellite to be always
-		// accessible by the renters.
-		select {
-		case <-p.tg.StopChan():
-			return
-		case <-time.After(time.Minute * 30):
-			continue
-		}
-	}
-}
-
-// managedLearnHostname discovers the external IP of the Satellite.
-func (p *Provider) managedLearnHostname() {
-	// Fetch the necessary variables.
-	p.mu.RLock()
-	satPort := p.port
-	satAutoAddress := p.autoAddress
-	p.mu.RUnlock()
-
-	// Use the gateway to get the external ip.
-	hostname, err := p.g.DiscoverAddress(p.tg.StopChan())
-	if err != nil {
-		p.log.Println("WARN: failed to discover external IP")
-		return
-	}
-
-	autoAddress := modules.NetAddress(net.JoinHostPort(hostname.String(), satPort))
-	if err := autoAddress.IsValid(); err != nil {
-		p.log.Printf("WARN: discovered hostname %q is invalid: %v", autoAddress, err)
-		return
-	}
-	if autoAddress == satAutoAddress {
-		// Nothing to do - the auto address has not changed.
-		return
-	}
-
-	p.mu.Lock()
-	p.autoAddress = autoAddress
-	err = p.save()
-	p.mu.Unlock()
-	if err != nil {
-		p.log.Println("ERROR: couldn't save provider:", err)
-	}
-
-	// TODO inform the renters that the Satellite address has changed.
-}
 
 // initNetworking performs actions like port forwarding, and gets the
 // Satellite established on the network.
@@ -86,7 +34,7 @@ func (p *Provider) initNetworking(address, muxAddr string) (err error) {
 	p.tg.OnStop(func() {
 		err := p.listener.Close()
 		if err != nil {
-			p.log.Println("WARN: closing the listener failed:", err)
+			p.log.Warn("closing the listener failed", zap.Error(err))
 		}
 
 		// Wait until the threadedListener has returned to continue shutdown.
@@ -100,35 +48,9 @@ func (p *Provider) initNetworking(address, muxAddr string) (err error) {
 	}
 	p.port = port
 
-	// Non-blocking, perform port forwarding and create the hostname discovery
-	// thread.
-	go func() {
-		// Add this function to the threadgroup, so that the logger will not
-		// disappear before port closing can be registered to the threadgroup
-		// OnStop functions.
-		err := p.tg.Add()
-		if err != nil {
-			// If this goroutine is not run before shutdown starts, this
-			// codeblock is reachable.
-			return
-		}
-		defer p.tg.Done()
-
-		err = p.g.ForwardPort(port)
-		if err != nil {
-			p.log.Println(err)
-		}
-
-		threadedUpdateHostnameClosedChan := make(chan struct{})
-		go p.threadedUpdateHostname(threadedUpdateHostnameClosedChan)
-		p.tg.OnStop(func() {
-			<-threadedUpdateHostnameClosedChan
-		})
-	}()
-
 	// Launch the listener.
 	go p.threadedListen(threadedListenerClosedChan)
-	p.log.Println("INFO: listening on port", port)
+	p.log.Info("listening on port", zap.String("port", port))
 
 	// Create the mux and setup the close procedures.
 	p.mux, err = net.Listen("tcp", muxAddr)
@@ -145,7 +67,7 @@ func (p *Provider) initNetworking(address, muxAddr string) (err error) {
 	p.tg.OnStop(func() {
 		err := p.mux.Close()
 		if err != nil {
-			p.log.Println("WARN: closing the mux failed:", err)
+			p.log.Warn("closing the mux failed", zap.Error(err))
 		}
 
 		// Wait until the threadedListener has returned to continue shutdown.
@@ -154,7 +76,7 @@ func (p *Provider) initNetworking(address, muxAddr string) (err error) {
 
 	// Launch the mux.
 	go p.threadedListenMux(threadedMuxClosedChan)
-	p.log.Println("INFO: mux listening on port", muxPort)
+	p.log.Info("mux listening on port", zap.String("port", muxPort))
 
 	return nil
 }
@@ -193,7 +115,7 @@ func (p *Provider) threadedListenMux(closeChan chan struct{}) {
 		conn, err := p.mux.Accept()
 		if err != nil {
 			if !errors.Is(err, net.ErrClosed) {
-				p.log.Println("WARN: falied to accept connection:", err)
+				p.log.Warn("falied to accept connection", zap.Error(err))
 			}
 			return
 		}
@@ -204,7 +126,7 @@ func (p *Provider) threadedListenMux(closeChan chan struct{}) {
 			// Upgrade the connection to RHP3.
 			t, err := rhpv3.NewHostTransport(conn, p.secretKey)
 			if err != nil {
-				p.log.Println("ERROR: falied to upgrade connection:", err)
+				p.log.Error("falied to upgrade connection", zap.Error(err))
 				return
 			}
 			defer t.Close()
@@ -213,7 +135,7 @@ func (p *Provider) threadedListenMux(closeChan chan struct{}) {
 				stream, err := t.AcceptStream()
 				if err != nil {
 					if !strings.Contains(err.Error(), "peer closed stream gracefully") && !strings.Contains(err.Error(), "peer closed underlying connection") {
-						p.log.Println("ERROR: falied to accept stream:", err)
+						p.log.Error("falied to accept stream", zap.Error(err))
 					}
 					return
 				}
@@ -253,7 +175,7 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 
 	// Skip if a satellite maintenance is running.
 	if p.m.Maintenance() {
-		p.log.Println("INFO: closing inbound connection because satellite maintenance is running")
+		p.log.Info("closing inbound connection because satellite maintenance is running")
 		return
 	}
 
@@ -261,7 +183,7 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	// this if desired.
 	err = conn.SetDeadline(time.Now().Add(defaultConnectionDeadline))
 	if err != nil {
-		p.log.Println("WARN: could not set deadline on connection:", err)
+		p.log.Warn("could not set deadline on connection", zap.Error(err))
 		return
 	}
 
@@ -272,11 +194,11 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	var req loopKeyExchangeRequest
 	req.DecodeFrom(d)
 	if err = d.Err(); err != nil {
-		p.log.Println("ERROR: could not read handshake request:", err)
+		p.log.Error("could not read handshake request", zap.Error(err))
 		return
 	}
 	if req.Specifier != loopEnterSpecifier {
-		p.log.Println("ERROR: wrong handshake request specifier")
+		p.log.Error("wrong handshake request specifier")
 		return
 	}
 
@@ -289,7 +211,7 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	}
 	if !supportsChaCha {
 		(&loopKeyExchangeResponse{Cipher: cipherNoOverlap}).EncodeTo(e)
-		p.log.Println("ERROR: no supported ciphers")
+		p.log.Error("no supported ciphers")
 		return
 	}
 
@@ -309,14 +231,14 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	copy(resp.Signature[:], pubkeySig[:])
 	resp.EncodeTo(e)
 	if err = e.Flush(); err != nil {
-		p.log.Println("ERROR: could not send handshake response:", err)
+		p.log.Error("could not send handshake response", zap.Error(err))
 		return
 	}
 
 	// Use cipherKey to initialize an AEAD cipher.
 	aead, err := chacha20poly1305.New(cipherKey[:])
 	if err != nil {
-		p.log.Println("ERROR: could not create cipher:", err)
+		p.log.Error("could not create cipher", zap.Error(err))
 		return
 	}
 
@@ -332,7 +254,7 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 		Challenge: s.Challenge,
 	}
 	if err := s.WriteMessage(&challengeReq); err != nil {
-		p.log.Println("ERROR: could not send challenge:", err)
+		p.log.Error("could not send challenge", zap.Error(err))
 		return
 	}
 
@@ -340,7 +262,7 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 	var id types.Specifier
 	err = s.ReadMessage(&id, modules.MinMessageSize)
 	if err != nil {
-		p.log.Println("ERROR: could not read request specifier:", err)
+		p.log.Error("could not read request specifier", zap.Error(err))
 		return
 	}
 
@@ -416,10 +338,10 @@ func (p *Provider) threadedHandleConn(conn net.Conn) {
 			err = modules.AddContext(err, "incoming RPCCompleteMultipart failed")
 		}
 	default:
-		p.log.Println("INFO: inbound connection from:", conn.RemoteAddr()) //TODO
+		p.log.Info("inbound connection from", zap.Stringer("host", conn.RemoteAddr())) //TODO
 	}
 	if err != nil {
-		p.log.Printf("ERROR: error with %v: %v\n", conn.RemoteAddr(), err)
+		p.log.Error("inbound connection failed", zap.Stringer("host", conn.RemoteAddr()), zap.Error(err))
 	}
 }
 
@@ -445,7 +367,7 @@ func (p *Provider) threadedHandleStream(s *rhpv3.Stream, addr string) {
 
 	// Skip if a satellite maintenance is running.
 	if p.m.Maintenance() {
-		p.log.Println("INFO: closing inbound stream because satellite maintenance is running")
+		p.log.Info("closing inbound stream because satellite maintenance is running")
 		return
 	}
 
@@ -453,13 +375,13 @@ func (p *Provider) threadedHandleStream(s *rhpv3.Stream, addr string) {
 	// this if desired.
 	err = s.SetDeadline(time.Now().Add(defaultStreamDeadline))
 	if err != nil {
-		p.log.Println("ERROR: could not set deadline on stream:", err)
+		p.log.Error("could not set deadline on stream", zap.Error(err))
 		return
 	}
 
 	id, err := s.ReadID()
 	if err != nil {
-		p.log.Println("ERROR: failed to read RPC ID:", err)
+		p.log.Error("failed to read RPC ID", zap.Error(err))
 		return
 	}
 
@@ -485,10 +407,10 @@ func (p *Provider) threadedHandleStream(s *rhpv3.Stream, addr string) {
 			err = modules.AddContext(err, "incoming RPCUploadPart failed")
 		}
 	default:
-		p.log.Println("INFO: unknown inbound stream from", addr) //TODO
+		p.log.Info("unknown inbound stream from", zap.String("host", addr)) //TODO
 	}
 	if err != nil {
-		p.log.Printf("ERROR: error with %v: %v\n", addr, err)
+		p.log.Error("inbound connection failed", zap.String("host", addr), zap.Error(err))
 	}
 }
 

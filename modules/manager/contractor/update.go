@@ -2,8 +2,10 @@ package contractor
 
 import (
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
 )
 
 // managedArchiveContracts will figure out which contracts are no longer needed
@@ -11,7 +13,7 @@ import (
 func (c *Contractor) managedArchiveContracts() {
 	// Determine the current block height.
 	c.mu.RLock()
-	currentHeight := c.blockHeight
+	currentHeight := c.tip.Height
 	c.mu.RUnlock()
 
 	// Loop through the current set of contracts and migrate any expired ones to
@@ -27,7 +29,7 @@ func (c *Contractor) managedArchiveContracts() {
 			id := contract.ID
 			c.staticContracts.RetireContract(id)
 			expired = append(expired, id)
-			c.log.Println("INFO: archived expired contract", id)
+			c.log.Info("archived expired contract", zap.Stringer("id", id))
 		}
 	}
 
@@ -50,68 +52,70 @@ func (c *Contractor) managedArchiveContracts() {
 	}
 }
 
-// ProcessConsensusChange will be called by the consensus set every time there
-// is a change in the blockchain. Updates will always be called in order.
-func (c *Contractor) ProcessConsensusChange(cc modules.ConsensusChange) {
-	c.mu.Lock()
-
-	c.blockHeight = cc.InitialHeight()
-	for _, block := range cc.AppliedBlocks {
-		if block.ID() != modules.GenesisID {
-			c.blockHeight++
-		}
+// UpdateChainState applies or reverts the updates from ChainManager.
+func (c *Contractor) UpdateChainState(reverted []chain.RevertUpdate, applied []chain.ApplyUpdate) error {
+	for _, cru := range reverted {
+		c.staticWatchdog.callScanRevertUpdate(cru)
 	}
-	c.staticWatchdog.callScanConsensusChange(cc)
 
-	// If the allowance is set and we have entered the next period, update
-	// CurrentPeriod.
-	renters := c.renters
-	for key, renter := range renters {
-		if renter.Allowance.Active() && c.blockHeight >= renter.CurrentPeriod+renter.Allowance.Period {
-			renter.CurrentPeriod += renter.Allowance.Period
-			c.renters[key] = renter
-			err := c.UpdateRenter(renter)
-			if err != nil {
-				c.log.Println("ERROR: unable to update renter:", err)
+	for _, cau := range applied {
+		c.mu.Lock()
+		c.tip = cau.State.Index
+		c.staticWatchdog.callScanApplyUpdate(cau)
+
+		// If the allowance is set and we have entered the next period, update
+		// CurrentPeriod.
+		renters := c.renters
+		for key, renter := range renters {
+			if renter.Allowance.Active() && c.tip.Height >= renter.CurrentPeriod+renter.Allowance.Period {
+				renter.CurrentPeriod += renter.Allowance.Period
+				c.renters[key] = renter
+				err := c.UpdateRenter(renter)
+				if err != nil {
+					c.log.Error("unable to update renter", zap.Error(err))
+				}
 			}
 		}
+
+		// Check if c.synced already signals that the contractor is synced.
+		synced := false
+		select {
+		case <-c.synced:
+			synced = true
+		default:
+		}
+
+		// If we weren't synced but are now, we close the channel. If we were
+		// synced but aren't anymore, we need a new channel.
+		if !synced && c.s.Synced() && c.tip == c.cm.Tip() {
+			close(c.synced)
+		} else if synced && (!c.s.Synced() || c.tip != c.cm.Tip()) {
+			c.synced = make(chan struct{})
+		}
+
+		// Let the watchdog take any necessary actions and update its state. We do
+		// this before persisting the contractor so that the watchdog is up-to-date on
+		// reboot. Otherwise it is possible that e.g. that the watchdog thinks a
+		// storage proof was missed and marks down a host for that. Other watchdog
+		// actions are innocuous.
+		if c.s.Synced() && c.tip == c.cm.Tip() {
+			c.staticWatchdog.callCheckContracts()
+		}
 	}
 
-	// Check if c.synced already signals that the contractor is synced.
-	synced := false
-	select {
-	case <-c.synced:
-		synced = true
-	default:
-	}
-	// If we weren't synced but are now, we close the channel. If we were
-	// synced but aren't anymore, we need a new channel.
-	if !synced && cc.Synced {
-		close(c.synced)
-	} else if synced && !cc.Synced {
-		c.synced = make(chan struct{})
-	}
-
-	// Let the watchdog take any necessary actions and update its state. We do
-	// this before persisting the contractor so that the watchdog is up-to-date on
-	// reboot. Otherwise it is possible that e.g. that the watchdog thinks a
-	// storage proof was missed and marks down a host for that. Other watchdog
-	// actions are innocuous.
-	if cc.Synced {
-		c.staticWatchdog.callCheckContracts()
-	}
-
-	c.lastChange = cc.ID
-	err := c.updateState()
-	if err != nil {
-		c.log.Println("ERROR: unable to save while processing a consensus change:", err)
+	if err := c.updateState(); err != nil {
+		c.log.Error("unable to save while processing a consensus change", zap.Error(err))
+		c.mu.Unlock()
+		return err
 	}
 	c.mu.Unlock()
 
 	// Perform contract maintenance if our blockchain is synced. Use a separate
 	// goroutine so that the rest of the contractor is not blocked during
 	// maintenance.
-	if cc.Synced {
+	if c.s.Synced() && c.tip == c.cm.Tip() {
 		go c.threadedContractMaintenance()
 	}
+
+	return nil
 }

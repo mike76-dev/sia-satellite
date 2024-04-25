@@ -13,6 +13,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/rs/xid"
+	"go.uber.org/zap"
 	"lukechampine.com/frand"
 
 	"go.sia.tech/core/types"
@@ -342,7 +343,7 @@ func (m *Manager) getEmailPreferences() error {
 	buf := bytes.NewBuffer(b)
 	d := types.NewDecoder(io.LimitedReader{R: buf, N: 24})
 	var threshold types.Currency
-	threshold.DecodeFrom(d)
+	(*types.V1Currency)(&threshold).DecodeFrom(d)
 	m.email = email
 	m.warnThreshold = threshold
 	tx.Commit()
@@ -356,7 +357,7 @@ func (m *Manager) setEmailPreferences(email string, threshold types.Currency) er
 
 	var buf bytes.Buffer
 	e := types.NewEncoder(&buf)
-	threshold.EncodeTo(e)
+	types.V1Currency(threshold).EncodeTo(e)
 	e.Flush()
 	_, err := m.db.Exec(`
 		UPDATE mg_email
@@ -389,11 +390,7 @@ func (m *Manager) sendWarning() {
 	}
 
 	// Check the wallet balance.
-	balance, _, _, err := m.wallet.ConfirmedBalance()
-	if err != nil {
-		m.log.Println("ERROR: couldn't retrieve wallet balance:", err)
-		return
-	}
+	balance, _, _ := m.wallet.ConfirmedBalance()
 	if balance.Cmp(m.warnThreshold) >= 0 {
 		return
 	}
@@ -401,13 +398,13 @@ func (m *Manager) sendWarning() {
 	// Balance is low; check if a warning has been sent today.
 	tx, err := m.db.Begin()
 	if err != nil {
-		m.log.Println("ERROR: couldn't start transaction:", err)
+		m.log.Error("couldn't start transaction", zap.Error(err))
 		return
 	}
 	var timestamp uint64
 	err = tx.QueryRow("SELECT time_sent FROM mg_email WHERE id = 1").Scan(&timestamp)
 	if err != nil {
-		m.log.Println("ERROR: couldn't retrieve timestamp:", err)
+		m.log.Error("couldn't retrieve timestamp", zap.Error(err))
 		tx.Rollback()
 		return
 	}
@@ -427,7 +424,7 @@ func (m *Manager) sendWarning() {
 	t := template.New("warning")
 	t, err = t.Parse(warningTemplate)
 	if err != nil {
-		m.log.Printf("ERROR: unable to parse HTML template: %v\n", err)
+		m.log.Error("unable to parse HTML template", zap.Error(err))
 		tx.Rollback()
 		return
 	}
@@ -439,7 +436,7 @@ func (m *Manager) sendWarning() {
 	})
 	err = m.ms.SendMail("Sia Satellite", m.email, "Warning: Balance Low", &b)
 	if err != nil {
-		m.log.Println("ERROR: unable to send a warning:", err)
+		m.log.Error("unable to send warning", zap.Error(err))
 		tx.Rollback()
 		return
 	}
@@ -451,13 +448,13 @@ func (m *Manager) sendWarning() {
 		WHERE id = 1
 	`, time.Now().Unix())
 	if err != nil {
-		m.log.Println("ERROR: couldn't update database:", err)
+		m.log.Error("couldn't update database", zap.Error(err))
 		tx.Rollback()
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		m.log.Println("ERROR: couldn't commit the changes:", err)
+		m.log.Error("couldn't commit the changes", zap.Error(err))
 	}
 }
 
@@ -691,7 +688,7 @@ func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 		WHERE renter_pk = ?
 	`, pk[:])
 	if err != nil {
-		m.log.Println("ERROR: unable to query files:", err)
+		m.log.Error("unable to query files", zap.Error(err))
 		return modules.AddContext(err, "unable to query files")
 	}
 
@@ -702,7 +699,7 @@ func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 		var bucket, path []byte
 		if err := rows.Scan(&name, &bucket, &path); err != nil {
 			rows.Close()
-			m.log.Println("ERROR: unable to retrieve filename:", err)
+			m.log.Error("unable to retrieve filename", zap.Error(err))
 			return modules.AddContext(err, "unable to retrieve filename")
 		}
 		m.hostContractor.CancelUpload(pk, bucket, path)
@@ -715,11 +712,11 @@ func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 		p := filepath.Join(m.BufferedFilesDir(), name)
 		fi, err := os.Stat(p)
 		if err != nil {
-			m.log.Println("ERROR: unable to get file size:", err)
+			m.log.Error("unable to get file size", zap.Error(err))
 			return modules.AddContext(err, "unable to get file size")
 		}
 		if err := os.Remove(p); err != nil {
-			m.log.Println("ERROR: unable to delete file:", err)
+			m.log.Error("unable to delete file", zap.Error(err))
 			return modules.AddContext(err, "unable to delete file")
 		}
 		m.mu.Lock()
@@ -727,7 +724,7 @@ func (m *Manager) DeleteBufferedFiles(pk types.PublicKey) error {
 		m.mu.Unlock()
 		_, err = m.db.Exec("DELETE FROM ctr_uploads WHERE filename = ?", name)
 		if err != nil {
-			m.log.Println("ERROR: unable to delete file record:", err)
+			m.log.Error("unable to delete file record", zap.Error(err))
 			return modules.AddContext(err, "unable to delete file record")
 		}
 	}
@@ -778,7 +775,7 @@ func (m *Manager) DeleteMultipartUploads(pk types.PublicKey) error {
 	// Make a list of file names.
 	rows, err := m.db.Query("SELECT filename FROM ctr_parts WHERE renter_pk = ?", pk[:])
 	if err != nil {
-		m.log.Println("ERROR: unable to query files:", err)
+		m.log.Error("unable to query files", zap.Error(err))
 		return modules.AddContext(err, "unable to query files")
 	}
 
@@ -787,7 +784,7 @@ func (m *Manager) DeleteMultipartUploads(pk types.PublicKey) error {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			rows.Close()
-			m.log.Println("ERROR: unable to retrieve filename:", err)
+			m.log.Error("unable to retrieve filename", zap.Error(err))
 			return modules.AddContext(err, "unable to retrieve filename")
 		}
 		names = append(names, name)
@@ -799,11 +796,11 @@ func (m *Manager) DeleteMultipartUploads(pk types.PublicKey) error {
 		p := filepath.Join(m.BufferedFilesDir(), name)
 		fi, err := os.Stat(p)
 		if err != nil {
-			m.log.Println("ERROR: unable to get file size:", err)
+			m.log.Error("unable to get file size", zap.Error(err))
 			return modules.AddContext(err, "unable to get file size")
 		}
 		if err := os.Remove(p); err != nil {
-			m.log.Println("ERROR: unable to delete file:", err)
+			m.log.Error("unable to delete file", zap.Error(err))
 			return modules.AddContext(err, "unable to delete file")
 		}
 		m.mu.Lock()
@@ -811,7 +808,7 @@ func (m *Manager) DeleteMultipartUploads(pk types.PublicKey) error {
 		m.mu.Unlock()
 		_, err = m.db.Exec("DELETE FROM ctr_parts WHERE filename = ?", name)
 		if err != nil {
-			m.log.Println("ERROR: unable to delete file record:", err)
+			m.log.Error("unable to delete file record", zap.Error(err))
 			return modules.AddContext(err, "unable to delete file record")
 		}
 	}
@@ -819,7 +816,7 @@ func (m *Manager) DeleteMultipartUploads(pk types.PublicKey) error {
 	// Delete multipart uploads.
 	_, err = m.db.Exec("DELETE FROM ctr_multipart WHERE renter_pk = ?", pk[:])
 	if err != nil {
-		m.log.Println("ERROR: unable to delete multipart uploads:", err)
+		m.log.Error("unable to delete multipart uploads", zap.Error(err))
 		return modules.AddContext(err, "unable to delete multipart uploads")
 	}
 
@@ -905,7 +902,7 @@ func (m *Manager) DeleteMultipart(rpk types.PublicKey, id types.Hash256) error {
 func (m *Manager) managedPruneMultipartUploads() {
 	tx, err := m.db.Begin()
 	if err != nil {
-		m.log.Println("ERROR: unable to start transaction:", err)
+		m.log.Error("unable to start transaction", zap.Error(err))
 		return
 	}
 
@@ -916,7 +913,7 @@ func (m *Manager) managedPruneMultipartUploads() {
 		WHERE created < ?
 	`, uint64(time.Now().Add(-multipartUploadPruneThreshold).Unix()))
 	if err != nil {
-		m.log.Println("ERROR: unable to query multipart uploads:", err)
+		m.log.Error("unable to query multipart uploads", zap.Error(err))
 		tx.Rollback()
 		return
 	}
@@ -925,7 +922,7 @@ func (m *Manager) managedPruneMultipartUploads() {
 	for rows.Next() {
 		key := make([]byte, 32)
 		if err := rows.Scan(&key); err != nil {
-			m.log.Println("ERROR: unable to get upload ID:", err)
+			m.log.Error("unable to get upload ID", zap.Error(err))
 			rows.Close()
 			tx.Rollback()
 			return
@@ -941,7 +938,7 @@ func (m *Manager) managedPruneMultipartUploads() {
 	for _, id := range ids {
 		rows, err = tx.Query("SELECT filename FROM ctr_parts WHERE upload_id = ?", id[:])
 		if err != nil {
-			m.log.Println("ERROR: unable to query files:", err)
+			m.log.Error("unable to query files", zap.Error(err))
 			tx.Rollback()
 			return
 		}
@@ -951,7 +948,7 @@ func (m *Manager) managedPruneMultipartUploads() {
 			var name string
 			if err := rows.Scan(&name); err != nil {
 				rows.Close()
-				m.log.Println("ERROR: unable to retrieve filename:", err)
+				m.log.Error("unable to retrieve filename", zap.Error(err))
 				tx.Rollback()
 				return
 			}
@@ -963,12 +960,12 @@ func (m *Manager) managedPruneMultipartUploads() {
 			p := filepath.Join(m.BufferedFilesDir(), name)
 			fi, err := os.Stat(p)
 			if err != nil {
-				m.log.Println("ERROR: unable to get file size:", err)
+				m.log.Error("unable to get file size", zap.Error(err))
 				tx.Rollback()
 				return
 			}
 			if err := os.Remove(p); err != nil {
-				m.log.Println("ERROR: unable to delete file:", err)
+				m.log.Error("unable to delete file", zap.Error(err))
 				tx.Rollback()
 				return
 			}
@@ -977,7 +974,7 @@ func (m *Manager) managedPruneMultipartUploads() {
 			m.mu.Unlock()
 			res, err := tx.Exec("DELETE FROM ctr_parts WHERE filename = ?", name)
 			if err != nil {
-				m.log.Println("ERROR: unable to delete file record:", err)
+				m.log.Error("unable to delete file record", zap.Error(err))
 				tx.Rollback()
 				return
 			}
@@ -989,19 +986,19 @@ func (m *Manager) managedPruneMultipartUploads() {
 	// Delete the multipart uploads.
 	res, err := tx.Exec("DELETE FROM ctr_multipart WHERE created < ?", uint64(time.Now().Add(-multipartUploadPruneThreshold).Unix()))
 	if err != nil {
-		m.log.Println("ERROR: unable to prune multipart uploads:", err)
+		m.log.Error("unable to prune multipart uploads", zap.Error(err))
 		tx.Rollback()
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		m.log.Println("ERROR: unable to commit transaction:", err)
+		m.log.Error("unable to commit transaction", zap.Error(err))
 		return
 	}
 
 	numUploads, _ := res.RowsAffected()
 	if numUploads > 0 {
-		m.log.Printf("INFO: pruned %d multipart uploads with %d parts\n", numUploads, numParts)
+		m.log.Info(fmt.Sprintf("pruned %d multipart uploads with %d parts", numUploads, numParts))
 	}
 }
 

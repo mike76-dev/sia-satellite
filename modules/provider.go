@@ -8,8 +8,6 @@ import (
 // Provider implements the methods necessary to communicate with the
 // renters.
 type Provider interface {
-	Alerter
-
 	// Close safely shuts down the provider.
 	Close() error
 
@@ -38,11 +36,11 @@ func (ec ExtendedContract) EncodeTo(e *types.Encoder) {
 	ec.Contract.Signatures[0].EncodeTo(e)
 	ec.Contract.Signatures[1].EncodeTo(e)
 	e.WriteUint64(ec.StartHeight)
-	ec.ContractPrice.EncodeTo(e)
-	ec.TotalCost.EncodeTo(e)
-	ec.UploadSpending.EncodeTo(e)
-	ec.DownloadSpending.EncodeTo(e)
-	ec.FundAccountSpending.EncodeTo(e)
+	types.V1Currency(ec.ContractPrice).EncodeTo(e)
+	types.V1Currency(ec.TotalCost).EncodeTo(e)
+	types.V1Currency(ec.UploadSpending).EncodeTo(e)
+	types.V1Currency(ec.DownloadSpending).EncodeTo(e)
+	types.V1Currency(ec.FundAccountSpending).EncodeTo(e)
 	ec.RenewedFrom.EncodeTo(e)
 }
 
@@ -93,11 +91,11 @@ func (cm *ContractMetadata) EncodeTo(e *types.Encoder) {
 	e.Write(cm.HostKey[:])
 	e.WriteUint64(cm.StartHeight)
 	e.Write(cm.RenewedFrom[:])
-	cm.UploadSpending.EncodeTo(e)
-	cm.DownloadSpending.EncodeTo(e)
-	cm.FundAccountSpending.EncodeTo(e)
-	cm.ContractPrice.EncodeTo(e)
-	cm.TotalCost.EncodeTo(e)
+	types.V1Currency(cm.UploadSpending).EncodeTo(e)
+	types.V1Currency(cm.DownloadSpending).EncodeTo(e)
+	types.V1Currency(cm.FundAccountSpending).EncodeTo(e)
+	types.V1Currency(cm.ContractPrice).EncodeTo(e)
+	types.V1Currency(cm.TotalCost).EncodeTo(e)
 	cm.Revision.EncodeTo(e)
 }
 
@@ -107,10 +105,10 @@ func (cm *ContractMetadata) DecodeFrom(d *types.Decoder) {
 	d.Read(cm.HostKey[:])
 	cm.StartHeight = d.ReadUint64()
 	d.Read(cm.RenewedFrom[:])
-	cm.UploadSpending.DecodeFrom(d)
-	cm.DownloadSpending.DecodeFrom(d)
-	cm.FundAccountSpending.DecodeFrom(d)
-	cm.ContractPrice.DecodeFrom(d)
-	cm.TotalCost.DecodeFrom(d)
+	(*types.V1Currency)(&cm.UploadSpending).DecodeFrom(d)
+	(*types.V1Currency)(&cm.DownloadSpending).DecodeFrom(d)
+	(*types.V1Currency)(&cm.FundAccountSpending).DecodeFrom(d)
+	(*types.V1Currency)(&cm.ContractPrice).DecodeFrom(d)
+	(*types.V1Currency)(&cm.TotalCost).DecodeFrom(d)
 	cm.Revision.DecodeFrom(d)
 }

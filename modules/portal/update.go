@@ -3,8 +3,8 @@ package portal
 import (
 	"time"
 
-	"github.com/mike76-dev/sia-satellite/modules"
-	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
+	"go.uber.org/zap"
 )
 
 // walletCheckInterval determines how often the wallet is checked
@@ -42,67 +42,77 @@ func (p *Portal) threadedWatchForNewTxns() {
 func (p *Portal) managedCheckWallet() {
 	addrs, err := p.getSiacoinAddresses()
 	if err != nil {
-		p.log.Println("ERROR: couldn't get account addresses:", err)
+		p.log.Error("couldn't get account addresses", zap.Error(err))
 		return
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for addr, email := range addrs {
-		pts, err := p.w.AddressUnconfirmedTransactions(addr)
-		if err != nil {
-			p.log.Println("ERROR: couldn't get unconfirmed transactions:", err)
+	txns := p.cm.PoolTransactions()
+	for _, txn := range txns {
+		txid := txn.ID()
+		if _, exists := p.transactions[txid]; exists {
 			continue
 		}
-
-		for _, pt := range pts {
-			if _, exists := p.transactions[pt.TransactionID]; exists {
-				continue
-			}
-			for _, output := range pt.Outputs {
-				if output.FundType == types.SpecifierSiacoinOutput && output.WalletAddress {
-					err := p.addSiacoinPayment(email, output.Value, pt.TransactionID)
-					if err != nil {
-						p.log.Println("ERROR: couldn't add SC payment:", err)
-						continue
-					}
-					p.transactions[pt.TransactionID] = addr
+		for _, sco := range txn.SiacoinOutputs {
+			if email, exists := addrs[sco.Address]; exists {
+				if err := p.addSiacoinPayment(email, sco.Value, txid); err != nil {
+					p.log.Error("couldn't add SC payment", zap.Error(err))
+					continue
 				}
+				p.transactions[txid] = sco.Address
 			}
 		}
 	}
 }
 
-// ProcessConsensusChange gets called to inform Portal about the
-// changes in the consensus set.
-func (p *Portal) ProcessConsensusChange(cc modules.ConsensusChange) {
-	for _, block := range cc.RevertedBlocks {
-		for _, txn := range block.Transactions {
-			_, exists := p.transactions[txn.ID()]
-			if exists {
-				p.mu.Lock()
+// UpdateChainState applies or reverts the updates from the ChainManager.
+func (p *Portal) UpdateChainState(reverted []chain.RevertUpdate, applied []chain.ApplyUpdate) error {
+	addrs, err := p.getSiacoinAddresses()
+	if err != nil {
+		p.log.Error("couldn't get account addresses", zap.Error(err))
+		return err
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for _, cru := range reverted {
+		for _, txn := range cru.Block.Transactions {
+			if _, exists := p.transactions[txn.ID()]; exists {
 				delete(p.transactions, txn.ID())
-				p.mu.Unlock()
-				err := p.revertSiacoinPayment(txn.ID())
-				if err != nil {
-					p.log.Println("ERROR: couldn't revert SC payment:", err)
+				if err := p.revertSiacoinPayment(txn.ID()); err != nil {
+					p.log.Error("couldn't revert SC payment", zap.Error(err))
 				}
 			}
 		}
 	}
 
-	for range cc.AppliedBlocks {
-		p.mu.Lock()
-		txns := p.transactions
-		p.mu.Unlock()
-		for txid := range txns {
-			err := p.confirmSiacoinPayment(txid)
-			if err != nil {
-				p.log.Println("ERROR: couldn't confirm SC payment:", err)
+	for _, cau := range applied {
+		for _, txn := range cau.Block.Transactions {
+			txid := txn.ID()
+			for _, sco := range txn.SiacoinOutputs {
+				if email, exists := addrs[sco.Address]; exists {
+					if _, exists := p.transactions[txid]; !exists {
+						if err := p.addSiacoinPayment(email, sco.Value, txid); err != nil {
+							p.log.Error("couldn't add SC payment", zap.Error(err))
+							continue
+						}
+						p.transactions[txid] = sco.Address
+					}
+				}
 			}
 		}
 	}
+
+	for txid := range p.transactions {
+		if err := p.confirmSiacoinPayment(txid); err != nil {
+			p.log.Error("couldn't confirm SC payment", zap.Error(err))
+		}
+	}
+
+	return nil
 }
 
 // threadedCheckOnHoldAccounts performs the account checks with set

@@ -9,6 +9,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/rs/xid"
+	"go.uber.org/zap"
 
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
@@ -1076,11 +1077,11 @@ func (p *Provider) managedReceiveFile(s *rhpv3.Stream) error {
 	}
 	defer func() {
 		if err := file.Sync(); err != nil {
-			p.log.Println("ERROR: couldn't sync file:", err)
+			p.log.Error("couldn't sync file", zap.Error(err))
 		} else if err := file.Close(); err != nil {
-			p.log.Println("ERROR: couldn't close file:", err)
+			p.log.Error("couldn't close file", zap.Error(err))
 		} else if err := p.m.RegisterUpload(ur.PubKey, ur.Bucket, ur.Path, ur.MimeType, ur.Enctypted, path, !ud.More); err != nil {
-			p.log.Println("ERROR: couldn't register file:", err)
+			p.log.Error("couldn't register file", zap.Error(err))
 		}
 	}()
 
@@ -1324,11 +1325,11 @@ func (p *Provider) managedReceivePart(s *rhpv3.Stream) error {
 
 	// Save the file and register the part.
 	if err := file.Sync(); err != nil {
-		p.log.Println("ERROR: couldn't sync file:", err)
+		p.log.Error("couldn't sync file", zap.Error(err))
 	} else if err := file.Close(); err != nil {
-		p.log.Println("ERROR: couldn't close file:", err)
+		p.log.Error("couldn't close file", zap.Error(err))
 	} else if err := p.m.PutMultipartPart(upr.PubKey, upr.UploadID, upr.PartNo, name); err != nil {
-		p.log.Println("ERROR: couldn't register part:", err)
+		p.log.Error("couldn't register part", zap.Error(err))
 	}
 
 	return nil

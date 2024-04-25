@@ -2,8 +2,6 @@ package provider
 
 import (
 	"database/sql"
-	"errors"
-	"fmt"
 	"net"
 	"path/filepath"
 	"sync"
@@ -11,15 +9,9 @@ import (
 	siasync "github.com/mike76-dev/sia-satellite/internal/sync"
 	"github.com/mike76-dev/sia-satellite/modules"
 	"github.com/mike76-dev/sia-satellite/persist"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
-)
-
-var (
-	// Nil dependency errors.
-	errNilDB      = errors.New("provider cannot use a nil database")
-	errNilGateway = errors.New("provider cannot use nil gateway")
-	errNilManager = errors.New("provider cannot use a nil manager")
 )
 
 // A Provider contains the information necessary to communicate with the
@@ -27,7 +19,7 @@ var (
 type Provider struct {
 	// Dependencies.
 	db *sql.DB
-	g  modules.Gateway
+	s  modules.Syncer
 	m  modules.Manager
 
 	autoAddress modules.NetAddress // Determined using automatic tooling in network.go
@@ -35,26 +27,24 @@ type Provider struct {
 	secretKey   types.PrivateKey
 
 	// Utilities.
-	listener      net.Listener
-	mux           net.Listener
-	log           *persist.Logger
-	mu            sync.RWMutex
-	port          string
-	tg            siasync.ThreadGroup
-	staticAlerter *modules.GenericAlerter
+	listener net.Listener
+	mux      net.Listener
+	log      *zap.Logger
+	mu       sync.RWMutex
+	port     string
+	tg       siasync.ThreadGroup
 }
 
 // New returns an initialized Provider.
-func New(db *sql.DB, g modules.Gateway, m modules.Manager, satelliteAddr string, muxAddr string, dir string) (*Provider, <-chan error) {
+func New(db *sql.DB, s modules.Syncer, m modules.Manager, satelliteAddr string, muxAddr string, dir string) (*Provider, <-chan error) {
 	errChan := make(chan error, 1)
 	var err error
 
 	// Create the Provider object.
 	p := &Provider{
-		db:            db,
-		g:             g,
-		m:             m,
-		staticAlerter: modules.NewAlerter("provider"),
+		db: db,
+		s:  s,
+		m:  m,
 	}
 
 	// Call stop in the event of a partial startup.
@@ -65,21 +55,17 @@ func New(db *sql.DB, g modules.Gateway, m modules.Manager, satelliteAddr string,
 	}()
 
 	// Create the logger.
-	p.log, err = persist.NewFileLogger(filepath.Join(dir, "provider.log"))
+	logger, closeFn, err := persist.NewFileLogger(filepath.Join(dir, "provider.log"))
 	if err != nil {
 		errChan <- err
 		return nil, errChan
 	}
 	// Establish the closing of the logger.
 	p.tg.AfterStop(func() {
-		err := p.log.Close()
-		if err != nil {
-			// The logger may or may not be working here, so use a Println
-			// instead.
-			fmt.Println("Failed to close the provider logger:", err)
-		}
+		closeFn()
 	})
-	p.log.Println("INFO: provider created, started logging")
+	p.log = logger
+	p.log.Info("provider created, started logging")
 
 	// Load the provider persistence.
 	if loadErr := p.load(); loadErr != nil {
@@ -90,7 +76,7 @@ func New(db *sql.DB, g modules.Gateway, m modules.Manager, satelliteAddr string,
 	// Initialize the networking.
 	err = p.initNetworking(satelliteAddr, muxAddr)
 	if err != nil {
-		p.log.Println("ERROR: could not initialize provider networking:", err)
+		p.log.Error("could not initialize provider networking", zap.Error(err))
 		errChan <- err
 		return nil, errChan
 	}

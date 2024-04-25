@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/mike76-dev/sia-satellite/modules"
+	"go.uber.org/zap"
 
 	"go.sia.tech/core/types"
 )
@@ -124,17 +125,17 @@ type FileContract struct {
 func (c *FileContract) EncodeTo(e *types.Encoder) {
 	c.header.Transaction.EncodeTo(e)
 	e.WriteUint64(c.header.StartHeight)
-	c.header.DownloadSpending.EncodeTo(e)
-	c.header.FundAccountSpending.EncodeTo(e)
-	c.header.MaintenanceSpending.AccountBalanceCost.EncodeTo(e)
-	c.header.MaintenanceSpending.FundAccountCost.EncodeTo(e)
-	c.header.MaintenanceSpending.UpdatePriceTableCost.EncodeTo(e)
-	c.header.StorageSpending.EncodeTo(e)
-	c.header.UploadSpending.EncodeTo(e)
-	c.header.TotalCost.EncodeTo(e)
-	c.header.ContractFee.EncodeTo(e)
-	c.header.TxnFee.EncodeTo(e)
-	c.header.SiafundFee.EncodeTo(e)
+	types.V1Currency(c.header.DownloadSpending).EncodeTo(e)
+	types.V1Currency(c.header.FundAccountSpending).EncodeTo(e)
+	types.V1Currency(c.header.MaintenanceSpending.AccountBalanceCost).EncodeTo(e)
+	types.V1Currency(c.header.MaintenanceSpending.FundAccountCost).EncodeTo(e)
+	types.V1Currency(c.header.MaintenanceSpending.UpdatePriceTableCost).EncodeTo(e)
+	types.V1Currency(c.header.StorageSpending).EncodeTo(e)
+	types.V1Currency(c.header.UploadSpending).EncodeTo(e)
+	types.V1Currency(c.header.TotalCost).EncodeTo(e)
+	types.V1Currency(c.header.ContractFee).EncodeTo(e)
+	types.V1Currency(c.header.TxnFee).EncodeTo(e)
+	types.V1Currency(c.header.SiafundFee).EncodeTo(e)
 	e.WriteBool(c.header.Utility.GoodForUpload)
 	e.WriteBool(c.header.Utility.GoodForRenew)
 	e.WriteBool(c.header.Utility.BadContract)
@@ -146,17 +147,17 @@ func (c *FileContract) EncodeTo(e *types.Encoder) {
 func (c *FileContract) DecodeFrom(d *types.Decoder) {
 	c.header.Transaction.DecodeFrom(d)
 	c.header.StartHeight = d.ReadUint64()
-	c.header.DownloadSpending.DecodeFrom(d)
-	c.header.FundAccountSpending.DecodeFrom(d)
-	c.header.MaintenanceSpending.AccountBalanceCost.DecodeFrom(d)
-	c.header.MaintenanceSpending.FundAccountCost.DecodeFrom(d)
-	c.header.MaintenanceSpending.UpdatePriceTableCost.DecodeFrom(d)
-	c.header.StorageSpending.DecodeFrom(d)
-	c.header.UploadSpending.DecodeFrom(d)
-	c.header.TotalCost.DecodeFrom(d)
-	c.header.ContractFee.DecodeFrom(d)
-	c.header.TxnFee.DecodeFrom(d)
-	c.header.SiafundFee.DecodeFrom(d)
+	(*types.V1Currency)(&c.header.DownloadSpending).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.FundAccountSpending).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.MaintenanceSpending.AccountBalanceCost).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.MaintenanceSpending.FundAccountCost).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.MaintenanceSpending.UpdatePriceTableCost).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.StorageSpending).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.UploadSpending).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.TotalCost).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.ContractFee).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.TxnFee).DecodeFrom(d)
+	(*types.V1Currency)(&c.header.SiafundFee).DecodeFrom(d)
 	c.header.Utility.GoodForUpload = d.ReadBool()
 	c.header.Utility.GoodForRenew = d.ReadBool()
 	c.header.Utility.BadContract = d.ReadBool()
@@ -369,7 +370,7 @@ func (cs *ContractSet) managedInsertContract(h contractHeader, rpk types.PublicK
 	// Check if this contract already exists in the set.
 	cs.mu.Lock()
 	if _, exists := cs.contracts[fc.header.ID()]; exists {
-		cs.log.Println("CRITICAL: trying to overwrite existing contract")
+		cs.log.Error("trying to overwrite existing contract", zap.Stringer("id", fc.header.ID()))
 	}
 
 	cs.contracts[fc.header.ID()] = fc

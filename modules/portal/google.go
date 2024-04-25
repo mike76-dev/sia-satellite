@@ -10,6 +10,7 @@ import (
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/external"
+	"go.uber.org/zap"
 )
 
 // Google glient ID.
@@ -30,7 +31,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		// Retrieve the action type.
 		action := req.FormValue("action")
 		if action != "signup" && action != "login" {
-			api.portal.log.Println("ERROR: wrong action type")
+			api.portal.log.Error("wrong action type")
 			writeError(w,
 				Error{
 					Code:    httpErrorBadRequest,
@@ -54,7 +55,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 		// Verify client ID.
 		if data.ClientID != googleClientID {
-			api.portal.log.Println("ERROR: wrong client ID")
+			api.portal.log.Error("wrong client ID")
 			writeError(w,
 				Error{
 					Code:    httpErrorWrongCredentials,
@@ -77,7 +78,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 			return key, nil
 		})
 		if err != nil {
-			api.portal.log.Println("ERROR: couldn't parse claims:", err)
+			api.portal.log.Error("couldn't parse claims", zap.Error(err))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,
@@ -88,7 +89,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 		// Verify the issuer.
 		if issuer, ok := claims["iss"]; !ok || (issuer != "accounts.google.com" && issuer != "https://accounts.google.com") {
-			api.portal.log.Println("ERROR: invalid issuer")
+			api.portal.log.Error("invalid issuer")
 			writeError(w,
 				Error{
 					Code:    httpErrorWrongCredentials,
@@ -99,7 +100,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 		// Verify the audience.
 		if audience, ok := claims["aud"]; !ok || audience != googleClientID {
-			api.portal.log.Println("ERROR: invalid audience")
+			api.portal.log.Error("invalid audience")
 			writeError(w,
 				Error{
 					Code:    httpErrorWrongCredentials,
@@ -112,7 +113,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		var expires interface{}
 		var ok bool
 		if expires, ok = claims["exp"]; !ok {
-			api.portal.log.Println("ERROR: invalid expiration time")
+			api.portal.log.Error("invalid expiration time")
 			writeError(w,
 				Error{
 					Code:    httpErrorWrongCredentials,
@@ -121,7 +122,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 			return
 		}
 		if expires.(float64) < float64(time.Now().Unix()) {
-			api.portal.log.Println("ERROR: token has expired")
+			api.portal.log.Error("token has expired")
 			writeError(w,
 				Error{
 					Code:    httpErrorWrongCredentials,
@@ -132,7 +133,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 		// Check if the email is verified.
 		if verified := claims["email_verified"]; verified != "true" && verified != true {
-			api.portal.log.Println("ERROR: email not verified")
+			api.portal.log.Error("email not verified")
 			writeError(w,
 				Error{
 					Code:    httpErrorWrongCredentials,
@@ -147,7 +148,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		// Create an account if it doesn't exist yet.
 		exists, err := api.portal.userExists(email)
 		if err != nil {
-			api.portal.log.Println("ERROR: couldn't verify user account:", err)
+			api.portal.log.Error("couldn't verify user account", zap.Error(err))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,
@@ -178,7 +179,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 			// Create a new account.
 			if err := api.portal.updateAccount(email, "", true); err != nil {
-				api.portal.log.Printf("ERROR: error querying database: %v\n", err)
+				api.portal.log.Error("error querying database", zap.Error(err))
 				writeError(w,
 					Error{
 						Code:    httpErrorInternal,
@@ -201,7 +202,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		t := time.Now().Add(7 * 24 * time.Hour)
 		token, err := api.portal.generateToken(cookiePrefix, email, t)
 		if err != nil {
-			api.portal.log.Printf("ERROR: error generating token: %v\n", err)
+			api.portal.log.Error("error generating token", zap.Error(err))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,

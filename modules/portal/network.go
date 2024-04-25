@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/julienschmidt/httprouter"
+	"go.uber.org/zap"
 )
 
 const (
@@ -187,7 +188,7 @@ func (p *Portal) initNetworking(address string) error {
 	// Start the portal API server.
 	srv := &http.Server{Handler: api}
 	go srv.Serve(l)
-	p.log.Println("INFO: listening on", l.Addr())
+	p.log.Info("listening on", zap.Stringer("addr", l.Addr()))
 
 	// Spin up a goroutine to stop the server on shutdown.
 	go func() {
@@ -331,7 +332,7 @@ func (api *portalAPI) handleDecodeError(w http.ResponseWriter, err error) (Error
 
 	// Otherwise send a 500 Internal Server Error response.
 	default:
-		api.portal.log.Printf("ERROR: failed to decode JSON: %v\n", err)
+		api.portal.log.Error("failed to decode JSON", zap.Error(err))
 		return Error{
 			Code:    httpErrorInternal,
 			Message: "internal error",

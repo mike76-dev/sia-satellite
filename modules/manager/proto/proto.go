@@ -6,6 +6,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/modules"
 
+	"go.sia.tech/core/consensus"
 	rhpv2 "go.sia.tech/core/rhp/v2"
 	rhpv3 "go.sia.tech/core/rhp/v3"
 	"go.sia.tech/core/types"
@@ -13,7 +14,7 @@ import (
 
 // transactionSigner is the minimal interface for modules.Wallet.
 type transactionSigner interface {
-	Sign(*types.Transaction, []types.Hash256, types.CoveredFields) error
+	Sign(cs consensus.State, txn *types.Transaction, toSign []types.Hash256) error
 }
 
 // HostSettings uses the Settings RPC to retrieve the host's settings.

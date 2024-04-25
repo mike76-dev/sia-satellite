@@ -15,6 +15,7 @@ import (
 	"github.com/stripe/stripe-go/v75/invoice"
 	"github.com/stripe/stripe-go/v75/paymentintent"
 	"github.com/stripe/stripe-go/v75/webhook"
+	"go.uber.org/zap"
 )
 
 // maxBodyBytes specifies the maximum body size for /webhook requests.
@@ -121,7 +122,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	// Retrieve account balance.
 	ub, cErr := api.portal.manager.GetBalance(email)
 	if cErr != nil {
-		api.portal.log.Println("ERROR: Could not fetch account balance:", cErr)
+		api.portal.log.Error("could not fetch account balance", zap.Error(cErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -135,7 +136,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	if ub.IsUser && ub.StripeID != "" {
 		cust, cErr = customer.Get(ub.StripeID, nil)
 		if cErr != nil {
-			api.portal.log.Println("ERROR: Could not get customer:", cErr)
+			api.portal.log.Error("could not get customer", zap.Error(cErr))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,
@@ -149,7 +150,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 		}
 		cust, cErr = customer.New(params)
 		if cErr != nil {
-			api.portal.log.Println("ERROR: Could not create customer:", cErr)
+			api.portal.log.Error("could not create customer", zap.Error(cErr))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,
@@ -163,7 +164,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 		ub.StripeID = cust.ID
 		cErr = api.portal.manager.UpdateBalance(email, ub)
 		if cErr != nil {
-			api.portal.log.Println("ERROR: Could not update balance:", cErr)
+			api.portal.log.Error("could not update balance", zap.Error(cErr))
 			writeError(w,
 				Error{
 					Code:    httpErrorInternal,
@@ -200,7 +201,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	}
 	amount, currency, pErr := calculateOrderAmount(id)
 	if pErr != nil {
-		api.portal.log.Println("ERROR: couldn't read pending payment:", pErr)
+		api.portal.log.Error("couldn't read pending payment", zap.Error(pErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -221,7 +222,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 
 	pi, pErr := paymentintent.New(params)
 	if pErr != nil {
-		api.portal.log.Println("ERROR: pi.New:", pErr)
+		api.portal.log.Error("pi.New", zap.Error(pErr))
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -229,7 +230,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 			}, http.StatusInternalServerError)
 		return
 	}
-	api.portal.log.Printf("pi.New: %v\n", pi.ClientSecret)
+	api.portal.log.Info("pi.New", zap.String("clientSecret", pi.ClientSecret))
 
 	writeJSON(w, struct {
 		ClientSecret string `json:"clientSecret"`
@@ -244,7 +245,7 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 	req.Body = http.MaxBytesReader(w, req.Body, maxBodyBytes)
 	payload, err := io.ReadAll(req.Body)
 	if err != nil {
-		api.portal.log.Println("Error reading request body:", err)
+		api.portal.log.Error("error reading request body", zap.Error(err))
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
@@ -253,7 +254,7 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 	endpointSecret := os.Getenv("SATD_STRIPE_WEBHOOK_KEY")
 	event, err := webhook.ConstructEvent(payload, req.Header.Get("Stripe-Signature"), endpointSecret)
 	if err != nil {
-		api.portal.log.Println("Error verifying webhook signature:", err)
+		api.portal.log.Error("error verifying webhook signature", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -265,7 +266,7 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 		var paymentIntent stripe.PaymentIntent
 		err := json.Unmarshal(event.Data.Raw, &paymentIntent)
 		if err != nil {
-			api.portal.log.Println("Error parsing webhook JSON:", err)
+			api.portal.log.Error("error parsing webhook JSON", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -277,7 +278,7 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 		var paymentIntent stripe.PaymentIntent
 		err := json.Unmarshal(event.Data.Raw, &paymentIntent)
 		if err != nil {
-			api.portal.log.Println("Error parsing webhook JSON:", err)
+			api.portal.log.Error("error parsing webhook JSON", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -286,7 +287,7 @@ func (api *portalAPI) webhookHandlerPOST(w http.ResponseWriter, req *http.Reques
 		return
 
 	default:
-		api.portal.log.Printf("Unhandled event type: %s\n", event.Type)
+		api.portal.log.Error("unhandled event type", zap.Any("event", event.Type))
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -303,7 +304,7 @@ func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 	}
 	err := p.addPayment(cust.ID, amount, currency, def)
 	if err != nil {
-		p.log.Println("ERROR: could not add payment:", err)
+		p.log.Error("could not add payment", zap.Error(err))
 	}
 
 	// If a default payment method was specified, update the customer.
@@ -315,7 +316,7 @@ func (p *Portal) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
 		}
 		_, err = customer.Update(pi.Customer.ID, params)
 		if err != nil {
-			p.log.Println("ERROR: couldn't update customer:", err)
+			p.log.Error("couldn't update customer", zap.Error(err))
 		}
 	}
 }
@@ -336,7 +337,7 @@ func (p *Portal) handlePaymentIntentFailed(pi stripe.PaymentIntent) {
 
 	err := p.requestPayment(id, in.ID, amount, currency)
 	if err != nil {
-		p.log.Println("ERROR: could not request payment:", err)
+		p.log.Error("could not request payment", zap.Error(err))
 	}
 }
 

@@ -19,7 +19,7 @@ const (
 // Filter filters host addresses which belong to the same subnet to
 // avoid selecting hosts from the same region.
 type Filter struct {
-	filter   map[string]struct{}
+	filter map[string]struct{}
 }
 
 // NewFilter creates a new addressFilter object.
