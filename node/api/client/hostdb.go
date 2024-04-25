@@ -40,7 +40,7 @@ func (c *Client) HostDbSetFilterMode(fm modules.FilterMode, hosts []types.Public
 		NetAddresses: netAddresses,
 	}
 
-	return c.c.POST("/hostdb/FilterMode", &hdblp, nil)
+	return c.c.POST("/hostdb/filtermode", &hdblp, nil)
 }
 
 // HostDbHost request the /hostdb/host/:publickey endpoint's resources.
