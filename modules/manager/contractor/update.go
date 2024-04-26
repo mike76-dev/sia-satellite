@@ -58,8 +58,8 @@ func (c *Contractor) UpdateChainState(reverted []chain.RevertUpdate, applied []c
 		c.staticWatchdog.callScanRevertUpdate(cru)
 	}
 
+	c.mu.Lock()
 	for _, cau := range applied {
-		c.mu.Lock()
 		c.tip = cau.State.Index
 		c.staticWatchdog.callScanApplyUpdate(cau)
 
