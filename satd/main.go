@@ -65,7 +65,7 @@ func getWalletSeed() string {
 		pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Println()
 		if err != nil {
-			log.Fatalf("Could not read database password: %v\n", err)
+			log.Fatalf("Could not read wallet seed: %v\n", err)
 		}
 		seed = string(pw)
 	}
