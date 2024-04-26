@@ -180,9 +180,9 @@ func (jps *JSONPeerStore) save() error {
 	defer f.Close()
 	if _, err = f.Write(js); err != nil {
 		return err
-	} else if f.Sync(); err != nil {
+	} else if err = f.Sync(); err != nil {
 		return err
-	} else if f.Close(); err != nil {
+	} else if err = f.Close(); err != nil {
 		return err
 	} else if err := os.Rename(jps.path+"_tmp", jps.path); err != nil {
 		return err

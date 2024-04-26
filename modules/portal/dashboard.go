@@ -242,7 +242,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 		return
 	}
 	if data.Estimation == 0 {
-		api.portal.log.Println("ERROR: zero estimation")
+		api.portal.log.Error("zero estimation")
 		writeError(w,
 			Error{
 				Code:    httpErrorInternal,
@@ -1013,7 +1013,7 @@ func (api *portalAPI) feesHandlerGET(w http.ResponseWriter, _ *http.Request, _ h
 }
 
 // announcementHandlerGET handles the GET /dashboard/announcement requests.
-func (api *portalAPI) announcementHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+func (api *portalAPI) announcementHandlerGET(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	// Get the current announcement.
 	text, _, err := api.portal.GetAnnouncement()
 	if err != nil {
