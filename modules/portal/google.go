@@ -47,7 +47,7 @@ func (api *portalAPI) authHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		}
 
 		var data googleAuth
-		gErr, code := api.handleDecodeError(w, dec.Decode(&data))
+		gErr, code := api.handleDecodeError(dec.Decode(&data))
 		if code != http.StatusOK {
 			writeError(w, gErr, code)
 			return

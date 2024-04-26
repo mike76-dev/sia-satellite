@@ -214,7 +214,7 @@ func (api *portalAPI) hostsHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	var data hostsRequest
-	hdErr, code := api.handleDecodeError(w, dec.Decode(&data))
+	hdErr, code := api.handleDecodeError(dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, hdErr, code)
 		return
@@ -759,7 +759,7 @@ func (api *portalAPI) filesHandlerPOST(w http.ResponseWriter, req *http.Request,
 	}
 
 	var data fileDeleteRequest
-	hdErr, code := api.handleDecodeError(w, dec.Decode(&data))
+	hdErr, code := api.handleDecodeError(dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, hdErr, code)
 		return
@@ -813,7 +813,7 @@ func (api *portalAPI) settingsHandlerPOST(w http.ResponseWriter, req *http.Reque
 	}
 
 	var settings modules.RenterSettings
-	hdErr, code := api.handleDecodeError(w, dec.Decode(&settings))
+	hdErr, code := api.handleDecodeError(dec.Decode(&settings))
 	if code != http.StatusOK {
 		writeError(w, hdErr, code)
 		return

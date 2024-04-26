@@ -183,7 +183,7 @@ func (api *portalAPI) paymentHandlerPOST(w http.ResponseWriter, req *http.Reques
 	var data struct {
 		Items []item `json:"items"`
 	}
-	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	err, code := api.handleDecodeError(dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return

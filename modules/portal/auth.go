@@ -98,7 +98,7 @@ func (api *portalAPI) loginHandlerPOST(w http.ResponseWriter, req *http.Request,
 	var data struct {
 		Email string `json:"email"`
 	}
-	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	err, code := api.handleDecodeError(dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
@@ -203,7 +203,7 @@ func (api *portalAPI) registerHandlerPOST(w http.ResponseWriter, req *http.Reque
 	var data struct {
 		Email string `json:"email"`
 	}
-	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	err, code := api.handleDecodeError(dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
@@ -434,7 +434,7 @@ func (api *portalAPI) registerResendHandlerPOST(w http.ResponseWriter, req *http
 	var data struct {
 		Email string `json:"email"`
 	}
-	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	err, code := api.handleDecodeError(dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
@@ -580,7 +580,7 @@ func (api *portalAPI) resetHandlerPOST(w http.ResponseWriter, req *http.Request,
 	var data struct {
 		Email string `json:"email"`
 	}
-	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	err, code := api.handleDecodeError(dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return
@@ -634,7 +634,7 @@ func (api *portalAPI) resetResendHandlerPOST(w http.ResponseWriter, req *http.Re
 	var data struct {
 		Email string `json:"email"`
 	}
-	err, code := api.handleDecodeError(w, dec.Decode(&data))
+	err, code := api.handleDecodeError(dec.Decode(&data))
 	if code != http.StatusOK {
 		writeError(w, err, code)
 		return

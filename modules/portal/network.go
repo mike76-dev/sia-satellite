@@ -244,7 +244,7 @@ func (err Error) Error() string {
 }
 
 // checkHeader checks the HTTP request header for the right content type.
-func checkHeader(w http.ResponseWriter, r *http.Request) Error {
+func checkHeader(r *http.Request) Error {
 	value := r.Header.Get("Content-Type")
 	if value != "" && !strings.Contains(value, "application/json") {
 		return Error{
@@ -259,7 +259,7 @@ func checkHeader(w http.ResponseWriter, r *http.Request) Error {
 // json.Decoder.
 func prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, error) {
 	// Check the response header first.
-	if err := checkHeader(w, r); err.Code != httpErrorNone {
+	if err := checkHeader(r); err.Code != httpErrorNone {
 		writeError(w, err, http.StatusUnsupportedMediaType)
 		return nil, errors.New(err.Message)
 	}
@@ -278,7 +278,7 @@ func prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, erro
 
 // handleDecodeError parses the json.Decoder errors and returns an
 // error message and a response code.
-func (api *portalAPI) handleDecodeError(w http.ResponseWriter, err error) (Error, int) {
+func (api *portalAPI) handleDecodeError(err error) (Error, int) {
 	if err == nil {
 		return Error{}, http.StatusOK
 	}
