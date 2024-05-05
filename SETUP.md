@@ -16,11 +16,11 @@ You will also need an email account, from which the users will be receiving emai
 
 ## To Start With
 
-Log into your server and download the Satellite files. This guide assumes that you will use the version `0.10.0` for an x86 CPU:
+Log into your server and download the Satellite files. This guide assumes that you will use the version `0.11.2` for an x86 CPU:
 ```
 mkdir ~/satellite
 cd ~/satellite
-wget -q https://github.com/mike76-dev/sia-satellite/releases/download/v0.10.0/satellite_linux_amd64.zip
+wget -q https://github.com/mike76-dev/sia-satellite/releases/download/v0.11.2/satellite_linux_amd64.zip
 unzip satellite_linux_amd64.zip
 rm satellite_linux_amd64.zip
 ```
@@ -285,9 +285,9 @@ These commands will install and start MySQL, but will not prompt you to set a pa
 ```
 $ sudo mysql
 ```
-Then run the following `ALTER USER` command to change the root user’s authentication method to one that uses a password. The following example changes the authentication method to `mysql_native_password`:
+Then run the following `ALTER USER` command to change the root user’s authentication method to one that uses a password. The following example changes the authentication method to `cached_sha2_password`:
 ```
-mysql> ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
+mysql> ALTER USER 'root'@'localhost' IDENTIFIED WITH cached_sha2_password BY 'password';
 ```
 After making this change, exit the MySQL prompt:
 ```
@@ -355,7 +355,7 @@ mysql> CREATE DATABASE satellite;
 ```
 Then create a user for the Satellite. This guide will be using `satuser` as the user name. Take a note of this name and be sure to change password to a strong password of your choice:
 ```
-mysql> CREATE USER 'satuser'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
+mysql> CREATE USER 'satuser'@'localhost' IDENTIFIED WITH cached_sha2_password BY 'password';
 ```
 Now grant this user access to the database:
 ```
@@ -402,19 +402,17 @@ $ nano satdconfig.json
 First, choose a `name` of your satellite node (Hint: it makes sense to use your domain name for it). This is required to receive email reports later on. Fill in the `dbUser` and `dbName` fields with the MySQL user name (`satuser`) and the database name (`satellite`). Set the directory to store the `satd` metadata and log files (here it is `/usr/local/etc/satd`). You can also change the default portal API port number (`:8080`) as well as the other ports:
 ```
 "Satd Configuration"
-"0.3.0"
+"0.4.0"
 {
-  "name": "your_chosen_name",
-	"agent": "Sat-Agent",
-	"gateway": ":0",
-	"api": "localhost:9990",
-	"satellite": ":9992",
-  "mux": ":9993",
-	"dir": "/usr/local/etc/satd",
-	"bootstrap": true,
-	"dbUser": "satuser",
-	"dbName": "satellite",
-	"portal": ":8080"
+    "name": "your_chosen_name",
+    "gateway": ":0",
+    "api": "localhost:9990",
+    "satellite": ":9992",
+    "mux": ":9993",
+    "dir": "/usr/local/etc/satd",
+    "dbUser": "satuser",
+    "dbName": "satellite",
+    "portal": ":8080"
 }
 ```
 Save and exit. Now copy the file to its new location:
@@ -430,9 +428,9 @@ Fill in the fields. Replace `your_email_address` with the email address that wil
 ```
 "smtp"
 {
-	"from": "your_email_address",
-	"host": "SMTP_server",
-	"port": "SMTP_port"
+    "from": "your_email_address",
+    "host": "SMTP_server",
+    "port": "SMTP_port"
 }
 ```
 Save and exit. Copy the file to the location specified earlier under 'dir' in 'satdconfig.json':
@@ -457,7 +455,7 @@ Enter the following lines. Replace:
 `<user>` with the name of the user that will be running `satd`,
 `<api_password>` with the `satd` API password of your choice,
 `<db_password>` with the MySQL user password created earlier,
-`<wallet_password>` with the wallet encryption password that you will create at a later step,
+`<wallet_seed>` with your 12-word BIP39 seed phrase,
 `<mail_password>` with your SMTP server authentication password,
 `<stripe_key>` with your Stripe secret key,
 `<webhook_key>` with your Stripe webhook signing secret,
@@ -470,14 +468,13 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/satd --dir=/usr/local/etc/satd
-ExecStop=/usr/local/bin/satc stop
 TimeoutStopSec=660
 Restart=always
 RestartSec=15
 User=<user>
 Environment="SATD_API_PASSWORD=<api_password>"
 Environment="SATD_DB_PASSWORD=<db_password>"
-Environment="SATD_WALLET_PASSWORD=<wallet_password>"
+Environment="SATD_WALLET_SEED=<wallet_seed>"
 Environment="SATD_CONFIG_DIR=/usr/local/etc/satd"
 Environment="SATD_MAIL_PASSWORD=<mail_password>"
 Environment="SATD_STRIPE_KEY=<stripe_key>"
@@ -512,26 +509,26 @@ $ journalctl -u satd -f
 If everything went well, you should see the following output:
 ```
 Output:
-Nov 18 15:16:17 <host> systemd[1]: Started satd.
-Nov 18 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
-Nov 18 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
-Nov 18 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
-Nov 18 15:16:17 <host> satd[226480]: satd v0.10.0
-Nov 18 15:16:17 <host> satd[226480]: Git Revision 2f5a918
-Nov 18 15:16:17 <host> satd[226480]: Loading...
-Nov 18 15:16:17 <host> satd[226480]: Creating mail client...
-Nov 18 15:16:17 <host> satd[226480]: Connecting to the SQL database...
-Nov 18 15:16:17 <host> satd[226480]: Loading gateway...
-Nov 18 15:16:17 <host> satd[226480]: Loading consensus...
-Nov 18 15:16:17 <host> satd[226480]: Loading transaction pool...
-Nov 18 15:16:17 <host> satd[226480]: Loading wallet...
-Nov 18 15:16:17 <host> satd[226480]: Loading manager...
-Nov 18 15:16:18 <host> satd[226480]: Loading provider...
-Nov 18 15:16:18 <host> satd[226480]: Loading portal...
-Nov 18 15:16:18 <host> satd[226480]: API is now available, synchronous startup completed in 0.019 seconds
-Nov 18 15:16:18 <host> satd[226480]: Wallet Password found, attempting to auto-unlock wallet...
-Nov 18 15:16:18 <host> satd[226480]: Auto-unlock failed: provided encryption key is incorrect
-Nov 18 15:16:18 <host> satd[226480]: Finished full setup in 0s
+May 05 15:16:17 <host> systemd[1]: Started satd.
+May 05 15:16:17 <host> satd[226480]: Using SATD_CONFIG_DIR environment variable to load config.
+May 05 15:16:17 <host> satd[226480]: Using SATD_API_PASSWORD environment variable.
+May 05 15:16:17 <host> satd[226480]: Using SATD_DB_PASSWORD environment variable.
+May 05 15:16:17 <host> satd[226480]: Using SATD_WALLET_SEED environment variable.
+May 05 15:16:17 <host> satd[226480]: satd v0.11.2
+May 05 15:16:17 <host> satd[226480]: Git Revision 5a0f763
+May 05 15:16:17 <host> satd[226480]: Loading...
+May 05 15:16:17 <host> satd[226480]: Creating mail client...
+May 05 15:16:17 <host> satd[226480]: Connecting to the SQL database...
+May 05 15:16:17 <host> satd[226480]: Connecting to the BoltDB database...
+May 05 15:16:17 <host> satd[226480]: Loading chain manager...
+May 05 15:16:17 <host> satd[226480]: Loading syncer...
+May 05 15:16:17 <host> satd[226480]: Loading wallet...
+May 05 15:16:17 <host> satd[226480]: Loading manager...
+May 05 15:16:18 <host> satd[226480]: Loading provider...
+May 05 15:16:18 <host> satd[226480]: Loading portal...
+May 05 15:16:18 <host> satd[226480]: API is now available, synchronous startup completed in 1.002 seconds
+May 05 15:16:18 <host> satd[226480]: p2p: Listening on [::]:43987
+May 05 15:16:18 <host> satd[226480]: api: Listening on 127.0.0.1:9990
 ```
 The daemon will now be syncing to the blockchain. You can monitor the progress with the following command:
 ```
@@ -546,43 +543,33 @@ Once the node is synced, the output will change:
 ```
 Output:
 Synced: Yes
-Block:      bid:0000000000000001090c306294fd37218f2dcfd851ea52b43fb608a8479887f3
-Height:     448299
-Target:     [0 0 0 0 0 0 0 1 18 199 150 23 29 10 55 177 95 226 182 18 239 59 254 34 226 48 104 226 81 92 121 204]
-Difficulty: ~17.19 uS
+Block:      bid:000000000000000065dcd6a1ada93c0a91e990d11a3e8dec85d4939cfeebcec5
+Height:     468821
 ```
-You should now create a wallet. You will need the password you set in your `systemd` unit earlier. When prompted type in the wallet password you chose.
+Once the consensus is synced, the Satellite will sync the other modules: wallet, manager, and portal. This will take some time, especially syncing the wallet module. Due to the multi-address nature of the satellite wallet, we need to scan the blockchain first in order to find out how many addresses have been generated from your seed. The following command:
 ```
-$ satc wallet init -p --apipassword <api_password>
+$ journalctl -u satd -f
 ```
-A new 12-word wallet seed will be generated. Save this seed somewhere secure.
+will show the scan progress.
 ```
 Output:
-Wallet password: 
-Confirm: 
-Recovery seed:
-<a_new_wallet_seed>
-
-Wallet encrypted with given password
+May 05 21:33:04 <host> satd[226480]: Wallet: starting scan...
+...
+May 05 21:45:13 <host> satd[226480]: Wallet: scanned to height 123100...
 ```
-You should now unlock your wallet. In the future, when starting Satellite your wallet will automatically unlock, this is why we put the wallet password in the `systemd` unit.
-```
-$ satc wallet unlock --apipassword <api_password>
-```
-If you enter
+When the scan is complete, the Satellite will start syncing the wallet. You can monitor the progress using the following command:
 ```
 $ satc wallet --apipassword <api_password>
 ```
-now, you should see the following output:
 ```
 Output:
 Wallet status:
-Encrypted, Unlocked
-Height:              18059
-Confirmed Balance:   0 H
-Unconfirmed Delta:   +0 H
-Exact:               0 H
-Estimated Fee:       30 mS / KB
+Height:               44500
+Confirmed SC Balance: 0 H
+Unconfirmed Delta:    +0 SC
+Exact:                0 H
+SF Balance:           0
+Estimated Fee:        10 mS / KB
 ```
 The last step is to generate an address to send Siacoin to:
 ```
