@@ -177,6 +177,7 @@ type Manager struct {
 	maintenance         bool
 	bufferSize          uint64
 	multipartUploads    map[types.Hash256]struct{}
+	tip                 types.ChainIndex
 
 	// Block heights at the start of the current and the previous months.
 	currentMonth blockTimestamp

@@ -32,6 +32,7 @@ type Portal struct {
 	// Atomic stats.
 	authStats map[string]authenticationStats
 	credits   modules.CreditData
+	tip       types.ChainIndex
 
 	// Watch list of SC payment transactions.
 	transactions map[types.TransactionID]types.Address
@@ -131,13 +132,39 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cm *chain.M
 	}
 
 	// Subscribe to the consensus set using the most recent consensus change.
+	reorgChan := make(chan struct{}, 1)
+	reorgChan <- struct{}{}
+	unsubscribe := cm.OnReorg(func(_ types.ChainIndex) {
+		select {
+		case reorgChan <- struct{}{}:
+		default:
+		}
+	})
+
 	go func() {
-		err := pt.sync(pt.cm.Tip())
-		if err != nil {
-			pt.log.Error("couldn't subscribe to consensus updates", zap.Error(err))
+		defer unsubscribe()
+
+		if err := pt.tg.Add(); err != nil {
+			pt.log.Error("couldn't start a thread", zap.Error(err))
 			return
 		}
+		defer pt.tg.Done()
+
+		for {
+			select {
+			case <-pt.tg.StopChan():
+				return
+			case <-reorgChan:
+			}
+
+			err := pt.sync(pt.tip)
+			if err != nil {
+				pt.log.Error("couldn't sync portal", zap.Error(err))
+				return
+			}
+		}
 	}()
+
 	pt.tg.OnStop(func() {
 		// We don't want any recently made payments to go unnoticed.
 		pt.managedCheckWallet()
@@ -147,6 +174,12 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cm *chain.M
 }
 
 func (p *Portal) sync(index types.ChainIndex) error {
+	addrs, err := p.getSiacoinAddresses()
+	if err != nil {
+		p.log.Error("couldn't get account addresses", zap.Error(err))
+		return err
+	}
+
 	for index != p.cm.Tip() {
 		select {
 		case <-p.tg.StopChan():
@@ -157,12 +190,17 @@ func (p *Portal) sync(index types.ChainIndex) error {
 		if err != nil {
 			p.log.Error("failed to subscribe to chain manager", zap.Error(err))
 			return err
-		} else if err := p.UpdateChainState(crus, caus); err != nil {
+		} else if err := p.UpdateChainState(crus, caus, addrs); err != nil {
 			p.log.Error("failed to update chain state", zap.Error(err))
 			return err
 		}
 		if len(caus) > 0 {
 			index = caus[len(caus)-1].State.Index
+			p.tip = index
+			if err := p.saveTip(); err != nil {
+				p.log.Error("failed to save tip", zap.Error(err))
+				return err
+			}
 		}
 	}
 	return nil

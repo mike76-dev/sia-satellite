@@ -372,24 +372,6 @@ func hostdbBlockingStartup(db *sql.DB, cm *chain.Manager, s modules.Syncer, dir 
 	return hdb, nil
 }
 
-// hostdbAsyncStartup handles the async portion of New.
-func hostdbAsyncStartup(hdb *HostDB) error {
-	err := hdb.sync(hdb.tip)
-	if err != nil {
-		// Subscribe again using the new ID. This will cause a triggered scan
-		// on all of the hosts, but that should be acceptable.
-		hdb.mu.Lock()
-		hdb.tip = types.ChainIndex{}
-		err = hdb.reset()
-		hdb.mu.Unlock()
-		if err != nil {
-			return err
-		}
-		err = hdb.sync(hdb.tip)
-	}
-	return err
-}
-
 func (hdb *HostDB) sync(index types.ChainIndex) error {
 	for index != hdb.cm.Tip() {
 		select {
@@ -424,17 +406,51 @@ func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, dir string) (*HostDB, 
 	}
 
 	// Non-blocking startup.
+	reorgChan := make(chan struct{}, 1)
+	reorgChan <- struct{}{}
+	unsubscribe := cm.OnReorg(func(_ types.ChainIndex) {
+		select {
+		case reorgChan <- struct{}{}:
+		default:
+		}
+	})
+
 	go func() {
+		defer unsubscribe()
 		defer close(errChan)
 		if err := hdb.tg.Add(); err != nil {
 			errChan <- err
 			return
 		}
 		defer hdb.tg.Done()
-		// Subscribe to the consensus set in a separate goroutine.
-		err := hostdbAsyncStartup(hdb)
-		if err != nil {
-			errChan <- err
+
+		for {
+			select {
+			case <-hdb.tg.StopChan():
+				return
+			case <-reorgChan:
+			}
+
+			err := hdb.sync(hdb.tip)
+			if err != nil {
+				// Subscribe again using the new ID. This will cause a triggered scan
+				// on all of the hosts, but that should be acceptable.
+				hdb.mu.Lock()
+				hdb.tip = types.ChainIndex{}
+				err = hdb.reset()
+				hdb.mu.Unlock()
+				if err != nil {
+					hdb.log.Error("failed to reset HostDB", zap.Error(err))
+					errChan <- err
+					return
+				}
+				err = hdb.sync(hdb.tip)
+				if err != nil {
+					hdb.log.Error("failed to sync HostDB", zap.Error(err))
+					errChan <- err
+					return
+				}
+			}
 		}
 	}()
 

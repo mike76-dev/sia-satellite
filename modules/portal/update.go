@@ -3,6 +3,7 @@ package portal
 import (
 	"time"
 
+	"go.sia.tech/core/types"
 	"go.sia.tech/coreutils/chain"
 	"go.uber.org/zap"
 )
@@ -68,13 +69,7 @@ func (p *Portal) managedCheckWallet() {
 }
 
 // UpdateChainState applies or reverts the updates from the ChainManager.
-func (p *Portal) UpdateChainState(reverted []chain.RevertUpdate, applied []chain.ApplyUpdate) error {
-	addrs, err := p.getSiacoinAddresses()
-	if err != nil {
-		p.log.Error("couldn't get account addresses", zap.Error(err))
-		return err
-	}
-
+func (p *Portal) UpdateChainState(reverted []chain.RevertUpdate, applied []chain.ApplyUpdate, addrs map[types.Address]string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

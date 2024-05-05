@@ -251,7 +251,6 @@ func (c *Contractor) Close() error {
 // New returns a new Contractor.
 func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, m modules.Manager, wallet modules.Wallet, hdb modules.HostDB, dir string) (*Contractor, <-chan error) {
 	errChan := make(chan error, 1)
-	defer close(errChan)
 
 	// Create the logger.
 	logger, closeFn, err := persist.NewFileLogger(filepath.Join(dir, "contractor.log"))
@@ -280,16 +279,44 @@ func New(db *sql.DB, cm *chain.Manager, s modules.Syncer, m modules.Manager, wal
 	})
 
 	// Non-blocking startup.
+	reorgChan := make(chan struct{}, 1)
+	reorgChan <- struct{}{}
+	unsubscribe := cm.OnReorg(func(_ types.ChainIndex) {
+		select {
+		case reorgChan <- struct{}{}:
+		default:
+		}
+	})
+
 	go func() {
-		// Subscribe to the consensus set in a separate goroutine.
+		defer unsubscribe()
+		defer close(errChan)
+
 		if err := c.tg.Add(); err != nil {
 			c.log.Error("couldn't start a thread", zap.Error(err))
 			return
 		}
 		defer c.tg.Done()
-		err := contractorAsyncStartup(c)
-		if err != nil {
-			c.log.Error("couldn't start contractor", zap.Error(err))
+
+		for {
+			select {
+			case <-c.tg.StopChan():
+				return
+			case <-reorgChan:
+			}
+
+			err := c.sync(c.tip)
+			if err != nil {
+				// Reset the contractor consensus variables and try rescanning.
+				c.mu.Lock()
+				c.tip = types.ChainIndex{}
+				c.mu.Unlock()
+				err = c.sync(c.tip)
+			}
+			if err != nil {
+				c.log.Error("couldn't sync contractor", zap.Error(err))
+				errChan <- err
+			}
 		}
 	}()
 
@@ -375,17 +402,6 @@ func (c *Contractor) sync(index types.ChainIndex) error {
 		}
 	}
 	return nil
-}
-
-// contractorAsyncStartup handles the async portion of New.
-func contractorAsyncStartup(c *Contractor) error {
-	err := c.sync(c.tip)
-	if err != nil {
-		// Reset the contractor consensus variables and try rescanning.
-		c.tip = types.ChainIndex{}
-		err = c.sync(c.tip)
-	}
-	return err
 }
 
 // managedSynced returns true if the contractor is synced with the consensusset.

@@ -14,13 +14,15 @@ const (
 
 // load loads the Portal's persistent data from disk.
 func (p *Portal) load() error {
-	err := p.loadStats()
-	if err != nil {
+	if err := p.loadTip(); err != nil {
 		return err
 	}
 
-	err = p.loadCredits()
-	if err != nil {
+	if err := p.loadStats(); err != nil {
+		return err
+	}
+
+	if err := p.loadCredits(); err != nil {
 		return err
 	}
 

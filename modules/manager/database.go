@@ -91,7 +91,7 @@ func dbGetAverages(tx *sql.Tx) (avg modules.HostAverages, err error) {
 		return
 	}
 
-	d := types.NewDecoder(io.LimitedReader{R: bytes.NewBuffer(avgBytes), N: int64(len(avgBytes))})
+	d := types.NewBufDecoder(avgBytes)
 	avg.DecodeFrom(d)
 	err = d.Err()
 
@@ -107,6 +107,23 @@ func dbPutAverages(tx *sql.Tx, avg modules.HostAverages) error {
 
 	_, err := tx.Exec("REPLACE INTO mg_averages (id, bytes) VALUES (1, ?)", buf.Bytes())
 
+	return err
+}
+
+// dbGetTip retrieves the last saved chain index.
+func dbGetTip(tx *sql.Tx) (tip types.ChainIndex, err error) {
+	bid := make([]byte, 32)
+	err = tx.QueryRow("SELECT height, bid FROM mg_tip WHERE id = 1").Scan(&tip.Height, &bid)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return
+	}
+	copy(tip.ID[:], bid)
+	return tip, nil
+}
+
+// dbPutTip saves the provided chain index.
+func dbPutTip(tx *sql.Tx, tip types.ChainIndex) error {
+	_, err := tx.Exec("REPLACE INTO mg_tip (id, height, bid) VALUES (1, ?, ?)", tip.Height, tip.ID[:])
 	return err
 }
 
@@ -340,8 +357,7 @@ func (m *Manager) getEmailPreferences() error {
 		return err
 	}
 
-	buf := bytes.NewBuffer(b)
-	d := types.NewDecoder(io.LimitedReader{R: buf, N: 24})
+	d := types.NewBufDecoder(b)
 	var threshold types.Currency
 	(*types.V1Currency)(&threshold).DecodeFrom(d)
 	m.email = email

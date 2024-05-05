@@ -81,6 +81,7 @@ DROP TABLE IF EXISTS pt_accounts;
 DROP TABLE IF EXISTS pt_stats;
 DROP TABLE IF EXISTS pt_credits;
 DROP TABLE IF EXISTS pt_announcement;
+DROP TABLE IF EXISTS pt_tip;
 
 CREATE TABLE pt_accounts (
 	id            INT NOT NULL AUTO_INCREMENT,
@@ -131,6 +132,13 @@ CREATE TABLE pt_announcement (
 	PRIMARY KEY (id)
 );
 
+CREATE TABLE pt_tip (
+	id        INT NOT NULL AUTO_INCREMENT,
+	height    BIGINT UNSIGNED NOT NULL,
+	bid       BINARY(32) NOT NULL,
+	PRIMARY KEY (id)
+);
+
 /* manager */
 
 DROP TABLE IF EXISTS mg_email;
@@ -140,6 +148,7 @@ DROP TABLE IF EXISTS mg_spendings;
 DROP TABLE IF EXISTS mg_balances;
 DROP TABLE IF EXISTS mg_prices;
 DROP TABLE IF EXISTS mg_maintenance;
+DROP TABLE IF EXISTS mg_tip;
 
 CREATE TABLE mg_email (
 	id        INT NOT NULL AUTO_INCREMENT,
@@ -210,6 +219,13 @@ CREATE TABLE mg_prices (
 CREATE TABLE mg_maintenance (
 	id          INT NOT NULL AUTO_INCREMENT,
 	maintenance BOOL NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE mg_tip (
+	id        INT NOT NULL AUTO_INCREMENT,
+	height    BIGINT UNSIGNED NOT NULL,
+	bid       BINARY(32) NOT NULL,
 	PRIMARY KEY (id)
 );
 

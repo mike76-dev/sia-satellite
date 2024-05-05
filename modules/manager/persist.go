@@ -114,6 +114,10 @@ func (m *Manager) initPersist(dir string) error {
 	})
 
 	// Load the persisted data.
+	m.tip, err = dbGetTip(m.dbTx)
+	if err != nil {
+		return modules.AddContext(err, "couldn't load tip")
+	}
 	m.currentMonth, m.prevMonth, err = dbGetBlockTimestamps(m.dbTx)
 	if err != nil {
 		return modules.AddContext(err, "couldn't load block timestamps")
@@ -139,11 +143,35 @@ func (m *Manager) initPersist(dir string) error {
 	go m.threadedCheckOutOfSync()
 
 	// Subscribe to the consensus set using the most recent consensus change.
+	reorgChan := make(chan struct{}, 1)
+	reorgChan <- struct{}{}
+	unsubscribe := m.cm.OnReorg(func(_ types.ChainIndex) {
+		select {
+		case reorgChan <- struct{}{}:
+		default:
+		}
+	})
+
 	go func() {
-		err := m.sync(m.cm.Tip())
-		if err != nil {
-			m.log.Error("failed to subscribe", zap.Error(err))
+		defer unsubscribe()
+
+		if err := m.tg.Add(); err != nil {
+			m.log.Error("couldn't start a thread", zap.Error(err))
 			return
+		}
+		defer m.tg.Done()
+
+		for {
+			select {
+			case <-m.tg.StopChan():
+				return
+			case <-reorgChan:
+			}
+
+			err := m.sync(m.tip)
+			if err != nil {
+				m.log.Error("failed to sync manager", zap.Error(err))
+			}
 		}
 	}()
 
@@ -167,6 +195,11 @@ func (m *Manager) sync(index types.ChainIndex) error {
 		}
 		if len(caus) > 0 {
 			index = caus[len(caus)-1].State.Index
+			m.tip = index
+			if err := dbPutTip(m.dbTx, index); err != nil {
+				m.log.Error("failed to save tip", zap.Error(err))
+				return err
+			}
 		}
 	}
 	return nil

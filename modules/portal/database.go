@@ -315,6 +315,16 @@ func (p *Portal) addSiacoinPayment(email string, amount types.Currency, txid typ
 		return errors.New("zero payment amount provided")
 	}
 
+	// Check if the txid is unique.
+	var count int
+	err := p.db.QueryRow("SELECT COUNT(*) FROM pt_payments WHERE txid = ?", txid[:]).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
 	// Update the payments table.
 	amt := modules.Float64(amount) / modules.Float64(types.HastingsPerSiacoin)
 	if err := p.putPayment(email, amt, "SC", txid); err != nil {
@@ -979,4 +989,21 @@ func (p *Portal) managedCheckAnnouncement() {
 	if err != nil {
 		p.log.Error("unable to expire announcement", zap.Error(err))
 	}
+}
+
+// loadTip retrieves the saved chain index.
+func (p *Portal) loadTip() error {
+	bid := make([]byte, 32)
+	err := p.db.QueryRow("SELECT height, bid FROM pt_tip WHERE id = 1").Scan(&p.tip.Height, &bid)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	copy(p.tip.ID[:], bid)
+	return nil
+}
+
+// saveTip saves the current chain index.
+func (p *Portal) saveTip() error {
+	_, err := p.db.Exec("REPLACE INTO pt_tip (id, height, bid) VALUES (1, ?, ?)", p.tip.Height, p.tip.ID[:])
+	return err
 }
