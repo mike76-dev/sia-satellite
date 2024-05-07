@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"strings"
 
 	"go.sia.tech/core/types"
 )
@@ -62,6 +63,29 @@ func MulFloat(c types.Currency, f float64) types.Currency {
 	copy(dBuf[16-len(d):], d[:])
 	denom := types.NewCurrency(binary.BigEndian.Uint64(dBuf[8:]), binary.BigEndian.Uint64(dBuf[:8]))
 	return num.Div(denom)
+}
+
+// ToString formats a types.Currency to a maximum of 2 decimal places.
+func ToString(c types.Currency) string {
+	if c.IsZero() {
+		return "0 H"
+	}
+	s := c.Big().String()
+	u := (len(s) - 1) / 3
+	if u < 4 {
+		return s + " H"
+	} else if u > 12 {
+		u = 12
+	}
+	mant := s[:len(s)-u*3]
+	if frac := strings.TrimRight(s[len(s)-u*3:], "0"); len(frac) > 0 {
+		if len(frac) > 2 {
+			frac = frac[:2]
+		}
+		mant += "." + frac
+	}
+	unit := []string{"pS", "nS", "uS", "mS", "SC", "KS", "MS", "GS", "TS"}[u-4]
+	return mant + " " + unit
 }
 
 // Tax calculates the Siafund fee from the amount.
