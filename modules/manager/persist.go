@@ -185,7 +185,7 @@ func (m *Manager) sync(index types.ChainIndex) error {
 			return nil
 		default:
 		}
-		crus, caus, err := m.cm.UpdatesSince(index, 1000)
+		crus, caus, err := m.cm.UpdatesSince(index, 100)
 		if err != nil {
 			m.log.Error("failed to subscribe to chain manager", zap.Error(err))
 			return err

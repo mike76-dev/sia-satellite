@@ -389,7 +389,7 @@ func (c *Contractor) sync(index types.ChainIndex) error {
 			return nil
 		default:
 		}
-		crus, caus, err := c.cm.UpdatesSince(index, 1000)
+		crus, caus, err := c.cm.UpdatesSince(index, 100)
 		if err != nil {
 			c.log.Error("failed to subscribe to chain manager", zap.Error(err))
 			return err
