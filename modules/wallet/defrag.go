@@ -131,17 +131,12 @@ func (w *Wallet) managedCreateDefragTransaction() (_ []types.Transaction, err er
 
 	// Mark all outputs that were spent as spent.
 	for _, scoid := range spentScoids {
-		if err := w.insertSpentOutput(types.Hash256(scoid)); err != nil {
-			return nil, err
-		}
-
+		w.used[types.Hash256(scoid)] = true
 	}
 
 	// Mark the parent output as spent. Must be done after the transaction is
 	// finished because otherwise the txid and output id will change.
-	if err := w.insertSpentOutput(types.Hash256(parentTxn.SiacoinOutputID(0))); err != nil {
-		return nil, err
-	}
+	w.used[types.Hash256(parentTxn.SiacoinOutputID(0))] = true
 
 	// Construct the final transaction set.
 	return []types.Transaction{parentTxn, txn}, nil
@@ -168,9 +163,7 @@ func (w *Wallet) threadedDefragWallet() {
 		defer w.mu.Unlock()
 		for _, txn := range txnSet {
 			for _, sci := range txn.SiacoinInputs {
-				if err := w.removeSpentOutput(types.Hash256(sci.ParentID)); err != nil {
-					w.log.Error("couldn't remove spent output", zap.Error(err))
-				}
+				delete(w.used, types.Hash256(sci.ParentID))
 			}
 		}
 	}()

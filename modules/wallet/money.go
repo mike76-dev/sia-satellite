@@ -175,9 +175,7 @@ func (w *Wallet) Fund(txn *types.Transaction, amount types.Currency) (parents []
 				UnlockConditions: types.StandardUnlockConditions(key.PublicKey()),
 			})
 			toSign[i] = types.Hash256(sce.ID)
-			if err := w.insertSpentOutput(sce.ID); err != nil {
-				return nil, nil, err
-			}
+			w.used[sce.ID] = true
 		}
 	}
 
@@ -190,9 +188,7 @@ func (w *Wallet) Release(txnSet []types.Transaction) {
 	defer w.mu.Unlock()
 	for _, txn := range txnSet {
 		for i := range txn.SiacoinOutputs {
-			if err := w.removeSpentOutput(types.Hash256(txn.SiacoinOutputID(i))); err != nil {
-				w.log.Error("couldn't remove spent output", zap.Error(err))
-			}
+			delete(w.used, types.Hash256(txn.SiacoinOutputID((i))))
 		}
 	}
 }
@@ -211,9 +207,7 @@ func (w *Wallet) Reserve(ids []types.Hash256, duration time.Duration) error {
 
 	// Reserve the ids.
 	for _, id := range ids {
-		if err := w.insertSpentOutput(id); err != nil {
-			return err
-		}
+		w.used[id] = true
 	}
 
 	// Sleep for the duration and then unreserve the ids.
@@ -222,7 +216,7 @@ func (w *Wallet) Reserve(ids []types.Hash256, duration time.Duration) error {
 		defer w.mu.Unlock()
 
 		for _, id := range ids {
-			w.removeSpentOutput(id)
+			delete(w.used, id)
 		}
 	})
 	return nil

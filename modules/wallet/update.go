@@ -43,9 +43,7 @@ func (w *Wallet) removeSiacoinElements(sces []types.SiacoinElement) error {
 		if err := w.deleteSiacoinElement(sce.SiacoinOutput.Address); err != nil {
 			return modules.AddContext(err, "failed to delete output")
 		}
-		if err := w.removeSpentOutput(sce.ID); err != nil {
-			return modules.AddContext(err, "failed to remove spent output")
-		}
+		delete(w.used, sce.ID)
 		w.log.Debug("removed UTXO", zap.Stringer("address", sce.SiacoinOutput.Address), zap.Stringer("value", sce.SiacoinOutput.Value))
 	}
 	return nil
@@ -66,9 +64,7 @@ func (w *Wallet) removeSiafundElements(sfes []types.SiafundElement) error {
 		if err := w.deleteSiafundElement(sfe.SiafundOutput.Address); err != nil {
 			return modules.AddContext(err, "failed to delete output")
 		}
-		if err := w.removeSpentOutput(sfe.ID); err != nil {
-			return modules.AddContext(err, "failed to remove spent output")
-		}
+		delete(w.used, sfe.ID)
 		w.log.Debug("removed UTXO", zap.Stringer("address", sfe.SiafundOutput.Address), zap.Uint64("value", sfe.SiafundOutput.Value))
 	}
 	return nil

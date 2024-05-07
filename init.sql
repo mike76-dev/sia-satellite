@@ -6,7 +6,6 @@ DROP TABLE IF EXISTS wt_watched;
 DROP TABLE IF EXISTS wt_addresses;
 DROP TABLE IF EXISTS wt_tip;
 DROP TABLE IF EXISTS wt_info;
-DROP TABLE IF EXISTS wt_spent;
 
 CREATE TABLE wt_addresses (
 	id   BIGINT NOT NULL AUTO_INCREMENT,
@@ -54,11 +53,6 @@ CREATE TABLE wt_info (
 	id       INT NOT NULL AUTO_INCREMENT,
 	seed     BINARY(16) NOT NULL,
 	progress BIGINT UNSIGNED NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE wt_spent (
-	id BINARY(32) NOT NULL,
 	PRIMARY KEY (id)
 );
 

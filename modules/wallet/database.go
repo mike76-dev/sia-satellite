@@ -392,22 +392,6 @@ func (w *Wallet) load() (err error) {
 
 	rows.Close()
 
-	rows, err = w.db.Query("SELECT id FROM wt_spent")
-	if err != nil {
-		return modules.AddContext(err, "couldn't query spent outputs")
-	}
-
-	for rows.Next() {
-		var id types.Hash256
-		if err := rows.Scan(&b); err != nil {
-			return modules.AddContext(err, "couldn't scan spent output")
-		}
-		copy(id[:], b)
-		w.used[id] = true
-	}
-
-	rows.Close()
-
 	w.tx, err = w.db.Begin()
 	if err != nil {
 		return modules.AddContext(err, "couldn't start wallet transaction")
@@ -459,11 +443,6 @@ func (w *Wallet) reset() (err error) {
 	if err != nil {
 		w.dbError = true
 		return modules.AddContext(err, "couldn't drop addresses")
-	}
-	_, err = w.tx.Exec("DROP TABLE wt_spent")
-	if err != nil {
-		w.dbError = true
-		return modules.AddContext(err, "couldn't drop spent outputs")
 	}
 
 	_, err = w.tx.Exec(`
@@ -525,17 +504,6 @@ func (w *Wallet) reset() (err error) {
 		return modules.AddContext(err, "couldn't create watched addresses")
 	}
 
-	_, err = w.tx.Exec(`
-		CREATE TABLE wt_spent (
-			id BINARY(32) NOT NULL,
-			PRIMARY KEY (id)
-		)
-	`)
-	if err != nil {
-		w.dbError = true
-		return modules.AddContext(err, "couldn't create spent outputs")
-	}
-
 	if err := w.updateTip(w.tip); err != nil {
 		return err
 	}
@@ -568,26 +536,6 @@ func (w *Wallet) getSeedProgress() (progress uint64, err error) {
 // putSeedProgress updates the current seed progress.
 func (w *Wallet) putSeedProgress(progress uint64) error {
 	_, err := w.tx.Exec("UPDATE wt_info SET progress = ? WHERE id = 1", progress)
-	if err != nil {
-		w.dbError = true
-	}
-	return err
-}
-
-// insertSpentOutput adds a new spent output.
-func (w *Wallet) insertSpentOutput(id types.Hash256) error {
-	w.used[id] = true
-	_, err := w.tx.Exec("INSERT INTO wt_spent (id) VALUES (?)", id[:])
-	if err != nil {
-		w.dbError = true
-	}
-	return err
-}
-
-// removeSpentOutput removes a spent output.
-func (w *Wallet) removeSpentOutput(id types.Hash256) error {
-	delete(w.used, id)
-	_, err := w.tx.Exec("DELETE FROM wt_spent WHERE id = ?", id[:])
 	if err != nil {
 		w.dbError = true
 	}
