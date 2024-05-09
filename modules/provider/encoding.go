@@ -458,11 +458,11 @@ func (usr *updateSettingsRequest) DecodeFrom(d *types.Decoder) {
 	usr.BackupFileMetadata = d.ReadBool()
 	usr.AutoRepairFiles = d.ReadBool()
 	usr.ProxyUploads = d.ReadBool()
-	if usr.AutoRenewContracts || usr.AutoRepairFiles {
+	if usr.AutoRenewContracts || usr.BackupFileMetadata || usr.AutoRepairFiles || usr.ProxyUploads {
 		sk := d.ReadBytes()
 		usr.PrivateKey = types.PrivateKey(sk)
 	}
-	if usr.AutoRepairFiles {
+	if usr.BackupFileMetadata || usr.AutoRepairFiles || usr.ProxyUploads {
 		ak := d.ReadBytes()
 		usr.AccountKey = types.PrivateKey(ak)
 	}
