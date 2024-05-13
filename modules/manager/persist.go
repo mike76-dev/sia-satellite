@@ -161,6 +161,11 @@ func (m *Manager) initPersist(dir string) error {
 		}
 		defer m.tg.Done()
 
+		err := m.sync(m.tip)
+		if err != nil {
+			m.log.Error("failed to sync manager", zap.Error(err))
+		}
+
 		for {
 			select {
 			case <-m.tg.StopChan():

@@ -150,6 +150,12 @@ func New(config *persist.SatdConfig, db *sql.DB, ms mail.MailSender, cm *chain.M
 		}
 		defer pt.tg.Done()
 
+		err := pt.sync(pt.tip)
+		if err != nil {
+			pt.log.Error("couldn't sync portal", zap.Error(err))
+			return
+		}
+
 		for {
 			select {
 			case <-pt.tg.StopChan():

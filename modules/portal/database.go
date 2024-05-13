@@ -336,6 +336,7 @@ func (p *Portal) addSiacoinPayment(email string, amount types.Currency, txid typ
 
 // confirmSiacoinPayment decrements the number of remaining payment
 // confirmations.
+// A lock must be acquired before calling this function.
 func (p *Portal) confirmSiacoinPayment(txid types.TransactionID) error {
 	tx, err := p.db.Begin()
 	if err != nil {
@@ -372,9 +373,7 @@ func (p *Portal) confirmSiacoinPayment(txid types.TransactionID) error {
 	// If the tx is confirmed, increase the account balance.
 	if left == 0 {
 		// Delete from the map.
-		p.mu.Lock()
 		delete(p.transactions, txid)
-		p.mu.Unlock()
 
 		// Fetch the account.
 		var c, id, in string
