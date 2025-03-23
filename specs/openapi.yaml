@@ -1,0 +1,2289 @@
+openapi: 3.0.3
+info:
+  title: Sia Satellite API
+  description: |-
+    This is the preliminary specification of Sia Satellite API.
+  license:
+    name: MIT License
+    url: https://opensource.org/license/mit/
+  version: 1.0.0
+servers:
+  - url: https://api.ss-alpha.online/v1
+tags:
+  - name: account
+    description: managing user account
+  - name: auth
+    description: authentication of a user and operations on the user account
+  - name: contracts
+    description: contract management
+  - name: hosts
+    description: host management
+  - name: objects
+    description: object metadata management
+  - name: payments
+    description: payments and payment history
+  - name: satellite
+    description: network information
+paths:
+  /account:
+    get:
+      tags:
+        - account
+      description: Retrieve the account status
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/plan:
+    post:
+      tags:
+        - account
+      description: Change payment plan
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                newPlan:
+                  description: Desired payment plan
+                  type: string
+                  example: 'invoicing'
+                  enum:
+                    - pre-payment
+                    - invoicing
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/token:
+    get:
+      tags:
+        - account
+      description: Generate an API authentication token
+      security:
+        - authCookie: []
+      parameters:
+        - name: duration
+          in: query
+          description: Duration of the token in seconds
+          required: false
+          schema:
+            type: integer
+            format: int64
+            default: 604800
+            example: 2592000
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    description: API authentication token
+                    type: string
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/stats:
+    get:
+      tags:
+        - account
+      description: Retrieve usage statistics
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: month
+          in: query
+          description: Month, defaults to the current month; zero-based
+          schema:
+            type: integer
+            format: int32
+            example: 3
+        - name: year
+          in: query
+          description: Year, defaults to the current year
+          schema:
+            type: integer
+            format: int32
+            example: 2025
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usage'
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/settings:
+    get:
+      tags:
+        - account
+      description: Retrieve the account settings
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - account
+      description: Update the account settings
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settings'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth:
+    get:
+      tags:
+        - auth
+      description: Log into the dashboard
+      security:
+        - apiKeyHeader: []
+        - authCookie: []
+      responses:
+        '204':
+          description: Successful operation
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/login:
+    post:
+      tags:
+        - auth
+      description: Log into the dashboard using credentials provided
+      security: []
+      parameters:
+        - name: X-Satellite-Password
+          in: header
+          description: Account password
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  description: Account E-mail address
+                  type: string
+                  example: 'user@domain.com'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/login/{provider}:
+    post:
+      tags:
+        - auth
+      description: Log into the dashboard using 3rd-party OAuth provider
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          description: OAuth provider. Only Google is currently supported.
+          required: true
+          schema:
+            type: string
+            example: 'google'
+        - name: action
+          in: query
+          description: Reason for the authentication
+          required: true
+          schema:
+            type: string
+            enum:
+              - login
+              - signup
+            example: 'login'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, credential]
+              properties:
+                clientId:
+                  description: Google client ID
+                  type: string
+                credential:
+                  description: Google JWT ID token
+                  type: string
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/signup:
+    post:
+      tags:
+        - auth
+      description: Sign up for the Satellite
+      security: []
+      parameters:
+        - name: X-Satellite-Password
+          in: header
+          description: Account password
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  description: Account E-mail address
+                  type: string
+                  example: 'user@domain.com'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/signup/resend:
+    post:
+      tags:
+        - auth
+      description: Resend account verification E-mail
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  description: Account E-mail address
+                  type: string
+                  example: 'user@domain.com'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/reset:
+    post:
+      tags:
+        - auth
+      description: Reset the account password
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  description: Account E-mail address
+                  type: string
+                  example: 'user@domain.com'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/reset/resend:
+    post:
+      tags:
+        - auth
+      description: Resend password reset E-mail
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  description: Account E-mail address
+                  type: string
+                  example: 'user@domain.com'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/change:
+    get:
+      tags:
+        - auth
+      description: Change account password
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: X-Satellite-Password
+          in: header
+          description: New password
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /auth/delete:
+    get:
+      tags:
+        - auth
+      description: Delete account
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /contracts:
+    get:
+      tags:
+        - contracts
+      description: Get paginated list of active contracts
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: offset
+          in: query
+          description: Index of the first contract, starting from 0
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of contracts to return; -1 returns all contracts
+          schema:
+            type: integer
+            format: int32
+            default: -1
+            example: 100
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Contract'
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - contracts
+      description: Deletes all contracts
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '204':
+          description: Successful operation
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /contract/{id}:
+    get:
+      tags:
+        - contracts
+      description: Retrieve contract with the given ID
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: id
+          in: path
+          description: ID of the contract
+          required: true
+          schema:
+            type: string
+            example: '279bfc4fc0dd4bdadfac6b5e50bbc0c23c6dbf6a6bb06a8d4ecfcaddd0cac801'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - contracts
+      description: Delete contract with the given ID
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: id
+          in: path
+          description: ID of the contract
+          required: true
+          schema:
+            type: string
+            example: '279bfc4fc0dd4bdadfac6b5e50bbc0c23c6dbf6a6bb06a8d4ecfcaddd0cac801'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /contracts/config:
+    get:
+      tags:
+        - contracts
+      description: Get the contracts configuration
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractsConfig'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - contracts
+      description: Update the contracts configuration
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractsConfig'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /contracts/form:
+    post:
+      tags:
+        - contracts
+      description: Form the required number of contracts
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contracts]
+              properties:
+                contracts:
+                  $ref: '#/components/schemas/ContractsConfig'
+                hosts:
+                  $ref: '#/components/schemas/HostsConfig'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Contract'
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /contract/{id}/renew:
+    post:
+      tags:
+        - contracts
+      description: Renew the specified contract
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: id
+          in: path
+          description: ID of the contract
+          required: true
+          schema:
+            type: string
+            example: '279bfc4fc0dd4bdadfac6b5e50bbc0c23c6dbf6a6bb06a8d4ecfcaddd0cac801'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contracts]
+              properties:
+                newEndHeight:
+                  description: End height of the new contract
+                  type: integer
+                  format: int64
+                  example: 533200
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /hosts:
+    get:
+      tags:
+        - hosts
+      description: Get paginated list of hosts that satisfy the configuration
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: offset
+          in: query
+          description: Index of the first host, starting from 0
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of hosts to return; -1 returns all hosts
+          schema:
+            type: integer
+            format: int32
+            default: -1
+            example: 100
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Host'
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /host/{key}:
+    get:
+      tags:
+        - hosts
+      description: Get the host with the given key
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: key
+          in: path
+          description: Public key of the host
+          required: true
+          schema:
+            type: string
+            example: 'ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Host'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /hosts/blacklist:
+    get:
+      tags:
+        - hosts
+      description: Retrieve the hosts blacklist
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  example: 'ed25519:ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - hosts
+      description: Add hosts to the blacklist
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                example: 'ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /hosts/blacklist/{key}:
+    delete:
+      tags:
+        - hosts
+      description: Remove the host from the blacklist
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: key
+          in: path
+          description: Public key of the host
+          required: true
+          schema:
+            type: string
+            example: 'ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /hosts/whitelist:
+    get:
+      tags:
+        - hosts
+      description: Retrieve the hosts whitelist
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  example: 'ed25519:ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - hosts
+      description: Add hosts to the whitelist
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                example: 'ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /hosts/whitelist/{key}:
+    delete:
+      tags:
+        - hosts
+      description: Remove the host from the whitelist
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: key
+          in: path
+          description: Public key of the host
+          required: true
+          schema:
+            type: string
+            example: 'ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /hosts/config:
+    get:
+      tags:
+        - hosts
+      description: Get the hosts configuration
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HostsConfig'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - hosts
+      description: Update the hosts configuration
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HostsConfig'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /objects:
+    get:
+      tags:
+        - objects
+      description: Get paginated list of metadata
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: offset
+          in: query
+          description: Index of the first object, starting from 0
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of objects to return; -1 returns all objects
+          schema:
+            type: integer
+            format: int32
+            default: -1
+            example: 100
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  objects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Object'
+                  more:
+                    description: Indicator if there are more objects
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - objects
+      description: Update metadata on the Satellite
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Object'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - objects
+      description: Delete all metadata
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '204':
+          description: Successful operation
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /object/{key}:
+    get:
+      tags:
+        - objects
+      description: Get metadata of the object with the given key
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: key
+          in: path
+          description: Key of the object
+          required: true
+          schema:
+            type: string
+            example: '73889caed0faf8b2a441cc69acfdb67e27ffdbd00dc50caf2d1a03ed1db5385d'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Object'
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - objects
+      description: Update metadata of the object with the given key
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: key
+          in: path
+          description: Key of the object
+          required: true
+          schema:
+            type: string
+            example: '73889caed0faf8b2a441cc69acfdb67e27ffdbd00dc50caf2d1a03ed1db5385d'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - objects
+      description: Delete metadata of the object with the given key
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: key
+          in: path
+          description: Key of the object
+          required: true
+          schema:
+            type: string
+            example: '73889caed0faf8b2a441cc69acfdb67e27ffdbd00dc50caf2d1a03ed1db5385d'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /objects/slabs:
+    get:
+      tags:
+        - objects
+      description: Get paginated list of recently modified slabs
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: after
+          in: query
+          description: Slabs modified after this timestamp will be returned
+          required: true
+          schema:
+            type: string
+            format: date-time
+            example: '2024-04-12T00:00:00Z'
+        - name: offset
+          in: query
+          description: Index of the first slab, starting from 0
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of slabs to return; -1 returns all slabs
+          schema:
+            type: integer
+            format: int32
+            default: -1
+            example: 100
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slabs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Slab'
+                  more:
+                    description: Indicator if there are more slabs
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payments:
+    get:
+      tags:
+        - payments
+      description: Get paginated payment history
+      security:
+        - apiKey: []
+        - authCookie: []
+      parameters:
+        - name: offset
+          in: query
+          description: Index of the first record, starting from 0
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+            example: 0
+        - name: limit
+          in: query
+          description: Maximum number of record to return; -1 returns all records
+          schema:
+            type: integer
+            format: int32
+            default: -1
+            example: 100
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payment'
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payment/amount:
+    post:
+      tags:
+        - payments
+      description: Calculate payment amount
+      security:
+        - apiKey: []
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                config:
+                  $ref: '#/components/schemas/ContractsConfig'
+                currency:
+                  description: Payment currency
+                  type: string
+                  example: 'USD'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  amount:
+                    description: Recommended payment amount
+                    type: number
+                    format: double
+                    example: 100.00
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /payment/address:
+    get:
+      tags:
+        - payments
+      description: Get Siacoin deposit address
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address:
+                    description: Siacoin deposit address
+                    type: string
+                    example: 'addr:6a20603919b4568b726711b0bbba0d00f124c063703209e63bcf86f5eb603b398c95aeef185d'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /satellite/fees:
+    get:
+      tags:
+        - satellite
+      description: Retrieve satellite fees
+      security: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fees'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /satellite/network:
+    get:
+      tags:
+        - satellite
+      description: Retrieve network stats
+      security: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blockHeight:
+                    description: Current block height
+                    type: integer
+                    format: int64
+                    example: 512484
+                  onlineHosts:
+                    description: Number of online hosts
+                    type: integer
+                    format: int64
+                    example: 480
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /satellite/status:
+    get:
+      tags:
+        - satellite
+      description: Retrieve Satellite status
+      security: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  online:
+                    description: Indicator if the Satellite is online
+                    type: boolean
+                    example: true
+                  version:
+                    description: Current version of the Satellite
+                    type: string
+                    example: '1.0.0'
+                  message:
+                    description: Any additional information
+                    type: string
+                    example: 'Maintenance is scheduled'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          description: Error code
+          type: integer
+          format: int32
+          example: 41
+        message:
+          description: Error message
+          type: string
+          example: 'token has expired'
+    Account:
+      type: object
+      properties:
+        email:
+          description: The e-mail address of the user
+          type: string
+          example: 'user@domain.com'
+        createdAt:
+          description: The creation timestamp of the account
+          type: string
+          format: date-time
+          example: '2024-04-12T08:35:23Z'
+        verified:
+          description: An indicator if the e-mail address is verified
+          type: boolean
+          example: true
+        paymentPlan:
+          description: The current payment plan
+          type: string
+          default: 'pre-payment'
+          enum:
+            - pre-payment
+            - invoicing
+          example: 'pre-payment'
+        balance:
+          description: The current balance of the account
+          type: object
+          properties:
+            total:
+              description: Total balance in SC
+              type: number
+              format: double
+              example: 2850.5594
+            locked:
+              description: Amount of SC locked in contracts
+              type: number
+              format: double
+              example: 45.235674
+            available:
+              description: Amount of SC still available
+              type: number
+              format: double
+              example: 2805.32373
+        currency:
+          description: The user's preferred currency
+          type: object
+          properties:
+            code:
+              description: The code of the currency
+              type: string
+              example: 'USD'
+            scRate:
+              description: Siacoin exchange rate
+              type: number
+              format: double
+              example: 0.0034
+        stripeID:
+          description: The ID string of the user's account at Stripe
+          type: string
+          example: '34PgAgMrrfXIUdQ'
+    Settings:
+      type: object
+      properties:
+        manageContracts:
+          description: |-
+            An indicator if the satellite shall take over the contract management
+            including forming new contracts and renewing existing contracts
+          type: boolean
+          example: true
+        backupMetadata:
+          description: An indicator if the satellite shall backup the object metadata
+          type: boolean
+          example: true
+        autoRepair:
+          description: |-
+            An indicator if the satellite shall try to repair the data automatically.
+            Only works together with autoRenew and backupMetadata enabled.
+          type: boolean
+          example: false
+    Contract:
+      type: object
+      properties:
+        id:
+          description: Contract ID
+          type: string
+          example: 'fcid:279bfc4fc0dd4bdadfac6b5e50bbc0c23c6dbf6a6bb06a8d4ecfcaddd0cac801'
+        hostKey:
+          description: Public key of the host
+          type: string
+          example: 'ed25519:08f0e75f0a322f4616ac98d91ecbe0c02f4e9fb53c6a0eba685e36efa9d89390'
+        v2:
+          description: An indicator if this is a V2 contract
+          type: boolean
+          example: true
+        proofHeight:
+          description: Block height when the storage proof was submitted
+          type: integer
+          format: int64
+          example: 0
+        renewedFrom:
+          description: ID of the ancestor contract
+          type: string
+          example: 'fcid:ca92e8a8cee562664d4ef90b70ccecf0ba4cd9dde4df277ce5a2ae1ae4726fef'
+        revisionHeight:
+          description: Maximum block height to submit revisions
+          type: integer
+          format: int64
+          example: 532346
+        revisionNumber:
+          description: Revision No. of the contract
+          type: integer
+          format: int64
+          example: 5
+        size:
+          description: File size in bytes
+          type: integer
+          format: int64
+          example: 4194304
+        startHeight:
+          description: Block height when the contract was formed
+          type: integer
+          format: int64
+          example: 528327
+        state:
+          description: State of the contract
+          type: string
+          enum:
+            - invalid
+            - unknown
+            - pending
+            - active
+            - complete
+            - failed
+          example: 'active'
+        usability:
+          description: Usability status
+          type: string
+          enum:
+            - bad
+            - good
+          example: 'good'
+        windowStart:
+          description: Block height, after which a storage proof needs to be submitted
+          type: integer
+          format: int64
+          example: 532490
+        windowEnd:
+          description: Block height, after which no storage proofs may be submitted
+          type: integer
+          format: int64
+          example: 532634
+        contractPrice:
+          description: Contract formation cost
+          type: string
+          example: '818'
+        initialRenterFunds:
+          description: Amount of money the renter has put in the contract
+          type: string
+          example: '248'
+        spending:
+          description: Contract spendings
+          type: object
+          properties:
+            deletions:
+              description: Funds spent on deletions
+              type: string
+              example: '33225416258'
+            fundAccount:
+              description: Funds spent on account fundings
+              type: string
+              example: '210'
+            sectorRoots:
+              description: Funds spent on retrieving sector roots
+              type: string
+              example: '03331279'
+            uploads:
+              description: Funds spent on uploads
+              type: string
+              example: '6'
+    ContractsConfig:
+      type: object
+      properties:
+        count:
+          description: Number of contracts to form
+          type: integer
+          format: int64
+          example: 50
+        period:
+          description: Duration of contracts in blocks
+          type: integer
+          format: int64
+          example: 2016
+        renewWindow:
+          description: Period when contracts may be renewed
+          type: integer
+          format: int64
+          example: 288
+        download:
+          description: Expected download size in bytes
+          type: integer
+          format: int64
+          example: 1048576
+        upload:
+          description: Expected upload size in bytes
+          type: integer
+          format: int64
+          example: 65536
+        redundancy:
+          description: Data redundancy
+          type: number
+          format: double
+          example: 3.0
+    HostsConfig:
+      type: object
+      properties:
+        maxStoragePrice:
+          description: Maximum storage price in H/byte/block
+          type: string
+          example: '84761'
+        maxIngressPrice:
+          description: Maximum ingress price in H/byte
+          type: string
+          example: '116477'
+        maxEgressPrice:
+          description: Maximum egress price in H/byte
+          type: string
+          example: '144'
+        maxContractPrice:
+          description: Maximum contract price in Hastings
+          type: string
+          example: '59133866'
+        maxLatency:
+          description: Maximum scan latency in nanoseconds
+          type: integer
+          format: int64
+          example: 100000000
+        minUploadSpeed:
+          description: Minimum upload speed in bytes/second
+          type: integer
+          format: int64
+          example: 1048576
+        minDownloadSpeed:
+          description: Minimum download speed in bytes/second
+          type: integer
+          format: int64
+          example: 10485760
+        basis:
+          description: Basis for speed benchmarking
+          type: string
+          enum:
+            - eu
+            - us
+            - ap
+            - global
+          default: 'global'
+          example: 'us'
+        countries:
+          description: Countries of location
+          type: array
+          items:
+            type: string
+            example: 'US'
+    Host:
+      type: object
+      properties:
+        publicKey:
+          description: Public key of the host
+          type: string
+          example: 'ed25519:ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+        netAddress:
+          description: Net address of the host
+          type: string
+          example: '23.26.250.110:9972'
+        contractPrice:
+          description: Contract price in Hastings
+          type: string
+          example: '100000000000000000000000'
+        storagePrice:
+          description: Storage price in H/byte/block
+          type: string
+          example: '32407407407'
+        ingressPrice:
+          description: Ingress price in H/byte
+          type: string
+          example: '280000000000000'
+        egressPrice:
+          description: Egress price in H/byte
+          type: string
+          example: '900000000000000'
+        country:
+          description: Country of location
+          type: string
+          example: 'US'
+        benchmarks:
+          description: Benchmark results
+          type: array
+          items:
+            type: object
+            properties:
+              basis:
+                description: Calculation basis
+                type: string
+                example: 'global'
+                enum:
+                  - eu
+                  - us
+                  - ap
+                  - global
+              latency:
+                description: Latency in nanoseconds
+                type: integer
+                format: int64
+                example: 3384000000
+              uploadSpeed:
+                description: Upload speed in bytes/second
+                type: number
+                format: double
+                example: 4285325.23632819
+              downloadSpeed:
+                description: Download speed in bytes/second
+                type: number
+                format: double
+                example: 6145461.249201419
+              score:
+                description: Combined score
+                type: number
+                format: double
+                example: 0.089
+    Slab:
+      type: object
+      required: [health, encryptionKey, minShards, offset, length]
+      properties:
+        health:
+          description: Health of the slab
+          type: number
+          format: double
+          example: 0.75
+        encryptionKey:
+          description: Slab encryption key
+          type: string
+          example: 'key:73889caed0faf8b2a441cc69acfdb67e27ffdbd00dc50caf2d1a03ed1db5385d'
+        minShards:
+          description: Mimimum shards required to reconstruct the slab
+          type: integer
+          format: int32
+          example: 10
+        offset:
+          description: Offset of the data in the slab
+          type: integer
+          format: int64
+          example: 8640
+        length:
+          description: Length of the data
+          type: integer
+          format: int64
+          example: 1342540
+        shards:
+          description: List of shards
+          type: array
+          items:
+            type: object
+            properties:
+              contracts:
+                additionalProperties:
+                  example: 'ed25519:08f0e75f0a322f4616ac98d91ecbe0c02f4e9fb53c6a0eba685e36efa9d89390'
+                  type: array
+                  items:
+                    type: string
+                    example: 'fcid:ca92e8a8cee562664d4ef90b70ccecf0ba4cd9dde4df277ce5a2ae1ae4726fef'
+              root:
+                type: string
+                example: 'h:fbc7f4db9ab28c7d49aabebbdf470a23ce2ff8efdff570d63d7ddd31d17dc027'
+    Object:
+      type: object
+      required: [key, metadata]
+      properties:
+        key:
+          description: Object key
+          type: string
+          example: 'key:73889caed0faf8b2a441cc69acfdb67e27ffdbd00dc50caf2d1a03ed1db5385d'
+        metadata:
+          description: Encrypted object metadata
+          type: string
+          example: 'IkhlbGxvLCB3b3JsZC4gSGVsbG8sIHdvcmxkLiBIZWxsbywgd29ybGQuIg=='
+        slabs:
+          description: List of data slabs
+          type: array
+          items:
+            $ref: '#/components/schemas/Slab'
+    Payment:
+      type: object
+      properties:
+        timestamp:
+          description: Timestamp of the payment
+          type: string
+          format: date-time
+          example: '2024-04-16T00:00:00Z'
+        amount:
+          description: Amount of the payment
+          type: number
+          format: double
+          example: 100.00
+        currency:
+          description: Payment currency
+          type: string
+          example: 'USD'
+        scRate:
+          description: Siacoin exchange rate at the moment of payment
+          type: number
+          format: double
+          example: 0.0033
+        confirmationsRequired:
+          description: Required number of confirmations (if paid in Siacoin)
+          type: integer
+          format: int32
+          example: 0
+        transactionID:
+          description: Transaction ID (if paid in Siacoin)
+          type: string
+          example: ''
+    Usage:
+      type: object
+      properties:
+        contractsFormed:
+          description: Number of contracts formed
+          type: integer
+          format: int32
+          example: 38
+        contractsRenewed:
+          description: Number of contracts renewed
+          type: integer
+          format: int32
+          example: 16
+        contractsRefreshed:
+          description: Number of contracts refreshed
+          type: integer
+          format: int32
+          example: 6
+        contractsExpired:
+          description: Number of contracts expired
+          type: integer
+          format: int64
+          example: 20
+        slabsSaved:
+          description: Number of object slabs saved
+          type: integer
+          format: int64
+          example: 226
+        slabsMigrated:
+          description: Number of object slabs migrated
+          type: integer
+          format: int64
+          example: 84
+        slabsRetrieved:
+          description: Number of object slabs retrieved
+          type: integer
+          format: int64
+          example: 127
+        slabsDeleted:
+          description: Number of object slabs deleted
+          type: integer
+          format: int64
+          example: 0
+    Fees:
+      type: object
+      properties:
+        contractFormation:
+          description: Fee per contract formed, relative to contract amount
+          type: number
+          format: double
+          example: 0.10
+        contractRenewal:
+          description: Fee per contract renewed or refreshed, relative to contract amount
+          type: number
+          format: double
+          example: 0.10
+        slabBackup:
+          description: Fee per saved object slab, in Hastings
+          type: string
+          example: '1000000000000000000000'
+        slabRetrieval:
+          description: Fee per retrieved object slab, in Hastings
+          type: string
+          example: '1000000000000000000000'
+        slabMigration:
+          description: Fee per migrated object slab, in Hastings
+          type: string
+          example: '10000000000000000000000'
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: query
+      name: token
+    apiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-Satellite-Token
+    authCookie:
+      type: apiKey
+      in: cookie
+      name: X-Satellite-Token
