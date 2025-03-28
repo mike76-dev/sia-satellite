@@ -15,7 +15,7 @@
 # vendor/
 
 # Various tools
-utils/
+utilities
 
 # VSCode files
 .vscode
