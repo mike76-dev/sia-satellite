@@ -1,5 +1,4 @@
-// Package mail defines the interfaces for sending email
-// messages.
+// Package mail defines the interfaces for sending email messages.
 package mail
 
 import (
@@ -11,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/internal/utils"
 )
 
 // configFilename is the name of the mail client configuration
@@ -24,14 +23,14 @@ type MailSender interface {
 }
 
 type (
-	// configData contains the mail client fields stored on disk.
+	// smtpConfigData contains the mail client fields stored on disk.
 	smtpConfigData struct {
 		From string `json:"from"`
 		Host string `json:"host"`
 		Port string `json:"port"`
 	}
 
-	// MailClient contains all necesssary fields for connecting
+	// mailClient contains all necesssary fields for connecting
 	// to a mail client.
 	mailClient struct {
 		from     string
@@ -50,9 +49,9 @@ func (mc *mailClient) SendMail(from, to, subject string, body *bytes.Buffer) err
 	rec := []string{to}
 	var b bytes.Buffer
 	mimeHeaders := "MIME-version: 1.0;\r\nContent-Type: text/html; charset=\"UTF-8\";\r\n\r\n"
-	b.Write([]byte(fmt.Sprintf("From: %s\r\n", from)))
-	b.Write([]byte(fmt.Sprintf("To: %s\r\n", to)))
-	b.Write([]byte(fmt.Sprintf("Subject: %s\r\n", subject)))
+	b.Write(fmt.Appendf(nil, "From: %s\r\n", from))
+	b.Write(fmt.Appendf(nil, "To: %s\r\n", to))
+	b.Write(fmt.Appendf(nil, "Subject: %s\r\n", subject))
 	b.Write([]byte(mimeHeaders))
 	b.Write(body.Bytes())
 	b.Write([]byte("\r\n"))
@@ -70,7 +69,7 @@ func New(configPath string) (MailSender, error) {
 		return nil, fmt.Errorf("unable to open config file: %s", err)
 	}
 	defer func() {
-		err = modules.ComposeErrors(err, config.Close())
+		err = utils.ComposeErrors(err, config.Close())
 	}()
 
 	// Read the client type.
