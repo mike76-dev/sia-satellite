@@ -15,15 +15,14 @@ const configFilename = "satdconfig.json"
 
 // SatdConfig contains the fields that are passed on to the new node.
 type SatdConfig struct {
-	Name          string `json:"name"`
-	GatewayAddr   string `json:"gateway"`
-	APIAddr       string `json:"api"`
-	SatelliteAddr string `json:"satellite"`
-	HTTPAddr      string `json:"http"`
-	Dir           string `json:"dir"`
-	DBUser        string `json:"dbUser"`
-	DBName        string `json:"dbName"`
-	Test          bool   `json:"test,omitempty"`
+	Name        string `json:"name"`
+	GatewayAddr string `json:"gateway"`
+	APIAddr     string `json:"api"`
+	HTTPAddr    string `json:"http"`
+	Dir         string `json:"dir"`
+	DBUser      string `json:"dbUser"`
+	DBName      string `json:"dbName"`
+	Test        bool   `json:"test,omitempty"`
 }
 
 // satdMetadata contains the header and version strings that identify the
