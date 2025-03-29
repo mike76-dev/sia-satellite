@@ -19,11 +19,11 @@ type SatdConfig struct {
 	GatewayAddr   string `json:"gateway"`
 	APIAddr       string `json:"api"`
 	SatelliteAddr string `json:"satellite"`
-	MuxAddr       string `json:"mux"`
+	HTTPAddr      string `json:"http"`
 	Dir           string `json:"dir"`
 	DBUser        string `json:"dbUser"`
 	DBName        string `json:"dbName"`
-	PortalPort    string `json:"portal"`
+	Test          bool   `json:"test,omitempty"`
 }
 
 // satdMetadata contains the header and version strings that identify the
@@ -36,7 +36,7 @@ type satdMetadata = struct {
 // metadata contains the actual values.
 var metadata = satdMetadata{
 	Header:  "Satd Configuration",
-	Version: "0.4.0",
+	Version: "0.5.0",
 }
 
 func compose(err1, err2 error) error {
