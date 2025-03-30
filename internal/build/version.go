@@ -15,13 +15,21 @@ const (
 )
 
 var (
-	// BinaryName is the name of the node binary. It is supplied at compile time
-	// via ldflags.
-	BinaryName = "unknown"
+	// NodeBinaryName is the name of the node binary. It is supplied at compile
+	// time via ldflags.
+	NodeBinaryName = "unknown"
 
 	// NodeVersion is the current version of the node software. It is supplied
 	// at compile time via ldflags.
 	NodeVersion = "?.?.?"
+
+	// ClientBinaryName is the name of the client binary. It is supplied at compile
+	// time via ldflags.
+	ClientBinaryName = "unknown"
+
+	// ClientVersion is the current version of the client software. It is supplied
+	// at compile time via ldflags.
+	ClientVersion = "?.?.?"
 )
 
 // IsVersion returns whether str is a valid release version with no -rc component.
