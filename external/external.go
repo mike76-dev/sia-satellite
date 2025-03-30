@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/mike76-dev/sia-satellite/modules"
+	"github.com/mike76-dev/sia-satellite/internal/utils"
 )
 
 const (
@@ -44,7 +44,7 @@ func FetchSCRates() (map[string]float64, error) {
 		}
 		return data.Price, nil
 	}
-	return nil, modules.AddContext(err, "falied to fetch SC exchange rates")
+	return nil, utils.AddContext(err, "falied to fetch SC exchange rates")
 }
 
 // GetGooglePublicKey retrieves the public key from Google.
