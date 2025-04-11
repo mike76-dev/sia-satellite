@@ -1,58 +1,23 @@
 /* wallet */
 
 DROP TABLE IF EXISTS wt_sces;
-DROP TABLE IF EXISTS wt_sfes;
-DROP TABLE IF EXISTS wt_watched;
-DROP TABLE IF EXISTS wt_addresses;
+DROP TABLE IF EXISTS wt_addrs;
 DROP TABLE IF EXISTS wt_tip;
-DROP TABLE IF EXISTS wt_info;
 
-CREATE TABLE wt_addresses (
-	id   BIGINT NOT NULL AUTO_INCREMENT,
-	addr BINARY(32) NOT NULL UNIQUE,
-	PRIMARY KEY (id)
+CREATE TABLE wt_addrs (
+	id   BIGINT UNSIGNED NOT NULL,
+	addr BINARY(32) NOT NULL UNIQUE
 );
 
 CREATE TABLE wt_sces (
-	id              BIGINT NOT NULL AUTO_INCREMENT,
-	scoid           BINARY(32) NOT NULL UNIQUE,
-	sc_value        BLOB NOT NULL,
-	merkle_proof    BLOB NOT NULL,
-	leaf_index      BIGINT UNSIGNED NOT NULL,
-	maturity_height BIGINT UNSIGNED NOT NULL,
-	address_id      BIGINT NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
-);
-
-CREATE TABLE wt_sfes (
-	id              BIGINT NOT NULL AUTO_INCREMENT,
-	sfoid           BINARY(32) NOT NULL UNIQUE,
-	claim_start     BLOB NOT NULL,
-	merkle_proof    BLOB NOT NULL,
-	leaf_index      BIGINT UNSIGNED NOT NULL,
-	sf_value        BIGINT UNSIGNED NOT NULL,
-	address_id      BIGINT NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
-);
-
-CREATE TABLE wt_watched (
-	address_id BIGINT NOT NULL UNIQUE,
-	FOREIGN KEY (address_id) REFERENCES wt_addresses(id)
+	scoid BINARY(32) NOT NULL UNIQUE,
+	bytes BLOB NOT NULL
 );
 
 CREATE TABLE wt_tip (
-	id        INT NOT NULL AUTO_INCREMENT,
-	height    BIGINT UNSIGNED NOT NULL,
-	bid       BINARY(32) NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE wt_info (
-	id       INT NOT NULL AUTO_INCREMENT,
-	seed     BINARY(16) NOT NULL,
-	progress BIGINT UNSIGNED NOT NULL,
+	id     INT NOT NULL AUTO_INCREMENT,
+	height BIGINT UNSIGNED NOT NULL,
+	bid    BINARY(32) NOT NULL,
 	PRIMARY KEY (id)
 );
 

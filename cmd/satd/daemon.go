@@ -28,7 +28,7 @@ func startDaemon(config *persist.SatdConfig, apiPassword, dbPassword string, see
 	}
 
 	// Start the node.
-	n := newNode(config)
+	n := newNode(config, dbPassword, seed)
 	stop := n.Start()
 
 	log.Println("api: Listening on", l.Addr())
