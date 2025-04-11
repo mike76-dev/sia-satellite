@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/wallet"
 	"go.sia.tech/coreutils/chain"
 	"go.sia.tech/coreutils/syncer"
 	"go.sia.tech/jape"
@@ -12,6 +13,7 @@ import (
 type server struct {
 	chain  *chain.Manager
 	syncer *syncer.Syncer
+	wallet *wallet.Wallet
 }
 
 func isSynced(s *syncer.Syncer) bool {
@@ -82,9 +84,21 @@ func (s *server) txpoolFeeHandler(jc jape.Context) {
 	jc.Encode(s.chain.RecommendedFee())
 }
 
+func (s *server) walletBalanceHandler(jc jape.Context) {
+	jc.Encode(s.wallet.Balance())
+}
+
+func (s *server) walletAddressHandler(jc jape.Context) {
+	addr, err := s.wallet.NextAddress()
+	if jc.Check("couldn't generate address", err) != nil {
+		return
+	}
+	jc.Encode(addr)
+}
+
 // NewServer returns an HTTP handler that serves the satd API.
-func NewServer(cm *chain.Manager, s *syncer.Syncer) http.Handler {
-	srv := server{cm, s}
+func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet) http.Handler {
+	srv := server{cm, s, w}
 	return jape.Mux(map[string]jape.Handler{
 		"GET /consensus/network":  srv.consensusNetworkHandler,
 		"GET /consensus/tip":      srv.consensusTipHandler,
@@ -95,5 +109,8 @@ func NewServer(cm *chain.Manager, s *syncer.Syncer) http.Handler {
 
 		"GET  /txpool/transactions": srv.txpoolTransactionsHandler,
 		"GET  /txpool/fee":          srv.txpoolFeeHandler,
+
+		"GET  /wallet/balance": srv.walletBalanceHandler,
+		"GET  /wallet/address": srv.walletAddressHandler,
 	})
 }

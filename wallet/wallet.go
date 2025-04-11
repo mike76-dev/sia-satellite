@@ -12,6 +12,7 @@ import (
 	"go.sia.tech/core/types"
 	"go.sia.tech/coreutils/chain"
 	"go.sia.tech/coreutils/syncer"
+	"go.sia.tech/coreutils/wallet"
 	"go.uber.org/zap"
 )
 
@@ -181,4 +182,83 @@ func (w *Wallet) synced() bool {
 	}
 
 	return count >= 5 && time.Since(w.chain.TipState().PrevTimestamps[0]) < 24*time.Hour
+}
+
+// isLocked returns true if the Siacoin output with given id is locked, this
+// method must be called whilst holding the mutex lock.
+func (w *Wallet) isLocked(id types.SiacoinOutputID) bool {
+	return time.Now().Before(w.locked[id])
+}
+
+// Key returns the private key at the specified index.
+func (w *Wallet) Key(index uint64) types.PrivateKey {
+	return wallet.KeyFromSeed(w.store.seed, index)
+}
+
+// UnspentSiacoinElements returns the wallet's unspent siacoin outputs.
+func (w *Wallet) UnspentSiacoinElements() []types.SiacoinElement {
+	return w.store.unspentSiacoinElements()
+}
+
+// Balance returns the balance of the wallet.
+func (w *Wallet) Balance() (balance wallet.Balance) {
+	outputs := w.store.unspentSiacoinElements()
+	tpoolSpent := make(map[types.SiacoinOutputID]bool)
+	tpoolUtxos := make(map[types.SiacoinOutputID]types.SiacoinElement)
+	for _, txn := range w.chain.PoolTransactions() {
+		for _, sci := range txn.SiacoinInputs {
+			tpoolSpent[sci.ParentID] = true
+			delete(tpoolUtxos, sci.ParentID)
+		}
+		for i, sco := range txn.SiacoinOutputs {
+			if !w.store.addressFound(sco.Address) {
+				continue
+			}
+
+			outputID := txn.SiacoinOutputID(i)
+			tpoolUtxos[outputID] = types.SiacoinElement{
+				ID:            types.SiacoinOutputID(outputID),
+				StateElement:  types.StateElement{LeafIndex: types.UnassignedLeafIndex},
+				SiacoinOutput: sco,
+			}
+		}
+	}
+
+	for _, txn := range w.chain.V2PoolTransactions() {
+		for _, si := range txn.SiacoinInputs {
+			tpoolSpent[si.Parent.ID] = true
+			delete(tpoolUtxos, si.Parent.ID)
+		}
+		for i, sco := range txn.SiacoinOutputs {
+			if !w.store.addressFound(sco.Address) {
+				continue
+			}
+			sce := txn.EphemeralSiacoinOutput(i)
+			tpoolUtxos[sce.ID] = sce.Move()
+		}
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	bh := w.chain.TipState().Index.Height
+	for _, sco := range outputs {
+		if sco.MaturityHeight > bh {
+			balance.Immature = balance.Immature.Add(sco.SiacoinOutput.Value)
+		} else {
+			balance.Confirmed = balance.Confirmed.Add(sco.SiacoinOutput.Value)
+			if !w.isLocked(sco.ID) && !tpoolSpent[sco.ID] {
+				balance.Spendable = balance.Spendable.Add(sco.SiacoinOutput.Value)
+			}
+		}
+	}
+
+	for _, sco := range tpoolUtxos {
+		balance.Unconfirmed = balance.Unconfirmed.Add(sco.SiacoinOutput.Value)
+	}
+	return
+}
+
+// NextAddress generates the next sequential wallet address.
+func (w *Wallet) NextAddress() (addr types.Address, err error) {
+	return w.store.insertAddress(w.store.greatestIndex + 1)
 }
