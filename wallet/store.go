@@ -240,20 +240,7 @@ func (s *DBStore) logEvent(event wallet.Event) {
 		desc += "v1 transaction"
 	case wallet.EventTypeV2Transaction:
 		desc += "v2 transaction"
-	case wallet.EventTypeV1ContractResolution:
-		desc += "v1 contract resolution"
-		if event.Data.(wallet.EventV1ContractResolution).Missed {
-			desc += " (fail)"
-		} else {
-			desc += " (success)"
-		}
-	case wallet.EventTypeV2ContractResolution:
-		desc += "v2 contract resolution"
-		if event.Data.(wallet.EventV2ContractResolution).Missed {
-			desc += " (fail)"
-		} else {
-			desc += " (success)"
-		}
+	case wallet.EventTypeV1ContractResolution, wallet.EventTypeV2ContractResolution:
 	default:
 		desc += "unknown event"
 	}
