@@ -48,7 +48,7 @@ func (s *scanner) generateAddresses(ctx context.Context, num uint64) {
 				default:
 				}
 				key := wallet.KeyFromSeed(seed, i)
-				addrs[i] = types.StandardAddress(key.PublicKey())
+				addrs[i] = types.StandardUnlockHash(key.PublicKey())
 			}
 		}(uint64(cpu))
 	}
