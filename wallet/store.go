@@ -334,6 +334,11 @@ func (s *DBStore) insertAddress(index uint64) (addr types.Address, err error) {
 	return addr, s.save()
 }
 
+// rootAddress returns the first address derived from the wallet seed.
+func (s *DBStore) rootAddress() types.Address {
+	return types.StandardUnlockHash(wallet.KeyFromSeed(s.seed, 0).PublicKey())
+}
+
 // close saves the changes to disk.
 func (s *DBStore) close() {
 	s.mu.Lock()

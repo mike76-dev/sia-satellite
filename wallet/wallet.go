@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,13 @@ import (
 	"go.sia.tech/coreutils/syncer"
 	"go.sia.tech/coreutils/wallet"
 	"go.uber.org/zap"
+)
+
+var (
+	defragThreshold     = 300
+	maxInputsForDefrag  = 300
+	maxDefragUTXOs      = 10
+	reservationDuration = 15 * time.Minute
 )
 
 // Wallet is a multi-address wallet. It doesn't support Siafunds
@@ -200,6 +208,16 @@ func (w *Wallet) UnspentSiacoinElements() []types.SiacoinElement {
 	return w.store.unspentSiacoinElements()
 }
 
+// Address returns the address of the wallet at the specified index.
+func (w *Wallet) Address(index uint64) types.Address {
+	return types.StandardUnlockHash(wallet.KeyFromSeed(w.store.seed, index).PublicKey())
+}
+
+// UnlockConditions returns the unlock conditions of the wallet at the specified index.
+func (w *Wallet) UnlockConditions(index uint64) types.UnlockConditions {
+	return types.StandardUnlockConditions(wallet.KeyFromSeed(w.store.seed, index).PublicKey())
+}
+
 // Balance returns the balance of the wallet.
 func (w *Wallet) Balance() (balance wallet.Balance) {
 	outputs := w.store.unspentSiacoinElements()
@@ -359,4 +377,216 @@ func (w *Wallet) UnconfirmedEvents() (annotated []wallet.Event) {
 		addEvent(types.Hash256(txn.ID()), wallet.EventTypeV2Transaction, wallet.EventV2Transaction(txn), relevant)
 	}
 	return annotated
+}
+
+// ReleaseInputs is a helper function that releases the inputs of txn for use in
+// other transactions. It should only be called on transactions that are invalid
+// or will never be broadcast.
+func (w *Wallet) ReleaseInputs(txns []types.V2Transaction) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, txn := range txns {
+		for _, in := range txn.SiacoinInputs {
+			delete(w.locked, in.Parent.ID)
+		}
+	}
+}
+
+// selectUTXOs is used to select unspent Siacoin outputs for funding a transaction.
+func (w *Wallet) selectUTXOs(amount types.Currency, inputs int, useUnconfirmed bool, elements []types.SiacoinElement) ([]types.SiacoinElement, types.Currency, error) {
+	if amount.IsZero() {
+		return nil, types.ZeroCurrency, nil
+	}
+
+	tpoolSpent := make(map[types.SiacoinOutputID]bool)
+	tpoolUtxos := make(map[types.SiacoinOutputID]types.SiacoinElement)
+	for _, txn := range w.chain.PoolTransactions() {
+		for _, sci := range txn.SiacoinInputs {
+			tpoolSpent[sci.ParentID] = true
+			delete(tpoolUtxos, sci.ParentID)
+		}
+		for i, sco := range txn.SiacoinOutputs {
+			tpoolUtxos[txn.SiacoinOutputID(i)] = types.SiacoinElement{
+				ID:            txn.SiacoinOutputID(i),
+				StateElement:  types.StateElement{LeafIndex: types.UnassignedLeafIndex},
+				SiacoinOutput: sco,
+			}
+		}
+	}
+	for _, txn := range w.chain.V2PoolTransactions() {
+		for _, sci := range txn.SiacoinInputs {
+			tpoolSpent[sci.Parent.ID] = true
+			delete(tpoolUtxos, sci.Parent.ID)
+		}
+		for i := range txn.SiacoinOutputs {
+			sce := txn.EphemeralSiacoinOutput(i)
+			tpoolUtxos[sce.ID] = sce.Move()
+		}
+	}
+
+	// Remove immature, locked and spent outputs.
+	cs := w.chain.TipState()
+	utxos := make([]types.SiacoinElement, 0, len(elements))
+	var usedSum types.Currency
+	var immatureSum types.Currency
+	for _, sce := range elements {
+		if used := w.isLocked(sce.ID) || tpoolSpent[sce.ID]; used {
+			usedSum = usedSum.Add(sce.SiacoinOutput.Value)
+			continue
+		} else if immature := cs.Index.Height < sce.MaturityHeight; immature {
+			immatureSum = immatureSum.Add(sce.SiacoinOutput.Value)
+			continue
+		}
+		utxos = append(utxos, sce.Share())
+	}
+
+	// Sort by value, descending.
+	sort.Slice(utxos, func(i, j int) bool {
+		return utxos[i].SiacoinOutput.Value.Cmp(utxos[j].SiacoinOutput.Value) > 0
+	})
+
+	var unconfirmedUTXOs []types.SiacoinElement
+	var unconfirmedSum types.Currency
+	if useUnconfirmed {
+		for _, sce := range tpoolUtxos {
+			if !w.store.addressFound(sce.SiacoinOutput.Address) || w.isLocked(sce.ID) {
+				continue
+			}
+			unconfirmedUTXOs = append(unconfirmedUTXOs, sce.Share())
+			unconfirmedSum = unconfirmedSum.Add(sce.SiacoinOutput.Value)
+		}
+	}
+
+	// Sort by value, descending.
+	sort.Slice(unconfirmedUTXOs, func(i, j int) bool {
+		return unconfirmedUTXOs[i].SiacoinOutput.Value.Cmp(unconfirmedUTXOs[j].SiacoinOutput.Value) > 0
+	})
+
+	// Fund the transaction using the largest utxos first.
+	var selected []types.SiacoinElement
+	var inputSum types.Currency
+	for i, sce := range utxos {
+		if inputSum.Cmp(amount) >= 0 {
+			utxos = utxos[i:]
+			break
+		}
+		selected = append(selected, sce.Share())
+		inputSum = inputSum.Add(sce.SiacoinOutput.Value)
+	}
+
+	if inputSum.Cmp(amount) < 0 && useUnconfirmed {
+		// Try adding unconfirmed utxos.
+		for _, sce := range unconfirmedUTXOs {
+			selected = append(selected, sce.Share())
+			inputSum = inputSum.Add(sce.SiacoinOutput.Value)
+			if inputSum.Cmp(amount) >= 0 {
+				break
+			}
+		}
+
+		if inputSum.Cmp(amount) < 0 {
+			// Still not enough funds.
+			return nil, types.ZeroCurrency, fmt.Errorf("%w: inputs %v < needed %v (used: %v immature: %v unconfirmed: %v)", wallet.ErrNotEnoughFunds, inputSum.String(), amount.String(), usedSum.String(), immatureSum.String(), unconfirmedSum.String())
+		}
+	} else if inputSum.Cmp(amount) < 0 {
+		return nil, types.ZeroCurrency, fmt.Errorf("%w: inputs %v < needed %v (used: %v immature: %v", wallet.ErrNotEnoughFunds, inputSum.String(), amount.String(), usedSum.String(), immatureSum.String())
+	}
+
+	// Check if remaining utxos should be defragged.
+	txnInputs := inputs + len(selected)
+	if len(utxos) > defragThreshold && txnInputs < maxInputsForDefrag {
+		// Add the smallest utxos to the transaction.
+		defraggable := utxos
+		if len(defraggable) > maxDefragUTXOs {
+			defraggable = defraggable[len(defraggable)-maxDefragUTXOs:]
+		}
+		for i := len(defraggable) - 1; i >= 0; i-- {
+			if txnInputs >= maxInputsForDefrag {
+				break
+			}
+
+			sce := &defraggable[i]
+			selected = append(selected, sce.Share())
+			inputSum = inputSum.Add(sce.SiacoinOutput.Value)
+			txnInputs++
+		}
+	}
+	return selected, inputSum, nil
+}
+
+// FundTransaction adds siacoin inputs worth at least amount to the provided
+// V2 transaction. If necessary, a change output will also be added. The inputs
+// will not be available to future calls to FundTransaction unless ReleaseInputs
+// is called.
+//
+// The returned index should be used as the basis for AddV2PoolTransactions.
+func (w *Wallet) FundTransaction(txn *types.V2Transaction, amount types.Currency, useUnconfirmed bool) (types.ChainIndex, []int, error) {
+	if amount.IsZero() {
+		return w.store.lastSyncedIndex(), nil, nil
+	}
+
+	// Fetch outputs from the store.
+	elements := w.store.unspentSiacoinElements()
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	selected, inputSum, err := w.selectUTXOs(amount, len(txn.SiacoinInputs), useUnconfirmed, elements)
+	if err != nil {
+		return types.ChainIndex{}, nil, err
+	}
+
+	// Add a change output if necessary.
+	if inputSum.Cmp(amount) > 0 {
+		txn.SiacoinOutputs = append(txn.SiacoinOutputs, types.SiacoinOutput{
+			Value:   inputSum.Sub(amount),
+			Address: w.store.rootAddress(),
+		})
+	}
+
+	toSign := make([]int, 0, len(selected))
+	for _, sce := range selected {
+		toSign = append(toSign, len(txn.SiacoinInputs))
+		txn.SiacoinInputs = append(txn.SiacoinInputs, types.V2SiacoinInput{
+			Parent: sce.Copy(),
+		})
+		w.locked[sce.ID] = time.Now().Add(reservationDuration)
+	}
+
+	return w.store.lastSyncedIndex(), toSign, nil
+}
+
+// SignInputs adds a signature to each of the specified siacoin inputs.
+func (w *Wallet) SignInputs(txn *types.V2Transaction, toSign []int) {
+	if len(toSign) == 0 {
+		return
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	sigHash := w.chain.TipState().InputSigHash(*txn)
+	for _, i := range toSign {
+		w.store.mu.Lock()
+		index, found := w.store.addresses[txn.SiacoinInputs[i].Parent.SiacoinOutput.Address]
+		if !found {
+			panic("missing address to sign SC input")
+		}
+		w.store.mu.Unlock()
+		policy := w.SpendPolicy(index)
+		txn.SiacoinInputs[i].SatisfiedPolicy = types.SatisfiedPolicy{
+			Policy:     policy,
+			Signatures: []types.Signature{w.SignHash(sigHash, index)},
+		}
+	}
+}
+
+// SpendPolicy returns the wallet's default spend policy at the specified index.
+func (w *Wallet) SpendPolicy(index uint64) types.SpendPolicy {
+	return types.SpendPolicy{Type: types.PolicyTypeUnlockConditions(w.UnlockConditions(index))}
+}
+
+// SignHash signs the hash with the wallet's private key at the specified index.
+func (w *Wallet) SignHash(h types.Hash256, index uint64) types.Signature {
+	return wallet.KeyFromSeed(w.store.seed, index).SignHash(h)
 }
