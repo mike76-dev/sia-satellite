@@ -100,6 +100,18 @@ func (s *server) walletEventsHandler(jc jape.Context) {
 	jc.Encode(s.wallet.UnconfirmedEvents())
 }
 
+func (s *server) walletRescanHandler(jc jape.Context) {
+	var wrr WalletRescanRequest
+	if jc.Decode(&wrr) != nil {
+		return
+	}
+	err := s.wallet.Rescan(wrr.Addresses)
+	if jc.Check("couldn't start rescan", err) != nil {
+		return
+	}
+	jc.EmptyResonse()
+}
+
 // NewServer returns an HTTP handler that serves the satd API.
 func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet) http.Handler {
 	srv := server{cm, s, w}
@@ -117,5 +129,6 @@ func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet) http.Handl
 		"GET  /wallet/balance": srv.walletBalanceHandler,
 		"GET  /wallet/address": srv.walletAddressHandler,
 		"GET  /wallet/events":  srv.walletEventsHandler,
+		"POST /wallet/rescan":  srv.walletRescanHandler,
 	})
 }

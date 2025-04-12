@@ -24,3 +24,8 @@ type TxpoolTransactionsResponse struct {
 	Transactions   []types.Transaction   `json:"transactions"`
 	V2Transactions []types.V2Transaction `json:"v2transactions"`
 }
+
+// WalletRescanRequest is the request type for /wallet/rescan.
+type WalletRescanRequest struct {
+	Addresses uint64 `json:"addresses"`
+}

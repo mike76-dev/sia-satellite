@@ -163,6 +163,9 @@ func (s *DBStore) resetChainState() error {
 	}
 
 	s.tip = types.ChainIndex{}
+	s.greatestIndex = 0
+	s.addresses = make(map[types.Address]uint64)
+	s.sces = make(map[types.SiacoinOutputID]types.SiacoinElement)
 	return s.save()
 }
 

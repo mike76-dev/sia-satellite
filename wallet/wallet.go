@@ -3,6 +3,7 @@ package wallet
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -27,14 +28,15 @@ var (
 // Wallet is a multi-address wallet. It doesn't support Siafunds
 // and Foundation subsidies.
 type Wallet struct {
-	chain  *chain.Manager
-	syncer *syncer.Syncer
-	store  *DBStore
-	log    *zap.Logger
-	mu     sync.Mutex
-	ctx    context.Context
-	cancel func()
-	locked map[types.SiacoinOutputID]time.Time
+	chain    *chain.Manager
+	syncer   *syncer.Syncer
+	store    *DBStore
+	log      *zap.Logger
+	mu       sync.Mutex
+	ctx      context.Context
+	cancel   func()
+	locked   map[types.SiacoinOutputID]time.Time
+	scanning bool
 }
 
 // New returns an initialized Wallet.
@@ -78,6 +80,10 @@ func New(cm *chain.Manager, s *syncer.Syncer, db *sql.DB, seedPhrase string, log
 		}
 
 		for {
+			if w.scanning {
+				time.Sleep(time.Second)
+				continue
+			}
 			select {
 			case <-ctx.Done():
 				return
@@ -93,6 +99,8 @@ func New(cm *chain.Manager, s *syncer.Syncer, db *sql.DB, seedPhrase string, log
 	if len(store.addresses) == 0 { // rescan needed
 		scanner := newScanner(store.seed)
 		go func() {
+			w.scanning = true
+
 			// Wait until synced.
 			for {
 				if w.synced() {
@@ -105,6 +113,7 @@ func New(cm *chain.Manager, s *syncer.Syncer, db *sql.DB, seedPhrase string, log
 			addrs, err := scanner.scan(ctx, cm, defaultAddresses)
 			if err != nil {
 				logger.Error("failed to scan blockchain for addresses", zap.Error(err))
+				w.scanning = false
 				return
 			}
 
@@ -112,6 +121,7 @@ func New(cm *chain.Manager, s *syncer.Syncer, db *sql.DB, seedPhrase string, log
 				_, err = store.insertAddress(index)
 				if err != nil {
 					logger.Error("failed to insert address", zap.Error(err))
+					w.scanning = false
 					return
 				}
 			}
@@ -120,10 +130,12 @@ func New(cm *chain.Manager, s *syncer.Syncer, db *sql.DB, seedPhrase string, log
 				_, err = store.insertAddress(0)
 				if err != nil {
 					logger.Error("failed to insert root address", zap.Error(err))
+					w.scanning = false
 					return
 				}
 			}
 
+			w.scanning = false
 			go syncWallet()
 		}()
 	} else {
@@ -589,4 +601,58 @@ func (w *Wallet) SpendPolicy(index uint64) types.SpendPolicy {
 // SignHash signs the hash with the wallet's private key at the specified index.
 func (w *Wallet) SignHash(h types.Hash256, index uint64) types.Signature {
 	return wallet.KeyFromSeed(w.store.seed, index).SignHash(h)
+}
+
+// Rescan rescans the wallet using up to num addresses.
+func (w *Wallet) Rescan(num uint64) error {
+	if !w.synced() {
+		return errors.New("wallet not synced")
+	}
+
+	if w.scanning {
+		return errors.New("another scan is already running")
+	}
+
+	w.mu.Lock()
+	w.scanning = true
+	w.mu.Unlock()
+
+	if err := w.store.resetChainState(); err != nil {
+		return utils.AddContext(err, "failed to reset store")
+	}
+
+	scanner := newScanner(w.store.seed)
+	go func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+
+		addrs, err := scanner.scan(w.ctx, w.chain, num)
+		if err != nil {
+			w.log.Error("failed to scan blockchain for addresses", zap.Error(err))
+			w.scanning = false
+			return
+		}
+
+		for _, index := range addrs {
+			_, err = w.store.insertAddress(index)
+			if err != nil {
+				w.log.Error("failed to insert address", zap.Error(err))
+				w.scanning = false
+				return
+			}
+		}
+
+		if len(w.store.addresses) == 0 { // insert at least one address
+			_, err = w.store.insertAddress(0)
+			if err != nil {
+				w.log.Error("failed to insert root address", zap.Error(err))
+				w.scanning = false
+				return
+			}
+		}
+
+		w.scanning = false
+	}()
+
+	return nil
 }
