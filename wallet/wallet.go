@@ -262,3 +262,101 @@ func (w *Wallet) Balance() (balance wallet.Balance) {
 func (w *Wallet) NextAddress() (addr types.Address, err error) {
 	return w.store.insertAddress(w.store.greatestIndex + 1)
 }
+
+// UnconfirmedEvents returns all unconfirmed transactions relevant to the wallet.
+func (w *Wallet) UnconfirmedEvents() (annotated []wallet.Event) {
+	confirmed := w.store.unspentSiacoinElements()
+	utxos := make(map[types.SiacoinOutputID]types.SiacoinElement)
+	for _, se := range confirmed {
+		utxos[se.ID] = se.Share()
+	}
+
+	index := types.ChainIndex{
+		Height: w.chain.TipState().Index.Height + 1,
+	}
+	timestamp := time.Now().Truncate(time.Second)
+
+	addEvent := func(id types.Hash256, eventType string, data wallet.EventData, relevantAddrs []types.Address) {
+		ev := wallet.Event{
+			ID:             id,
+			Index:          index,
+			MaturityHeight: index.Height,
+			Timestamp:      timestamp,
+			Type:           eventType,
+			Data:           data,
+			Relevant:       relevantAddrs,
+		}
+
+		if ev.SiacoinInflow().Equals(ev.SiacoinOutflow()) {
+			// Ignore events that don't affect the wallet.
+			return
+		}
+		annotated = append(annotated, ev)
+	}
+
+	for _, txn := range w.chain.PoolTransactions() {
+		var relevant []types.Address
+		event := wallet.EventV1Transaction{
+			Transaction: txn,
+		}
+
+		var outflow types.Currency
+		for _, sci := range txn.SiacoinInputs {
+			sce, ok := utxos[sci.ParentID]
+			if !ok {
+				// Ignore inputs that don't belong to the wallet.
+				continue
+			}
+			outflow = outflow.Add(sce.SiacoinOutput.Value)
+			event.SpentSiacoinElements = append(event.SpentSiacoinElements, sce.Share())
+			relevant = append(relevant, sce.SiacoinOutput.Address)
+		}
+
+		var inflow types.Currency
+		for i, so := range txn.SiacoinOutputs {
+			if w.store.addressFound(so.Address) {
+				inflow = inflow.Add(so.Value)
+				utxos[txn.SiacoinOutputID(i)] = types.SiacoinElement{
+					ID:            txn.SiacoinOutputID(i),
+					StateElement:  types.StateElement{LeafIndex: types.UnassignedLeafIndex},
+					SiacoinOutput: so,
+				}
+				relevant = append(relevant, so.Address)
+			}
+		}
+
+		// Skip transactions that don't affect the wallet.
+		if inflow.IsZero() && outflow.IsZero() {
+			continue
+		}
+		addEvent(types.Hash256(txn.ID()), wallet.EventTypeV1Transaction, event, relevant)
+	}
+
+	for _, txn := range w.chain.V2PoolTransactions() {
+		var relevant []types.Address
+		var inflow, outflow types.Currency
+		for _, sci := range txn.SiacoinInputs {
+			if !w.store.addressFound(sci.Parent.SiacoinOutput.Address) {
+				continue
+			}
+			outflow = outflow.Add(sci.Parent.SiacoinOutput.Value)
+			relevant = append(relevant, sci.Parent.SiacoinOutput.Address)
+		}
+
+		for _, sco := range txn.SiacoinOutputs {
+			if !w.store.addressFound(sco.Address) {
+				continue
+			}
+			inflow = inflow.Add(sco.Value)
+			relevant = append(relevant, sco.Address)
+		}
+
+		// Skip transactions that don't affect the wallet.
+		if inflow.IsZero() && outflow.IsZero() {
+			continue
+		}
+
+		addEvent(types.Hash256(txn.ID()), wallet.EventTypeV2Transaction, wallet.EventV2Transaction(txn), relevant)
+	}
+	return annotated
+}
