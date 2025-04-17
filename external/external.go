@@ -5,6 +5,7 @@ package external
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -34,13 +35,13 @@ func FetchSCRates() (map[string]float64, error) {
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return nil, errors.New("falied to fetch SC exchange rates")
+			return nil, fmt.Errorf("falied to fetch SC exchange rates: %s", resp.Status)
 		}
 		var data marketResponse
 		dec := json.NewDecoder(resp.Body)
 		err = dec.Decode(&data)
 		if err != nil {
-			return nil, errors.New("wrong format of SC exchange rates")
+			return nil, utils.AddContext(err, "wrong format of SC exchange rates")
 		}
 		return data.Price, nil
 	}
