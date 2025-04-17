@@ -56,8 +56,8 @@ type (
 
 	// HostInteraction represents the current interaction status with a host.
 	HostInteraction struct {
-		Uptime           uint64             `json:"uptime"`
-		Downtime         uint64             `json:"downtime"`
+		Uptime           time.Duration      `json:"uptime"`
+		Downtime         time.Duration      `json:"downtime"`
 		ScanHistory      []HostScan         `json:"scanHistory"`
 		BenchmarkHistory []HostBenchmark    `json:"benchmarkHistory"`
 		LastSeen         time.Time          `json:"lastSeen"`
