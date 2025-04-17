@@ -35,15 +35,17 @@ type HostDB struct {
 	log       *zap.Logger
 	mu        sync.Mutex
 	closeChan chan struct{}
+	test      bool
 }
 
 // New returns an initialized HostDB.
-func New(db *sql.DB, log *zap.Logger) (*HostDB, error) {
+func New(db *sql.DB, log *zap.Logger, test bool) (*HostDB, error) {
 	hdb := &HostDB{
 		db:        db,
 		log:       log,
 		hosts:     make(map[types.PublicKey]*HostDBEntry),
 		closeChan: make(chan struct{}),
+		test:      test,
 	}
 
 	if err := hdb.load(); err != nil {
@@ -252,7 +254,7 @@ func (hdb *HostDB) load() error {
 
 // doUpdate retrieves a new list of hosts and saves it.
 func (hdb *HostDB) doUpdate() error {
-	hosts, err := external.GetHosts()
+	hosts, err := external.GetHosts(hdb.test)
 	if err != nil {
 		return err
 	}

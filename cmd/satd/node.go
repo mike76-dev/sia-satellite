@@ -153,7 +153,7 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Could not initialize hostDB logger: %v\n", err)
 	}
 
-	hdb, err := hostdb.New(db, hdbLogger)
+	hdb, err := hostdb.New(db, hdbLogger, config.Test)
 	if err != nil {
 		log.Fatalf("Could not initialize hostDB: %v\n", err)
 	}

@@ -15,7 +15,7 @@ import (
 
 const (
 	// hostscoretAPI is the endpoint of the HostScore API.
-	hostscoretAPI = "https://api.hostscore.info/v1/hosts?offset=0&limit=-1"
+	hostscoreAPI = "https://api.hostscore.info/v1/hosts?offset=0&limit=-1"
 )
 
 var ErrHostScoreTimeout = errors.New("HostScore service unavailable")
@@ -106,9 +106,13 @@ type hostsResponse struct {
 }
 
 // GetHosts retrieves the list of online hosts.
-func GetHosts() ([]Host, error) {
+func GetHosts(zen bool) ([]Host, error) {
+	urlString := hostscoreAPI
+	if zen {
+		urlString += "&network=zen"
+	}
 	client := &http.Client{Timeout: time.Minute}
-	resp, err := client.Get(hostscoretAPI)
+	resp, err := client.Get(urlString)
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
