@@ -346,34 +346,6 @@ func (hdb *HostDB) doUpdate() error {
 			Settings:     host.Settings,
 		}
 
-		for node, interaction := range host.Interactions {
-			_, err := intStmt.Exec(
-				host.PublicKey[:],
-				node,
-				int64(interaction.Uptime.Seconds()),
-				int64(interaction.Downtime.Seconds()),
-				interaction.LastSeen.Unix(),
-				interaction.ActiveHosts,
-				interaction.Score.PricesScore,
-				interaction.Score.StorageScore,
-				interaction.Score.CollateralScore,
-				interaction.Score.InteractionsScore,
-				interaction.Score.UptimeScore,
-				interaction.Score.AgeScore,
-				interaction.Score.VersionScore,
-				interaction.Score.LatencyScore,
-				interaction.Score.BenchmarksScore,
-				interaction.Score.ContractsScore,
-				interaction.Score.TotalScore,
-				interaction.Successes,
-				interaction.Failures,
-			)
-			if err != nil {
-				tx.Rollback()
-				return utils.AddContext(err, "couldn't save interactions")
-			}
-		}
-
 		var settings bytes.Buffer
 		e := types.NewEncoder(&settings)
 		if (host.Settings != rhpv4.HostSettings{}) {
@@ -405,6 +377,34 @@ func (hdb *HostDB) doUpdate() error {
 		if err != nil {
 			tx.Rollback()
 			return utils.AddContext(err, "couldn't save host")
+		}
+
+		for node, interaction := range host.Interactions {
+			_, err := intStmt.Exec(
+				host.PublicKey[:],
+				node,
+				int64(interaction.Uptime.Seconds()),
+				int64(interaction.Downtime.Seconds()),
+				interaction.LastSeen.Unix(),
+				interaction.ActiveHosts,
+				interaction.Score.PricesScore,
+				interaction.Score.StorageScore,
+				interaction.Score.CollateralScore,
+				interaction.Score.InteractionsScore,
+				interaction.Score.UptimeScore,
+				interaction.Score.AgeScore,
+				interaction.Score.VersionScore,
+				interaction.Score.LatencyScore,
+				interaction.Score.BenchmarksScore,
+				interaction.Score.ContractsScore,
+				interaction.Score.TotalScore,
+				interaction.Successes,
+				interaction.Failures,
+			)
+			if err != nil {
+				tx.Rollback()
+				return utils.AddContext(err, "couldn't save interactions")
+			}
 		}
 	}
 
