@@ -21,6 +21,59 @@ CREATE TABLE wt_tip (
 	PRIMARY KEY (id)
 );
 
+/* hostdb */
+
+DROP TABLE IF EXISTS hdb_interactions;
+DROP TABLE IF EXISTS hdb_hosts;
+
+CREATE TABLE hdb_hosts (
+	is_online          BOOL NOT NULL,
+	public_key         BINARY(32) NOT NULL,
+	first_seen         BIGINT NOT NULL,
+	known_since        BIGINT UNSIGNED NOT NULL,
+	net_address        TEXT NOT NULL,
+	ip_nets            TEXT NOT NULL,
+	last_ip_change     BIGINT NOT NULL,
+	price_score        DOUBLE NOT NULL,
+	storage_score      DOUBLE NOT NULL,
+	collateral_score   DOUBLE NOT NULL,
+	interactions_score DOUBLE NOT NULL,
+	uptime_score       DOUBLE NOT NULL,
+	age_score          DOUBLE NOT NULL,
+	version_score      DOUBLE NOT NULL,
+	latency_score      DOUBLE NOT NULL,
+	benchmarks_score   DOUBLE NOT NULL,
+	contracts_score    DOUBLE NOT NULL,
+	total_score        DOUBLE NOT NULL,
+	country            TEXT NOT NULL,
+	settings           BLOB,
+	PRIMARY KEY (public_key)
+);
+
+CREATE TABLE hdb_interactions (
+	public_key         BINARY(32) NOT NULL,
+	node               VARCHAR(8) NOT NULL,
+	uptime             BIGINT NOT NULL,
+	downtime           BIGINT NOT NULL,
+	last_seen          BIGINT NOT NULL,
+	active_hosts       INT NOT NULL,
+	price_score        DOUBLE NOT NULL,
+	storage_score      DOUBLE NOT NULL,
+	collateral_score   DOUBLE NOT NULL,
+	interactions_score DOUBLE NOT NULL,
+	uptime_score       DOUBLE NOT NULL,
+	age_score          DOUBLE NOT NULL,
+	version_score      DOUBLE NOT NULL,
+	latency_score      DOUBLE NOT NULL,
+	benchmarks_score   DOUBLE NOT NULL,
+	contracts_score    DOUBLE NOT NULL,
+	total_score        DOUBLE NOT NULL,
+	successes          DOUBLE NOT NULL,
+	failures           DOUBLE NOT NULL,
+	PRIMARY KEY (public_key, node),
+	FOREIGN KEY (public_key) REFERENCES hdb_hosts(public_key)
+);
+
 /* provider */
 
 DROP TABLE IF EXISTS pr_info;
@@ -185,65 +238,6 @@ CREATE TABLE mg_tip (
 	id        INT NOT NULL AUTO_INCREMENT,
 	height    BIGINT UNSIGNED NOT NULL,
 	bid       BINARY(32) NOT NULL,
-	PRIMARY KEY (id)
-);
-
-/* hostdb */
-
-DROP TABLE IF EXISTS hdb_scanhistory;
-DROP TABLE IF EXISTS hdb_ipnets;
-DROP TABLE IF EXISTS hdb_hosts;
-DROP TABLE IF EXISTS hdb_fdomains;
-DROP TABLE IF EXISTS hdb_fhosts;
-DROP TABLE IF EXISTS hdb_contracts;
-DROP TABLE IF EXISTS hdb_info;
-
-CREATE TABLE hdb_hosts (
-	id         INT NOT NULL AUTO_INCREMENT,
-	public_key BINARY(32) NOT NULL UNIQUE,
-	filtered   BOOL NOT NULL,
-	bytes      BLOB NOT NULL,
-	PRIMARY KEY (id)
-);
-
-CREATE TABLE hdb_scanhistory (
-	id         INT NOT NULL AUTO_INCREMENT,
-	public_key BINARY(32) NOT NULL,
-	time       BIGINT UNSIGNED NOT NULL,
-	success    BOOL NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (public_key) REFERENCES hdb_hosts(public_key)
-);
-
-CREATE TABLE hdb_ipnets (
-	id         INT NOT NULL AUTO_INCREMENT,
-	public_key BINARY(32) NOT NULL,
-	ip_net     VARCHAR(255) NOT NULL,
-	PRIMARY KEY (id),
-	FOREIGN KEY (public_key) REFERENCES hdb_hosts(public_key)
-);
-
-CREATE TABLE hdb_fdomains (
-	dom VARCHAR(255) NOT NULL
-);
-
-CREATE TABLE hdb_fhosts (
-	public_key BINARY(32) NOT NULL
-);
-
-CREATE TABLE hdb_contracts (
-	host_pk   BINARY(32) NOT NULL,
-	renter_pk BINARY(32) NOT NULL,
-	data      BIGINT UNSIGNED NOT NULL
-);
-
-CREATE TABLE hdb_info (
-	id               INT NOT NULL AUTO_INCREMENT,
-	height           BIGINT UNSIGNED NOT NULL,
-	bid              BINARY(32) NOT NULL,
-	scan_complete    BOOL NOT NULL,
-	disable_ip_check BOOL NOT NULL,
-	filter_mode      INT NOT NULL,
 	PRIMARY KEY (id)
 );
 

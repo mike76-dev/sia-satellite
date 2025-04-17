@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/mike76-dev/sia-satellite/hostdb"
 	"github.com/mike76-dev/sia-satellite/internal/syncerutil"
 	"github.com/mike76-dev/sia-satellite/persist"
 	"github.com/mike76-dev/sia-satellite/wallet"
@@ -25,6 +26,7 @@ type node struct {
 	chain  *chain.Manager
 	syncer *syncer.Syncer
 	wallet *wallet.Wallet
+	hostDB *hostdb.HostDB
 
 	Start func() (stop func())
 }
@@ -145,10 +147,22 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Could not initialize wallet: %v\n", err)
 	}
 
+	// Initialize host database.
+	hdbLogger, hdbCloseFn, err := persist.NewFileLogger(filepath.Join(dir, "hostdb.log"), zapcore.ErrorLevel)
+	if err != nil {
+		log.Fatalf("Could not initialize hostDB logger: %v\n", err)
+	}
+
+	hdb, err := hostdb.New(db, hdbLogger)
+	if err != nil {
+		log.Fatalf("Could not initialize hostDB: %v\n", err)
+	}
+
 	return &node{
 		chain:  cm,
 		syncer: s,
 		wallet: w,
+		hostDB: hdb,
 		Start: func() func() {
 			ch := make(chan struct{})
 			go func() {
@@ -156,10 +170,12 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 				close(ch)
 			}()
 			return func() {
+				hdb.Close()
 				w.Close()
 				l.Close()
 				<-ch
 				bdb.Close()
+				hdbCloseFn()
 				walletCloseFn()
 				syncerCloseFn()
 				cmCloseFn()
