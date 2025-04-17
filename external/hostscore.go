@@ -2,8 +2,10 @@ package external
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/internal/utils"
@@ -15,6 +17,8 @@ const (
 	// hostscoretAPI is the endpoint of the HostScore API.
 	hostscoretAPI = "https://api.hostscore.info/v1/hosts?offset=0&limit=-1"
 )
+
+var ErrHostScoreTimeout = errors.New("HostScore service unavailable")
 
 type (
 	// HostScan represents the result of a host scan.
@@ -103,7 +107,8 @@ type hostsResponse struct {
 
 // GetHosts retrieves the list of online hosts.
 func GetHosts() ([]Host, error) {
-	resp, err := http.Get(hostscoretAPI)
+	client := &http.Client{Timeout: time.Minute}
+	resp, err := client.Get(hostscoretAPI)
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
@@ -117,5 +122,10 @@ func GetHosts() ([]Host, error) {
 		}
 		return data.Hosts, nil
 	}
+
+	if ue, ok := err.(*url.Error); ok && ue.Timeout() {
+		return nil, ErrHostScoreTimeout
+	}
+
 	return nil, utils.AddContext(err, "falied to fetch hosts")
 }
