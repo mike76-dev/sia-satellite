@@ -275,7 +275,7 @@ func (hdb *HostDB) doUpdate() error {
 	}
 
 	hostStmt, err := tx.Prepare(`
-		REPLACE INTO hdb_hosts (
+		INSERT INTO hdb_hosts (
 			is_online,
 			public_key,
 			first_seen,
@@ -296,7 +296,27 @@ func (hdb *HostDB) doUpdate() error {
 			total_score,
 			country,
 			settings
-		) VALUES (TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AS new
+		ON DUPLICATE KEY UPDATE
+			is_online = new.is_online,
+			first_seen = new.first_seen,
+			known_since = new.known_since,
+			net_address = new.net_address,
+			ip_nets = new.ip_nets,
+			last_ip_change = new.last_ip_change,
+			price_score = new.price_score,
+			storage_score = new.storage_score,
+			collateral_score = new.collateral_score,
+			interactions_score = new.interactions_score,
+			uptime_score = new.uptime_score,
+			age_score = new.age_score,
+			version_score = new.version_score,
+			latency_score = new.latency_score,
+			benchmarks_score = new.benchmarks_score,
+			contracts_score = new.contracts_score,
+			total_score = new.total_score,
+			country = new.country,
+			settings = new.settings
 	`)
 	if err != nil {
 		tx.Rollback()
@@ -305,7 +325,7 @@ func (hdb *HostDB) doUpdate() error {
 	defer hostStmt.Close()
 
 	intStmt, err := tx.Prepare(`
-		REPLACE INTO hdb_interactions (
+		INSERT INTO hdb_interactions (
 			public_key,
 			node,
 			uptime,
@@ -325,7 +345,25 @@ func (hdb *HostDB) doUpdate() error {
 			total_score,
 			successes,
 			failures
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AS new
+		ON DUPLICATE KEY UPDATE
+			uptime = new.uptime,
+			downtime = new.downtime,
+			last_seen = new.last_seen,
+			active_hosts = new.active_hosts,
+			price_score = new.price_score,
+			storage_score = new.storage_score,
+			collateral_score = new.collateral_score,
+			interactions_score = new.interactions_score,
+			uptime_score = new.uptime_score,
+			age_score = new.age_score,
+			version_score = new.version_score,
+			latency_score = new.latency_score,
+			benchmarks_score = new.benchmarks_score,
+			contracts_score = new.contracts_score,
+			total_score = new.total_score,
+			successes = new.successes,
+			failures = new.failures
 	`)
 	if err != nil {
 		tx.Rollback()
