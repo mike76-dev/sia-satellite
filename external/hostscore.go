@@ -133,3 +133,17 @@ func GetHosts(zen bool) ([]Host, error) {
 
 	return nil, utils.AddContext(err, "falied to fetch hosts")
 }
+
+// Score calculates the total score of a HostScoreBreakdown.
+func (hsb HostScoreBreakdown) Score() float64 {
+	return hsb.AgeScore *
+		hsb.BenchmarksScore *
+		hsb.CollateralScore *
+		hsb.ContractsScore *
+		hsb.InteractionsScore *
+		hsb.LatencyScore *
+		hsb.PricesScore *
+		hsb.StorageScore *
+		hsb.UptimeScore *
+		hsb.VersionScore
+}
