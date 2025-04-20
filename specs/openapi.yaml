@@ -1057,6 +1057,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - hosts
+      description: Clear the hosts blacklist
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /hosts/blacklist/{key}:
     delete:
       tags:
@@ -1139,6 +1167,34 @@ paths:
               items:
                 type: string
                 example: 'ab79a75577b8d906d088be3e82a0e25fa8c7531a1d3218f4e9f4361907ed1cb3'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - hosts
+      description: Clear the hosts whitelist
+      security:
+        - apiKey: []
+        - authCookie: []
       responses:
         '204':
           description: Successful operation
@@ -2079,41 +2135,26 @@ components:
           description: Country of location
           type: string
           example: 'US'
-        benchmarks:
-          description: Benchmark results
-          type: array
-          items:
-            type: object
-            properties:
-              basis:
-                description: Calculation basis
-                type: string
-                example: 'global'
-                enum:
-                  - eu
-                  - us
-                  - ap
-                  - global
-              latency:
-                description: Latency in nanoseconds
-                type: integer
-                format: int64
-                example: 3384000000
-              uploadSpeed:
-                description: Upload speed in bytes/second
-                type: number
-                format: double
-                example: 4285325.23632819
-              downloadSpeed:
-                description: Download speed in bytes/second
-                type: number
-                format: double
-                example: 6145461.249201419
-              score:
-                description: Combined score
-                type: number
-                format: double
-                example: 0.089
+        latency:
+          description: Latency in nanoseconds
+          type: integer
+          format: int64
+          example: 3384000000
+        uploadSpeed:
+          description: Upload speed in bytes/second
+          type: number
+          format: double
+          example: 4285325.23632819
+        downloadSpeed:
+          description: Download speed in bytes/second
+          type: number
+          format: double
+          example: 6145461.249201419
+        score:
+          description: Combined score
+          type: number
+          format: double
+          example: 0.089
     Slab:
       type: object
       required: [health, encryptionKey, minShards, offset, length]
