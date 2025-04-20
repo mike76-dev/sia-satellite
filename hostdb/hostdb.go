@@ -3,6 +3,7 @@ package hostdb
 import (
 	"bytes"
 	"database/sql"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -14,18 +15,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// ErrHostNotFound is returned when no host is found with the given public key.
+var ErrHostNotFound = errors.New("host not found")
+
 // HostDBEntry represents a single host.
 type HostDBEntry struct {
-	PublicKey    types.PublicKey
-	FirstSeen    time.Time
-	KnownSince   uint64
-	NetAddress   string
-	IPNets       []string
-	LastIPChange time.Time
-	Score        external.HostScoreBreakdown
-	Interactions map[string]external.HostInteraction
-	Country      string
-	Settings     rhpv4.HostSettings
+	PublicKey    types.PublicKey                     `json:"publicKey"`
+	FirstSeen    time.Time                           `json:"firstSeen"`
+	KnownSince   uint64                              `json:"knownSince"`
+	NetAddress   string                              `json:"netAddress"`
+	IPNets       []string                            `json:"ipNets"`
+	LastIPChange time.Time                           `json:"lastIPChange"`
+	Score        external.HostScoreBreakdown         `json:"score"`
+	Interactions map[string]external.HostInteraction `json:"interactions"`
+	Country      string                              `json:"country"`
+	Settings     rhpv4.HostSettings                  `json:"settings"`
 }
 
 // HostDB keeps a list of online hosts that is updated regularly.
@@ -468,4 +472,29 @@ func (hdb *HostDB) update() {
 		case <-time.After(2 * time.Hour):
 		}
 	}
+}
+
+// Host returns the entry with the given public key.
+func (hdb *HostDB) Host(pk types.PublicKey) (*HostDBEntry, error) {
+	hdb.mu.Lock()
+	defer hdb.mu.Unlock()
+
+	host, ok := hdb.hosts[pk]
+	if !ok {
+		return nil, ErrHostNotFound
+	} else {
+		return host, nil
+	}
+}
+
+// Hosts returns the list of all online hosts.
+func (hdb *HostDB) Hosts() (hosts []*HostDBEntry) {
+	hdb.mu.Lock()
+	defer hdb.mu.Unlock()
+
+	for _, host := range hdb.hosts {
+		hosts = append(hosts, host)
+	}
+
+	return
 }

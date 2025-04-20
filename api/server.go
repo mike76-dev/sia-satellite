@@ -1,10 +1,13 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/hostdb"
 	"github.com/mike76-dev/sia-satellite/wallet"
+	"go.sia.tech/core/types"
 	"go.sia.tech/coreutils/chain"
 	"go.sia.tech/coreutils/syncer"
 	"go.sia.tech/jape"
@@ -14,6 +17,7 @@ type server struct {
 	chain  *chain.Manager
 	syncer *syncer.Syncer
 	wallet *wallet.Wallet
+	hostDB *hostdb.HostDB
 }
 
 func isSynced(s *syncer.Syncer) bool {
@@ -112,9 +116,29 @@ func (s *server) walletRescanHandler(jc jape.Context) {
 	jc.EmptyResonse()
 }
 
+func (s *server) hostDBHostsHandler(jc jape.Context) {
+	jc.Encode(s.hostDB.Hosts())
+}
+
+func (s *server) hostDBHostHandler(jc jape.Context) {
+	key := jc.PathParam("key")
+	if key == "" {
+		jc.Error(errors.New("no public key provided"), http.StatusBadRequest)
+	}
+	var pk types.PublicKey
+	if jc.Check("couldn't decode public key", pk.UnmarshalText([]byte(key))) != nil {
+		return
+	}
+	host, err := s.hostDB.Host(pk)
+	if jc.Check("couldn't retrieve host", err) != nil {
+		return
+	}
+	jc.Encode(host)
+}
+
 // NewServer returns an HTTP handler that serves the satd API.
-func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet) http.Handler {
-	srv := server{cm, s, w}
+func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet, hdb *hostdb.HostDB) http.Handler {
+	srv := server{cm, s, w, hdb}
 	return jape.Mux(map[string]jape.Handler{
 		"GET /consensus/network":  srv.consensusNetworkHandler,
 		"GET /consensus/tip":      srv.consensusTipHandler,
@@ -130,5 +154,8 @@ func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet) http.Handl
 		"GET  /wallet/address": srv.walletAddressHandler,
 		"GET  /wallet/events":  srv.walletEventsHandler,
 		"POST /wallet/rescan":  srv.walletRescanHandler,
+
+		"GET /hostdb/hosts":     srv.hostDBHostsHandler,
+		"GET /hostdb/host/:key": srv.hostDBHostHandler,
 	})
 }
