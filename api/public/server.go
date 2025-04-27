@@ -23,44 +23,57 @@ const (
 	httpMaxBodySize = 1048576 // 1MiB.
 )
 
-// server is the public API server.
-type server struct {
-	accounts *account.AccountManager
+// Server is the public API server.
+type Server struct {
+	accounts  *account.AccountManager
+	authStats map[string]authenticationStats
+	log       *zap.Logger
 
-	log    *zap.Logger
-	router http.Handler
-	mu     sync.RWMutex
+	router   http.Handler
+	routerMu sync.RWMutex
+
+	mu        sync.Mutex
+	closeChan chan struct{}
 }
 
 // ServeHTTP implements the http.Handler interface.
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mu.RLock()
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.routerMu.RLock()
 	s.router.ServeHTTP(w, r)
-	s.mu.RUnlock()
+	s.routerMu.RUnlock()
 }
 
 // buildHTTPRoutes sets up and returns an httprouter.Router connected to the server.
-func (s *server) buildHTTPRoutes() {
+func (s *Server) buildHTTPRoutes() {
 	router := httprouter.New()
 
-	s.mu.Lock()
+	s.routerMu.Lock()
 	s.router = router
-	s.mu.Unlock()
+	s.routerMu.Unlock()
 }
 
 // NewServer returns an initialized public API server.
-func NewServer(am *account.AccountManager, logger *zap.Logger) http.Handler {
-	s := &server{
-		accounts: am,
-		log:      logger,
+func NewServer(am *account.AccountManager, logger *zap.Logger) *Server {
+	s := &Server{
+		accounts:  am,
+		log:       logger,
+		authStats: make(map[string]authenticationStats),
+		closeChan: make(chan struct{}),
 	}
+
+	go s.pruneAuthStats()
 
 	s.buildHTTPRoutes()
 	return s
 }
 
+// Close shuts down the server.
+func (s *Server) Close() {
+	s.closeChan <- struct{}{}
+}
+
 // writeError writes an error to the API caller.
-func (s *server) writeError(w http.ResponseWriter, err Error, code int) {
+func (s *Server) writeError(w http.ResponseWriter, err Error, code int) {
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	w.WriteHeader(code)
 	encodingErr := json.NewEncoder(w).Encode(err)
@@ -72,7 +85,7 @@ func (s *server) writeError(w http.ResponseWriter, err Error, code int) {
 // writeJSON writes the object to the ResponseWriter. If the encoding fails, an
 // error is written instead. The Content-Type of the response header is set
 // accordingly.
-func (s *server) writeJSON(w http.ResponseWriter, obj interface{}) {
+func (s *Server) writeJSON(w http.ResponseWriter, obj interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	err := json.NewEncoder(w).Encode(obj)
 	if _, isJsonErr := err.(*json.SyntaxError); isJsonErr {
@@ -83,7 +96,7 @@ func (s *server) writeJSON(w http.ResponseWriter, obj interface{}) {
 // writeSuccess writes the HTTP header with status 204 No Content to the
 // ResponseWriter. WriteSuccess should only be used to indicate that the
 // requested action succeeded AND there is no data to return.
-func (s *server) writeSuccess(w http.ResponseWriter) {
+func (s *Server) writeSuccess(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -101,7 +114,7 @@ func checkHeader(r *http.Request) Error {
 
 // prepareDecoder is a helper function that returns an initialized
 // json.Decoder.
-func (s *server) prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, error) {
+func (s *Server) prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, error) {
 	// Check the response header first.
 	if err := checkHeader(r); err.Code != httpErrorNone {
 		s.writeError(w, err, http.StatusUnsupportedMediaType)
@@ -122,7 +135,7 @@ func (s *server) prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.D
 
 // handleDecodeError parses the json.Decoder errors and returns an
 // error message and a response code.
-func (s *server) handleDecodeError(err error) (Error, int) {
+func (s *Server) handleDecodeError(err error) (Error, int) {
 	if err == nil {
 		return Error{}, http.StatusOK
 	}

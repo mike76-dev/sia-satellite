@@ -180,7 +180,8 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Could not initialize API logger: %v\n", err)
 	}
 
-	srv := &http.Server{Handler: public.NewServer(am, apiLogger)}
+	apiServer := public.NewServer(am, apiLogger)
+	srv := &http.Server{Handler: apiServer}
 	go srv.Serve(httpListener)
 	log.Printf("Public API: listening on %s\n", httpListener.Addr())
 
@@ -197,6 +198,7 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 				close(ch)
 			}()
 			return func() {
+				apiServer.Close()
 				srv.Shutdown(context.Background())
 				httpListener.Close()
 				hdb.Close()
