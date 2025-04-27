@@ -23,6 +23,7 @@ const (
 type Server struct {
 	accounts  *account.AccountManager
 	authStats map[string]authenticationStats
+	callStats map[string]int
 	log       *zap.Logger
 
 	router   http.Handler
@@ -62,6 +63,7 @@ func NewServer(am *account.AccountManager, logger *zap.Logger) *Server {
 		accounts:  am,
 		log:       logger,
 		authStats: make(map[string]authenticationStats),
+		callStats: make(map[string]int),
 		closeChan: make(chan struct{}),
 	}
 

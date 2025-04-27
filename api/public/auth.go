@@ -79,8 +79,27 @@ func (s *Server) checkPasswordResets(w http.ResponseWriter, req *http.Request) e
 	return err
 }
 
+// checkAbuse is a helper function that checks if the remote host
+// has exceeded the API call limit and sends a response if it has.
+func (s *Server) checkAbuse(w http.ResponseWriter, req *http.Request) error {
+	err := s.checkCalls(getRemoteHost(req))
+	if err != nil {
+		s.writeError(w,
+			Error{
+				Code:    httpErrorTooManyRequests,
+				Message: "too many calls",
+			}, http.StatusTooManyRequests)
+	}
+	return err
+}
+
 // authHandlerGET handles the GET /auth requests.
 func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check for abuse.
+	if err := s.checkAbuse(w, req); err != nil {
+		return
+	}
+
 	// Extract the authentication token.
 	var reset bool
 	token := req.Header.Get("X-Satellite-Token")
@@ -163,6 +182,11 @@ func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ http
 
 // authLoginHandlerPOST handles the POST /auth/login requests.
 func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check for abuse.
+	if err := s.checkAbuse(w, req); err != nil {
+		return
+	}
+
 	dec, err := s.prepareDecoder(w, req)
 	if err != nil {
 		return

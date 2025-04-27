@@ -29,6 +29,10 @@ const (
 	// maxPasswordResets is how many times a password reset link may
 	// be requested per hour from the same IP.
 	maxPasswordResets = 3
+
+	// maxAPICalls is how many single API calls may be accepted from
+	// the same IP within authStatsCheckFrequency.
+	maxAPICalls = 600
 )
 
 type (
@@ -59,6 +63,9 @@ func (s *Server) pruneAuthStats() {
 
 		s.mu.Lock()
 		defer s.mu.Unlock()
+
+		// Reset the call stats.
+		s.callStats = make(map[string]int)
 
 		now := time.Now().Unix()
 		for ip, entry := range s.authStats {
@@ -92,6 +99,20 @@ func (s *Server) pruneAuthStats() {
 			s.authStats[entry.RemoteHost] = stats
 		}
 	}
+}
+
+// checkCalls returns an error if there are too many API calls from
+// the same IP.
+func (s *Server) checkCalls(host string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	num := s.callStats[host]
+	s.callStats[host] = num + 1
+	if num >= maxAPICalls {
+		return errors.New("too many API calls from " + host)
+	}
+
+	return nil
 }
 
 // checkAndUpdateVerifications checks if there are too many verification
