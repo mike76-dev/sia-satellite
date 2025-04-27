@@ -15,10 +15,6 @@ import (
 )
 
 const (
-	// httpContentTypeError is returned when the header content type is not
-	// "application/json".
-	httpContentTypeError = "Content-Type header is not application/json"
-
 	// httpMaxBodySize enforces a maximum read of 1MiB from the request body.
 	httpMaxBodySize = 1048576 // 1MiB.
 )
@@ -108,27 +104,9 @@ func (s *Server) writeSuccess(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// checkHeader checks the HTTP request header for the right content type.
-func checkHeader(r *http.Request) Error {
-	value := r.Header.Get("Content-Type")
-	if value != "" && !strings.Contains(value, "application/json") {
-		return Error{
-			Code:    httpErrorBadRequest,
-			Message: httpContentTypeError,
-		}
-	}
-	return Error{}
-}
-
 // prepareDecoder is a helper function that returns an initialized
 // json.Decoder.
 func (s *Server) prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, error) {
-	// Check the response header first.
-	if err := checkHeader(r); err.Code != httpErrorNone {
-		s.writeError(w, err, http.StatusUnsupportedMediaType)
-		return nil, errors.New(err.Message)
-	}
-
 	// Limit the request body size.
 	r.Body = http.MaxBytesReader(w, r.Body, httpMaxBodySize)
 
