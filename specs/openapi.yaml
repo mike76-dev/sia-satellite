@@ -258,7 +258,10 @@ paths:
     get:
       tags:
         - auth
-      description: Log into the dashboard
+      description: |-
+        Log into the dashboard. The authentication token is submitted
+        in a cookie. If it is provided in a header, then a password
+        reset was requested.
       security:
         - apiKeyHeader: []
         - authCookie: []
