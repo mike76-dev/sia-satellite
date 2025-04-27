@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/mike76-dev/sia-satellite/account"
+	public "github.com/mike76-dev/sia-satellite/api/public"
 	"github.com/mike76-dev/sia-satellite/hostdb"
 	"github.com/mike76-dev/sia-satellite/internal/syncerutil"
 	"github.com/mike76-dev/sia-satellite/persist"
@@ -80,13 +83,13 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 	chain.WithLog(cmLogger)(cm)
 
 	// Initialize syncer.
-	l, err := net.Listen("tcp", config.GatewayAddr)
+	syncerListener, err := net.Listen("tcp", config.GatewayAddr)
 	if err != nil {
-		log.Fatalf("Could not start listener: %v\n", err)
+		log.Fatalf("Could not start syncer listener: %v\n", err)
 	}
 
 	// Peers will reject us if our hostname is empty or unspecified, so use loopback.
-	syncerAddr := l.Addr().String()
+	syncerAddr := syncerListener.Addr().String()
 	host, port, _ := net.SplitHostPort(syncerAddr)
 	if ip := net.ParseIP(host); ip == nil || ip.IsUnspecified() {
 		syncerAddr = net.JoinHostPort("127.0.0.1", port)
@@ -114,7 +117,7 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Could not initialize syncer logger: %v\n", err)
 	}
 
-	s := syncer.New(l, cm, ps, header, syncer.WithLogger(syncerLogger))
+	s := syncer.New(syncerListener, cm, ps, header, syncer.WithLogger(syncerLogger))
 
 	// Initialize MySQL database.
 	log.Println("Connecting to the SQL database...")
@@ -166,6 +169,21 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Couldn't initialize account manager: %v\n", err)
 	}
 
+	// Initialize public API.
+	httpListener, err := net.Listen("tcp", config.HTTPAddr)
+	if err != nil {
+		log.Fatalf("Could not start HTTP listener: %v\n", err)
+	}
+
+	apiLogger, apiCloseFn, err := persist.NewFileLogger(filepath.Join(dir, "api.log"), zapcore.ErrorLevel)
+	if err != nil {
+		log.Fatalf("Could not initialize API logger: %v\n", err)
+	}
+
+	srv := &http.Server{Handler: public.NewServer(am, apiLogger)}
+	go srv.Serve(httpListener)
+	log.Printf("Public API: listening on %s\n", httpListener.Addr())
+
 	return &node{
 		chain:    cm,
 		syncer:   s,
@@ -179,11 +197,14 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 				close(ch)
 			}()
 			return func() {
+				srv.Shutdown(context.Background())
+				httpListener.Close()
 				hdb.Close()
 				w.Close()
-				l.Close()
+				syncerListener.Close()
 				<-ch
 				bdb.Close()
+				apiCloseFn()
 				hdbCloseFn()
 				walletCloseFn()
 				syncerCloseFn()

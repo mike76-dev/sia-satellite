@@ -1,0 +1,207 @@
+package api
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+
+	"github.com/julienschmidt/httprouter"
+	"github.com/mike76-dev/sia-satellite/account"
+	"go.uber.org/zap"
+)
+
+const (
+	// httpContentTypeError is returned when the header content type is not
+	// "application/json".
+	httpContentTypeError = "Content-Type header is not application/json"
+
+	// httpMaxBodySize enforces a maximum read of 1MiB from the request body.
+	httpMaxBodySize = 1048576 // 1MiB.
+)
+
+// server is the public API server.
+type server struct {
+	accounts *account.AccountManager
+
+	log    *zap.Logger
+	router http.Handler
+	mu     sync.RWMutex
+}
+
+// ServeHTTP implements the http.Handler interface.
+func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	s.router.ServeHTTP(w, r)
+	s.mu.RUnlock()
+}
+
+// buildHTTPRoutes sets up and returns an httprouter.Router connected to the server.
+func (s *server) buildHTTPRoutes() {
+	router := httprouter.New()
+
+	s.mu.Lock()
+	s.router = router
+	s.mu.Unlock()
+}
+
+// NewServer returns an initialized public API server.
+func NewServer(am *account.AccountManager, logger *zap.Logger) http.Handler {
+	s := &server{
+		accounts: am,
+		log:      logger,
+	}
+
+	s.buildHTTPRoutes()
+	return s
+}
+
+// writeError writes an error to the API caller.
+func (s *server) writeError(w http.ResponseWriter, err Error, code int) {
+	w.Header().Set("Content-Type", "application/json;charset=utf-8")
+	w.WriteHeader(code)
+	encodingErr := json.NewEncoder(w).Encode(err)
+	if _, isJsonErr := encodingErr.(*json.SyntaxError); isJsonErr {
+		s.log.Error("failed to encode API error response", zap.Error(encodingErr))
+	}
+}
+
+// writeJSON writes the object to the ResponseWriter. If the encoding fails, an
+// error is written instead. The Content-Type of the response header is set
+// accordingly.
+func (s *server) writeJSON(w http.ResponseWriter, obj interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	err := json.NewEncoder(w).Encode(obj)
+	if _, isJsonErr := err.(*json.SyntaxError); isJsonErr {
+		s.log.Error("failed to encode API response", zap.Error(err))
+	}
+}
+
+// writeSuccess writes the HTTP header with status 204 No Content to the
+// ResponseWriter. WriteSuccess should only be used to indicate that the
+// requested action succeeded AND there is no data to return.
+func (s *server) writeSuccess(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// checkHeader checks the HTTP request header for the right content type.
+func checkHeader(r *http.Request) Error {
+	value := r.Header.Get("Content-Type")
+	if value != "" && !strings.Contains(value, "application/json") {
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: httpContentTypeError,
+		}
+	}
+	return Error{}
+}
+
+// prepareDecoder is a helper function that returns an initialized
+// json.Decoder.
+func (s *server) prepareDecoder(w http.ResponseWriter, r *http.Request) (*json.Decoder, error) {
+	// Check the response header first.
+	if err := checkHeader(r); err.Code != httpErrorNone {
+		s.writeError(w, err, http.StatusUnsupportedMediaType)
+		return nil, errors.New(err.Message)
+	}
+
+	// Limit the request body size.
+	r.Body = http.MaxBytesReader(w, r.Body, httpMaxBodySize)
+
+	// Initialize the decoder and instruct it to not accept any undeclared
+	// fields in the body JSON.
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+
+	// Return the decoder.
+	return dec, nil
+}
+
+// handleDecodeError parses the json.Decoder errors and returns an
+// error message and a response code.
+func (s *server) handleDecodeError(err error) (Error, int) {
+	if err == nil {
+		return Error{}, http.StatusOK
+	}
+	var syntaxError *json.SyntaxError
+	var unmarshalTypeError *json.UnmarshalTypeError
+
+	switch {
+	// Catch any syntax errors in the JSON.
+	case errors.As(err, &syntaxError):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "wrong request body format",
+		}, http.StatusBadRequest
+
+	// Catch a potential io.ErrUnexpectedEOF error in the JSON.
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "wrong request body format",
+		}, http.StatusBadRequest
+
+	// Catch any type errors.
+	case errors.As(err, &unmarshalTypeError):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "request body contains an invalid value",
+		}, http.StatusBadRequest
+
+	// Catch the error caused by extra unexpected fields in the request
+	// body.
+	case strings.HasPrefix(err.Error(), "json: unknown field"):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "request body contains an unknown field",
+		}, http.StatusBadRequest
+
+	// An io.EOF error is returned by Decode() if the request body is
+	// empty.
+	case errors.Is(err, io.EOF):
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "request body is empty",
+		}, http.StatusBadRequest
+
+	// Catch the error caused by the request body being too large.
+	case err.Error() == "http: request body too large":
+		return Error{
+			Code:    httpErrorBadRequest,
+			Message: "request body too large",
+		}, http.StatusRequestEntityTooLarge
+
+	// Otherwise send a 500 Internal Server Error response.
+	default:
+		s.log.Error("failed to decode JSON", zap.Error(err))
+		return Error{
+			Code:    httpErrorInternal,
+			Message: "internal error",
+		}, http.StatusInternalServerError
+	}
+}
+
+// getRemoteHost returns the address of the remote host.
+func getRemoteHost(r *http.Request) (host string) {
+	host, _, _ = net.SplitHostPort(r.RemoteAddr)
+	if host == "127.0.0.1" || host == "localhost" {
+		xff := r.Header.Values("X-Forwarded-For")
+		if len(xff) > 0 {
+			host = xff[0]
+		}
+	}
+	return
+}
+
+// getCookie is a helper function that retrieves the cookie value.
+func getCookie(r *http.Request, name string) string {
+	cookie, err := r.Cookie(name)
+	if err == nil {
+		v := cookie.Value
+		return strings.TrimPrefix(v, name+"=")
+	}
+	return ""
+}

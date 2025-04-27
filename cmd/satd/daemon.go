@@ -31,7 +31,7 @@ func startDaemon(config *persist.SatdConfig, apiPassword, dbPassword string, see
 	n := newNode(config, dbPassword, seed)
 	stop := n.Start()
 
-	log.Println("api: Listening on", l.Addr())
+	log.Println("API: Listening on", l.Addr())
 	go startWeb(l, n, apiPassword)
 
 	signalCh := make(chan os.Signal, 1)
