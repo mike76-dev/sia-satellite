@@ -15,6 +15,7 @@ const (
 
 	httpErrorWrongCredentials = 30
 	httpErrorTooManyRequests  = 31
+	httpErrorUnverified       = 32
 
 	httpErrorTokenInvalid = 40
 	httpErrorTokenExpired = 41
@@ -27,8 +28,7 @@ const (
 type Error struct {
 	// Code identifies the error and enables an easier client-side error handling.
 	Code int `json:"code"`
-	// Message describes the error in English. Typically it is set to
-	// `err.Error()`. This field is required.
+	// Message describes the error. Typically it is set to `err.Error()`.
 	Message string `json:"message"`
 }
 

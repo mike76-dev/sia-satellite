@@ -47,6 +47,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) buildHTTPRoutes() {
 	router := httprouter.New()
 
+	// /auth requests.
+	router.POST("/auth/login", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.authLoginHandlerPOST(w, req, ps)
+	})
+
 	s.routerMu.Lock()
 	s.router = router
 	s.routerMu.Unlock()
@@ -85,7 +90,7 @@ func (s *Server) writeError(w http.ResponseWriter, err Error, code int) {
 // writeJSON writes the object to the ResponseWriter. If the encoding fails, an
 // error is written instead. The Content-Type of the response header is set
 // accordingly.
-func (s *Server) writeJSON(w http.ResponseWriter, obj interface{}) {
+func (s *Server) writeJSON(w http.ResponseWriter, obj any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	err := json.NewEncoder(w).Encode(obj)
 	if _, isJsonErr := err.(*json.SyntaxError); isJsonErr {
