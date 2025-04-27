@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/account"
 	"github.com/mike76-dev/sia-satellite/hostdb"
 	"github.com/mike76-dev/sia-satellite/wallet"
 	"go.sia.tech/core/types"
@@ -14,10 +15,11 @@ import (
 )
 
 type server struct {
-	chain  *chain.Manager
-	syncer *syncer.Syncer
-	wallet *wallet.Wallet
-	hostDB *hostdb.HostDB
+	chain    *chain.Manager
+	syncer   *syncer.Syncer
+	wallet   *wallet.Wallet
+	hostDB   *hostdb.HostDB
+	accounts *account.AccountManager
 }
 
 func isSynced(s *syncer.Syncer) bool {
@@ -136,9 +138,13 @@ func (s *server) hostDBHostHandler(jc jape.Context) {
 	jc.Encode(host)
 }
 
+func (s *server) amAccountsHandler(jc jape.Context) {
+	jc.Encode(s.accounts.Accounts())
+}
+
 // NewServer returns an HTTP handler that serves the satd API.
-func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet, hdb *hostdb.HostDB) http.Handler {
-	srv := server{cm, s, w, hdb}
+func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet, hdb *hostdb.HostDB, am *account.AccountManager) http.Handler {
+	srv := server{cm, s, w, hdb, am}
 	return jape.Mux(map[string]jape.Handler{
 		"GET /consensus/network":  srv.consensusNetworkHandler,
 		"GET /consensus/tip":      srv.consensusTipHandler,
@@ -157,5 +163,7 @@ func NewServer(cm *chain.Manager, s *syncer.Syncer, w *wallet.Wallet, hdb *hostd
 
 		"GET /hostdb/hosts":     srv.hostDBHostsHandler,
 		"GET /hostdb/host/:key": srv.hostDBHostHandler,
+
+		"GET /accounts": srv.amAccountsHandler,
 	})
 }

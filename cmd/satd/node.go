@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/mike76-dev/sia-satellite/account"
 	"github.com/mike76-dev/sia-satellite/hostdb"
 	"github.com/mike76-dev/sia-satellite/internal/syncerutil"
 	"github.com/mike76-dev/sia-satellite/persist"
@@ -23,10 +24,11 @@ import (
 )
 
 type node struct {
-	chain  *chain.Manager
-	syncer *syncer.Syncer
-	wallet *wallet.Wallet
-	hostDB *hostdb.HostDB
+	chain    *chain.Manager
+	syncer   *syncer.Syncer
+	wallet   *wallet.Wallet
+	hostDB   *hostdb.HostDB
+	accounts *account.AccountManager
 
 	Start func() (stop func())
 }
@@ -158,11 +160,18 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Could not initialize hostDB: %v\n", err)
 	}
 
+	// Initialize accounts.
+	am, err := account.New(db)
+	if err != nil {
+		log.Fatalf("Couldn't initialize account manager: %v\n", err)
+	}
+
 	return &node{
-		chain:  cm,
-		syncer: s,
-		wallet: w,
-		hostDB: hdb,
+		chain:    cm,
+		syncer:   s,
+		wallet:   w,
+		hostDB:   hdb,
+		accounts: am,
 		Start: func() func() {
 			ch := make(chan struct{})
 			go func() {

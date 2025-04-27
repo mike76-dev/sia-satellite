@@ -74,6 +74,35 @@ CREATE TABLE hdb_interactions (
 	FOREIGN KEY (public_key) REFERENCES hdb_hosts(public_key)
 );
 
+/* account manager */
+
+DROP TABLE IF EXISTS am_accounts;
+DROP TABLE IF EXISTS am_info;
+
+CREATE TABLE am_accounts (
+	id            INT NOT NULL AUTO_INCREMENT,
+	email         VARCHAR(64) NOT NULL UNIQUE,
+	password_hash BINARY(32) NOT NULL,
+	created_at    BIGINT NOT NULL,
+	verified      BOOL NOT NULL,
+	invoicing     BOOL NOT NULL,
+	sc_total      BLOB NOT NULL,
+	sc_locked     BLOB NOT NULL,
+	currency      VARCHAR(8) NOT NULL,
+	stripe_id     VARCHAR(32) NOT NULL,
+	invoice       VARCHAR(32) NOT NULL,
+	on_hold       BIGINT NOT NULL,
+	nonce         BINARY(16) NOT NULL,
+	sc_address    BINARY(32) NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE am_info (
+	id          INT NOT NULL AUTO_INCREMENT,
+	private_key BINARY(64) NOT NULL,
+	PRIMARY KEY (id)
+);
+
 /* provider */
 
 DROP TABLE IF EXISTS pr_info;
@@ -89,22 +118,10 @@ CREATE TABLE pr_info (
 /* portal */
 
 DROP TABLE IF EXISTS pt_payments;
-DROP TABLE IF EXISTS pt_accounts;
 DROP TABLE IF EXISTS pt_stats;
 DROP TABLE IF EXISTS pt_credits;
 DROP TABLE IF EXISTS pt_announcement;
 DROP TABLE IF EXISTS pt_tip;
-
-CREATE TABLE pt_accounts (
-	id            INT NOT NULL AUTO_INCREMENT,
-	email         VARCHAR(64) NOT NULL UNIQUE,
-	password_hash BINARY(32) NOT NULL,
-	verified      BOOL NOT NULL,
-	time          BIGINT UNSIGNED NOT NULL,
-	nonce         BINARY(16) NOT NULL,
-	sc_address    BINARY(32) NOT NULL,
-	PRIMARY KEY (id)
-);
 
 CREATE TABLE pt_payments (
 	id        INT NOT NULL AUTO_INCREMENT,
@@ -157,7 +174,6 @@ DROP TABLE IF EXISTS mg_email;
 DROP TABLE IF EXISTS mg_timestamp;
 DROP TABLE IF EXISTS mg_averages;
 DROP TABLE IF EXISTS mg_spendings;
-DROP TABLE IF EXISTS mg_balances;
 DROP TABLE IF EXISTS mg_prices;
 DROP TABLE IF EXISTS mg_maintenance;
 DROP TABLE IF EXISTS mg_tip;
@@ -195,19 +211,6 @@ CREATE TABLE mg_spendings (
 	slabs_retrieved BIGINT UNSIGNED NOT NULL,
 	slabs_migrated  BIGINT UNSIGNED NOT NULL,
 	CONSTRAINT email_period UNIQUE (email, period),
-	FOREIGN KEY (email) REFERENCES pt_accounts(email)
-);
-
-CREATE TABLE mg_balances (
-	email      VARCHAR(64) NOT NULL,
-	subscribed BOOL NOT NULL,
-	sc_balance DOUBLE NOT NULL,
-	sc_locked  DOUBLE NOT NULL,
-	currency   VARCHAR(8) NOT NULL,
-	stripe_id  VARCHAR(32) NOT NULL,
-	invoice    VARCHAR(32) NOT NULL,
-	on_hold    BIGINT UNSIGNED NOT NULL,
-	PRIMARY KEY (email),
 	FOREIGN KEY (email) REFERENCES pt_accounts(email)
 );
 
