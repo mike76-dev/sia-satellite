@@ -48,6 +48,9 @@ func (s *Server) buildHTTPRoutes() {
 	router := httprouter.New()
 
 	// /auth requests.
+	router.GET("/auth", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.authHandlerGET(w, req, ps)
+	})
 	router.POST("/auth/login", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.authLoginHandlerPOST(w, req, ps)
 	})

@@ -64,6 +64,103 @@ func (s *Server) checkFailedLogins(w http.ResponseWriter, req *http.Request) err
 	return err
 }
 
+// checkFailedResets is a helper function that checks if the remote
+// host has exceeded the password reset attempt count and sends
+// a response if it has.
+func (s *Server) checkPasswordResets(w http.ResponseWriter, req *http.Request) error {
+	err := s.checkAndUpdatePasswordResets(getRemoteHost(req))
+	if err != nil {
+		s.writeError(w,
+			Error{
+				Code:    httpErrorTooManyRequests,
+				Message: "too many failed login attempts",
+			}, http.StatusTooManyRequests)
+	}
+	return err
+}
+
+// authHandlerGET handles the GET /auth requests.
+func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Extract the authentication token.
+	var reset bool
+	token := req.Header.Get("X-Satellite-Token")
+	if token != "" { // a password reset was requested
+		reset = true
+	} else {
+		token = getCookie(req, "X-Satellite-Token")
+		if token == "" {
+			s.writeError(w,
+				Error{
+					Code:    httpErrorTokenInvalid,
+					Message: "no token provided",
+				}, http.StatusUnauthorized)
+			return
+		}
+	}
+
+	// Decode the token.
+	prefix, email, expires, err := s.accounts.DecodeToken(token)
+	if err != nil {
+		// Check and update login stats.
+		if err := s.checkFailedLogins(w, req); err != nil {
+			return
+		}
+		s.log.Error("failed to decode token", zap.Error(err))
+		s.writeError(w,
+			Error{
+				Code:    httpErrorTokenInvalid,
+				Message: "unable to decode token",
+			}, http.StatusUnauthorized)
+		return
+	}
+
+	// Check the token type.
+	if (reset && prefix != account.ResetPrefix) || prefix != account.CookiePrefix {
+		s.writeError(w,
+			Error{
+				Code:    httpErrorTokenInvalid,
+				Message: "wrong token type",
+			}, http.StatusUnauthorized)
+		return
+	}
+
+	// Check the token validity.
+	if expires.Before(time.Now()) {
+		s.writeError(w,
+			Error{
+				Code:    httpErrorTokenExpired,
+				Message: "token already expired",
+			}, http.StatusUnauthorized)
+		return
+	}
+
+	// Generate a change cookie. This one has a different name, so
+	// a password reset is not confused for a password change.
+	// Set the expiration the same as of the password reset token.
+	if reset {
+		changeToken, err := s.accounts.GenerateToken(account.ChangePrefix, email, expires)
+		if err != nil {
+			s.log.Error("error generating token", zap.Error(err))
+			s.writeError(w,
+				Error{
+					Code:    httpErrorInternal,
+					Message: "internal error",
+				}, http.StatusInternalServerError)
+			return
+		}
+
+		cookie := http.Cookie{
+			Name:    "X-Satellite-Change",
+			Value:   changeToken,
+			Expires: expires,
+			Path:    "/",
+		}
+		http.SetCookie(w, &cookie)
+	}
+
+	s.writeSuccess(w)
+}
+
 // authLoginHandlerPOST handles the POST /auth/login requests.
 func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	dec, err := s.prepareDecoder(w, req)

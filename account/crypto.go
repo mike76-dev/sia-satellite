@@ -23,6 +23,9 @@ var (
 	// ResetPrefix is used for generating a password reset token.
 	ResetPrefix = AuthPrefix{'P', 'W', 'R', 'e', 's', 'e', 't'}
 
+	// ChangePrefix is used for generating a password change token.
+	ChangePrefix = AuthPrefix{'P', 'W', 'C', 'h', 'a', 'n', 'g', 'e'}
+
 	// CookiePrefix is used for generating client-side cookies.
 	CookiePrefix = AuthPrefix{'C', 'o', 'o', 'k', 'i', 'e'}
 
