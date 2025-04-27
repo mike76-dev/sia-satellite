@@ -390,7 +390,6 @@ paths:
         - name: X-Satellite-Password
           in: header
           description: Account password
-          required: true
           schema:
             type: string
       requestBody:
@@ -404,6 +403,12 @@ paths:
                   description: Account E-mail address
                   type: string
                   example: 'user@domain.com'
+                code:
+                  description: Verification code received by E-mail
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+                  example: '123456'
       responses:
         '204':
           description: Successful operation
