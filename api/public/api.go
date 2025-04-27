@@ -37,3 +37,8 @@ type Error struct {
 func (err Error) Error() string {
 	return err.Message
 }
+
+// init performs the API initialization.
+func init() {
+	initGoogle()
+}
