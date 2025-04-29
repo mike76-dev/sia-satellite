@@ -687,3 +687,48 @@ func (s *Server) authResetHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 	s.writeSuccess(w)
 }
+
+// authResetResendHandlerPOST handles the POST /auth/reset/resend requests.
+func (s *Server) authResetResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check for abuse. This may be redundant, but shouldn't hurt.
+	if err := s.checkAbuse(w, req); err != nil {
+		return
+	}
+
+	// Check and update stats.
+	if err := s.checkPasswordResets(w, req); err != nil {
+		return
+	}
+
+	// Decode request body.
+	dec, err := s.prepareDecoder(w, req)
+	if err != nil {
+		return
+	}
+
+	var data struct {
+		Email string `json:"email"`
+	}
+	httpError, code := s.handleDecodeError(dec.Decode(&data))
+	if code != http.StatusOK {
+		s.writeError(w, httpError, code)
+		return
+	}
+
+	// Retrieve the user account.
+	_, err = s.accounts.FindAccount(data.Email)
+	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+		// Do not return an error. Otherwise we would give a potential
+		// attacker a hint.
+		s.writeSuccess(w)
+		return
+	}
+
+	// Send password reset link by email. Note that we don't check now if
+	// the account is verified. We will need to do that at a later point.
+	if ok := s.sendPasswordResetLinkByMail(w, req, data.Email); !ok {
+		return
+	}
+
+	s.writeSuccess(w)
+}
