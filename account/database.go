@@ -177,9 +177,10 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 	defer am.mu.Unlock()
 
 	acc := &Account{
-		Email:     email,
-		CreatedAt: time.Now(),
-		Currency:  "USD",
+		Email:       email,
+		CreatedAt:   time.Now(),
+		Currency:    "USD",
+		PaymentPlan: PredefinedPaymentPlans[PaymentPlanPrePayment],
 	}
 
 	am.accounts[email] = acc
@@ -187,6 +188,11 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 	if password != "" {
 		pwh = passwordHash(password)
 	}
+
+	var buf bytes.Buffer
+	e := types.NewEncoder(&buf)
+	types.V2Currency(types.ZeroCurrency).EncodeTo(e)
+	e.Flush()
 
 	_, err := am.db.Exec(`
 		INSERT INTO am_accounts (
@@ -210,8 +216,8 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 		acc.CreatedAt.Unix(),
 		false,
 		false,
-		[]byte{},
-		[]byte{},
+		buf.Bytes(),
+		buf.Bytes(),
 		acc.Currency,
 		"",
 		"",
