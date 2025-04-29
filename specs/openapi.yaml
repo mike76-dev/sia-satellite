@@ -409,9 +409,7 @@ paths:
                 code:
                   description: Verification code received by E-mail
                   type: string
-                  minLength: 6
-                  maxLength: 6
-                  example: '123456'
+                  pattern: '^\d{6}$'
       responses:
         '204':
           description: Successful operation
