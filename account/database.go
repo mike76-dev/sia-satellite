@@ -225,3 +225,18 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 
 	return acc, nil
 }
+
+// SetVerified sets the Verified flag of the account to true.
+func (am *AccountManager) SetVerified(acc *Account) error {
+	acc.Verified = true
+	_, err := am.db.Exec(`
+		UPDATE am_accounts
+		SET verified = TRUE
+		WHERE email = ?
+	`, acc.Email)
+	if err != nil {
+		return utils.AddContext(err, "couldn't mark account verified")
+	}
+
+	return nil
+}

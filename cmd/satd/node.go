@@ -15,6 +15,7 @@ import (
 	public "github.com/mike76-dev/sia-satellite/api/public"
 	"github.com/mike76-dev/sia-satellite/hostdb"
 	"github.com/mike76-dev/sia-satellite/internal/syncerutil"
+	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/persist"
 	"github.com/mike76-dev/sia-satellite/wallet"
 	"go.sia.tech/core/consensus"
@@ -169,6 +170,13 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Couldn't initialize account manager: %v\n", err)
 	}
 
+	// Initialize mail client.
+	log.Println("Creating mail client...")
+	mc, err := mail.New(dir)
+	if err != nil {
+		log.Fatalf("Could not create mail client: %v\n", err)
+	}
+
 	// Initialize public API.
 	httpListener, err := net.Listen("tcp", config.HTTPAddr)
 	if err != nil {
@@ -180,7 +188,7 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Could not initialize API logger: %v\n", err)
 	}
 
-	apiServer := public.NewServer(am, apiLogger)
+	apiServer := public.NewServer(am, mc, apiLogger)
 	srv := &http.Server{Handler: apiServer}
 	go srv.Serve(httpListener)
 	log.Printf("Public API: listening on %s\n", httpListener.Addr())

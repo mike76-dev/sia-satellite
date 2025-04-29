@@ -1,15 +1,46 @@
 package api
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 	"net/mail"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/account"
 	"go.uber.org/zap"
+)
+
+const (
+	// verifyTemplate contains the text send by email when a
+	// new user account is being created.
+	verifyTemplate = `
+		<!-- template.html -->
+		<!DOCTYPE html>
+		<html>
+		<body>
+	    	<h2>Please Verify Your Email Address</h2>
+		    <p>This is your one-time code to complete your account registration. This code is valid within the next 15 minutes.</p>
+	    	<h1>{{.Code}}</h1>
+		</body>
+		</html>
+	`
+)
+
+type (
+	// verificationCode holds a email verification code.
+	verificationCode struct {
+		Code string
+	}
+
+	// resetLink holds the parts of a password reset link.
+	resetLink struct {
+		Path  string
+		Token string
+	}
 )
 
 // checkEmail is a helper function that validates an email address.
@@ -64,7 +95,7 @@ func (s *Server) checkFailedLogins(w http.ResponseWriter, req *http.Request) err
 	return err
 }
 
-// checkFailedResets is a helper function that checks if the remote
+// checkPasswordResets is a helper function that checks if the remote
 // host has exceeded the password reset attempt count and sends
 // a response if it has.
 func (s *Server) checkPasswordResets(w http.ResponseWriter, req *http.Request) error {
@@ -74,6 +105,21 @@ func (s *Server) checkPasswordResets(w http.ResponseWriter, req *http.Request) e
 			Error{
 				Code:    httpErrorTooManyRequests,
 				Message: "too many failed login attempts",
+			}, http.StatusTooManyRequests)
+	}
+	return err
+}
+
+// checkVerifications is a helper function that checks if the remote
+// host has exceeded the verification attempt count and sends a response
+// if it has.
+func (s *Server) checkVerifications(w http.ResponseWriter, req *http.Request) error {
+	err := s.checkAndUpdateVerifications(getRemoteHost(req))
+	if err != nil {
+		s.writeError(w,
+			Error{
+				Code:    httpErrorTooManyRequests,
+				Message: "too many verification attempts",
 			}, http.StatusTooManyRequests)
 	}
 	return err
@@ -187,6 +233,7 @@ func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		return
 	}
 
+	// Decode request body.
 	dec, err := s.prepareDecoder(w, req)
 	if err != nil {
 		return
@@ -276,4 +323,200 @@ func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	// Send the cookie.
 	http.SetCookie(w, &cookie)
 	s.writeSuccess(w)
+}
+
+// authSignupHandlerPOST handles the POST /auth/signup requests.
+func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check for abuse.
+	if err := s.checkAbuse(w, req); err != nil {
+		return
+	}
+
+	// Decode request body.
+	dec, err := s.prepareDecoder(w, req)
+	if err != nil {
+		return
+	}
+
+	var data struct {
+		Email string `json:"email"`
+		Code  string `json:"code,omitempty"`
+	}
+	httpError, code := s.handleDecodeError(dec.Decode(&data))
+	if code != http.StatusOK {
+		s.writeError(w, httpError, code)
+		return
+	}
+
+	// Check request fields for validity.
+	email, httpError := checkEmail(data.Email)
+	if httpError.Code != httpErrorNone {
+		s.writeError(w, httpError, http.StatusBadRequest)
+		return
+	}
+
+	var password string
+	if data.Code == "" {
+		password = req.Header.Get("X-Satellite-Password")
+		if httpError := checkPassword(password); httpError.Code != httpErrorNone {
+			s.writeError(w, httpError, http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Check if the email address is already registered and/or verified.
+	var found, verified bool
+	var verifyError error
+	acc, err := s.accounts.FindAccount(email)
+	if err == nil {
+		found = true
+		verified = acc.Verified
+		verifyError = acc.VerifyCode(data.Code)
+	}
+
+	if found && verified { // account fully registered
+		s.writeError(w,
+			Error{
+				Code:    httpErrorEmailUsed,
+				Message: "email address already used",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	if data.Code == "" {
+		if !found { // no account yet
+			acc, err = s.accounts.NewAccount(email, password)
+			if err != nil {
+				s.log.Error("failed to create account", zap.Error(err))
+				s.writeError(w,
+					Error{
+						Code:    httpErrorInternal,
+						Message: "internal error",
+					}, http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// Check and update stats.
+		if err := s.checkVerifications(w, req); err != nil {
+			return
+		}
+
+		// Send verification code by email.
+		if ok := s.sendVerificationCodeByMail(w, req, acc); !ok {
+			return
+		}
+	} else {
+		if !found { // no account yet but a verificaion code is there
+			// Check and update stats.
+			if err := s.checkVerifications(w, req); err != nil {
+				return
+			}
+
+			s.writeError(w,
+				Error{
+					Code:    httpErrorNotFound,
+					Message: "email address not found",
+				}, http.StatusBadRequest)
+			return
+		}
+
+		// Check if the code is correct.
+		if verifyError != nil && errors.Is(verifyError, account.ErrWrongCode) {
+			// Check and update stats.
+			if err := s.checkVerifications(w, req); err != nil {
+				return
+			}
+
+			s.writeError(w,
+				Error{
+					Code:    httpErrorTokenInvalid,
+					Message: "invalid code",
+				}, http.StatusUnauthorized)
+			return
+		} else if verifyError != nil && errors.Is(verifyError, account.ErrCodeExpired) {
+			s.writeError(w,
+				Error{
+					Code:    httpErrorTokenExpired,
+					Message: "code already expired",
+				}, http.StatusUnauthorized)
+			return
+		}
+
+		// All good, mark the account as verified.
+		if err := s.accounts.SetVerified(acc); err != nil {
+			s.log.Error("failed to verify account", zap.Error(err))
+			s.writeError(w,
+				Error{
+					Code:    httpErrorInternal,
+					Message: "internal error",
+				}, http.StatusInternalServerError)
+			return
+		}
+
+		// Generate a cookie.
+		t := time.Now().Add(7 * 24 * time.Hour)
+		token, err := s.accounts.GenerateToken(account.CookiePrefix, email, t)
+		if err != nil {
+			s.log.Error("error generating token", zap.Error(err))
+			s.writeError(w,
+				Error{
+					Code:    httpErrorInternal,
+					Message: "internal error",
+				}, http.StatusInternalServerError)
+			return
+		}
+		cookie := http.Cookie{
+			Name:    "X-Satellite-Token",
+			Value:   token,
+			Expires: t,
+			Path:    "/",
+		}
+
+		// Send the cookie.
+		http.SetCookie(w, &cookie)
+	}
+
+	s.writeSuccess(w)
+}
+
+// sendVerificationCodeByMail is a wrapper function for sending a
+// verification code by email.
+func (s *Server) sendVerificationCodeByMail(w http.ResponseWriter, req *http.Request, acc *account.Account) bool {
+	// Check and update stats.
+	if err := s.checkVerifications(w, req); err != nil {
+		return false
+	}
+
+	// Generate a verification code.
+	code := verificationCode{Code: acc.GenerateCode(time.Now().Add(15 * time.Minute))}
+
+	// Generate email body.
+	t := template.New("verify")
+	t, err := t.Parse(verifyTemplate)
+	if err != nil {
+		s.log.Error("unable to parse HTML template", zap.Error(err))
+		s.writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "unable to send verification code",
+			}, http.StatusInternalServerError)
+		return false
+	}
+	var b bytes.Buffer
+	t.Execute(&b, code)
+
+	// Send verification code by email.
+	err = s.mail.SendMail("Sia Satellite", acc.Email, "Action Required", &b)
+	if err != nil {
+		s.log.Error("unable to send verification code", zap.Error(err))
+		s.writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "unable to send verification code",
+			}, http.StatusInternalServerError)
+		return false
+	}
+
+	return true
 }

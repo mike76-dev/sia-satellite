@@ -11,6 +11,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/account"
+	"github.com/mike76-dev/sia-satellite/mail"
 	"go.uber.org/zap"
 )
 
@@ -24,6 +25,7 @@ type Server struct {
 	accounts  *account.AccountManager
 	authStats map[string]authenticationStats
 	callStats map[string]int
+	mail      mail.MailSender
 	log       *zap.Logger
 
 	router   http.Handler
@@ -54,6 +56,9 @@ func (s *Server) buildHTTPRoutes() {
 	router.POST("/auth/login/:provider", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.authLoginProviderHandlerPOST(w, req, ps)
 	})
+	router.POST("/auth/signup", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.authSignupHandlerPOST(w, req, ps)
+	})
 
 	s.routerMu.Lock()
 	s.router = router
@@ -61,9 +66,10 @@ func (s *Server) buildHTTPRoutes() {
 }
 
 // NewServer returns an initialized public API server.
-func NewServer(am *account.AccountManager, logger *zap.Logger) *Server {
+func NewServer(am *account.AccountManager, ms mail.MailSender, logger *zap.Logger) *Server {
 	s := &Server{
 		accounts:  am,
+		mail:      ms,
 		log:       logger,
 		authStats: make(map[string]authenticationStats),
 		callStats: make(map[string]int),
