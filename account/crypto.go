@@ -11,6 +11,7 @@ import (
 	"github.com/dchest/threefish"
 	"github.com/mike76-dev/sia-satellite/internal/utils"
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/blake2b"
 	"lukechampine.com/frand"
 )
 
@@ -73,9 +74,11 @@ func (am *AccountManager) GenerateToken(prefix AuthPrefix, email string, expires
 	src := make([]byte, 128)
 	dst := make([]byte, 128)
 	copy(src[:8], prefix[:])
-	copy(src[8:72], email[:])
-	binary.BigEndian.PutUint64(src[72:80], uint64(expires.Unix()))
-	copy(src[80:96], nonce[:])
+	copy(src[8:24], nonce[:])
+	copy(src[24:88], email[:])
+	binary.BigEndian.PutUint64(src[88:96], uint64(expires.Unix()))
+	checksum := blake2b.Sum256(src[:96])
+	copy(src[96:], checksum[:])
 	cipher.Encrypt(dst[:64], src[:64])
 	cipher.Encrypt(dst[64:], src[64:])
 
@@ -109,10 +112,16 @@ func (am *AccountManager) DecodeToken(token string) (AuthPrefix, string, time.Ti
 		Email: make([]byte, 64),
 	}
 	copy(at.Prefix[:], dst[:8])
-	copy(at.Email[:], dst[8:72])
-	at.Expires = int64(binary.BigEndian.Uint64(dst[72:80]))
 	nonce := make([]byte, 16)
-	copy(nonce[:], dst[80:96])
+	copy(nonce[:], dst[8:24])
+	copy(at.Email[:], dst[24:88])
+	at.Expires = int64(binary.BigEndian.Uint64(dst[88:96]))
+
+	// Verify the checksum.
+	checksum := blake2b.Sum256(dst[:96])
+	if !bytes.Equal(checksum[:], dst[96:]) {
+		return AuthPrefix{}, "", time.Unix(0, 0), errors.New("invalid checksum")
+	}
 
 	// Find the length of email.
 	l := bytes.IndexByte(at.Email[:], 0)
