@@ -62,7 +62,6 @@ func (s *Server) pruneAuthStats() {
 		}
 
 		s.mu.Lock()
-		defer s.mu.Unlock()
 
 		// Reset the call stats.
 		s.callStats = make(map[string]int)
@@ -98,6 +97,8 @@ func (s *Server) pruneAuthStats() {
 			}
 			s.authStats[entry.RemoteHost] = stats
 		}
+
+		s.mu.Unlock()
 	}
 }
 
@@ -106,6 +107,7 @@ func (s *Server) pruneAuthStats() {
 func (s *Server) checkCalls(host string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	num := s.callStats[host]
 	s.callStats[host] = num + 1
 	if num >= maxAPICalls {
