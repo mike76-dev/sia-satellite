@@ -531,7 +531,11 @@ paths:
     get:
       tags:
         - auth
-      description: Change account password
+      description: |-
+        Change account password.
+        If a passwod reset was requested (e.g. in case of a forgotten
+        password), then the authentication token is submitted in the
+        `X-Satellite-Change` cookie instead of `X-Satellite-Token`.
       security:
         - apiKey: []
         - authCookie: []
