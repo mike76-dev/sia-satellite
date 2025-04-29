@@ -520,3 +520,44 @@ func (s *Server) sendVerificationCodeByMail(w http.ResponseWriter, req *http.Req
 
 	return true
 }
+
+// authSignupResendHandlerPOST handles the POST /auth/signup/resend requests.
+func (s *Server) authSignupResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check and update stats.
+	if err := s.checkVerifications(w, req); err != nil {
+		return
+	}
+
+	// Decode request body.
+	dec, err := s.prepareDecoder(w, req)
+	if err != nil {
+		return
+	}
+
+	var data struct {
+		Email string `json:"email"`
+	}
+	httpError, code := s.handleDecodeError(dec.Decode(&data))
+	if code != http.StatusOK {
+		s.writeError(w, httpError, code)
+		return
+	}
+
+	// Retrieve the user account.
+	acc, err := s.accounts.FindAccount(data.Email)
+	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+		s.writeError(w,
+			Error{
+				Code:    httpErrorNotFound,
+				Message: "email address not found",
+			}, http.StatusBadRequest)
+		return
+	}
+
+	// Send verification code by email.
+	if ok := s.sendVerificationCodeByMail(w, req, acc); !ok {
+		return
+	}
+
+	s.writeSuccess(w)
+}
