@@ -28,6 +28,20 @@ const (
 		</body>
 		</html>
 	`
+
+	// resetTemplate contains the text send by email when a
+	// user wants to reset their password.
+	resetTemplate = `
+		<!-- template.html -->
+		<!DOCTYPE html>
+		<html>
+		<body>
+    		<h2>Reset Your Password</h2>
+	    	<p>Click on the following link to enter a new password. This link is valid within the next 60 minutes.</p>
+	    	<p><a href="{{.Path}}?token={{.Token}}">{{.Path}}?token={{.Token}}</a></p>
+		</body>
+		</html>
+	`
 )
 
 type (
@@ -104,7 +118,7 @@ func (s *Server) checkPasswordResets(w http.ResponseWriter, req *http.Request) e
 		s.writeError(w,
 			Error{
 				Code:    httpErrorTooManyRequests,
-				Message: "too many failed login attempts",
+				Message: "too many password reset requests",
 			}, http.StatusTooManyRequests)
 	}
 	return err
@@ -119,7 +133,7 @@ func (s *Server) checkVerifications(w http.ResponseWriter, req *http.Request) er
 		s.writeError(w,
 			Error{
 				Code:    httpErrorTooManyRequests,
-				Message: "too many verification attempts",
+				Message: "too many verification requests",
 			}, http.StatusTooManyRequests)
 	}
 	return err
@@ -180,7 +194,7 @@ func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ http
 	}
 
 	// Check the token type.
-	if (reset && prefix != account.ResetPrefix) || prefix != account.CookiePrefix {
+	if (reset && prefix != account.ResetPrefix) || (!reset && prefix != account.CookiePrefix) {
 		s.writeError(w,
 			Error{
 				Code:    httpErrorTokenInvalid,
@@ -521,6 +535,65 @@ func (s *Server) sendVerificationCodeByMail(w http.ResponseWriter, req *http.Req
 	return true
 }
 
+// sendPasswordResetLinkByMail is a wrapper function for sending a
+// password reset link by email.
+func (s *Server) sendPasswordResetLinkByMail(w http.ResponseWriter, req *http.Request, email string) bool {
+	// Generate a password reset link.
+	token, err := s.accounts.GenerateToken(account.ResetPrefix, email, time.Now().Add(time.Hour))
+	if err != nil {
+		s.log.Error("error generating token", zap.Error(err))
+		s.writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "internal error",
+			}, http.StatusInternalServerError)
+		return false
+	}
+	path := req.Header["Referer"]
+	if len(path) == 0 {
+		s.log.Error("unable to fetch referer URL")
+		s.writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "unable to fetch referer URL",
+			}, http.StatusInternalServerError)
+		return false
+	}
+	link := resetLink{
+		Path:  path[0],
+		Token: token,
+	}
+
+	// Generate email body.
+	t := template.New("reset")
+	t, err = t.Parse(resetTemplate)
+	if err != nil {
+		s.log.Error("unable to parse HTML template", zap.Error(err))
+		s.writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "unable to send password reset link",
+			}, http.StatusInternalServerError)
+		return false
+	}
+	var b bytes.Buffer
+	t.Execute(&b, link)
+
+	// Send password reset link by email.
+	err = s.mail.SendMail("Sia Satellite", email, "Reset Your Password", &b)
+	if err != nil {
+		s.log.Error("unable to send password reset link", zap.Error(err))
+		s.writeError(w,
+			Error{
+				Code:    httpErrorInternal,
+				Message: "unable to send password reset link",
+			}, http.StatusInternalServerError)
+		return false
+	}
+
+	return true
+}
+
 // authSignupResendHandlerPOST handles the POST /auth/signup/resend requests.
 func (s *Server) authSignupResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	// Check for abuse.
@@ -554,8 +627,61 @@ func (s *Server) authSignupResendHandlerPOST(w http.ResponseWriter, req *http.Re
 		return
 	}
 
+	if acc.Verified { // already verified, no need to send a code
+		s.writeError(w,
+			Error{
+				Code:    httpErrorEmailUsed,
+				Message: "email address already used",
+			}, http.StatusBadRequest)
+		return
+	}
+
 	// Send verification code by email.
 	if ok := s.sendVerificationCodeByMail(w, req, acc); !ok {
+		return
+	}
+
+	s.writeSuccess(w)
+}
+
+// authResetHandlerPOST handles the POST /auth/reset requests.
+func (s *Server) authResetHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check for abuse. This may be redundant, but shouldn't hurt.
+	if err := s.checkAbuse(w, req); err != nil {
+		return
+	}
+
+	// Check and update stats.
+	if err := s.checkPasswordResets(w, req); err != nil {
+		return
+	}
+
+	// Decode request body.
+	dec, err := s.prepareDecoder(w, req)
+	if err != nil {
+		return
+	}
+
+	var data struct {
+		Email string `json:"email"`
+	}
+	httpError, code := s.handleDecodeError(dec.Decode(&data))
+	if code != http.StatusOK {
+		s.writeError(w, httpError, code)
+		return
+	}
+
+	// Retrieve the user account.
+	_, err = s.accounts.FindAccount(data.Email)
+	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+		// Do not return an error. Otherwise we would give a potential
+		// attacker a hint.
+		s.writeSuccess(w)
+		return
+	}
+
+	// Send password reset link by email.
+	if ok := s.sendPasswordResetLinkByMail(w, req, data.Email); !ok {
 		return
 	}
 
