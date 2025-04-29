@@ -88,6 +88,7 @@ CREATE TABLE am_accounts (
 	invoicing     BOOL NOT NULL,
 	sc_total      BLOB NOT NULL,
 	sc_locked     BLOB NOT NULL,
+	negative      BOOL NOT NULL,
 	currency      VARCHAR(8) NOT NULL,
 	stripe_id     VARCHAR(32) NOT NULL,
 	invoice       VARCHAR(32) NOT NULL,

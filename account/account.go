@@ -73,9 +73,9 @@ func (acc *Account) VerifyCode(code string) error {
 
 // Balance is the breakdown of the user's balance, in Siacoin.
 type Balance struct {
-	Total     types.Currency `json:"total"`
-	Locked    types.Currency `json:"locked"`
-	Avaliable types.Currency `json:"available"`
+	Total    types.Currency `json:"total"`
+	Locked   types.Currency `json:"locked"`
+	Negative bool           `json:"negative"`
 }
 
 // PaymentPlan can be either "pre-payment" or "invoicing".

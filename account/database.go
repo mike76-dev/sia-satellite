@@ -20,6 +20,7 @@ func (am *AccountManager) load() error {
 			invoicing,
 			sc_total,
 			sc_locked,
+			negative,
 			currency,
 			stripe_id
 		FROM am_accounts
@@ -32,7 +33,7 @@ func (am *AccountManager) load() error {
 	for rows.Next() {
 		var email, currency, stripeID string
 		var createdAt int64
-		var verified bool
+		var verified, negative bool
 		var invoicing byte
 		var total, locked []byte
 		if err := rows.Scan(
@@ -42,6 +43,7 @@ func (am *AccountManager) load() error {
 			&invoicing,
 			&total,
 			&locked,
+			&negative,
 			&currency,
 			&stripeID,
 		); err != nil {
@@ -55,6 +57,9 @@ func (am *AccountManager) load() error {
 			PaymentPlan: PredefinedPaymentPlans[invoicing],
 			Currency:    currency,
 			StripeID:    stripeID,
+			Balance: Balance{
+				Negative: negative,
+			},
 		}
 
 		td := types.NewBufDecoder(total)
@@ -69,7 +74,6 @@ func (am *AccountManager) load() error {
 			return utils.AddContext(err, "couldn't decode locked balance")
 		}
 
-		acc.Balance.Avaliable = acc.Balance.Total.Sub(acc.Balance.Locked)
 		am.accounts[email] = acc
 	}
 
@@ -203,13 +207,14 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 			invoicing,
 			sc_total,
 			sc_locked,
+			negative,
 			currency,
 			stripe_id,
 			invoice,
 			on_hold,
 			nonce,
 			sc_address
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		email,
 		pwh,
@@ -218,6 +223,7 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 		false,
 		buf.Bytes(),
 		buf.Bytes(),
+		false,
 		acc.Currency,
 		"",
 		"",
