@@ -1886,11 +1886,6 @@ components:
               type: number
               format: double
               example: 45.235674
-            available:
-              description: Amount of SC still available
-              type: number
-              format: double
-              example: 2805.32373
         currency:
           description: The user's preferred currency
           type: object
