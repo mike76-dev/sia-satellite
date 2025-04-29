@@ -523,8 +523,8 @@ func (s *Server) sendVerificationCodeByMail(w http.ResponseWriter, req *http.Req
 
 // authSignupResendHandlerPOST handles the POST /auth/signup/resend requests.
 func (s *Server) authSignupResendHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	// Check and update stats.
-	if err := s.checkVerifications(w, req); err != nil {
+	// Check for abuse.
+	if err := s.checkAbuse(w, req); err != nil {
 		return
 	}
 

@@ -10,10 +10,6 @@ const (
 	// stats are pruned.
 	authStatsCheckFrequency = 10 * time.Minute
 
-	// authStatsPruneThreshold defines how old the authentication
-	// stats may become before they are pruned.
-	authStatsPruneThreshold = 24 * time.Hour
-
 	// authStatsCountResetThreshold defines when the counter needs
 	// to be reset to zero after the last activity.
 	authStatsCountResetThreshold = time.Hour
@@ -36,19 +32,12 @@ const (
 )
 
 type (
-	// authAttempts keeps track of specific authentication activities.
-	authAttempts struct {
-		LastAttempt int64
-		Count       int64
-	}
-
 	// authenticationStats is the summary of authentication attempts
 	// from a single IP address.
 	authenticationStats struct {
-		RemoteHost     string
-		FailedLogins   authAttempts
-		Verifications  authAttempts
-		PasswordResets authAttempts
+		failedLogins   int
+		verifications  int
+		passwordResets int
 	}
 )
 
@@ -66,36 +55,9 @@ func (s *Server) pruneAuthStats() {
 		// Reset the call stats.
 		s.callStats = make(map[string]int)
 
-		now := time.Now().Unix()
-		for ip, entry := range s.authStats {
-			// Check if the entry needs to be pruned.
-			fl := float64(now - entry.FailedLogins.LastAttempt)
-			vr := float64(now - entry.Verifications.LastAttempt)
-			pr := float64(now - entry.PasswordResets.LastAttempt)
-			min := fl
-			if vr < min {
-				min = vr
-			}
-			if pr < min {
-				min = pr
-			}
-			if min > authStatsPruneThreshold.Seconds() {
-				delete(s.authStats, ip)
-				continue
-			}
-
-			// Check if the counters need to be reset.
-			stats := s.authStats[entry.RemoteHost]
-			if fl > authStatsCountResetThreshold.Seconds() {
-				stats.FailedLogins.Count = 0
-			}
-			if vr > authStatsCountResetThreshold.Seconds() {
-				stats.Verifications.Count = 0
-			}
-			if pr > authStatsCountResetThreshold.Seconds() {
-				stats.PasswordResets.Count = 0
-			}
-			s.authStats[entry.RemoteHost] = stats
+		// Check if the auth stats need to be pruned.
+		if time.Since(s.authTimer) > authStatsCountResetThreshold {
+			s.authStats = make(map[string]authenticationStats)
 		}
 
 		s.mu.Unlock()
@@ -127,36 +89,16 @@ func (s *Server) checkAndUpdateVerifications(host string) error {
 
 	// No such IP in the map yet.
 	if !ok {
-		s.authStats[host] = authenticationStats{
-			RemoteHost:   host,
-			FailedLogins: authAttempts{},
-			Verifications: authAttempts{
-				LastAttempt: time.Now().Unix(),
-				Count:       1,
-			},
-			PasswordResets: authAttempts{},
-		}
+		s.authStats[host] = authenticationStats{verifications: 1}
 		return nil
 	}
 
-	// IP exists but no verification requests yet.
-	if stats.Verifications.Count == 0 {
-		stats.Verifications.LastAttempt = time.Now().Unix()
-		stats.Verifications.Count = 1
-		s.authStats[host] = stats
-		return nil
-	}
-
-	// Check for abuse.
-	span := time.Now().Unix() - stats.Verifications.LastAttempt
-	if span == 0 {
-		span = 1 // avoid division by zero
-	}
-	stats.Verifications.LastAttempt = time.Now().Unix()
-	stats.Verifications.Count++
+	// Increment the counter.
+	stats.verifications++
 	s.authStats[host] = stats
 
-	if float64(stats.Verifications.Count)/float64(span) > maxVerifications {
+	// Check for abuse.
+	if stats.verifications > maxVerifications {
 		return errors.New("too many verification requests from " + host)
 	}
 
@@ -173,36 +115,16 @@ func (s *Server) checkAndUpdateFailedLogins(host string) error {
 
 	// No such IP in the map yet.
 	if !ok {
-		s.authStats[host] = authenticationStats{
-			RemoteHost: host,
-			FailedLogins: authAttempts{
-				LastAttempt: time.Now().Unix(),
-				Count:       1,
-			},
-			Verifications:  authAttempts{},
-			PasswordResets: authAttempts{},
-		}
+		s.authStats[host] = authenticationStats{failedLogins: 1}
 		return nil
 	}
 
-	// IP exists but no failed logins yet.
-	if stats.FailedLogins.Count == 0 {
-		stats.FailedLogins.LastAttempt = time.Now().Unix()
-		stats.FailedLogins.Count = 1
-		s.authStats[host] = stats
-		return nil
-	}
-
-	// Check for abuse.
-	span := time.Now().Unix() - stats.FailedLogins.LastAttempt
-	if span == 0 {
-		span = 1 // avoid division by zero
-	}
-	stats.FailedLogins.LastAttempt = time.Now().Unix()
-	stats.FailedLogins.Count++
+	// Increment the counter.
+	stats.failedLogins++
 	s.authStats[host] = stats
 
-	if float64(stats.FailedLogins.Count)/float64(span) > maxFailedLogins {
+	// Check for abuse.
+	if stats.failedLogins > maxFailedLogins {
 		return errors.New("too many failed logins from " + host)
 	}
 
@@ -219,36 +141,16 @@ func (s *Server) checkAndUpdatePasswordResets(host string) error {
 
 	// No such IP in the map yet.
 	if !ok {
-		s.authStats[host] = authenticationStats{
-			RemoteHost:    host,
-			FailedLogins:  authAttempts{},
-			Verifications: authAttempts{},
-			PasswordResets: authAttempts{
-				LastAttempt: time.Now().Unix(),
-				Count:       1,
-			},
-		}
+		s.authStats[host] = authenticationStats{passwordResets: 1}
 		return nil
 	}
 
-	// IP exists but no password resets yet.
-	if stats.PasswordResets.Count == 0 {
-		stats.PasswordResets.LastAttempt = time.Now().Unix()
-		stats.PasswordResets.Count = 1
-		s.authStats[host] = stats
-		return nil
-	}
-
-	// Check for abuse.
-	span := time.Now().Unix() - stats.PasswordResets.LastAttempt
-	if span == 0 {
-		span = 1 // avoid division by zero
-	}
-	stats.PasswordResets.LastAttempt = time.Now().Unix()
-	stats.PasswordResets.Count++
+	// Increment the counter.
+	stats.passwordResets++
 	s.authStats[host] = stats
 
-	if float64(stats.PasswordResets.Count)/float64(span) > maxPasswordResets {
+	// Check for abuse.
+	if stats.passwordResets > maxPasswordResets {
 		return errors.New("too many password reset requests from " + host)
 	}
 

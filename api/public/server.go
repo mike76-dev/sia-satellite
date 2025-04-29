@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/account"
@@ -25,6 +26,7 @@ type Server struct {
 	accounts  *account.AccountManager
 	authStats map[string]authenticationStats
 	callStats map[string]int
+	authTimer time.Time
 	mail      mail.MailSender
 	log       *zap.Logger
 
@@ -77,6 +79,7 @@ func NewServer(am *account.AccountManager, ms mail.MailSender, logger *zap.Logge
 		authStats: make(map[string]authenticationStats),
 		callStats: make(map[string]int),
 		closeChan: make(chan struct{}),
+		authTimer: time.Now(),
 	}
 
 	go s.pruneAuthStats()
