@@ -70,6 +70,9 @@ func (s *Server) buildHTTPRoutes() {
 	router.POST("/auth/reset/resend", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.authResetResendHandlerPOST(w, req, ps)
 	})
+	router.GET("/auth/change", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.authChangeHandlerGET(w, req, ps)
+	})
 
 	s.routerMu.Lock()
 	s.router = router
