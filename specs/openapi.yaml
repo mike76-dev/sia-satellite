@@ -254,6 +254,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /account/delete:
+    get:
+      tags:
+        - account
+      description: Delete account
+      security:
+        - apiKey: []
+        - authCookie: []
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '402':
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth:
     get:
       tags:
@@ -557,41 +592,6 @@ paths:
                 $ref: '#/components/schemas/Error'
         '401':
           description: Unauthorized request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /auth/delete:
-    get:
-      tags:
-        - auth
-      description: Delete account
-      security:
-        - apiKey: []
-        - authCookie: []
-      responses:
-        '204':
-          description: Successful operation
-        '400':
-          description: Invalid request parameter(s)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          description: Unauthorized request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '402':
-          description: Payment required
           content:
             application/json:
               schema:
