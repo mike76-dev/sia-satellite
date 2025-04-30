@@ -5,8 +5,8 @@ go 1.23.1
 toolchain go1.23.4
 
 require (
-	go.sia.tech/core v0.10.6-0.20250407154704-81a030aad05d
-	go.sia.tech/coreutils v0.12.2-0.20250409194146-7bb9065821f5
+	go.sia.tech/core v0.12.0
+	go.sia.tech/coreutils v0.13.2
 	go.sia.tech/jape v0.12.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/term v0.31.0
@@ -33,5 +33,5 @@ require (
 	github.com/montanaflynn/stats v0.7.1 // indirect
 	go.sia.tech/renterd v1.1.2-0.20250310164423-49c892b00d1b // indirect
 	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/tools v0.31.0 // indirect
+	golang.org/x/tools v0.32.0 // indirect
 )
