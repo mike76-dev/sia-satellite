@@ -164,8 +164,13 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Could not initialize hostDB: %v\n", err)
 	}
 
+	amLogger, amCloseFn, err := persist.NewFileLogger(filepath.Join(dir, "accounts.log"), zapcore.ErrorLevel)
+	if err != nil {
+		log.Fatalf("Could not initialize account manager logger: %v\n", err)
+	}
+
 	// Initialize accounts.
-	am, err := account.New(db, w)
+	am, err := account.New(db, w, amLogger)
 	if err != nil {
 		log.Fatalf("Couldn't initialize account manager: %v\n", err)
 	}
@@ -209,12 +214,14 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 				apiServer.Close()
 				srv.Shutdown(context.Background())
 				httpListener.Close()
+				am.Close()
 				hdb.Close()
 				w.Close()
 				syncerListener.Close()
 				<-ch
 				bdb.Close()
 				apiCloseFn()
+				amCloseFn()
 				hdbCloseFn()
 				walletCloseFn()
 				syncerCloseFn()
