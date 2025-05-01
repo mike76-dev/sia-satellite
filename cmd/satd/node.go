@@ -165,7 +165,7 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 	}
 
 	// Initialize accounts.
-	am, err := account.New(db)
+	am, err := account.New(db, w)
 	if err != nil {
 		log.Fatalf("Couldn't initialize account manager: %v\n", err)
 	}

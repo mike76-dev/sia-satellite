@@ -76,8 +76,10 @@ CREATE TABLE hdb_interactions (
 
 /* account manager */
 
+DROP TABLE IF EXISTS am_payments;
 DROP TABLE IF EXISTS am_accounts;
 DROP TABLE IF EXISTS am_info;
+DROP TABLE IF EXISTS am_tip;
 
 CREATE TABLE am_accounts (
 	id            INT NOT NULL AUTO_INCREMENT,
@@ -94,13 +96,33 @@ CREATE TABLE am_accounts (
 	invoice       VARCHAR(32) NOT NULL,
 	on_hold       BIGINT NOT NULL,
 	nonce         BINARY(16) NOT NULL,
-	sc_address    BINARY(32) NOT NULL,
+	sc_address    BINARY(32),
 	PRIMARY KEY (id)
+);
+
+CREATE TABLE am_payments (
+	id        INT NOT NULL AUTO_INCREMENT,
+	email     VARCHAR(64) NOT NULL,
+	amount    DOUBLE NOT NULL,
+	currency  VARCHAR(8) NOT NULL,
+	sc_rate   DOUBLE NOT NULL,
+	made_at   INT NOT NULL,
+	conf_left INT NOT NULL,
+	txid      BINARY(32),
+	PRIMARY KEY (id),
+	FOREIGN KEY (email) REFERENCES am_accounts(email)
 );
 
 CREATE TABLE am_info (
 	id          INT NOT NULL AUTO_INCREMENT,
 	private_key BINARY(64) NOT NULL,
+	PRIMARY KEY (id)
+);
+
+CREATE TABLE am_tip (
+	id     INT NOT NULL AUTO_INCREMENT,
+	height BIGINT UNSIGNED NOT NULL,
+	bid    BINARY(32) NOT NULL,
 	PRIMARY KEY (id)
 );
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/internal/utils"
+	"github.com/mike76-dev/sia-satellite/wallet"
 	"go.sia.tech/core/types"
 	"lukechampine.com/frand"
 )
@@ -88,19 +89,33 @@ const (
 
 var PredefinedPaymentPlans = []string{"pre-payment", "invoicing"}
 
+// Payment contains the details of a payment made by a user.
+type Payment struct {
+	Amount            float64             `json:"amount"`
+	Currency          string              `json:"currency"`
+	SCRate            float64             `json:"scRate"`
+	Timestamp         time.Time           `json:"timestamp"`
+	ConfirmationsLeft int                 `json:"confirmationsRequired"`
+	TransactionID     types.TransactionID `json:"transactionID,omitempty"`
+}
+
 // AccountManager manages the user accounts.
 type AccountManager struct {
-	accounts map[string]*Account
-	key      types.PrivateKey
-	db       *sql.DB
-	mu       sync.Mutex
+	accounts  map[string]*Account
+	addresses map[types.Address]string
+	key       types.PrivateKey
+	db        *sql.DB
+	wallet    *wallet.Wallet
+	mu        sync.Mutex
 }
 
 // New returns an initialized account manager.
-func New(db *sql.DB) (*AccountManager, error) {
+func New(db *sql.DB, w *wallet.Wallet) (*AccountManager, error) {
 	am := &AccountManager{
-		db:       db,
-		accounts: make(map[string]*Account),
+		db:        db,
+		wallet:    w,
+		accounts:  make(map[string]*Account),
+		addresses: make(map[types.Address]string),
 	}
 
 	if err := am.load(); err != nil {

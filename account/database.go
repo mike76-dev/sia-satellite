@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/internal/utils"
@@ -22,7 +23,8 @@ func (am *AccountManager) load() error {
 			sc_locked,
 			negative,
 			currency,
-			stripe_id
+			stripe_id,
+			sc_address
 		FROM am_accounts
 	`)
 	if err != nil {
@@ -35,7 +37,7 @@ func (am *AccountManager) load() error {
 		var createdAt int64
 		var verified, negative bool
 		var invoicing byte
-		var total, locked []byte
+		var total, locked, addr []byte
 		if err := rows.Scan(
 			&email,
 			&createdAt,
@@ -46,6 +48,7 @@ func (am *AccountManager) load() error {
 			&negative,
 			&currency,
 			&stripeID,
+			&addr,
 		); err != nil {
 			return utils.AddContext(err, "couldn't decode account")
 		}
@@ -75,6 +78,9 @@ func (am *AccountManager) load() error {
 		}
 
 		am.accounts[email] = acc
+		if addr != nil {
+			am.addresses[types.Address(addr)] = email
+		}
 	}
 
 	sk := make([]byte, 64)
@@ -251,4 +257,99 @@ func (am *AccountManager) SetVerified(acc *Account) error {
 	}
 
 	return nil
+}
+
+// GetAddress returns the Siacoin address of the account.
+// If there is no address yet, it is generated.
+func (am *AccountManager) GetAddress(acc *Account) (types.Address, error) {
+	var addr []byte
+	err := am.db.QueryRow(`
+		SELECT sc_address
+		FROM am_accounts
+		WHERE email = ?
+	`, acc.Email).Scan(&addr)
+	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		return types.Address{}, ErrUserNotFound
+	} else if err != nil {
+		return types.Address{}, utils.AddContext(err, "couldn't query address")
+	}
+
+	if addr != nil {
+		return types.Address(addr), nil
+	}
+
+	// Generate a new address.
+	address, err := am.wallet.NextAddress()
+	if err != nil {
+		return types.Address{}, utils.AddContext(err, "couldn't generate address")
+	}
+
+	// Update the database.
+	_, err = am.db.Exec(`
+		UPDATE am_accounts
+		SET sc_address = ?
+		WHERE email = ?
+	`, address[:], acc.Email)
+	if err != nil {
+		return types.Address{}, utils.AddContext(err, "couldn't insert address")
+	}
+
+	am.mu.Lock()
+	am.addresses[address] = acc.Email
+	am.mu.Unlock()
+
+	return address, nil
+}
+
+// GetPayments returns a list of payments made to the account.
+func (am *AccountManager) GetPayments(acc *Account, offset, limit int) (payments []Payment, err error) {
+	if limit < 0 {
+		limit = math.MaxInt
+	}
+
+	rows, err := am.db.Query(`
+		SELECT amount, currency, sc_rate, made_at, conf_left, txid
+		FROM am_payments
+		WHERE email = ?
+		ORDER BY made_at DESC
+		LIMIT ?, ?
+	`, acc.Email, offset, limit)
+	if err != nil {
+		return nil, utils.AddContext(err, "couldn't query payments")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var amount, scRate float64
+		var currency string
+		var timestamp int64
+		var confirmations int
+		var txid []byte
+		if err := rows.Scan(
+			&amount,
+			&currency,
+			&scRate,
+			&timestamp,
+			&confirmations,
+			&txid,
+		); err != nil {
+			return nil, utils.AddContext(err, "couldn't decode payment")
+		}
+
+		p := Payment{
+			Amount:            amount,
+			Currency:          currency,
+			SCRate:            scRate,
+			Timestamp:         time.Unix(timestamp, 0),
+			ConfirmationsLeft: confirmations,
+		}
+
+		if txid != nil {
+			p.TransactionID = types.TransactionID(txid)
+		}
+
+		payments = append(payments, p)
+	}
+
+	return
 }
