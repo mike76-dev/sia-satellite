@@ -139,6 +139,21 @@ func (s *Server) checkVerifications(w http.ResponseWriter, req *http.Request) er
 	return err
 }
 
+// checkInvalidTokens is a helper function that checks if the remote
+// host has exceeded the invalid token submission count and sends
+// a response if it has.
+func (s *Server) checkInvalidTokens(w http.ResponseWriter, req *http.Request) error {
+	err := s.checkAndUpdateInvalidTokens(getRemoteHost(req))
+	if err != nil {
+		s.writeError(w,
+			Error{
+				Code:    httpErrorTooManyRequests,
+				Message: "too many invalid token submissions",
+			}, http.StatusTooManyRequests)
+	}
+	return err
+}
+
 // checkAbuse is a helper function that checks if the remote host
 // has exceeded the API call limit and sends a response if it has.
 func (s *Server) checkAbuse(w http.ResponseWriter, req *http.Request) error {
@@ -765,7 +780,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 	prefix, email, expires, err := s.accounts.DecodeToken(token)
 	if err != nil {
 		// Check and update login stats.
-		if err := s.checkPasswordResets(w, req); err != nil {
+		if err := s.checkInvalidTokens(w, req); err != nil {
 			return
 		}
 		s.log.Error("failed to decode token", zap.Error(err))
