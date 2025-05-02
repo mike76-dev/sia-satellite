@@ -1,5 +1,7 @@
 package api
 
+import "go.sia.tech/core/types"
+
 // Error codes provided in an HTTP response.
 const (
 	httpErrorNone       = 0
@@ -41,4 +43,9 @@ func (err Error) Error() string {
 // init performs the API initialization.
 func init() {
 	initGoogle()
+}
+
+// PaymentAddressResponse is the response type for the /payment/address request.
+type PaymentAddressResponse struct {
+	Address types.Address `json:"address"`
 }

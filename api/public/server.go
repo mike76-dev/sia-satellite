@@ -78,6 +78,9 @@ func (s *Server) buildHTTPRoutes() {
 	router.GET("/payments", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.paymentsHandlerGET(w, req, ps)
 	})
+	router.GET("/payment/address", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.paymentAddressHandlerGET(w, req, ps)
+	})
 
 	s.routerMu.Lock()
 	s.router = router
