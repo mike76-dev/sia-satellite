@@ -81,7 +81,6 @@ func (am *AccountManager) load() error {
 
 		am.accounts[email] = acc
 		if addr != nil {
-			acc.address = types.Address(addr)
 			am.addresses[types.Address(addr)] = email
 		}
 	}

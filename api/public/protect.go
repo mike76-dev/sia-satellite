@@ -26,6 +26,10 @@ const (
 	// be requested per hour from the same IP.
 	maxPasswordResets = 3
 
+	// maxInvalidTokens is how many times an invalid token may be
+	// submitted per hour from the same IP.
+	maxInvalidTokens = 6
+
 	// maxAPICalls is how many single API calls may be accepted from
 	// the same IP within authStatsCheckFrequency.
 	maxAPICalls = 600
@@ -38,6 +42,7 @@ type (
 		failedLogins   int
 		verifications  int
 		passwordResets int
+		invalidTokens  int
 	}
 )
 
@@ -152,6 +157,32 @@ func (s *Server) checkAndUpdatePasswordResets(host string) error {
 	// Check for abuse.
 	if stats.passwordResets > maxPasswordResets {
 		return errors.New("too many password reset requests from " + host)
+	}
+
+	return nil
+}
+
+// checkAndUpdateInvalidTokens checks if there are too many invalid token
+// submissions from the same IP and updates the stats.
+func (s *Server) checkAndUpdateInvalidTokens(host string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	stats, ok := s.authStats[host]
+
+	// No such IP in the map yet.
+	if !ok {
+		s.authStats[host] = authenticationStats{invalidTokens: 1}
+		return nil
+	}
+
+	// Increment the counter.
+	stats.invalidTokens++
+	s.authStats[host] = stats
+
+	// Check for abuse.
+	if stats.invalidTokens > maxInvalidTokens {
+		return errors.New("too many invalid token submissions from " + host)
 	}
 
 	return nil
