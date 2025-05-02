@@ -83,15 +83,13 @@ func (am *AccountManager) updateChainState(reverted []chain.RevertUpdate, applie
 				if email, exists := am.addresses[sco.Address]; exists {
 					acc := am.accounts[email]
 					if !watched {
+						am.transactions[txid] = make(map[types.Address]string)
 						if !processed[email] {
 							if err := am.newSiacoinPayment(acc, txn); err != nil {
 								am.log.Error("couldn't add SC payment", zap.Error(err))
 								continue
 							}
 							processed[email] = true
-						}
-						if am.transactions[txid] == nil {
-							am.transactions[txid] = make(map[types.Address]string)
 						}
 						am.transactions[txid][sco.Address] = email
 					}
