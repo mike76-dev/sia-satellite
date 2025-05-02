@@ -294,7 +294,7 @@ func (am *AccountManager) saveAccount(acc *Account) error {
 			sc_total = ?,
 			sc_locked = ?,
 			negative = ?,
-			currency = ?,
+			currency = ?
 		WHERE email = ?
 	`,
 		total.Bytes(),
