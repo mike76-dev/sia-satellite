@@ -90,6 +90,9 @@ func (am *AccountManager) updateChainState(reverted []chain.RevertUpdate, applie
 							}
 							processed[email] = true
 						}
+						if am.transactions[txid] == nil {
+							am.transactions[txid] = make(map[types.Address]string)
+						}
 						am.transactions[txid][sco.Address] = email
 					}
 				}

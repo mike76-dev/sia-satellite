@@ -81,6 +81,7 @@ func (am *AccountManager) load() error {
 
 		am.accounts[email] = acc
 		if addr != nil {
+			acc.address = types.Address(addr)
 			am.addresses[types.Address(addr)] = email
 		}
 	}
@@ -474,7 +475,7 @@ func (am *AccountManager) newSiacoinPayment(acc *Account, txn types.V2Transactio
 	txid := txn.ID()
 	_, err := am.db.Exec(`
 		INSERT INTO am_payments (email, amount, currency, sc_rate, made_at, conf_left, txid)
-		VALUES (?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`,
 		acc.Email,
 		amount.Siacoins(),
