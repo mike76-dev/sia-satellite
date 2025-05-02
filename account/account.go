@@ -4,11 +4,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/mike76-dev/sia-satellite/external"
 	"github.com/mike76-dev/sia-satellite/internal/utils"
+	"github.com/mike76-dev/sia-satellite/wallet"
 	"go.sia.tech/core/types"
+	"go.sia.tech/coreutils/chain"
+	"go.uber.org/zap"
 	"lukechampine.com/frand"
 )
 
@@ -52,6 +57,7 @@ type Account struct {
 	StripeID    string    `json:"stripeID"`
 
 	verification verificationCode
+	address      types.Address
 }
 
 func (acc *Account) GenerateCode(expiration time.Time) string {
@@ -88,26 +94,115 @@ const (
 
 var PredefinedPaymentPlans = []string{"pre-payment", "invoicing"}
 
+// Payment contains the details of a payment made by a user.
+type Payment struct {
+	Amount            float64             `json:"amount"`
+	Currency          string              `json:"currency"`
+	SCRate            float64             `json:"scRate"`
+	Timestamp         time.Time           `json:"timestamp"`
+	ConfirmationsLeft int                 `json:"confirmationsRequired"`
+	TransactionID     types.TransactionID `json:"transactionID,omitempty"`
+}
+
 // AccountManager manages the user accounts.
 type AccountManager struct {
-	accounts map[string]*Account
-	key      types.PrivateKey
-	db       *sql.DB
-	mu       sync.Mutex
+	accounts     map[string]*Account
+	addresses    map[types.Address]string
+	transactions map[types.TransactionID]map[types.Address]string
+	rates        map[string]float64
+	key          types.PrivateKey
+	db           *sql.DB
+	log          *zap.Logger
+	chain        *chain.Manager
+	wallet       *wallet.Wallet
+	mu           sync.Mutex
+	closeChan    chan struct{}
+	tip          types.ChainIndex
 }
 
 // New returns an initialized account manager.
-func New(db *sql.DB) (*AccountManager, error) {
+func New(db *sql.DB, cm *chain.Manager, w *wallet.Wallet, logger *zap.Logger) (*AccountManager, error) {
 	am := &AccountManager{
-		db:       db,
-		accounts: make(map[string]*Account),
+		db:           db,
+		chain:        cm,
+		wallet:       w,
+		log:          logger,
+		accounts:     make(map[string]*Account),
+		addresses:    make(map[types.Address]string),
+		transactions: make(map[types.TransactionID]map[types.Address]string),
+		rates:        make(map[string]float64),
 	}
+
+	go am.fetchSiacoinRates()
+	go am.checkTransactions()
 
 	if err := am.load(); err != nil {
 		return nil, utils.AddContext(err, "couldn't load account manager")
 	}
 
+	reorgCh := make(chan struct{}, 1)
+	reorgCh <- struct{}{}
+	stop := cm.OnReorg(func(index types.ChainIndex) {
+		select {
+		case reorgCh <- struct{}{}:
+		default:
+		}
+	})
+
+	go func() {
+		defer stop()
+
+		for cm.Tip().Height <= am.tip.Height {
+			select {
+			case <-am.closeChan:
+				return
+			default:
+				time.Sleep(5 * time.Second)
+			}
+		}
+
+		for {
+			select {
+			case <-am.closeChan:
+				return
+			case <-reorgCh:
+				if err := am.sync(am.tip); err != nil {
+					am.log.Error("failed to sync", zap.Error(err))
+				}
+			}
+		}
+	}()
+
 	return am, nil
+}
+
+// Close shuts down the account manager.
+func (am *AccountManager) Close() {
+	am.closeChan <- struct{}{}
+}
+
+// fetchSiacoinRates periodically fetches the SC exchange rates.
+func (am *AccountManager) fetchSiacoinRates() {
+	fetch := func() {
+		rates, err := external.FetchSCRates()
+		if err != nil {
+			am.log.Error("failed to fetch SC exchange rates", zap.Error(err))
+		} else {
+			am.mu.Lock()
+			am.rates = rates
+			am.mu.Unlock()
+		}
+	}
+
+	fetch()
+	for {
+		select {
+		case <-am.closeChan:
+			return
+		case <-time.After(10 * time.Minute):
+			fetch()
+		}
+	}
 }
 
 // FindAccount returns an account with the specified email.
@@ -133,4 +228,18 @@ func (am *AccountManager) Accounts() (accs []Account) {
 	}
 
 	return
+}
+
+// GetSiacoinRate returns the Siacoin exchange rate for the given currency.
+// If the currency is not supported, zero is returned.
+func (am *AccountManager) GetSiacoinRate(currency string) float64 {
+	currency = strings.ToLower(currency)
+	if currency == "sc" { // edge case
+		return 1
+	}
+
+	am.mu.Lock()
+	defer am.mu.Unlock()
+
+	return am.rates[currency]
 }

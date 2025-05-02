@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/mike76-dev/sia-satellite/internal/utils"
@@ -22,7 +25,8 @@ func (am *AccountManager) load() error {
 			sc_locked,
 			negative,
 			currency,
-			stripe_id
+			stripe_id,
+			sc_address
 		FROM am_accounts
 	`)
 	if err != nil {
@@ -35,7 +39,7 @@ func (am *AccountManager) load() error {
 		var createdAt int64
 		var verified, negative bool
 		var invoicing byte
-		var total, locked []byte
+		var total, locked, addr []byte
 		if err := rows.Scan(
 			&email,
 			&createdAt,
@@ -46,6 +50,7 @@ func (am *AccountManager) load() error {
 			&negative,
 			&currency,
 			&stripeID,
+			&addr,
 		); err != nil {
 			return utils.AddContext(err, "couldn't decode account")
 		}
@@ -75,6 +80,10 @@ func (am *AccountManager) load() error {
 		}
 
 		am.accounts[email] = acc
+		if addr != nil {
+			acc.address = types.Address(addr)
+			am.addresses[types.Address(addr)] = email
+		}
 	}
 
 	sk := make([]byte, 64)
@@ -88,6 +97,37 @@ func (am *AccountManager) load() error {
 		return utils.AddContext(err, "couldn't read key")
 	} else {
 		am.key = sk
+	}
+
+	var height uint64
+	id := make([]byte, 32)
+	err = am.db.QueryRow(`
+		SELECT height, bid
+		FROM am_tip
+		WHERE id = 1
+	`).Scan(&height, &id)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return utils.AddContext(err, "couldn't load tip")
+	}
+	am.tip.Height = height
+	copy(am.tip.ID[:], id)
+
+	return nil
+}
+
+// saveTip updates the AccountManager's scanned index.
+func (am *AccountManager) saveTip(index types.ChainIndex) error {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+
+	am.tip = index
+
+	_, err := am.db.Exec(`
+		REPLACE INTO am_tip (id, height, bid)
+		VALUES (1, ?, ?)
+	`, index.Height, index.ID[:])
+	if err != nil {
+		return utils.AddContext(err, "couldn't save tip")
 	}
 
 	return nil
@@ -238,6 +278,34 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 	return acc, nil
 }
 
+// saveAccount updates the account in the database.
+func (am *AccountManager) saveAccount(acc *Account) error {
+	var total, locked bytes.Buffer
+	e := types.NewEncoder(&total)
+	types.V2Currency(acc.Balance.Total).EncodeTo(e)
+	e.Flush()
+	e = types.NewEncoder(&locked)
+	types.V2Currency(acc.Balance.Locked).EncodeTo(e)
+	e.Flush()
+
+	_, err := am.db.Exec(`
+		UPDATE am_accounts
+		SET
+			sc_total = ?,
+			sc_locked = ?,
+			negative = ?,
+			currency = ?,
+		WHERE email = ?
+	`,
+		total.Bytes(),
+		locked.Bytes(),
+		acc.Balance.Negative,
+		acc.Currency,
+		acc.Email,
+	)
+	return err
+}
+
 // SetVerified sets the Verified flag of the account to true.
 func (am *AccountManager) SetVerified(acc *Account) error {
 	acc.Verified = true
@@ -248,6 +316,318 @@ func (am *AccountManager) SetVerified(acc *Account) error {
 	`, acc.Email)
 	if err != nil {
 		return utils.AddContext(err, "couldn't mark account verified")
+	}
+
+	return nil
+}
+
+// GetAddress returns the Siacoin address of the account.
+// If there is no address yet, it is generated.
+func (am *AccountManager) GetAddress(acc *Account) (types.Address, error) {
+	if (acc.address != types.Address{}) {
+		return acc.address, nil
+	}
+
+	// Generate a new address.
+	address, err := am.wallet.NextAddress()
+	if err != nil {
+		return types.Address{}, utils.AddContext(err, "couldn't generate address")
+	}
+
+	// Update the database.
+	_, err = am.db.Exec(`
+		UPDATE am_accounts
+		SET sc_address = ?
+		WHERE email = ?
+	`, address[:], acc.Email)
+	if err != nil {
+		return types.Address{}, utils.AddContext(err, "couldn't insert address")
+	}
+
+	am.mu.Lock()
+	am.addresses[address] = acc.Email
+	am.mu.Unlock()
+
+	acc.address = address
+	return address, nil
+}
+
+// GetPayments returns a list of payments made to the account.
+func (am *AccountManager) GetPayments(acc *Account, offset, limit int) (payments []Payment, err error) {
+	if limit < 0 {
+		limit = math.MaxInt
+	}
+
+	rows, err := am.db.Query(`
+		SELECT amount, currency, sc_rate, made_at, conf_left, txid
+		FROM am_payments
+		WHERE email = ?
+		ORDER BY made_at DESC
+		LIMIT ?, ?
+	`, acc.Email, offset, limit)
+	if err != nil {
+		return nil, utils.AddContext(err, "couldn't query payments")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var amount, scRate float64
+		var currency string
+		var timestamp int64
+		var confirmations int
+		var txid []byte
+		if err := rows.Scan(
+			&amount,
+			&currency,
+			&scRate,
+			&timestamp,
+			&confirmations,
+			&txid,
+		); err != nil {
+			return nil, utils.AddContext(err, "couldn't decode payment")
+		}
+
+		p := Payment{
+			Amount:            amount,
+			Currency:          currency,
+			SCRate:            scRate,
+			Timestamp:         time.Unix(timestamp, 0),
+			ConfirmationsLeft: confirmations,
+		}
+
+		if txid != nil {
+			p.TransactionID = types.TransactionID(txid)
+		}
+
+		payments = append(payments, p)
+	}
+
+	return
+}
+
+// NewFiatPayment adds a new fiat payment to the account.
+func (am *AccountManager) NewFiatPayment(acc *Account, amount float64, currency string) error {
+	currency = strings.ToUpper(currency)
+	rate := am.GetSiacoinRate(currency)
+	if rate == 0 {
+		return fmt.Errorf("couldn't calculate SC/%s exchange rate", currency)
+	}
+
+	amountSC, err := types.ParseCurrency(fmt.Sprintf("%fSC", amount/rate))
+	if err != nil {
+		return fmt.Errorf("couldn't parse amount %f: %v", amount/rate, err)
+	}
+
+	// Insert payment record.
+	_, err = am.db.Exec(`
+		INSERT INTO am_payments (email, amount, currency, sc_rate, made_at, conf_left)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`,
+		acc.Email,
+		amount,
+		currency,
+		rate,
+		time.Now().Unix(),
+		0,
+	)
+	if err != nil {
+		return utils.AddContext(err, "couldn't insert payment record")
+	}
+
+	// Update account balance.
+	if acc.Balance.Negative {
+		if acc.Balance.Total.Cmp(amountSC) > 0 {
+			acc.Balance.Total = acc.Balance.Total.Sub(amountSC)
+		} else {
+			acc.Balance.Total = amountSC.Sub(acc.Balance.Total)
+			acc.Balance.Negative = false
+		}
+	} else {
+		acc.Balance.Total = acc.Balance.Total.Add(amountSC)
+	}
+
+	// Set the new default currency.
+	acc.Currency = currency
+
+	// Update the account.
+	if err := am.saveAccount(acc); err != nil {
+		return utils.AddContext(err, "couldn't save account")
+	}
+
+	return nil
+}
+
+// newSiacoinPayment adds a new siacoin payment to the account.
+// Note that the balance is not changed at this point.
+func (am *AccountManager) newSiacoinPayment(acc *Account, txn types.V2Transaction) error {
+	if acc == nil {
+		return nil
+	}
+
+	var amount types.Currency
+	for _, sco := range txn.SiacoinOutputs {
+		if sco.Address == acc.address {
+			amount = amount.Add(sco.Value)
+		}
+	}
+
+	// Insert payment record.
+	txid := txn.ID()
+	_, err := am.db.Exec(`
+		INSERT INTO am_payments (email, amount, currency, sc_rate, made_at, conf_left, txid)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`,
+		acc.Email,
+		amount.Siacoins(),
+		"SC",
+		1,
+		time.Now().Unix(),
+		6,
+		txid[:],
+	)
+	if err != nil {
+		return utils.AddContext(err, "couldn't insert payment record")
+	}
+
+	return nil
+}
+
+// confirmSiacoinPayment decrements the required number of confirmations.
+func (am *AccountManager) confirmSiacoinPayment(acc *Account, txid types.TransactionID) error {
+	if acc == nil {
+		return nil
+	}
+
+	var count int
+	var amount float64
+	if err := am.db.QueryRow(`
+		SELECT amount, conf_left
+		FROM am_payments
+		WHERE email = ?
+		AND txid = ?
+	`, acc.Email, txid[:]).Scan(&amount, &count); err != nil && errors.Is(err, sql.ErrNoRows) {
+		return ErrUserNotFound
+	} else if err != nil {
+		return utils.AddContext(err, "couldn't decode payment record")
+	}
+
+	// Decrement the counter. If it becomes zero, update the balance.
+	count--
+	if count == 0 {
+		amountSC, err := types.ParseCurrency(fmt.Sprintf("%fSC", amount))
+		if err != nil {
+			return utils.AddContext(err, "couldn't parse amount")
+		}
+
+		if acc.Balance.Negative {
+			if acc.Balance.Total.Cmp(amountSC) > 0 {
+				acc.Balance.Total = acc.Balance.Total.Sub(amountSC)
+			} else {
+				acc.Balance.Total = amountSC.Sub(acc.Balance.Total)
+				acc.Balance.Negative = false
+			}
+		} else {
+			acc.Balance.Total = acc.Balance.Total.Add(amountSC)
+		}
+
+		// Update the account.
+		if err := am.saveAccount(acc); err != nil {
+			return utils.AddContext(err, "couldn't save account")
+		}
+
+		// Remove the txn from the watch list.
+		delete(am.transactions, txid)
+	}
+
+	// Update the payment record.
+	_, err := am.db.Exec(`
+		UPDATE am_payments
+		SET conf_left = ?
+		WHERE email = ?
+		AND txid = ?
+	`, count, acc.Email, txid[:])
+	if err != nil {
+		return utils.AddContext(err, "couldn't update payment record")
+	}
+
+	return nil
+}
+
+// unconfirmSiacoinPayment increments the required number of confirmations.
+func (am *AccountManager) unconfirmSiacoinPayment(acc *Account, txid types.TransactionID) error {
+	if acc == nil {
+		return nil
+	}
+
+	var count int
+	var amount float64
+	if err := am.db.QueryRow(`
+		SELECT amount, conf_left
+		FROM am_payments
+		WHERE email = ?
+		AND txid = ?
+	`, acc.Email, txid[:]).Scan(&amount, &count); err != nil && errors.Is(err, sql.ErrNoRows) {
+		return ErrUserNotFound
+	} else if err != nil {
+		return utils.AddContext(err, "couldn't decode payment record")
+	}
+
+	// If count is zero, we have to deduct the balance as well.
+	if count == 0 {
+		amountSC, err := types.ParseCurrency(fmt.Sprintf("%fSC", amount))
+		if err != nil {
+			return utils.AddContext(err, "couldn't parse amount")
+		}
+
+		if acc.Balance.Negative {
+			acc.Balance.Total = acc.Balance.Total.Add(amountSC)
+		} else {
+			if acc.Balance.Total.Cmp(amountSC) > 0 {
+				acc.Balance.Total = acc.Balance.Total.Sub(amountSC)
+			} else {
+				acc.Balance.Total = amountSC.Sub(acc.Balance.Total)
+				acc.Balance.Negative = true
+			}
+		}
+
+		// Update the account.
+		if err := am.saveAccount(acc); err != nil {
+			return utils.AddContext(err, "couldn't save account")
+		}
+
+		// Recreate the txn in the watch list.
+		am.transactions[txid] = make(map[types.Address]string)
+		am.transactions[txid][acc.address] = acc.Email
+	}
+
+	// Increment the counter.
+	count++
+	_, err := am.db.Exec(`
+		UPDATE am_payments
+		SET conf_left = ?
+		WHERE email = ?
+		AND txid = ?
+	`, count, acc.Email, txid[:])
+	if err != nil {
+		return utils.AddContext(err, "couldn't update payment record")
+	}
+
+	return nil
+}
+
+// revertSiacoinPayment removes the payment record from the database.
+func (am *AccountManager) revertSiacoinPayment(acc *Account, txid types.TransactionID) error {
+	if acc == nil {
+		return nil
+	}
+
+	_, err := am.db.Exec(`
+		DELETE FROM am_payments
+		WHERE email = ?
+		AND txid = ?
+	`, acc.Email, txid[:])
+	if err != nil {
+		return utils.AddContext(err, "couldn't delete payment record")
 	}
 
 	return nil
