@@ -459,7 +459,7 @@ func (am *AccountManager) NewFiatPayment(acc *Account, amount float64, currency 
 
 // newSiacoinPayment adds a new siacoin payment to the account.
 // Note that the balance is not changed at this point.
-func (am *AccountManager) newSiacoinPayment(acc *Account, txn types.V2Transaction) error {
+func (am *AccountManager) newSiacoinPayment(acc *Account, txn types.V2Transaction, timestamp time.Time) error {
 	if acc == nil {
 		return nil
 	}
@@ -481,7 +481,7 @@ func (am *AccountManager) newSiacoinPayment(acc *Account, txn types.V2Transactio
 		amount.Siacoins(),
 		"SC",
 		1,
-		time.Now().Unix(),
+		timestamp.Unix(),
 		6,
 		txid[:],
 	)

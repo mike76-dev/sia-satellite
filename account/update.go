@@ -29,7 +29,7 @@ func (am *AccountManager) checkForPayments() {
 			if email, exists := am.addresses[sco.Address]; exists {
 				if !processed[email] {
 					acc := am.accounts[email]
-					if err := am.newSiacoinPayment(acc, txn); err != nil {
+					if err := am.newSiacoinPayment(acc, txn, time.Now()); err != nil {
 						am.log.Error("couldn't add SC payment", zap.Error(err))
 						continue
 					}
@@ -85,7 +85,7 @@ func (am *AccountManager) updateChainState(reverted []chain.RevertUpdate, applie
 					if !watched {
 						am.transactions[txid] = make(map[types.Address]string)
 						if !processed[email] {
-							if err := am.newSiacoinPayment(acc, txn); err != nil {
+							if err := am.newSiacoinPayment(acc, txn, cau.Block.Timestamp); err != nil {
 								am.log.Error("couldn't add SC payment", zap.Error(err))
 								continue
 							}
