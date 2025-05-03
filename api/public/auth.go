@@ -426,22 +426,12 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 			}
 		}
 
-		// Check and update stats.
-		if err := s.checkVerifications(w, req); err != nil {
-			return
-		}
-
 		// Send verification code by email.
 		if ok := s.sendVerificationCodeByMail(w, req, acc); !ok {
 			return
 		}
 	} else {
 		if !found { // no account yet but a verificaion code is there
-			// Check and update stats.
-			if err := s.checkVerifications(w, req); err != nil {
-				return
-			}
-
 			s.writeError(w,
 				Error{
 					Code:    httpErrorNotFound,
@@ -453,7 +443,7 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 		// Check if the code is correct.
 		if verifyError != nil && errors.Is(verifyError, account.ErrWrongCode) {
 			// Check and update stats.
-			if err := s.checkVerifications(w, req); err != nil {
+			if err := s.checkFailedLogins(w, req); err != nil {
 				return
 			}
 
