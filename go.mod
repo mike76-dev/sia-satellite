@@ -31,6 +31,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/klauspost/reedsolomon v1.12.4 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
+	github.com/stripe/stripe-go/v75 v75.11.0 // indirect
 	go.sia.tech/renterd v1.1.2-0.20250310164423-49c892b00d1b // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/tools v0.32.0 // indirect

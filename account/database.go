@@ -278,8 +278,8 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 	return acc, nil
 }
 
-// saveAccount updates the account in the database.
-func (am *AccountManager) saveAccount(acc *Account) error {
+// SaveAccount updates the account in the database.
+func (am *AccountManager) SaveAccount(acc *Account) error {
 	var total, locked bytes.Buffer
 	e := types.NewEncoder(&total)
 	types.V2Currency(acc.Balance.Total).EncodeTo(e)
@@ -450,7 +450,7 @@ func (am *AccountManager) NewFiatPayment(acc *Account, amount float64, currency 
 	acc.Currency = currency
 
 	// Update the account.
-	if err := am.saveAccount(acc); err != nil {
+	if err := am.SaveAccount(acc); err != nil {
 		return utils.AddContext(err, "couldn't save account")
 	}
 
@@ -531,7 +531,7 @@ func (am *AccountManager) confirmSiacoinPayment(acc *Account, txid types.Transac
 		}
 
 		// Update the account.
-		if err := am.saveAccount(acc); err != nil {
+		if err := am.SaveAccount(acc); err != nil {
 			return utils.AddContext(err, "couldn't save account")
 		}
 
@@ -591,7 +591,7 @@ func (am *AccountManager) unconfirmSiacoinPayment(acc *Account, txid types.Trans
 		}
 
 		// Update the account.
-		if err := am.saveAccount(acc); err != nil {
+		if err := am.SaveAccount(acc); err != nil {
 			return utils.AddContext(err, "couldn't save account")
 		}
 

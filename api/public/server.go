@@ -86,6 +86,9 @@ func (s *Server) buildHTTPRoutes() {
 	router.GET("/stripe/currencies", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.stripeCurrenciesHandlerGET(w, req, ps)
 	})
+	router.POST("/stripe/create-payment-intent", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.stripeCreatePaymentIntentHandlerPOST(w, req, ps)
+	})
 
 	s.routerMu.Lock()
 	s.router = router
