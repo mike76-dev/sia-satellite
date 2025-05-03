@@ -161,6 +161,15 @@ func New(db *sql.DB, cm *chain.Manager, w *wallet.Wallet, logger *zap.Logger) (*
 			}
 		}
 
+		for w.IsScanning() {
+			select {
+			case <-am.closeChan:
+				return
+			default:
+				time.Sleep(5 * time.Second)
+			}
+		}
+
 		for {
 			select {
 			case <-am.closeChan:

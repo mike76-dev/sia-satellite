@@ -192,6 +192,14 @@ func (w *Wallet) Close() {
 	w.store.close()
 }
 
+// IsScanning returns true if the wallet is doing the initial scan.
+func (w *Wallet) IsScanning() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	return w.scanning
+}
+
 // synced returns true if the wallet is synced to the blockchain.
 func (w *Wallet) synced() bool {
 	var count int
