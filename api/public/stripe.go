@@ -13,36 +13,29 @@ type (
 		MinimumAmount float32 `json:"minimum"`
 		ZeroDecimal   bool    `json:"zeroDecimal"`
 	}
-
-	// PaymentCurrencies contains a list of currencies.
-	PaymentCurrencies struct {
-		Currencies []PaymentCurrency `json:"currencies"`
-	}
 )
 
 // allowedCurrencies lists all available currencies.
-var allowedCurrencies = PaymentCurrencies{
-	Currencies: []PaymentCurrency{
-		{
-			Name:          "USD",
-			MinimumAmount: 0.5,
-			ZeroDecimal:   false,
-		},
-		{
-			Name:          "EUR",
-			MinimumAmount: 0.5,
-			ZeroDecimal:   false,
-		},
-		{
-			Name:          "GBP",
-			MinimumAmount: 0.3,
-			ZeroDecimal:   false,
-		},
-		{
-			Name:          "CAD",
-			MinimumAmount: 0.5,
-			ZeroDecimal:   false,
-		},
+var allowedCurrencies = []PaymentCurrency{
+	{
+		Name:          "USD",
+		MinimumAmount: 0.5,
+		ZeroDecimal:   false,
+	},
+	{
+		Name:          "EUR",
+		MinimumAmount: 0.5,
+		ZeroDecimal:   false,
+	},
+	{
+		Name:          "GBP",
+		MinimumAmount: 0.3,
+		ZeroDecimal:   false,
+	},
+	{
+		Name:          "CAD",
+		MinimumAmount: 0.5,
+		ZeroDecimal:   false,
 	},
 }
 
