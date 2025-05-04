@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -73,7 +72,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 
 	// Retrieve the user account.
 	acc, err := s.accounts.FindAccount(email)
-	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+	if err != nil {
 		s.writeError(w,
 			Error{
 				Code:    httpErrorNotFound,
@@ -189,7 +188,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 
 	// Retrieve the user account.
 	acc, err := s.accounts.FindAccount(email)
-	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+	if err != nil {
 		s.writeError(w,
 			Error{
 				Code:    httpErrorNotFound,

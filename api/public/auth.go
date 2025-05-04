@@ -623,7 +623,7 @@ func (s *Server) authSignupResendHandlerPOST(w http.ResponseWriter, req *http.Re
 
 	// Retrieve the user account.
 	acc, err := s.accounts.FindAccount(data.Email)
-	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+	if err != nil {
 		s.writeError(w,
 			Error{
 				Code:    httpErrorNotFound,
@@ -678,7 +678,7 @@ func (s *Server) authResetHandlerPOST(w http.ResponseWriter, req *http.Request, 
 
 	// Retrieve the user account.
 	_, err = s.accounts.FindAccount(data.Email)
-	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+	if err != nil {
 		// Do not return an error. Otherwise we would give a potential
 		// attacker a hint.
 		s.writeSuccess(w)
@@ -722,7 +722,7 @@ func (s *Server) authResetResendHandlerPOST(w http.ResponseWriter, req *http.Req
 
 	// Retrieve the user account.
 	_, err = s.accounts.FindAccount(data.Email)
-	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+	if err != nil {
 		// Do not return an error. Otherwise we would give a potential
 		// attacker a hint.
 		s.writeSuccess(w)
@@ -811,7 +811,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 
 	// Check if the email address is registered.
 	_, err = s.accounts.FindAccount(email)
-	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+	if err != nil {
 		s.writeError(w,
 			Error{
 				Code:    httpErrorNotFound,

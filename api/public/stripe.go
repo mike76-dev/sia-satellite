@@ -166,7 +166,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 
 	// Retrieve account.
 	acc, err := s.accounts.FindAccount(email)
-	if err != nil && errors.Is(err, account.ErrUserNotFound) {
+	if err != nil {
 		s.writeError(w,
 			Error{
 				Code:    httpErrorNotFound,
