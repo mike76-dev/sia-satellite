@@ -89,6 +89,9 @@ func (s *Server) buildHTTPRoutes() {
 	router.POST("/stripe/create-payment-intent", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.stripeCreatePaymentIntentHandlerPOST(w, req, ps)
 	})
+	router.POST("/stripe/webhook", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.stripeWebhookHandlerPOST(w, req, ps)
+	})
 
 	s.routerMu.Lock()
 	s.router = router
