@@ -24,6 +24,8 @@ tags:
     description: payments and payment history
   - name: satellite
     description: network information
+  - name: stripe
+    description: Stripe-related operations
 paths:
   /account:
     get:
@@ -1838,6 +1840,82 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /stripe/currencies:
+    get:
+      tags:
+        - stripe
+      description: Retrieve the list of supported payment currencies
+      security: []
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Currency'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /stripe/create-payment-intent:
+    post:
+      tags:
+        - stripe
+      description: Call this endpoint when a customer wants to make a fiat payment.
+      security:
+        - authCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  description: An array of purchased items
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        description: |-
+                          ID of the purchased item. It consists of the payment amount
+                          and the payment currency. For the purpose of verifying of
+                          the default payment method, ID is prefixed with 'default:'.
+                        type: string
+                        example: '5.00USD'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientSecret:
+                    description: Secret key of the client
+                    type: string
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     Error:
@@ -2320,6 +2398,22 @@ components:
           description: Fee per migrated object slab, in Hastings
           type: string
           example: '10000000000000000000000'
+    Currency:
+      type: object
+      properties:
+        name:
+          description: Name of the currency
+          type: string
+          example: 'USD'
+        minimum:
+          description: Minimum amount chargeable by Stripe
+          type: number
+          format: float
+          example: 0.5
+        zeroDecimal:
+          description: An indicator if the currency may have no decimals
+          type: boolean
+          example: false
   securitySchemes:
     apiKey:
       type: apiKey
