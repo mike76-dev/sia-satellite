@@ -67,6 +67,11 @@ type AccountResponse struct {
 	StripeID    string    `json:"stripeID"`
 }
 
+// AccountTokenResponse is the response type for the GET /account/token request.
+type AccountTokenResponse struct {
+	Token string `json:"token"`
+}
+
 // PaymentAddressResponse is the response type for the GET /payment/address request.
 type PaymentAddressResponse struct {
 	Address types.Address `json:"address"`
