@@ -48,6 +48,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) buildHTTPRoutes() {
 	router := httprouter.New()
 
+	// /account requests.
+	router.GET("/account", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.accountHandlerGET(w, req, ps)
+	})
+
 	// /auth requests.
 	router.GET("/auth", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.authHandlerGET(w, req, ps)

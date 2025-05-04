@@ -171,7 +171,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 			Error{
 				Code:    httpErrorNotFound,
 				Message: "email address not found",
-			}, http.StatusBadRequest)
+			}, http.StatusUnauthorized)
 		return
 	}
 

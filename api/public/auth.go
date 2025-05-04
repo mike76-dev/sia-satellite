@@ -816,7 +816,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 			Error{
 				Code:    httpErrorNotFound,
 				Message: "email address not found",
-			}, http.StatusBadRequest)
+			}, http.StatusUnauthorized)
 		return
 	}
 

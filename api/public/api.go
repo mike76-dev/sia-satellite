@@ -1,6 +1,10 @@
 package api
 
-import "go.sia.tech/core/types"
+import (
+	"time"
+
+	"go.sia.tech/core/types"
+)
 
 // Error codes provided in an HTTP response.
 const (
@@ -40,7 +44,30 @@ func (err Error) Error() string {
 	return err.Message
 }
 
-// PaymentAddressResponse is the response type for the /payment/address request.
+// Balance describes the user's balance.
+type Balance struct {
+	Total  float64 `json:"total"`
+	Locked float64 `json:"locked"`
+}
+
+// Currency combines the name of a currency with its exchange rate.
+type Currency struct {
+	Code   string  `json:"code"`
+	SCRate float64 `json:"scRate"`
+}
+
+// AccountResponse is the response type for the GET /account request.
+type AccountResponse struct {
+	Email       string    `json:"email"`
+	CreatedAt   time.Time `json:"createdAt"`
+	Verified    bool      `json:"verified"`
+	PaymentPlan string    `json:"paymentPlan"`
+	Balance     Balance   `json:"balance"`
+	Currency    Currency  `json:"currency"`
+	StripeID    string    `json:"stripeID"`
+}
+
+// PaymentAddressResponse is the response type for the GET /payment/address request.
 type PaymentAddressResponse struct {
 	Address types.Address `json:"address"`
 }

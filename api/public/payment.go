@@ -77,7 +77,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 			Error{
 				Code:    httpErrorNotFound,
 				Message: "email address not found",
-			}, http.StatusBadRequest)
+			}, http.StatusUnauthorized)
 		return
 	}
 
@@ -193,7 +193,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 			Error{
 				Code:    httpErrorNotFound,
 				Message: "email address not found",
-			}, http.StatusBadRequest)
+			}, http.StatusUnauthorized)
 		return
 	}
 
