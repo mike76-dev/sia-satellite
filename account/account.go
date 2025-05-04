@@ -10,6 +10,7 @@ import (
 
 	"github.com/mike76-dev/sia-satellite/external"
 	"github.com/mike76-dev/sia-satellite/internal/utils"
+	"github.com/mike76-dev/sia-satellite/mail"
 	"github.com/mike76-dev/sia-satellite/wallet"
 	"go.sia.tech/core/types"
 	"go.sia.tech/coreutils/chain"
@@ -58,6 +59,8 @@ type Account struct {
 
 	verification verificationCode
 	address      types.Address
+	invoice      string
+	onHoldSince  time.Time
 }
 
 func (acc *Account) GenerateCode(expiration time.Time) string {
@@ -111,22 +114,26 @@ type AccountManager struct {
 	transactions map[types.TransactionID]map[types.Address]string
 	rates        map[string]float64
 	key          types.PrivateKey
+	serverName   string
 	db           *sql.DB
 	log          *zap.Logger
 	chain        *chain.Manager
 	wallet       *wallet.Wallet
+	mail         mail.MailSender
 	mu           sync.Mutex
 	closeChan    chan struct{}
 	tip          types.ChainIndex
 }
 
 // New returns an initialized account manager.
-func New(db *sql.DB, cm *chain.Manager, w *wallet.Wallet, logger *zap.Logger) (*AccountManager, error) {
+func New(db *sql.DB, cm *chain.Manager, w *wallet.Wallet, logger *zap.Logger, ms mail.MailSender, name string) (*AccountManager, error) {
 	am := &AccountManager{
 		db:           db,
 		chain:        cm,
 		wallet:       w,
 		log:          logger,
+		mail:         ms,
+		serverName:   name,
 		accounts:     make(map[string]*Account),
 		addresses:    make(map[types.Address]string),
 		transactions: make(map[types.TransactionID]map[types.Address]string),
@@ -251,4 +258,18 @@ func (am *AccountManager) GetSiacoinRate(currency string) float64 {
 	defer am.mu.Unlock()
 
 	return am.rates[currency]
+}
+
+// findByID tries to find the account by the associated StripeID record.
+func (am *AccountManager) findByID(id string) *Account {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+
+	for _, acc := range am.accounts {
+		if acc.StripeID == id {
+			return acc
+		}
+	}
+
+	return nil
 }

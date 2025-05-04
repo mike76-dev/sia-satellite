@@ -1,8 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -11,9 +14,14 @@ import (
 	"github.com/mike76-dev/sia-satellite/account"
 	"github.com/stripe/stripe-go/v75"
 	"github.com/stripe/stripe-go/v75/customer"
+	"github.com/stripe/stripe-go/v75/invoice"
 	"github.com/stripe/stripe-go/v75/paymentintent"
+	"github.com/stripe/stripe-go/webhook"
 	"go.uber.org/zap"
 )
+
+// maxBodyBytes specifies the maximum body size for /webhook requests.
+const maxBodyBytes = int64(65536)
 
 type item struct {
 	ID string `json:"id"`
@@ -273,4 +281,139 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 	}{
 		ClientSecret: pi.ClientSecret,
 	})
+}
+
+// stripeWebhookHandlerPOST handles the POST /stripe/webhook requests.
+func (s *Server) stripeWebhookHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Read the request body.
+	req.Body = http.MaxBytesReader(w, req.Body, maxBodyBytes)
+	payload, err := io.ReadAll(req.Body)
+	if err != nil {
+		s.log.Error("error reading request body", zap.Error(err))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	// Verify the Stripe signature.
+	endpointSecret := os.Getenv("SATD_STRIPE_WEBHOOK_KEY")
+	event, err := webhook.ConstructEvent(payload, req.Header.Get("Stripe-Signature"), endpointSecret)
+	if err != nil {
+		s.log.Error("error verifying webhook signature", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Unmarshal the event data into an appropriate struct depending on
+	// its Type.
+	switch event.Type {
+	case "payment_intent.succeeded":
+		var paymentIntent stripe.PaymentIntent
+		err := json.Unmarshal(event.Data.Raw, &paymentIntent)
+		if err != nil {
+			s.log.Error("error parsing webhook JSON", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		s.handlePaymentIntentSucceeded(paymentIntent)
+		return
+
+	case "payment_intent.payment_failed":
+		var paymentIntent stripe.PaymentIntent
+		err := json.Unmarshal(event.Data.Raw, &paymentIntent)
+		if err != nil {
+			s.log.Error("error parsing webhook JSON", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		s.handlePaymentIntentFailed(paymentIntent)
+		return
+
+	default:
+		s.log.Error("unhandled event type", zap.Any("event", event.Type))
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// handlePaymentIntentSucceeded handles a successful payment.
+func (s *Server) handlePaymentIntentSucceeded(pi stripe.PaymentIntent) {
+	cust := pi.Customer
+	def := pi.SetupFutureUsage == "off_session"
+	currency := strings.ToUpper(string(pi.Currency))
+	amount := float64(pi.Amount)
+	if !isZeroDecimal(currency) {
+		amount = amount / 100
+	}
+
+	// If a default payment method was specified, update the customer.
+	if def {
+		params := &stripe.CustomerParams{
+			InvoiceSettings: &stripe.CustomerInvoiceSettingsParams{
+				DefaultPaymentMethod: stripe.String(pi.PaymentMethod.ID),
+			},
+		}
+		_, err := customer.Update(pi.Customer.ID, params)
+		if err != nil {
+			s.log.Error("couldn't update customer", zap.Error(err))
+		}
+	} else {
+		// Regular payment, register it.
+		err := s.accounts.NewFiatPayment(cust.ID, amount, currency)
+		if err != nil {
+			s.log.Error("could not add payment", zap.Error(err))
+		}
+	}
+}
+
+// handlePaymentIntentFailed handles a failed payment.
+func (s *Server) handlePaymentIntentFailed(pi stripe.PaymentIntent) {
+	in := pi.Invoice
+	if in == nil {
+		return
+	}
+
+	id := pi.Customer.ID
+	currency := strings.ToUpper(string(pi.Currency))
+	amount := float64(pi.Amount)
+	if !isZeroDecimal(currency) {
+		amount = amount / 100
+	}
+
+	err := s.accounts.RequestPayment(id, in.ID, amount, currency)
+	if err != nil {
+		s.log.Error("could not request payment", zap.Error(err))
+	}
+}
+
+// isDefaultPaymentMethodSet returns true if the Stripe customer
+// has a default payment method set.
+func isDefaultPaymentMethodSet(id string) (bool, error) {
+	cust, err := customer.Get(id, nil)
+	if err != nil {
+		return false, err
+	}
+
+	return cust.InvoiceSettings.DefaultPaymentMethod != nil, nil
+}
+
+// getInvoiceAmount is a helper function that retrieves the due
+// amount of an invoice.
+func getInvoiceAmount(id string) float64 {
+	in, err := invoice.Get(id, &stripe.InvoiceParams{})
+	if err != nil {
+		return 0
+	}
+	curr := strings.ToUpper(string(in.Currency))
+	amount := float64(in.AmountDue)
+	if !isZeroDecimal(curr) {
+		amount = amount / 100
+	}
+	return amount
+}
+
+// initStripe loads the Stripe key.
+func initStripe() {
+	stripe.Key = os.Getenv("SATD_STRIPE_KEY")
 }

@@ -22,9 +22,9 @@ const (
 		<!DOCTYPE html>
 		<html>
 		<body>
-	    	<h2>Please Verify Your Email Address</h2>
-		    <p>This is your one-time code to complete your account registration. This code is valid within the next 15 minutes.</p>
-	    	<h1>{{.Code}}</h1>
+			<h2>Please Verify Your Email Address</h2>
+			<p>This is your one-time code to complete your account registration. This code is valid within the next 15 minutes.</p>
+			<h1>{{.Code}}</h1>
 		</body>
 		</html>
 	`
@@ -36,9 +36,9 @@ const (
 		<!DOCTYPE html>
 		<html>
 		<body>
-    		<h2>Reset Your Password</h2>
-	    	<p>Click on the following link to enter a new password. This link is valid within the next 60 minutes.</p>
-	    	<p><a href="{{.Path}}?token={{.Token}}">{{.Path}}?token={{.Token}}</a></p>
+			<h2>Reset Your Password</h2>
+			<p>Click on the following link to enter a new password. This link is valid within the next 60 minutes.</p>
+			<p><a href="{{.Path}}?token={{.Token}}">{{.Path}}?token={{.Token}}</a></p>
 		</body>
 		</html>
 	`

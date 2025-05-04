@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"html/template"
 	"math"
 	"strings"
 	"time"
@@ -12,6 +13,22 @@ import (
 	"github.com/mike76-dev/sia-satellite/internal/utils"
 	"go.sia.tech/core/types"
 )
+
+// requestTemplate contains the text send by email when an invoice
+// payment fails.
+const requestTemplate = `
+	<!-- template.html -->
+	<!DOCTYPE html>
+	<html>
+	<body>
+		<h2>Invoice Not Paid</h2>
+		<p>There was an issue paying the monthly invoice of <strong>{{.Amount}}</strong>
+			on behalf of <strong>{{.Name}}</strong>.</p>
+		<p>Please visit your dashboard and make a payment.</p>
+		<p>If no payment is received within 24 hours, your account will be put on hold.</p>
+	</body>
+	</html>
+`
 
 // load loads the account manager from the database.
 func (am *AccountManager) load() error {
@@ -26,7 +43,9 @@ func (am *AccountManager) load() error {
 			negative,
 			currency,
 			stripe_id,
-			sc_address
+			sc_address,
+			invoice,
+			on_hold
 		FROM am_accounts
 	`)
 	if err != nil {
@@ -35,8 +54,8 @@ func (am *AccountManager) load() error {
 	defer rows.Close()
 
 	for rows.Next() {
-		var email, currency, stripeID string
-		var createdAt int64
+		var email, currency, stripeID, invoice string
+		var createdAt, onHoldSince int64
 		var verified, negative bool
 		var invoicing byte
 		var total, locked, addr []byte
@@ -51,6 +70,8 @@ func (am *AccountManager) load() error {
 			&currency,
 			&stripeID,
 			&addr,
+			&invoice,
+			&onHoldSince,
 		); err != nil {
 			return utils.AddContext(err, "couldn't decode account")
 		}
@@ -65,6 +86,7 @@ func (am *AccountManager) load() error {
 			Balance: Balance{
 				Negative: negative,
 			},
+			invoice: invoice,
 		}
 
 		td := types.NewBufDecoder(total)
@@ -83,6 +105,10 @@ func (am *AccountManager) load() error {
 		if addr != nil {
 			acc.address = types.Address(addr)
 			am.addresses[types.Address(addr)] = email
+		}
+
+		if onHoldSince != 0 {
+			acc.onHoldSince = time.Unix(onHoldSince, 0)
 		}
 	}
 
@@ -291,17 +317,23 @@ func (am *AccountManager) SaveAccount(acc *Account) error {
 	_, err := am.db.Exec(`
 		UPDATE am_accounts
 		SET
+			invoicing = ?,
 			sc_total = ?,
 			sc_locked = ?,
 			negative = ?,
-			currency = ?
+			currency = ?,
+			stripe_id = ?,
+			invoice = ?
 		WHERE email = ?
 	`,
+		acc.PaymentPlan == PredefinedPaymentPlans[PaymentPlanInvoicing],
 		total.Bytes(),
 		locked.Bytes(),
 		acc.Balance.Negative,
 		acc.Currency,
 		acc.Email,
+		acc.StripeID,
+		acc.invoice,
 	)
 	return err
 }
@@ -406,7 +438,13 @@ func (am *AccountManager) GetPayments(acc *Account, offset, limit int) (payments
 }
 
 // NewFiatPayment adds a new fiat payment to the account.
-func (am *AccountManager) NewFiatPayment(acc *Account, amount float64, currency string) error {
+func (am *AccountManager) NewFiatPayment(id string, amount float64, currency string) error {
+	// Find the account.
+	acc := am.findByID(id)
+	if acc == nil {
+		return ErrUserNotFound
+	}
+
 	currency = strings.ToUpper(currency)
 	rate := am.GetSiacoinRate(currency)
 	if rate == 0 {
@@ -628,6 +666,54 @@ func (am *AccountManager) revertSiacoinPayment(acc *Account, txid types.Transact
 	`, acc.Email, txid[:])
 	if err != nil {
 		return utils.AddContext(err, "couldn't delete payment record")
+	}
+
+	return nil
+}
+
+// RequestPayment notifies the user about a failed invoice payment and
+// puts a hold on the account.
+func (am *AccountManager) RequestPayment(id string, invoice string, amount float64, currency string) (err error) {
+	// Get the balance record.
+	acc := am.findByID(id)
+	if acc == nil {
+		return ErrUserNotFound
+	}
+
+	// Only send a request if the failed payment comes from a tracked invoice.
+	if acc.invoice != invoice {
+		return nil
+	}
+
+	// Send a payment request.
+	type request struct {
+		Name   string
+		Amount string
+	}
+	t := template.New("request")
+	t, err = t.Parse(requestTemplate)
+	if err != nil {
+		return utils.AddContext(err, "unable to parse HTML template")
+	}
+
+	var b bytes.Buffer
+	t.Execute(&b, request{
+		Name:   am.serverName,
+		Amount: fmt.Sprintf("%.2f %s", amount, currency),
+	})
+	err = am.mail.SendMail("Sia Satellite", acc.Email, "Action Required", &b)
+	if err != nil {
+		return fmt.Errorf("unable to send request to %s", acc.Email)
+	}
+
+	// Place a temporary hold on the account.
+	_, err = am.db.Exec(`
+		UPDATE am_accounts
+		SET on_hold = ?
+		WHERE stripe_id = ?
+	`, uint64(time.Now().Unix()), id)
+	if err != nil {
+		return fmt.Errorf("unable to put a hold on the account: %s, %v", acc.Email, err)
 	}
 
 	return nil

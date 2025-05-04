@@ -164,22 +164,22 @@ func newNode(config *persist.SatdConfig, dbPassword, seed string) *node {
 		log.Fatalf("Could not initialize hostDB: %v\n", err)
 	}
 
+	// Initialize mail client.
+	log.Println("Creating mail client...")
+	mc, err := mail.New(dir)
+	if err != nil {
+		log.Fatalf("Could not create mail client: %v\n", err)
+	}
+
 	amLogger, amCloseFn, err := persist.NewFileLogger(filepath.Join(dir, "accounts.log"), zapcore.ErrorLevel)
 	if err != nil {
 		log.Fatalf("Could not initialize account manager logger: %v\n", err)
 	}
 
 	// Initialize accounts.
-	am, err := account.New(db, cm, w, amLogger)
+	am, err := account.New(db, cm, w, amLogger, mc, config.Name)
 	if err != nil {
 		log.Fatalf("Couldn't initialize account manager: %v\n", err)
-	}
-
-	// Initialize mail client.
-	log.Println("Creating mail client...")
-	mc, err := mail.New(dir)
-	if err != nil {
-		log.Fatalf("Could not create mail client: %v\n", err)
 	}
 
 	// Initialize public API.

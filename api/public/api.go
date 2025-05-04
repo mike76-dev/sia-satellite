@@ -40,12 +40,13 @@ func (err Error) Error() string {
 	return err.Message
 }
 
-// init performs the API initialization.
-func init() {
-	initGoogle()
-}
-
 // PaymentAddressResponse is the response type for the /payment/address request.
 type PaymentAddressResponse struct {
 	Address types.Address `json:"address"`
+}
+
+// init performs the API initialization.
+func init() {
+	initGoogle()
+	initStripe()
 }
