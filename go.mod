@@ -36,4 +36,5 @@ require (
 	go.sia.tech/renterd v1.1.2-0.20250310164423-49c892b00d1b // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/tools v0.32.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -1,0 +1,8 @@
+api:
+  address: :9990
+renterd:
+  address: http://127.0.0.1:9980
+  password:
+satellite:
+  address:
+  apiToken:
