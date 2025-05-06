@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -48,8 +49,20 @@ func (c *Client) Get(path string, resp any) error {
 	}
 
 	defer res.Body.Close()
-	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-		return utils.AddContext(err, "couldn't decode response")
+
+	if res.Body != nil && resp != nil {
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return utils.AddContext(err, "couldn't read response body")
+		}
+
+		if len(body) == 0 {
+			return nil
+		}
+
+		if err := json.Unmarshal(body, resp); err != nil {
+			return utils.AddContext(err, "couldn't decode response")
+		}
 	}
 
 	return nil
@@ -74,8 +87,20 @@ func (c *Client) Post(path string, req, resp any) error {
 	}
 
 	defer res.Body.Close()
-	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-		return utils.AddContext(err, "couldn't decode response")
+
+	if res.Body != nil && resp != nil {
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return utils.AddContext(err, "couldn't read response body")
+		}
+
+		if len(body) == 0 {
+			return nil
+		}
+
+		if err := json.Unmarshal(body, resp); err != nil {
+			return utils.AddContext(err, "couldn't decode response")
+		}
 	}
 
 	return nil
@@ -105,8 +130,20 @@ func (c *Client) Put(path string, req, resp any) error {
 	}
 
 	defer res.Body.Close()
-	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-		return utils.AddContext(err, "couldn't decode response")
+
+	if res.Body != nil && resp != nil {
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return utils.AddContext(err, "couldn't read response body")
+		}
+
+		if len(body) == 0 {
+			return nil
+		}
+
+		if err := json.Unmarshal(body, resp); err != nil {
+			return utils.AddContext(err, "couldn't decode response")
+		}
 	}
 
 	return nil
@@ -131,8 +168,20 @@ func (c *Client) Delete(path string, resp any) error {
 	}
 
 	defer res.Body.Close()
-	if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-		return utils.AddContext(err, "couldn't decode response")
+
+	if res.Body != nil && resp != nil {
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return utils.AddContext(err, "couldn't read response body")
+		}
+
+		if len(body) == 0 {
+			return nil
+		}
+
+		if err := json.Unmarshal(body, resp); err != nil {
+			return utils.AddContext(err, "couldn't decode response")
+		}
 	}
 
 	return nil
