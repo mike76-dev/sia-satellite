@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
@@ -73,20 +72,31 @@ func main() {
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		if strings.HasPrefix(req.URL.Path, "/api/") {
-			copyBuf := new(bytes.Buffer)
 			if req.Body != nil {
-				reader := bufio.NewReader(req.Body)
-				tee := io.TeeReader(reader, copyBuf)
-				pr, pw := io.Pipe()
+				var copyBuf bytes.Buffer
+				tee := io.TeeReader(req.Body, &copyBuf)
+				bodyBytes, err := io.ReadAll(tee)
+				if err != nil {
+					logger.Error("Failed to read request body", zap.Error(err))
+					return
+				}
 
+				switch req.Method + " " + req.URL.Path {
+				case "PUT /api/bus/settings/gouging":
+					if err := updateGougingSettings(&copyBuf); err != nil {
+						logger.Error("PUT /bus/settings/gouging failed", zap.Error(err))
+					}
+				}
+
+				pr, pw := io.Pipe()
 				go func() {
+					reader := bytes.NewReader(bodyBytes)
 					buf := make([]byte, 65536)
 					for {
-						n, err := tee.Read(buf)
+						n, err := reader.Read(buf)
 						if n > 0 {
-							_, wErr := pw.Write(buf[:n])
-							if wErr != nil {
-								log.Printf("Pipe write error: %v\n", wErr)
+							if _, wErr := pw.Write(buf[:n]); wErr != nil {
+								logger.Error("pipe write error", zap.Error(wErr))
 								break
 							}
 						}
@@ -98,15 +108,10 @@ func main() {
 				}()
 
 				req.Body = io.NopCloser(pr)
+				req.ContentLength = int64(len(bodyBytes))
 			}
 
 			log.Printf("Intercepted API call: %s %s", req.Method, req.URL.Path)
-			switch req.Method + " " + req.URL.Path {
-			case "POST /bus/settings/gouging":
-				if err := updateGougingSettings(copyBuf); err != nil {
-					logger.Error("POST /bus/settings/gouging failed", zap.Error(err))
-				}
-			}
 		}
 	}
 
