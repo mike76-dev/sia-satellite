@@ -55,6 +55,9 @@ func (s *Server) buildHTTPRoutes() {
 	router.GET("/account/token", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.accountTokenHandlerGET(w, req, ps)
 	})
+	router.POST("/account/settings/gouging", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.accountSettingsGougingHandlerPOST(w, req, ps)
+	})
 
 	// /auth requests.
 	router.GET("/auth", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {

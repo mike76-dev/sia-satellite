@@ -37,7 +37,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 	// Decode the token.
 	prefix, email, expires, err := s.accounts.DecodeToken(token)
 	if err != nil {
-		// Check and update login stats.
+		// Check and update stats.
 		if err := s.checkInvalidTokens(w, req); err != nil {
 			return
 		}
@@ -153,7 +153,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 	// Decode the token.
 	prefix, email, expires, err := s.accounts.DecodeToken(token)
 	if err != nil {
-		// Check and update login stats.
+		// Check and update stats.
 		if err := s.checkInvalidTokens(w, req); err != nil {
 			return
 		}

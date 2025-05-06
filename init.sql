@@ -77,6 +77,7 @@ CREATE TABLE hdb_interactions (
 /* account manager */
 
 DROP TABLE IF EXISTS am_payments;
+DROP TABLE IF EXISTS am_settings;
 DROP TABLE IF EXISTS am_accounts;
 DROP TABLE IF EXISTS am_info;
 DROP TABLE IF EXISTS am_tip;
@@ -99,6 +100,32 @@ CREATE TABLE am_accounts (
 	sc_address    BINARY(32),
 	PRIMARY KEY (id)
 );
+
+CREATE TABLE am_settings (
+	id                 INT NOT NULL AUTO_INCREMENT,
+	email              VARCHAR(64) NOT NULL UNIQUE,
+	max_storage_price  BLOB NOT NULL,
+	max_ingress_price  BLOB NOT NULL,
+	max_egress_price   BLOB NOT NULL,
+	max_contract_price BLOB NOT NULL,
+	max_latency        BIGINT NOT NULL,
+	min_upload_speed   BIGINT UNSIGNED NOT NULL,
+	min_download_speed BIGINT UNSIGNED NOT NULL,
+	basis              VARCHAR(8) NOT NULL,
+	countries          TEXT NOT NULL,
+	contract_count     BIGINT UNSIGNED NOT NULL,
+	contract_period    BIGINT UNSIGNED NOT NULL,
+	renew_window       BIGINT UNSIGNED NOT NULL,
+	ingress            BIGINT UNSIGNED NOT NULL,
+	egress             BIGINT UNSIGNED NOT NULL,
+	min_shards         INT NOT NULL,
+	total_shards       INT NOT NULL,
+	manage_contracts   BOOL NOT NULL,
+	backup_metadata    BOOL NOT NULL,
+	auto_repair        BOOL NOT NULL,
+	PRIMARY KEY (id),
+	FOREIGN KEY (email) REFERENCES am_accounts(email)
+)
 
 CREATE TABLE am_payments (
 	id        INT NOT NULL AUTO_INCREMENT,

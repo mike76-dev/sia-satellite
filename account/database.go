@@ -301,6 +301,56 @@ func (am *AccountManager) NewAccount(email, password string) (*Account, error) {
 		return nil, utils.AddContext(err, "couldn't insert account")
 	}
 
+	// Create a new settings record.
+	_, err = am.db.Exec(`
+		INSERT INTO am_settings (
+			email,
+			max_storage_price,
+			max_ingress_price,
+			max_egress_price,
+			max_contract_price,
+			max_latency,
+			min_upload_speed,
+			min_download_speed,
+			basis,
+			countries,
+			contract_count,
+			contract_period,
+			renew_window,
+			ingress,
+			egress,
+			min_shards,
+			total_shards,
+			manage_contracts,
+			backup_metadata,
+			auto_repair
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		email,
+		buf.Bytes(),
+		buf.Bytes(),
+		buf.Bytes(),
+		buf.Bytes(),
+		0,
+		0,
+		0,
+		"global",
+		"",
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		0,
+		false,
+		false,
+		false,
+	)
+	if err != nil {
+		return nil, utils.AddContext(err, "couldn't insert settings record")
+	}
+
 	return acc, nil
 }
 
