@@ -256,6 +256,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /account/settings/gouging:
+    post:
+      tags:
+        - account
+      description: Update the account gouging settings
+      security:
+        - apiKey: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GougingSettings'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/settings/upload:
+    post:
+      tags:
+        - account
+      description: Update the account upload settings
+      security:
+        - apiKey: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadSettings'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /account/delete:
     get:
       tags:
@@ -2004,6 +2070,38 @@ components:
             Only works together with autoRenew and backupMetadata enabled.
           type: boolean
           example: false
+    GougingSettings:
+      type: object
+      properties:
+        maxStoragePrice:
+          description: Maximum storage price in H/byte/block
+          type: string
+          example: '84761'
+        maxIngressPrice:
+          description: Maximum ingress price in H/byte
+          type: string
+          example: '116477'
+        maxEgressPrice:
+          description: Maximum egress price in H/byte
+          type: string
+          example: '144'
+        maxContractPrice:
+          description: Maximum contract price in Hastings
+          type: string
+          example: '59133866'
+    UploadSettings:
+      type: object
+      properties:
+        minShards:
+          description: Minimum number of shards
+          type: integer
+          format: int32
+          example: 10
+        totalShards:
+          description: Total number of shards
+          type: integer
+          format: int32
+          example: 30
     Contract:
       type: object
       properties:
@@ -2132,11 +2230,16 @@ components:
           type: integer
           format: int64
           example: 65536
-        redundancy:
-          description: Data redundancy
-          type: number
-          format: double
-          example: 3.0
+        minShards:
+          description: Minimum number of shards
+          type: integer
+          format: int32
+          example: 10
+        totalShards:
+          description: Total number of shards
+          type: integer
+          format: int32
+          example: 30
     HostsConfig:
       type: object
       properties:
