@@ -27,7 +27,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 		if token == "" {
 			s.writeError(w,
 				Error{
-					Code:    httpErrorTokenInvalid,
+					Code:    HttpErrorTokenInvalid,
 					Message: "no token provided",
 				}, http.StatusUnauthorized)
 			return
@@ -44,7 +44,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 		s.log.Error("failed to decode token", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "unable to decode token",
 			}, http.StatusUnauthorized)
 		return
@@ -54,7 +54,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 	if (apiToken && prefix != account.APIPrefix) || (!apiToken && prefix != account.CookiePrefix) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "wrong token type",
 			}, http.StatusUnauthorized)
 		return
@@ -64,7 +64,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 	if expires.Before(time.Now()) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenExpired,
+				Code:    HttpErrorTokenExpired,
 				Message: "token already expired",
 			}, http.StatusUnauthorized)
 		return
@@ -75,7 +75,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorNotFound,
+				Code:    HttpErrorNotFound,
 				Message: "email address not found",
 			}, http.StatusUnauthorized)
 		return
@@ -89,7 +89,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 		if err != nil || offset < 0 {
 			s.writeError(w,
 				Error{
-					Code:    httpErrorBadRequest,
+					Code:    HttpErrorBadRequest,
 					Message: "invalid offset parameter",
 				}, http.StatusBadRequest)
 			return
@@ -102,7 +102,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 		if err != nil {
 			s.writeError(w,
 				Error{
-					Code:    httpErrorBadRequest,
+					Code:    HttpErrorBadRequest,
 					Message: "invalid limit parameter",
 				}, http.StatusBadRequest)
 			return
@@ -117,7 +117,7 @@ func (s *Server) paymentsHandlerGET(w http.ResponseWriter, req *http.Request, _ 
 		s.log.Error("failed to retrieve payment history", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "unable to retrieve payment history",
 			}, http.StatusInternalServerError)
 		return
@@ -143,7 +143,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 		if token == "" {
 			s.writeError(w,
 				Error{
-					Code:    httpErrorTokenInvalid,
+					Code:    HttpErrorTokenInvalid,
 					Message: "no token provided",
 				}, http.StatusUnauthorized)
 			return
@@ -160,7 +160,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 		s.log.Error("failed to decode token", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "unable to decode token",
 			}, http.StatusUnauthorized)
 		return
@@ -170,7 +170,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 	if (apiToken && prefix != account.APIPrefix) || (!apiToken && prefix != account.CookiePrefix) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "wrong token type",
 			}, http.StatusUnauthorized)
 		return
@@ -180,7 +180,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 	if expires.Before(time.Now()) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenExpired,
+				Code:    HttpErrorTokenExpired,
 				Message: "token already expired",
 			}, http.StatusUnauthorized)
 		return
@@ -191,7 +191,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorNotFound,
+				Code:    HttpErrorNotFound,
 				Message: "email address not found",
 			}, http.StatusUnauthorized)
 		return
@@ -203,7 +203,7 @@ func (s *Server) paymentAddressHandlerGET(w http.ResponseWriter, req *http.Reque
 		s.log.Error("failed to retrieve payment address", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "unable to retrieve deposit address",
 			}, http.StatusInternalServerError)
 		return

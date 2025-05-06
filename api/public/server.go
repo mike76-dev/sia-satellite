@@ -191,21 +191,21 @@ func (s *Server) handleDecodeError(err error) (Error, int) {
 	// Catch any syntax errors in the JSON.
 	case errors.As(err, &syntaxError):
 		return Error{
-			Code:    httpErrorBadRequest,
+			Code:    HttpErrorBadRequest,
 			Message: "wrong request body format",
 		}, http.StatusBadRequest
 
 	// Catch a potential io.ErrUnexpectedEOF error in the JSON.
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return Error{
-			Code:    httpErrorBadRequest,
+			Code:    HttpErrorBadRequest,
 			Message: "wrong request body format",
 		}, http.StatusBadRequest
 
 	// Catch any type errors.
 	case errors.As(err, &unmarshalTypeError):
 		return Error{
-			Code:    httpErrorBadRequest,
+			Code:    HttpErrorBadRequest,
 			Message: "request body contains an invalid value",
 		}, http.StatusBadRequest
 
@@ -213,7 +213,7 @@ func (s *Server) handleDecodeError(err error) (Error, int) {
 	// body.
 	case strings.HasPrefix(err.Error(), "json: unknown field"):
 		return Error{
-			Code:    httpErrorBadRequest,
+			Code:    HttpErrorBadRequest,
 			Message: "request body contains an unknown field",
 		}, http.StatusBadRequest
 
@@ -221,14 +221,14 @@ func (s *Server) handleDecodeError(err error) (Error, int) {
 	// empty.
 	case errors.Is(err, io.EOF):
 		return Error{
-			Code:    httpErrorBadRequest,
+			Code:    HttpErrorBadRequest,
 			Message: "request body is empty",
 		}, http.StatusBadRequest
 
 	// Catch the error caused by the request body being too large.
 	case err.Error() == "http: request body too large":
 		return Error{
-			Code:    httpErrorBadRequest,
+			Code:    HttpErrorBadRequest,
 			Message: "request body too large",
 		}, http.StatusRequestEntityTooLarge
 
@@ -236,7 +236,7 @@ func (s *Server) handleDecodeError(err error) (Error, int) {
 	default:
 		s.log.Error("failed to decode JSON", zap.Error(err))
 		return Error{
-			Code:    httpErrorInternal,
+			Code:    HttpErrorInternal,
 			Message: "internal error",
 		}, http.StatusInternalServerError
 	}

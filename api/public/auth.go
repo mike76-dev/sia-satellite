@@ -63,13 +63,13 @@ func checkEmail(address string) (string, Error) {
 	_, err := mail.ParseAddress(address)
 	if err != nil {
 		return "", Error{
-			Code:    httpErrorEmailInvalid,
+			Code:    HttpErrorEmailInvalid,
 			Message: "the email address is invalid",
 		}
 	}
 	if len(address) > 64 {
 		return "", Error{
-			Code:    httpErrorEmailTooLong,
+			Code:    HttpErrorEmailTooLong,
 			Message: "the email address is too long",
 		}
 	}
@@ -81,13 +81,13 @@ func checkEmail(address string) (string, Error) {
 func checkPassword(pwd string) Error {
 	if len(pwd) < 8 {
 		return Error{
-			Code:    httpErrorPasswordTooShort,
+			Code:    HttpErrorPasswordTooShort,
 			Message: "the password is too short",
 		}
 	}
 	if len(pwd) > 255 {
 		return Error{
-			Code:    httpErrorPasswordTooLong,
+			Code:    HttpErrorPasswordTooLong,
 			Message: "the password is too long",
 		}
 	}
@@ -102,7 +102,7 @@ func (s *Server) checkFailedLogins(w http.ResponseWriter, req *http.Request) err
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTooManyRequests,
+				Code:    HttpErrorTooManyRequests,
 				Message: "too many failed login attempts",
 			}, http.StatusTooManyRequests)
 	}
@@ -117,7 +117,7 @@ func (s *Server) checkPasswordResets(w http.ResponseWriter, req *http.Request) e
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTooManyRequests,
+				Code:    HttpErrorTooManyRequests,
 				Message: "too many password reset requests",
 			}, http.StatusTooManyRequests)
 	}
@@ -132,7 +132,7 @@ func (s *Server) checkVerifications(w http.ResponseWriter, req *http.Request) er
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTooManyRequests,
+				Code:    HttpErrorTooManyRequests,
 				Message: "too many verification requests",
 			}, http.StatusTooManyRequests)
 	}
@@ -147,7 +147,7 @@ func (s *Server) checkInvalidTokens(w http.ResponseWriter, req *http.Request) er
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTooManyRequests,
+				Code:    HttpErrorTooManyRequests,
 				Message: "too many invalid token submissions",
 			}, http.StatusTooManyRequests)
 	}
@@ -161,7 +161,7 @@ func (s *Server) checkAbuse(w http.ResponseWriter, req *http.Request) error {
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTooManyRequests,
+				Code:    HttpErrorTooManyRequests,
 				Message: "too many calls",
 			}, http.StatusTooManyRequests)
 	}
@@ -185,7 +185,7 @@ func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ http
 		if token == "" {
 			s.writeError(w,
 				Error{
-					Code:    httpErrorTokenInvalid,
+					Code:    HttpErrorTokenInvalid,
 					Message: "no token provided",
 				}, http.StatusUnauthorized)
 			return
@@ -202,7 +202,7 @@ func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ http
 		s.log.Error("failed to decode token", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "unable to decode token",
 			}, http.StatusUnauthorized)
 		return
@@ -212,7 +212,7 @@ func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ http
 	if (reset && prefix != account.ResetPrefix) || (!reset && prefix != account.CookiePrefix) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "wrong token type",
 			}, http.StatusUnauthorized)
 		return
@@ -222,7 +222,7 @@ func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ http
 	if expires.Before(time.Now()) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenExpired,
+				Code:    HttpErrorTokenExpired,
 				Message: "token already expired",
 			}, http.StatusUnauthorized)
 		return
@@ -237,7 +237,7 @@ func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ http
 			s.log.Error("error generating token", zap.Error(err))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorInternal,
+					Code:    HttpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -288,7 +288,7 @@ func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		}
 		s.writeError(w,
 			Error{
-				Code:    httpErrorWrongCredentials,
+				Code:    HttpErrorWrongCredentials,
 				Message: "invalid combination of email and password",
 			}, http.StatusBadRequest)
 		return
@@ -302,7 +302,7 @@ func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		}
 		s.writeError(w,
 			Error{
-				Code:    httpErrorWrongCredentials,
+				Code:    HttpErrorWrongCredentials,
 				Message: "invalid combination of email and password",
 			}, http.StatusBadRequest)
 		return
@@ -310,7 +310,7 @@ func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		s.log.Error("failed to verify password", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -324,7 +324,7 @@ func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		}
 		s.writeError(w,
 			Error{
-				Code:    httpErrorUnverified,
+				Code:    HttpErrorUnverified,
 				Message: "account not verified",
 			}, http.StatusUnauthorized)
 		return
@@ -337,7 +337,7 @@ func (s *Server) authLoginHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		s.log.Error("error generating token", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return
@@ -379,7 +379,7 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 	// Check request fields for validity.
 	email, httpError := checkEmail(data.Email)
-	if httpError.Code != httpErrorNone {
+	if httpError.Code != HttpErrorNone {
 		s.writeError(w, httpError, http.StatusBadRequest)
 		return
 	}
@@ -387,7 +387,7 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 	var password string
 	if data.Code == "" {
 		password = req.Header.Get("X-Satellite-Password")
-		if httpError := checkPassword(password); httpError.Code != httpErrorNone {
+		if httpError := checkPassword(password); httpError.Code != HttpErrorNone {
 			s.writeError(w, httpError, http.StatusBadRequest)
 			return
 		}
@@ -406,7 +406,7 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 	if found && verified { // account fully registered
 		s.writeError(w,
 			Error{
-				Code:    httpErrorEmailUsed,
+				Code:    HttpErrorEmailUsed,
 				Message: "email address already used",
 			}, http.StatusBadRequest)
 		return
@@ -419,7 +419,7 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 				s.log.Error("failed to create account", zap.Error(err))
 				s.writeError(w,
 					Error{
-						Code:    httpErrorInternal,
+						Code:    HttpErrorInternal,
 						Message: "internal error",
 					}, http.StatusInternalServerError)
 				return
@@ -434,7 +434,7 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 		if !found { // no account yet but a verificaion code is there
 			s.writeError(w,
 				Error{
-					Code:    httpErrorNotFound,
+					Code:    HttpErrorNotFound,
 					Message: "email address not found",
 				}, http.StatusBadRequest)
 			return
@@ -449,14 +449,14 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 
 			s.writeError(w,
 				Error{
-					Code:    httpErrorTokenInvalid,
+					Code:    HttpErrorTokenInvalid,
 					Message: "invalid code",
 				}, http.StatusUnauthorized)
 			return
 		} else if verifyError != nil && errors.Is(verifyError, account.ErrCodeExpired) {
 			s.writeError(w,
 				Error{
-					Code:    httpErrorTokenExpired,
+					Code:    HttpErrorTokenExpired,
 					Message: "code already expired",
 				}, http.StatusUnauthorized)
 			return
@@ -467,7 +467,7 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 			s.log.Error("failed to verify account", zap.Error(err))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorInternal,
+					Code:    HttpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -480,7 +480,7 @@ func (s *Server) authSignupHandlerPOST(w http.ResponseWriter, req *http.Request,
 			s.log.Error("error generating token", zap.Error(err))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorInternal,
+					Code:    HttpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -517,7 +517,7 @@ func (s *Server) sendVerificationCodeByMail(w http.ResponseWriter, req *http.Req
 		s.log.Error("unable to parse HTML template", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "unable to send verification code",
 			}, http.StatusInternalServerError)
 		return false
@@ -531,7 +531,7 @@ func (s *Server) sendVerificationCodeByMail(w http.ResponseWriter, req *http.Req
 		s.log.Error("unable to send verification code", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "unable to send verification code",
 			}, http.StatusInternalServerError)
 		return false
@@ -549,7 +549,7 @@ func (s *Server) sendPasswordResetLinkByMail(w http.ResponseWriter, req *http.Re
 		s.log.Error("error generating token", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return false
@@ -559,7 +559,7 @@ func (s *Server) sendPasswordResetLinkByMail(w http.ResponseWriter, req *http.Re
 		s.log.Error("unable to fetch referer URL")
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "unable to fetch referer URL",
 			}, http.StatusInternalServerError)
 		return false
@@ -576,7 +576,7 @@ func (s *Server) sendPasswordResetLinkByMail(w http.ResponseWriter, req *http.Re
 		s.log.Error("unable to parse HTML template", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "unable to send password reset link",
 			}, http.StatusInternalServerError)
 		return false
@@ -590,7 +590,7 @@ func (s *Server) sendPasswordResetLinkByMail(w http.ResponseWriter, req *http.Re
 		s.log.Error("unable to send password reset link", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "unable to send password reset link",
 			}, http.StatusInternalServerError)
 		return false
@@ -626,7 +626,7 @@ func (s *Server) authSignupResendHandlerPOST(w http.ResponseWriter, req *http.Re
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorNotFound,
+				Code:    HttpErrorNotFound,
 				Message: "email address not found",
 			}, http.StatusBadRequest)
 		return
@@ -635,7 +635,7 @@ func (s *Server) authSignupResendHandlerPOST(w http.ResponseWriter, req *http.Re
 	if acc.Verified { // already verified, no need to send a code
 		s.writeError(w,
 			Error{
-				Code:    httpErrorEmailUsed,
+				Code:    HttpErrorEmailUsed,
 				Message: "email address already used",
 			}, http.StatusBadRequest)
 		return
@@ -758,7 +758,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 			if token == "" {
 				s.writeError(w,
 					Error{
-						Code:    httpErrorTokenInvalid,
+						Code:    HttpErrorTokenInvalid,
 						Message: "no token provided",
 					}, http.StatusUnauthorized)
 				return
@@ -776,7 +776,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 		s.log.Error("failed to decode token", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "unable to decode token",
 			}, http.StatusUnauthorized)
 		return
@@ -786,7 +786,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 	if (apiToken && prefix != account.APIPrefix) || (!apiToken && ((reset && prefix != account.ChangePrefix) || (!reset && prefix != account.CookiePrefix))) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "wrong token type",
 			}, http.StatusUnauthorized)
 		return
@@ -796,7 +796,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 	if expires.Before(time.Now()) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenExpired,
+				Code:    HttpErrorTokenExpired,
 				Message: "token already expired",
 			}, http.StatusUnauthorized)
 		return
@@ -804,7 +804,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 
 	// Check new password for validity.
 	password := req.Header.Get("X-Satellite-Password")
-	if httpError := checkPassword(password); httpError.Code != httpErrorNone {
+	if httpError := checkPassword(password); httpError.Code != HttpErrorNone {
 		s.writeError(w, httpError, http.StatusBadRequest)
 		return
 	}
@@ -814,7 +814,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorNotFound,
+				Code:    HttpErrorNotFound,
 				Message: "email address not found",
 			}, http.StatusUnauthorized)
 		return
@@ -825,7 +825,7 @@ func (s *Server) authChangeHandlerGET(w http.ResponseWriter, req *http.Request, 
 		s.log.Error("failed to change password", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "couldn't change password",
 			}, http.StatusInternalServerError)
 		return

@@ -8,25 +8,25 @@ import (
 
 // Error codes provided in an HTTP response.
 const (
-	httpErrorNone       = 0
-	httpErrorInternal   = 1
-	httpErrorBadRequest = 2
+	HttpErrorNone       = 0
+	HttpErrorInternal   = 1
+	HttpErrorBadRequest = 2
 
-	httpErrorEmailInvalid = 10
-	httpErrorEmailUsed    = 11
-	httpErrorEmailTooLong = 12
+	HttpErrorEmailInvalid = 10
+	HttpErrorEmailUsed    = 11
+	HttpErrorEmailTooLong = 12
 
-	httpErrorPasswordTooShort = 20
-	httpErrorPasswordTooLong  = 21
+	HttpErrorPasswordTooShort = 20
+	HttpErrorPasswordTooLong  = 21
 
-	httpErrorWrongCredentials = 30
-	httpErrorTooManyRequests  = 31
-	httpErrorUnverified       = 32
+	HttpErrorWrongCredentials = 30
+	HttpErrorTooManyRequests  = 31
+	HttpErrorUnverified       = 32
 
-	httpErrorTokenInvalid = 40
-	httpErrorTokenExpired = 41
+	HttpErrorTokenInvalid = 40
+	HttpErrorTokenExpired = 41
 
-	httpErrorNotFound = 50
+	HttpErrorNotFound = 50
 )
 
 // Error is a type that is encoded as JSON and returned in an API response in
@@ -75,6 +75,12 @@ type AccountTokenResponse struct {
 // PaymentAddressResponse is the response type for the GET /payment/address request.
 type PaymentAddressResponse struct {
 	Address types.Address `json:"address"`
+}
+
+// UploadSettingsRequest is the request type for POST /account/settings/upload request.
+type UploadSettingsRequest struct {
+	MinShards   int `json:"minShards"`
+	TotalShards int `json:"totalShards"`
 }
 
 // init performs the API initialization.

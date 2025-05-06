@@ -122,7 +122,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 	if token == "" {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "no token provided",
 			}, http.StatusUnauthorized)
 		return
@@ -138,7 +138,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 		s.log.Error("failed to decode token", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "unable to decode token",
 			}, http.StatusUnauthorized)
 		return
@@ -148,7 +148,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 	if prefix != account.CookiePrefix {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenInvalid,
+				Code:    HttpErrorTokenInvalid,
 				Message: "wrong token type",
 			}, http.StatusUnauthorized)
 		return
@@ -158,7 +158,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 	if expires.Before(time.Now()) {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorTokenExpired,
+				Code:    HttpErrorTokenExpired,
 				Message: "token already expired",
 			}, http.StatusUnauthorized)
 		return
@@ -169,7 +169,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 	if err != nil {
 		s.writeError(w,
 			Error{
-				Code:    httpErrorNotFound,
+				Code:    HttpErrorNotFound,
 				Message: "email address not found",
 			}, http.StatusUnauthorized)
 		return
@@ -183,7 +183,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 			s.log.Error("could not get customer", zap.Error(err))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorInternal,
+					Code:    HttpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -197,7 +197,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 			s.log.Error("could not create customer", zap.Error(err))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorInternal,
+					Code:    HttpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -210,7 +210,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 			s.log.Error("could not update account", zap.Error(err))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorInternal,
+					Code:    HttpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -248,7 +248,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 		s.log.Error("couldn't read pending payment", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorBadRequest,
+				Code:    HttpErrorBadRequest,
 				Message: "internal error",
 			}, http.StatusBadRequest)
 		return
@@ -269,7 +269,7 @@ func (s *Server) stripeCreatePaymentIntentHandlerPOST(w http.ResponseWriter, req
 		s.log.Error("pi.New", zap.Error(err))
 		s.writeError(w,
 			Error{
-				Code:    httpErrorInternal,
+				Code:    HttpErrorInternal,
 				Message: "internal error",
 			}, http.StatusInternalServerError)
 		return

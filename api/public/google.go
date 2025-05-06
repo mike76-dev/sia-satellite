@@ -35,7 +35,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("wrong action type")
 			s.writeError(w,
 				Error{
-					Code:    httpErrorBadRequest,
+					Code:    HttpErrorBadRequest,
 					Message: "wrong action type",
 				}, http.StatusBadRequest)
 			return
@@ -59,7 +59,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("wrong client ID", zap.String("ClientID", data.ClientID))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorWrongCredentials,
+					Code:    HttpErrorWrongCredentials,
 					Message: "wrong client ID",
 				}, http.StatusUnauthorized)
 			return
@@ -82,7 +82,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("couldn't parse claims", zap.Error(err))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorInternal,
+					Code:    HttpErrorInternal,
 					Message: "couldn't parse claims",
 				}, http.StatusInternalServerError)
 			return
@@ -93,7 +93,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("invalid issuer", zap.String("issuer", issuer.(string)))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorWrongCredentials,
+					Code:    HttpErrorWrongCredentials,
 					Message: "invalid issuer",
 				}, http.StatusUnauthorized)
 			return
@@ -104,7 +104,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("invalid audience", zap.String("audience", audience.(string)))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorWrongCredentials,
+					Code:    HttpErrorWrongCredentials,
 					Message: "invalid issuer",
 				}, http.StatusUnauthorized)
 			return
@@ -117,7 +117,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("invalid expiration time", zap.Float64("expires", expires.(float64)))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorWrongCredentials,
+					Code:    HttpErrorWrongCredentials,
 					Message: "invalid expiration time",
 				}, http.StatusUnauthorized)
 			return
@@ -126,7 +126,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("token has expired", zap.Float64("expires", expires.(float64)))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorWrongCredentials,
+					Code:    HttpErrorWrongCredentials,
 					Message: "token has expired",
 				}, http.StatusUnauthorized)
 			return
@@ -137,7 +137,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("email not verified")
 			s.writeError(w,
 				Error{
-					Code:    httpErrorWrongCredentials,
+					Code:    HttpErrorWrongCredentials,
 					Message: "email not verified",
 				}, http.StatusUnauthorized)
 			return
@@ -158,7 +158,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			if action != "signup" {
 				s.writeError(w,
 					Error{
-						Code:    httpErrorEmailInvalid,
+						Code:    HttpErrorEmailInvalid,
 						Message: "invalid email provided",
 					}, http.StatusBadRequest)
 				return
@@ -170,7 +170,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 				s.log.Error("error querying database", zap.Error(err))
 				s.writeError(w,
 					Error{
-						Code:    httpErrorInternal,
+						Code:    HttpErrorInternal,
 						Message: "internal error",
 					}, http.StatusInternalServerError)
 				return
@@ -179,7 +179,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			if action == "signup" {
 				s.writeError(w,
 					Error{
-						Code:    httpErrorEmailUsed,
+						Code:    HttpErrorEmailUsed,
 						Message: "user already exists",
 					}, http.StatusBadRequest)
 				return
@@ -193,7 +193,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 			s.log.Error("error generating token", zap.Error(err))
 			s.writeError(w,
 				Error{
-					Code:    httpErrorInternal,
+					Code:    HttpErrorInternal,
 					Message: "internal error",
 				}, http.StatusInternalServerError)
 			return
@@ -213,7 +213,7 @@ func (s *Server) authLoginProviderHandlerPOST(w http.ResponseWriter, req *http.R
 
 	s.writeError(w,
 		Error{
-			Code:    httpErrorBadRequest,
+			Code:    HttpErrorBadRequest,
 			Message: "provider not supported",
 		}, http.StatusBadRequest)
 }
