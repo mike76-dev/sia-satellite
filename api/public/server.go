@@ -58,6 +58,9 @@ func (s *Server) buildHTTPRoutes() {
 	router.POST("/account/settings/gouging", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.accountSettingsGougingHandlerPOST(w, req, ps)
 	})
+	router.POST("/account/settings/upload", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.accountSettingsUploadHandlerPOST(w, req, ps)
+	})
 
 	// /auth requests.
 	router.GET("/auth", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {

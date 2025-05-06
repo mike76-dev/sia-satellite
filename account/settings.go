@@ -112,3 +112,42 @@ func (am *AccountManager) UpdateGougingSettings(acc *Account, gs GougingSettings
 
 	return nil
 }
+
+// GetUploadSettings retrieves the account's upload settings.
+func (am *AccountManager) GetUploadSettings(acc *Account) (UploadSettings, error) {
+	var ms, ts int
+	if err := am.db.QueryRow(`
+		SELECT
+			min_shards,
+			total_shards
+		FROM am_settings
+		WHERE email = ?
+	`, acc.Email).Scan(&ms, &ts); err != nil {
+		return UploadSettings{}, utils.AddContext(err, "couldn't query upload settings")
+	}
+
+	return UploadSettings{
+		MinShards:   ms,
+		TotalShards: ts,
+	}, nil
+}
+
+// UpdateUploadSettings updates the account's upload settings.
+func (am *AccountManager) UpdateUploadSettings(acc *Account, us UploadSettings) error {
+	_, err := am.db.Exec(`
+		UPDATE am_settings
+		SET
+			min_shards = ?,
+			total_shards = ?
+		WHERE email = ?
+	`,
+		us.MinShards,
+		us.TotalShards,
+		acc.Email,
+	)
+	if err != nil {
+		return utils.AddContext(err, "couldn't update upload settings")
+	}
+
+	return nil
+}
