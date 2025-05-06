@@ -178,7 +178,7 @@ func (s *Server) accountTokenHandlerGET(w http.ResponseWriter, req *http.Request
 	d := req.FormValue("duration")
 	if d != "" {
 		duration, err = strconv.ParseInt(d, 10, 64)
-		if err != nil || duration <= 0 || duration > math.MaxInt64/int64(time.Nanosecond) {
+		if err != nil || duration <= 0 || duration > math.MaxInt64/int64(time.Second) {
 			s.writeError(w,
 				Error{
 					Code:    HttpErrorBadRequest,
@@ -189,7 +189,7 @@ func (s *Server) accountTokenHandlerGET(w http.ResponseWriter, req *http.Request
 	}
 
 	// Generate a token.
-	apiToken, err := s.accounts.GenerateToken(account.APIPrefix, acc.Email, time.Now().Add(time.Duration(duration)*time.Nanosecond))
+	apiToken, err := s.accounts.GenerateToken(account.APIPrefix, acc.Email, time.Now().Add(time.Duration(duration)*time.Second))
 	if err != nil {
 		s.log.Error("failed to generate API token", zap.Error(err))
 		s.writeError(w,
