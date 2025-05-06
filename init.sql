@@ -125,7 +125,7 @@ CREATE TABLE am_settings (
 	auto_repair        BOOL NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES am_accounts(email)
-)
+);
 
 CREATE TABLE am_payments (
 	id        INT NOT NULL AUTO_INCREMENT,
