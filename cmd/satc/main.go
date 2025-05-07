@@ -86,6 +86,10 @@ func main() {
 					if err := updateGougingSettings(&copyBuf); err != nil {
 						logger.Error("PUT /bus/settings/gouging failed", zap.Error(err))
 					}
+				case "PUT /api/bus/settings/upload":
+					if err := updateUploadSettings(&copyBuf); err != nil {
+						logger.Error("PUT /bus/settings/upload failed", zap.Error(err))
+					}
 				}
 
 				pr, pw := io.Pipe()

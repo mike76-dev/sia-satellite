@@ -33,3 +33,25 @@ func updateGougingSettings(body *bytes.Buffer) error {
 
 	return nil
 }
+
+// updateUploadSettings updates the upload settings of `renterd` on the satellite.
+func updateUploadSettings(body *bytes.Buffer) error {
+	var rus renterd.UploadSettings
+	if err := decodeRequest(body, &rus); err != nil {
+		return err
+	}
+
+	us := account.UploadSettings{
+		MinShards:   rus.Redundancy.MinShards,
+		TotalShards: rus.Redundancy.TotalShards,
+	}
+
+	var httpError api.Error
+	if err := satellite.Post("/account/settings/upload", &us, &httpError); err != nil {
+		return utils.AddContext(err, "couldn't update upload settings")
+	} else if httpError.Code != api.HttpErrorNone {
+		return fmt.Errorf("failed to update upload settings: %s", httpError.Message)
+	}
+
+	return nil
+}
