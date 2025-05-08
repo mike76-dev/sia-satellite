@@ -32,6 +32,7 @@ const requestTemplate = `
 
 // load loads the account manager from the database.
 func (am *AccountManager) load() error {
+	// Load accounts.
 	rows, err := am.db.Query(`
 		SELECT
 			email,
@@ -51,7 +52,6 @@ func (am *AccountManager) load() error {
 	if err != nil {
 		return utils.AddContext(err, "couldn't query accounts")
 	}
-	defer rows.Close()
 
 	for rows.Next() {
 		var email, currency, stripeID, invoice string
@@ -111,7 +111,40 @@ func (am *AccountManager) load() error {
 			acc.onHoldSince = time.Unix(onHoldSince, 0)
 		}
 	}
+	rows.Close()
 
+	// Load watched transactions.
+	for email, acc := range am.accounts {
+		rows, err := am.db.Query(`
+			SELECT conf_left, txid
+			FROM am_payments
+			WHERE email = ?
+			AND txid IS NOT NULL
+		`, email)
+		if err != nil {
+			return utils.AddContext(err, "couldn't query payments")
+		}
+
+		for rows.Next() {
+			var cl int
+			txid := make([]byte, 32)
+			if err := rows.Scan(&cl, &txid); err != nil {
+				rows.Close()
+				return utils.AddContext(err, "couldn't decode payment record")
+			}
+
+			if cl > 0 {
+				if am.transactions[types.TransactionID(txid)] == nil {
+					am.transactions[types.TransactionID(txid)] = make(map[types.Address]string)
+				}
+
+				am.transactions[types.TransactionID(txid)][acc.address] = email
+			}
+		}
+		rows.Close()
+	}
+
+	// Load secret key or create one, if it doesn't exist.
 	sk := make([]byte, 64)
 	if err := am.db.QueryRow("SELECT private_key FROM am_info WHERE id = 1").Scan(&sk); err != nil && errors.Is(err, sql.ErrNoRows) {
 		am.key = utils.NewPrivateKey()
@@ -125,6 +158,7 @@ func (am *AccountManager) load() error {
 		am.key = sk
 	}
 
+	// Load scanned index.
 	var height uint64
 	id := make([]byte, 32)
 	err = am.db.QueryRow(`
@@ -765,6 +799,57 @@ func (am *AccountManager) RequestPayment(id string, invoice string, amount float
 	if err != nil {
 		return fmt.Errorf("unable to put a hold on the account: %s, %v", acc.Email, err)
 	}
+
+	return nil
+}
+
+// DeleteAccount performs a complete wipeout of the account.
+func (am *AccountManager) DeleteAccount(acc *Account) error {
+	// Start a transaction.
+	tx, err := am.db.Begin()
+	if err != nil {
+		return utils.AddContext(err, "couldn't start transaction")
+	}
+
+	// Delete database records.
+	_, err = tx.Exec("DELETE FROM am_payments WHERE email = ?", acc.Email)
+	if err != nil {
+		tx.Rollback()
+		return utils.AddContext(err, "couldn't delete payments")
+	}
+
+	_, err = tx.Exec("DELETE FROM am_settings WHERE email = ?", acc.Email)
+	if err != nil {
+		tx.Rollback()
+		return utils.AddContext(err, "couldn't delete settings")
+	}
+
+	_, err = tx.Exec("DELETE FROM am_accounts WHERE email = ?", acc.Email)
+	if err != nil {
+		tx.Rollback()
+		return utils.AddContext(err, "couldn't delete account record")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return utils.AddContext(err, "couldn't commit transaction")
+	}
+
+	// Clean up the maps.
+	am.mu.Lock()
+	defer am.mu.Unlock()
+
+	if (acc.address != types.Address{}) {
+		for txid, addrs := range am.transactions {
+			if addrs != nil {
+				delete(addrs, acc.address)
+				if len(addrs) == 0 {
+					delete(am.transactions, txid)
+				}
+			}
+		}
+		delete(am.addresses, acc.address)
+	}
+	delete(am.accounts, acc.Email)
 
 	return nil
 }
