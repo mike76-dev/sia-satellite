@@ -31,6 +31,11 @@ func updateGougingSettings(body *bytes.Buffer) error {
 		return fmt.Errorf("failed to update gouging settings: %s", httpError.Message)
 	}
 
+	store.Settings.GougingSettingsSaved = true
+	if err := saveToStore(dir, store); err != nil {
+		return utils.AddContext(err, "couldn't save gouging settings status")
+	}
+
 	return nil
 }
 
@@ -51,6 +56,11 @@ func updateUploadSettings(body *bytes.Buffer) error {
 		return utils.AddContext(err, "couldn't update upload settings")
 	} else if httpError.Code != api.HttpErrorNone {
 		return fmt.Errorf("failed to update upload settings: %s", httpError.Message)
+	}
+
+	store.Settings.UploadSettingsSaved = true
+	if err := saveToStore(dir, store); err != nil {
+		return utils.AddContext(err, "couldn't save upload settings status")
 	}
 
 	return nil

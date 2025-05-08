@@ -24,6 +24,7 @@ var dir string
 var satellite *api.Client
 var logger *zap.Logger
 var closeFn func()
+var store persistData
 
 func decodeRequest(body *bytes.Buffer, resp any) error {
 	if err := json.NewDecoder(body).Decode(resp); err != nil {
@@ -50,7 +51,12 @@ func main() {
 
 	cfg, err := loadConfig(dir)
 	if err != nil {
-		log.Fatalf("Failed to parse config: %v", err)
+		log.Fatalf("Failed to parse config: %v\n", err)
+	}
+
+	store, err = loadFromStore(dir)
+	if err != nil {
+		log.Fatalf("Failed to load from store: %v\n", err)
 	}
 
 	logger, closeFn, err = persist.NewFileLogger(filepath.Join(dir, "satc.log"), zapcore.ErrorLevel)
@@ -63,7 +69,7 @@ func main() {
 
 	target, err := url.Parse(cfg.RenterdConfig.Address)
 	if err != nil {
-		log.Fatalf("Failed to parse target URL: %v", err)
+		log.Fatalf("Failed to parse target URL: %v\n", err)
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
@@ -115,12 +121,12 @@ func main() {
 				req.ContentLength = int64(len(bodyBytes))
 			}
 
-			log.Printf("Intercepted API call: %s %s", req.Method, req.URL.Path)
+			log.Printf("Intercepted API call: %s %s\n", req.Method, req.URL.Path)
 		}
 	}
 
 	log.Printf("satc listening on %s\n", cfg.APIConfig.Address)
 	if err := http.ListenAndServe(cfg.APIConfig.Address, proxy); err != nil {
-		log.Fatalf("Failed to start satc: %v", err)
+		log.Fatalf("Failed to start satc: %v\n", err)
 	}
 }
