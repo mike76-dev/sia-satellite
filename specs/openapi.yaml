@@ -322,6 +322,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /account/settings/contracts:
+    post:
+      tags:
+        - account
+      description: Update the contracts settings
+      security:
+        - apiKey: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractSettings'
+      responses:
+        '204':
+          description: Successful operation
+        '400':
+          description: Invalid request parameter(s)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /account/delete:
     get:
       tags:
@@ -822,66 +855,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /contracts/config:
-    get:
-      tags:
-        - contracts
-      description: Get the contracts configuration
-      security:
-        - apiKey: []
-        - authCookie: []
-      responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractsConfig'
-        '401':
-          description: Unauthorized request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-    post:
-      tags:
-        - contracts
-      description: Update the contracts configuration
-      security:
-        - apiKey: []
-        - authCookie: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ContractsConfig'
-      responses:
-        '204':
-          description: Successful operation
-        '400':
-          description: Invalid request parameter(s)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          description: Unauthorized request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /contracts/form:
     post:
       tags:
@@ -898,7 +871,7 @@ paths:
               required: [contracts]
               properties:
                 contracts:
-                  $ref: '#/components/schemas/ContractsConfig'
+                  $ref: '#/components/schemas/ContractSettings'
                 hosts:
                   $ref: '#/components/schemas/HostsConfig'
       responses:
@@ -1757,7 +1730,7 @@ paths:
               type: object
               properties:
                 config:
-                  $ref: '#/components/schemas/ContractsConfig'
+                  $ref: '#/components/schemas/ContractSettings'
                 currency:
                   description: Payment currency
                   type: string
@@ -2202,7 +2175,7 @@ components:
               description: Funds spent on uploads
               type: string
               example: '6'
-    ContractsConfig:
+    ContractsSettings:
       type: object
       properties:
         count:
@@ -2230,16 +2203,6 @@ components:
           type: integer
           format: int64
           example: 65536
-        minShards:
-          description: Minimum number of shards
-          type: integer
-          format: int32
-          example: 10
-        totalShards:
-          description: Total number of shards
-          type: integer
-          format: int32
-          example: 30
     HostsConfig:
       type: object
       properties:
