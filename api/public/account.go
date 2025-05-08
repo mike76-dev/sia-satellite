@@ -8,6 +8,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/mike76-dev/sia-satellite/account"
+	"go.sia.tech/core/types"
 	"go.uber.org/zap"
 )
 
@@ -560,6 +561,100 @@ func (s *Server) accountSettingsHandlerPOST(w http.ResponseWriter, req *http.Req
 			Error{
 				Code:    HttpErrorInternal,
 				Message: "failed to update satellite settings",
+			}, http.StatusInternalServerError)
+		return
+	}
+
+	s.writeSuccess(w)
+}
+
+// accountDeleteHandlerGET handles the GET /account/delete requests.
+func (s *Server) accountDeleteHandlerGET(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	// Check for abuse.
+	if err := s.checkAbuse(w, req); err != nil {
+		return
+	}
+
+	// Extract the authentication token.
+	var apiToken bool
+	token := req.FormValue("token")
+	if token != "" { // an API token
+		apiToken = true
+	} else {
+		token = getCookie(req, "X-Satellite-Token")
+		if token == "" {
+			s.writeError(w,
+				Error{
+					Code:    HttpErrorTokenInvalid,
+					Message: "no token provided",
+				}, http.StatusUnauthorized)
+			return
+		}
+	}
+
+	// Decode the token.
+	prefix, email, expires, err := s.accounts.DecodeToken(token)
+	if err != nil {
+		// Check and update login stats.
+		if err := s.checkInvalidTokens(w, req); err != nil {
+			return
+		}
+		s.log.Error("failed to decode token", zap.Error(err))
+		s.writeError(w,
+			Error{
+				Code:    HttpErrorTokenInvalid,
+				Message: "unable to decode token",
+			}, http.StatusUnauthorized)
+		return
+	}
+
+	// Check the token type.
+	if (apiToken && prefix != account.APIPrefix) || (!apiToken && prefix != account.CookiePrefix) {
+		s.writeError(w,
+			Error{
+				Code:    HttpErrorTokenInvalid,
+				Message: "wrong token type",
+			}, http.StatusUnauthorized)
+		return
+	}
+
+	// Check the token validity.
+	if expires.Before(time.Now()) {
+		s.writeError(w,
+			Error{
+				Code:    HttpErrorTokenExpired,
+				Message: "token already expired",
+			}, http.StatusUnauthorized)
+		return
+	}
+
+	// Retrieve the user account.
+	acc, err := s.accounts.FindAccount(email)
+	if err != nil {
+		s.writeError(w,
+			Error{
+				Code:    HttpErrorNotFound,
+				Message: "email address not found",
+			}, http.StatusUnauthorized)
+		return
+	}
+
+	// Check the remaining balance.
+	if acc.Balance.Negative && acc.Balance.Total.Cmp(types.ZeroCurrency) > 0 {
+		s.writeError(w,
+			Error{
+				Code:    HttpErrorBadRequest,
+				Message: "balance is negative",
+			}, http.StatusPaymentRequired)
+		return
+	}
+
+	// Delete the account.
+	if err := s.accounts.DeleteAccount(acc); err != nil {
+		s.writeError(w,
+			Error{
+				Code:    HttpErrorInternal,
+				Message: "failed to delete account",
 			}, http.StatusInternalServerError)
 		return
 	}

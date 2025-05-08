@@ -67,6 +67,9 @@ func (s *Server) buildHTTPRoutes() {
 	router.POST("/account/settings/upload", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		s.accountSettingsUploadHandlerPOST(w, req, ps)
 	})
+	router.GET("/account/delete", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		s.accountDeleteHandlerGET(w, req, ps)
+	})
 
 	// /auth requests.
 	router.GET("/auth", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
