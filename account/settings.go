@@ -151,3 +151,46 @@ func (am *AccountManager) UpdateUploadSettings(acc *Account, us UploadSettings) 
 
 	return nil
 }
+
+// GetSatelliteSettings retrieves the account's satellite settings.
+func (am *AccountManager) GetSatelliteSettings(acc *Account) (SatelliteSettings, error) {
+	var mc, bm, ar bool
+	if err := am.db.QueryRow(`
+		SELECT
+			manage_contracts,
+			backup_metadata,
+			auto_repair
+		FROM am_settings
+		WHERE email = ?
+	`, acc.Email).Scan(&mc, &bm, &ar); err != nil {
+		return SatelliteSettings{}, utils.AddContext(err, "couldn't query satellite settings")
+	}
+
+	return SatelliteSettings{
+		ManageContracts: mc,
+		BackupMetadata:  bm,
+		AutoRepair:      ar,
+	}, nil
+}
+
+// UpdateSatelliteSettings updates the account's satellite settings.
+func (am *AccountManager) UpdateSatelliteSettings(acc *Account, ss SatelliteSettings) error {
+	_, err := am.db.Exec(`
+		UPDATE am_settings
+		SET
+			manage_contracts = ?,
+			backup_metadata = ?,
+			auto_repair = ?
+		WHERE email = ?
+	`,
+		ss.ManageContracts,
+		ss.BackupMetadata,
+		ss.AutoRepair,
+		acc.Email,
+	)
+	if err != nil {
+		return utils.AddContext(err, "couldn't update satellite settings")
+	}
+
+	return nil
+}
