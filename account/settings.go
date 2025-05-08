@@ -32,13 +32,18 @@ type HostPreferences struct {
 	Countries        []string `json:"countries"`
 }
 
-// ContractPreferences lists the contract preferences of an account.
-type ContractPreferences struct {
+// ContractSettings lists the contract settings of an account.
+type ContractSettings struct {
 	Count       uint64 `json:"count"`
 	Period      uint64 `json:"period"`
 	RenewWindow uint64 `json:"renewWindow"`
 	Download    uint64 `json:"download"`
 	Upload      uint64 `json:"upload"`
+}
+
+// ContractPreferences combines lists the contract and upload settings.
+type ContractPreferences struct {
+	ContractSettings
 	UploadSettings
 }
 
@@ -190,6 +195,57 @@ func (am *AccountManager) UpdateSatelliteSettings(acc *Account, ss SatelliteSett
 	)
 	if err != nil {
 		return utils.AddContext(err, "couldn't update satellite settings")
+	}
+
+	return nil
+}
+
+// GetContractSettings retrieves the account's contract settings.
+func (am *AccountManager) GetContractSettings(acc *Account) (ContractSettings, error) {
+	var c, p, rw, d, u uint64
+	if err := am.db.QueryRow(`
+		SELECT
+			contract_count,
+			contract_period,
+			renew_window,
+			ingress,
+			egress
+		FROM am_settings
+		WHERE email = ?
+	`, acc.Email).Scan(&c, &p, &rw, &d, &u); err != nil {
+		return ContractSettings{}, utils.AddContext(err, "couldn't query contract settings")
+	}
+
+	return ContractSettings{
+		Count:       c,
+		Period:      p,
+		RenewWindow: rw,
+		Download:    d,
+		Upload:      u,
+	}, nil
+}
+
+// UpdateContractSettings updates the account's contract settings.
+func (am *AccountManager) UpdateContractSettings(acc *Account, cs ContractSettings) error {
+	_, err := am.db.Exec(`
+		UPDATE am_settings
+		SET
+			contract_count = ?,
+			contract_period = ?,
+			renew_window = ?,
+			ingress = ?,
+			egress = ?
+		WHERE email = ?
+	`,
+		cs.Count,
+		cs.Period,
+		cs.RenewWindow,
+		cs.Download,
+		cs.Upload,
+		acc.Email,
+	)
+	if err != nil {
+		return utils.AddContext(err, "couldn't update contract settings")
 	}
 
 	return nil

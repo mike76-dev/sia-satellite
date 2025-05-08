@@ -96,6 +96,10 @@ func main() {
 					if err := updateUploadSettings(&copyBuf); err != nil {
 						logger.Error("PUT /bus/settings/upload failed", zap.Error(err))
 					}
+				case "PUT /api/bus/autopilot":
+					if err := updateContractSettings(&copyBuf); err != nil {
+						logger.Error("PUT /bus/autopilot failed", zap.Error(err))
+					}
 				}
 
 				pr, pw := io.Pipe()

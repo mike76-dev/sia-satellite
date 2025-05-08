@@ -65,3 +65,33 @@ func updateUploadSettings(body *bytes.Buffer) error {
 
 	return nil
 }
+
+// updateContractSettings updates the contracts settings of `renterd` on the satellite.
+func updateContractSettings(body *bytes.Buffer) error {
+	var rac renterd.AutopilotConfig
+	if err := decodeRequest(body, &rac); err != nil {
+		return err
+	}
+
+	cs := account.ContractSettings{
+		Count:       rac.Contracts.Amount,
+		Period:      rac.Contracts.Period,
+		RenewWindow: rac.Contracts.RenewWindow,
+		Download:    rac.Contracts.Download,
+		Upload:      rac.Contracts.Upload,
+	}
+
+	var httpError api.Error
+	if err := satellite.Post("/account/settings/contracts", &cs, &httpError); err != nil {
+		return utils.AddContext(err, "couldn't update contracts settings")
+	} else if httpError.Code != api.HttpErrorNone {
+		return fmt.Errorf("failed to update contracts settings: %s", httpError.Message)
+	}
+
+	store.Settings.ContractSettingsSaved = true
+	if err := saveToStore(dir, store); err != nil {
+		return utils.AddContext(err, "couldn't save contracts settings status")
+	}
+
+	return nil
+}

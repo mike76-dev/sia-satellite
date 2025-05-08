@@ -9,8 +9,9 @@ import (
 )
 
 type settingsStatus struct {
-	GougingSettingsSaved bool `json:"gougingSettingsSaved"`
-	UploadSettingsSaved  bool `json:"uploadSettingsSaved"`
+	GougingSettingsSaved  bool `json:"gougingSettingsSaved"`
+	UploadSettingsSaved   bool `json:"uploadSettingsSaved"`
+	ContractSettingsSaved bool `json:"contractSettingsSaved"`
 }
 
 type persistData struct {
