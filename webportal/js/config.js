@@ -1,8 +1,0 @@
-// Change this to the network path your API server is listening at.
-const apiBaseURL = '';
-
-// This is your publishable Stripe API key.
-const stripePublicKey = '';
-
-// This is your Google client ID.
-const googleClientID = '';
