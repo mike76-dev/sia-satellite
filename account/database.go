@@ -86,7 +86,8 @@ func (am *AccountManager) load() error {
 			Balance: Balance{
 				Negative: negative,
 			},
-			invoice: invoice,
+			invoice:   invoice,
+			contracts: make(map[types.PublicKey]Contract),
 		}
 
 		td := types.NewBufDecoder(total)
@@ -146,6 +147,11 @@ func (am *AccountManager) load() error {
 			}
 		}
 		rows.Close()
+	}
+
+	// Load contracts.
+	if err := am.loadContracts(); err != nil {
+		return utils.AddContext(err, "couldn't load contracts")
 	}
 
 	// Load secret key or create one, if it doesn't exist.
@@ -820,6 +826,12 @@ func (am *AccountManager) DeleteAccount(acc *Account) error {
 	if err != nil {
 		tx.Rollback()
 		return utils.AddContext(err, "couldn't delete payments")
+	}
+
+	_, err = tx.Exec("DELETE FROM am_contracts WHERE email = ?", acc.Email)
+	if err != nil {
+		tx.Rollback()
+		return utils.AddContext(err, "couldn't delete contracts")
 	}
 
 	_, err = tx.Exec("DELETE FROM am_settings WHERE email = ?", acc.Email)

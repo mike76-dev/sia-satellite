@@ -58,6 +58,7 @@ type Account struct {
 	StripeID    string    `json:"stripeID"`
 
 	settings     RenterSettings
+	contracts    map[types.PublicKey]Contract
 	verification verificationCode
 	address      types.Address
 	invoice      string

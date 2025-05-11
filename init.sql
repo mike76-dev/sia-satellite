@@ -77,6 +77,7 @@ CREATE TABLE hdb_interactions (
 /* account manager */
 
 DROP TABLE IF EXISTS am_payments;
+DROP TABLE IF EXISTS am_contracts;
 DROP TABLE IF EXISTS am_settings;
 DROP TABLE IF EXISTS am_accounts;
 DROP TABLE IF EXISTS am_info;
@@ -124,6 +125,31 @@ CREATE TABLE am_settings (
 	backup_metadata    BOOL NOT NULL,
 	auto_repair        BOOL NOT NULL,
 	renter_key         BLOB,
+	PRIMARY KEY (id),
+	FOREIGN KEY (email) REFERENCES am_accounts(email)
+);
+
+CREATE TABLE am_contracts (
+	id              BINARY(32) NOT NULL,
+	renter_key      BINARY(32) NOT NULL,
+	host_key        BINARY(32) NOT NULL,
+	proof_height    BIGINT UNSIGNED NOT NULL,
+	renewed_from    BINARY(32) NOT NULL,
+	revision_height BIGINT UNSIGNED NOT NULL,
+	revision_number BIGINT UNSIGNED NOT NULL,
+	contract_size   BIGINT UNSIGNED NOT NULL,
+	start_height    BIGINT UNSIGNED NOT NULL,
+	contract_state  TEXT NOT NULL,
+	usability       TEXT NOT NULL,
+	window_start    BIGINT UNSIGNED NOT NULL,
+	window_end      BIGINT UNSIGNED NOT NULL,
+	contract_price  BLOB NOT NULL,
+	renter_funds    BLOB NOT NULL,
+	deletions       BLOB NOT NULL,
+	fund_account    BLOB NOT NULL,
+	sector_roots    BLOB NOT NULL,
+	uploads         BLOB NOT NULL,
+	email           VARCHAR(64) NOT NULL,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES am_accounts(email)
 );
