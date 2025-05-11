@@ -123,6 +123,7 @@ CREATE TABLE am_settings (
 	manage_contracts   BOOL NOT NULL,
 	backup_metadata    BOOL NOT NULL,
 	auto_repair        BOOL NOT NULL,
+	renter_key         BLOB,
 	PRIMARY KEY (id),
 	FOREIGN KEY (email) REFERENCES am_accounts(email)
 );

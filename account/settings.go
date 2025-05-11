@@ -52,6 +52,8 @@ type SatelliteSettings struct {
 	ManageContracts bool `json:"manageContracts"`
 	BackupMetadata  bool `json:"backupMetadata"`
 	AutoRepair      bool `json:"autoRepair"`
+
+	RenterKey types.PrivateKey `json:"renterKey,omitempty"`
 }
 
 // GetGougingSettings retrieves the account's gouging settings.
@@ -160,14 +162,16 @@ func (am *AccountManager) UpdateUploadSettings(acc *Account, us UploadSettings) 
 // GetSatelliteSettings retrieves the account's satellite settings.
 func (am *AccountManager) GetSatelliteSettings(acc *Account) (SatelliteSettings, error) {
 	var mc, bm, ar bool
+	var rk []byte
 	if err := am.db.QueryRow(`
 		SELECT
 			manage_contracts,
 			backup_metadata,
-			auto_repair
+			auto_repair,
+			renter_key
 		FROM am_settings
 		WHERE email = ?
-	`, acc.Email).Scan(&mc, &bm, &ar); err != nil {
+	`, acc.Email).Scan(&mc, &bm, &ar, &rk); err != nil {
 		return SatelliteSettings{}, utils.AddContext(err, "couldn't query satellite settings")
 	}
 
@@ -175,6 +179,7 @@ func (am *AccountManager) GetSatelliteSettings(acc *Account) (SatelliteSettings,
 		ManageContracts: mc,
 		BackupMetadata:  bm,
 		AutoRepair:      ar,
+		RenterKey:       rk,
 	}, nil
 }
 
@@ -185,12 +190,14 @@ func (am *AccountManager) UpdateSatelliteSettings(acc *Account, ss SatelliteSett
 		SET
 			manage_contracts = ?,
 			backup_metadata = ?,
-			auto_repair = ?
+			auto_repair = ?,
+			renter_key = ?
 		WHERE email = ?
 	`,
 		ss.ManageContracts,
 		ss.BackupMetadata,
 		ss.AutoRepair,
+		ss.RenterKey,
 		acc.Email,
 	)
 	if err != nil {

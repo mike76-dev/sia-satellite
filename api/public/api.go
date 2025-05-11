@@ -77,12 +77,6 @@ type PaymentAddressResponse struct {
 	Address types.Address `json:"address"`
 }
 
-// UploadSettingsRequest is the request type for POST /account/settings/upload request.
-type UploadSettingsRequest struct {
-	MinShards   int `json:"minShards"`
-	TotalShards int `json:"totalShards"`
-}
-
 // init performs the API initialization.
 func init() {
 	initGoogle()
