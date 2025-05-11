@@ -38,7 +38,7 @@ const (
 		<body>
 			<h2>Reset Your Password</h2>
 			<p>Click on the following link to enter a new password. This link is valid within the next 60 minutes.</p>
-			<p><a href="{{.Path}}?token={{.Token}}">{{.Path}}?token={{.Token}}</a></p>
+			<p><a href="{{.Path}}forgot-password?token={{.Token}}">{{.Path}}forgot-password?token={{.Token}}</a></p>
 		</body>
 		</html>
 	`
@@ -244,10 +244,12 @@ func (s *Server) authHandlerGET(w http.ResponseWriter, req *http.Request, _ http
 		}
 
 		cookie := http.Cookie{
-			Name:    "X-Satellite-Change",
-			Value:   changeToken,
-			Expires: expires,
-			Path:    "/",
+			Name:     "X-Satellite-Change",
+			Value:    changeToken,
+			Expires:  expires,
+			Path:     "/",
+			SameSite: http.SameSiteNoneMode, // for testing
+			Secure:   true,                  // for testing
 		}
 		http.SetCookie(w, &cookie)
 	}
