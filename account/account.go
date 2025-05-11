@@ -63,6 +63,7 @@ type Account struct {
 	address      types.Address
 	invoice      string
 	onHoldSince  time.Time
+	mu           sync.Mutex
 }
 
 func (acc *Account) GenerateCode(expiration time.Time) string {
@@ -242,7 +243,15 @@ func (am *AccountManager) Accounts() (accs []Account) {
 	defer am.mu.Unlock()
 
 	for _, acc := range am.accounts {
-		accs = append(accs, *acc)
+		accs = append(accs, Account{
+			Email:       acc.Email,
+			CreatedAt:   acc.CreatedAt,
+			Verified:    acc.Verified,
+			PaymentPlan: acc.PaymentPlan,
+			Balance:     acc.Balance,
+			Currency:    acc.Currency,
+			StripeID:    acc.StripeID,
+		})
 	}
 
 	return

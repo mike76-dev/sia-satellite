@@ -136,3 +136,80 @@ func (am *AccountManager) loadContracts() error {
 
 	return nil
 }
+
+// saveContract saves a contract to the database.
+func (am *AccountManager) saveContract(acc *Account, fc Contract) error {
+	acc.mu.Lock()
+	acc.contracts[fc.HostKey] = fc
+	acc.mu.Unlock()
+
+	_, err := am.db.Exec(`
+		INSERT INTO am_contracts (
+			id,
+			renter_key,
+			host_key,
+			proof_height,
+			renewed_from,
+			revision_height,
+			revision_number,
+			contract_size,
+			start_height,
+			contract_state,
+			usability,
+			window_start,
+			window_end,
+			contract_price,
+			renter_funds,
+			deletions,
+			fund_account,
+			sector_roots,
+			uploads,
+			email
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AS new
+		ON DUPLICATE KEY UPDATE
+			renter_key = new.renter_key,
+			host_key = new.host_key,
+			proof_height = new.proof_height,
+			renewed_from = new.renewed_from,
+			revision_height = new.revision_height,
+			revision_number = new.revision_number,
+			contract_size = new.contract_size,
+			start_height = new.start_height,
+			contract_state = new.contract_state,
+			usability = new.usability,
+			window_start = new.window_start,
+			window_end = new.window_end,
+			contract_price = new.contract_price,
+			renter_funds = new.renter_funds,
+			deletions = new.deletions,
+			fund_account = new.fund_account,
+			sector_roots = new.sector_roots,
+			uploads = new.uploads
+	`,
+		fc.ID[:],
+		fc.RenterKey[:],
+		fc.HostKey[:],
+		fc.ProofHeight,
+		fc.RenewedFrom[:],
+		fc.RevisionHeight,
+		fc.RevisionNumber,
+		fc.Size,
+		fc.StartHeight,
+		fc.State,
+		fc.Usability,
+		fc.WindowStart,
+		fc.WindowEnd,
+		utils.EncodeCurrency(fc.ContractPrice),
+		utils.EncodeCurrency(fc.InitialRenterFunds),
+		utils.EncodeCurrency(fc.Spending.Deletions),
+		utils.EncodeCurrency(fc.Spending.FundAccount),
+		utils.EncodeCurrency(fc.Spending.SectorRoots),
+		utils.EncodeCurrency(fc.Spending.Uploads),
+		acc.Email,
+	)
+	if err != nil {
+		return utils.AddContext(err, "couldn't save contract")
+	}
+
+	return nil
+}
