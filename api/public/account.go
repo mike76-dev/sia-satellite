@@ -548,18 +548,7 @@ func (s *Server) accountSettingsHandlerGET(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	// Retrieve the settings.
-	ss, err := s.accounts.GetSatelliteSettings(acc)
-	if err != nil {
-		s.writeError(w,
-			Error{
-				Code:    HttpErrorInternal,
-				Message: "failed to retrieve satellite settings",
-			}, http.StatusInternalServerError)
-		return
-	}
-
-	s.writeJSON(w, ss)
+	s.writeJSON(w, acc.GetSatelliteSettings())
 }
 
 // accountSettingsHandlerPOST handles the POST /account/settings requests.

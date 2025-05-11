@@ -152,47 +152,13 @@ func (am *AccountManager) loadSettings(acc *Account) error {
 }
 
 // GetGougingSettings retrieves the account's gouging settings.
-func (am *AccountManager) GetGougingSettings(acc *Account) (GougingSettings, error) {
-	var msp, mip, mep, mcp []byte
-	if err := am.db.QueryRow(`
-		SELECT
-			max_storage_price,
-			max_ingress_price,
-			max_egress_price,
-			max_contract_price
-		FROM am_settings
-		WHERE email = ?
-	`, acc.Email).Scan(&msp, &mip, &mep, &mcp); err != nil {
-		return GougingSettings{}, utils.AddContext(err, "couldn't query gouging settings")
-	}
-
-	var gs GougingSettings
-	d := types.NewBufDecoder(msp)
-	(*types.V2Currency)(&gs.MaxStoragePrice).DecodeFrom(d)
-	if err := d.Err(); err != nil {
-		return GougingSettings{}, utils.AddContext(err, "couldn't decode max storage price")
-	}
-	d = types.NewBufDecoder(mip)
-	(*types.V2Currency)(&gs.MaxIngressPrice).DecodeFrom(d)
-	if err := d.Err(); err != nil {
-		return GougingSettings{}, utils.AddContext(err, "couldn't decode max ingress price")
-	}
-	d = types.NewBufDecoder(mep)
-	(*types.V2Currency)(&gs.MaxEgressPrice).DecodeFrom(d)
-	if err := d.Err(); err != nil {
-		return GougingSettings{}, utils.AddContext(err, "couldn't decode max egress price")
-	}
-	d = types.NewBufDecoder(mcp)
-	(*types.V2Currency)(&gs.MaxContractPrice).DecodeFrom(d)
-	if err := d.Err(); err != nil {
-		return GougingSettings{}, utils.AddContext(err, "couldn't decode max contract price")
-	}
-
-	return gs, nil
+func (acc *Account) GetGougingSettings() GougingSettings {
+	return acc.settings.GougingSettings
 }
 
 // UpdateGougingSettings updates the account's gouging settings.
 func (am *AccountManager) UpdateGougingSettings(acc *Account, gs GougingSettings) error {
+	acc.settings.GougingSettings = gs
 	_, err := am.db.Exec(`
 		UPDATE am_settings
 		SET
@@ -216,26 +182,13 @@ func (am *AccountManager) UpdateGougingSettings(acc *Account, gs GougingSettings
 }
 
 // GetUploadSettings retrieves the account's upload settings.
-func (am *AccountManager) GetUploadSettings(acc *Account) (UploadSettings, error) {
-	var ms, ts int
-	if err := am.db.QueryRow(`
-		SELECT
-			min_shards,
-			total_shards
-		FROM am_settings
-		WHERE email = ?
-	`, acc.Email).Scan(&ms, &ts); err != nil {
-		return UploadSettings{}, utils.AddContext(err, "couldn't query upload settings")
-	}
-
-	return UploadSettings{
-		MinShards:   ms,
-		TotalShards: ts,
-	}, nil
+func (acc *Account) GetUploadSettings() UploadSettings {
+	return acc.settings.UploadSettings
 }
 
 // UpdateUploadSettings updates the account's upload settings.
 func (am *AccountManager) UpdateUploadSettings(acc *Account, us UploadSettings) error {
+	acc.settings.UploadSettings = us
 	_, err := am.db.Exec(`
 		UPDATE am_settings
 		SET
@@ -255,31 +208,13 @@ func (am *AccountManager) UpdateUploadSettings(acc *Account, us UploadSettings) 
 }
 
 // GetSatelliteSettings retrieves the account's satellite settings.
-func (am *AccountManager) GetSatelliteSettings(acc *Account) (SatelliteSettings, error) {
-	var mc, bm, ar bool
-	var rk []byte
-	if err := am.db.QueryRow(`
-		SELECT
-			manage_contracts,
-			backup_metadata,
-			auto_repair,
-			renter_key
-		FROM am_settings
-		WHERE email = ?
-	`, acc.Email).Scan(&mc, &bm, &ar, &rk); err != nil {
-		return SatelliteSettings{}, utils.AddContext(err, "couldn't query satellite settings")
-	}
-
-	return SatelliteSettings{
-		ManageContracts: mc,
-		BackupMetadata:  bm,
-		AutoRepair:      ar,
-		RenterKey:       rk,
-	}, nil
+func (acc *Account) GetSatelliteSettings() SatelliteSettings {
+	return acc.settings.SatelliteSettings
 }
 
 // UpdateSatelliteSettings updates the account's satellite settings.
 func (am *AccountManager) UpdateSatelliteSettings(acc *Account, ss SatelliteSettings) error {
+	acc.settings.SatelliteSettings = ss
 	_, err := am.db.Exec(`
 		UPDATE am_settings
 		SET
@@ -303,32 +238,13 @@ func (am *AccountManager) UpdateSatelliteSettings(acc *Account, ss SatelliteSett
 }
 
 // GetContractSettings retrieves the account's contract settings.
-func (am *AccountManager) GetContractSettings(acc *Account) (ContractSettings, error) {
-	var c, p, rw, d, u uint64
-	if err := am.db.QueryRow(`
-		SELECT
-			contract_count,
-			contract_period,
-			renew_window,
-			ingress,
-			egress
-		FROM am_settings
-		WHERE email = ?
-	`, acc.Email).Scan(&c, &p, &rw, &d, &u); err != nil {
-		return ContractSettings{}, utils.AddContext(err, "couldn't query contract settings")
-	}
-
-	return ContractSettings{
-		Count:       c,
-		Period:      p,
-		RenewWindow: rw,
-		Download:    d,
-		Upload:      u,
-	}, nil
+func (acc *Account) GetContractSettings() ContractSettings {
+	return acc.settings.ContractSettings
 }
 
 // UpdateContractSettings updates the account's contract settings.
 func (am *AccountManager) UpdateContractSettings(acc *Account, cs ContractSettings) error {
+	acc.settings.ContractSettings = cs
 	_, err := am.db.Exec(`
 		UPDATE am_settings
 		SET
