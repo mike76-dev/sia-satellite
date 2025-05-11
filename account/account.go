@@ -57,6 +57,7 @@ type Account struct {
 	Currency    string    `json:"currency"`
 	StripeID    string    `json:"stripeID"`
 
+	settings     RenterSettings
 	verification verificationCode
 	address      types.Address
 	invoice      string

@@ -113,8 +113,12 @@ func (am *AccountManager) load() error {
 	}
 	rows.Close()
 
-	// Load watched transactions.
+	// Load settings and watched transactions.
 	for email, acc := range am.accounts {
+		if err := am.loadSettings(acc); err != nil {
+			return utils.AddContext(err, "couldn't load settings")
+		}
+
 		rows, err := am.db.Query(`
 			SELECT conf_left, txid
 			FROM am_payments

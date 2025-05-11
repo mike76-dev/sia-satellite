@@ -1,6 +1,10 @@
 package account
 
 import (
+	"database/sql"
+	"errors"
+	"strings"
+
 	"github.com/mike76-dev/sia-satellite/internal/utils"
 	"go.sia.tech/core/types"
 )
@@ -54,6 +58,97 @@ type SatelliteSettings struct {
 	AutoRepair      bool `json:"autoRepair"`
 
 	RenterKey types.PrivateKey `json:"renterKey,omitempty"`
+}
+
+// RenterSettings combines all settings of an account.
+type RenterSettings struct {
+	HostPreferences
+	ContractPreferences
+	SatelliteSettings
+}
+
+// loadSettings loads the settings from the database.
+func (am *AccountManager) loadSettings(acc *Account) error {
+	var msp, mip, mep, mcp, rk []byte
+	var countries string
+	if err := am.db.QueryRow(`
+		SELECT
+			max_storage_price,
+			max_ingress_price,
+			max_egress_price,
+			max_contract_price,
+			max_latency,
+			min_upload_speed,
+			min_download_speed,
+			basis,
+			countries,
+			contract_count,
+			contract_period,
+			renew_window,
+			ingress,
+			egress,
+			min_shards,
+			total_shards,
+			manage_contracts,
+			backup_metadata,
+			auto_repair,
+			renter_key
+		FROM am_settings
+		WHERE email = ?
+	`, acc.Email).Scan(
+		&msp,
+		&mip,
+		&mep,
+		&mcp,
+		&acc.settings.MaxLatency,
+		&acc.settings.MinUploadSpeed,
+		&acc.settings.MinDownloadSpeed,
+		&acc.settings.Basis,
+		&countries,
+		&acc.settings.Count,
+		&acc.settings.Period,
+		&acc.settings.RenewWindow,
+		&acc.settings.Download,
+		&acc.settings.Upload,
+		&acc.settings.MinShards,
+		&acc.settings.TotalShards,
+		&acc.settings.ManageContracts,
+		&acc.settings.BackupMetadata,
+		&acc.settings.AutoRepair,
+		&rk,
+	); err != nil && errors.Is(err, sql.ErrNoRows) {
+		return ErrUserNotFound
+	} else if err != nil {
+		return utils.AddContext(err, "couldn't query settings")
+	}
+
+	d := types.NewBufDecoder(msp)
+	(*types.V2Currency)(&acc.settings.MaxStoragePrice).DecodeFrom(d)
+	if err := d.Err(); err != nil {
+		return utils.AddContext(err, "couldn't decode max storage price")
+	}
+	d = types.NewBufDecoder(mip)
+	(*types.V2Currency)(&acc.settings.MaxIngressPrice).DecodeFrom(d)
+	if err := d.Err(); err != nil {
+		return utils.AddContext(err, "couldn't decode max ingress price")
+	}
+	d = types.NewBufDecoder(mep)
+	(*types.V2Currency)(&acc.settings.MaxEgressPrice).DecodeFrom(d)
+	if err := d.Err(); err != nil {
+		return utils.AddContext(err, "couldn't decode max egress price")
+	}
+	d = types.NewBufDecoder(mcp)
+	(*types.V2Currency)(&acc.settings.MaxContractPrice).DecodeFrom(d)
+	if err := d.Err(); err != nil {
+		return utils.AddContext(err, "couldn't decode max contract price")
+	}
+
+	acc.settings.Countries = strings.Split(countries, ",")
+	if rk != nil {
+		acc.settings.RenterKey = rk
+	}
+
+	return nil
 }
 
 // GetGougingSettings retrieves the account's gouging settings.
